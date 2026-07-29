@@ -27,6 +27,11 @@ interface FormState {
   allowDelete: boolean
   toolsRoot: string
   password: string
+  showThoughts: boolean
+  ttsEnabled: boolean
+  ttsUrl: string
+  ttsModel: string
+  ttsVoice: string
 }
 
 function toForm(s: Settings): FormState {
@@ -43,6 +48,11 @@ function toForm(s: Settings): FormState {
     allowDelete: s.allowDelete,
     toolsRoot: s.toolsRoot,
     password: '',
+    showThoughts: s.showThoughts,
+    ttsEnabled: s.ttsEnabled,
+    ttsUrl: s.ttsUrl,
+    ttsModel: s.ttsModel,
+    ttsVoice: s.ttsVoice,
   }
 }
 
@@ -63,6 +73,11 @@ function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassw
     allowDelete: f.allowDelete,
     toolsRoot: f.toolsRoot.trim(),
     password: clearPassword ? api.CLEAR_SECRET : f.password,
+    showThoughts: f.showThoughts,
+    ttsEnabled: f.ttsEnabled,
+    ttsUrl: f.ttsUrl.trim(),
+    ttsModel: f.ttsModel.trim(),
+    ttsVoice: f.ttsVoice.trim(),
   }
 }
 
@@ -306,6 +321,41 @@ export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
         <label htmlFor="set-hist">{t('maxHistory')}</label>
         <input id="set-hist" type="number" step="1" min="0" value={form.maxHistoryMessages} onChange={(e) => set('maxHistoryMessages', e.target.value)} />
       </div>
+      <Toggle
+        label={t('showThoughts')}
+        sub={t('showThoughtsSub')}
+        checked={form.showThoughts}
+        onChange={(v) => set('showThoughts', v)}
+      />
+
+      <h3 className="section-title">{t('sectionTts')}</h3>
+      <Toggle
+        label={t('ttsEnabled')}
+        sub={t('ttsEnabledSub')}
+        checked={form.ttsEnabled}
+        onChange={(v) => set('ttsEnabled', v)}
+      />
+      <div className="field">
+        <label htmlFor="set-tts-url">{t('ttsUrl')}</label>
+        <input
+          id="set-tts-url"
+          type="url"
+          value={form.ttsUrl}
+          placeholder="http://127.0.0.1:8880/v1"
+          onChange={(e) => set('ttsUrl', e.target.value)}
+        />
+      </div>
+      <div className="grid-2">
+        <div className="field">
+          <label htmlFor="set-tts-model">{t('ttsModel')}</label>
+          <input id="set-tts-model" type="text" value={form.ttsModel} onChange={(e) => set('ttsModel', e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="set-tts-voice">{t('ttsVoice')}</label>
+          <input id="set-tts-voice" type="text" value={form.ttsVoice} onChange={(e) => set('ttsVoice', e.target.value)} />
+        </div>
+      </div>
+      <span className="hint">{t('ttsHint')}</span>
 
       <h3 className="section-title">{t('sectionMemoryTools')}</h3>
       <Toggle

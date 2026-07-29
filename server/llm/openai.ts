@@ -9,6 +9,7 @@ export interface StreamedToolCall {
 
 export interface StreamChatResult {
   content: string
+  thinking: string // raisonnement du modèle (champs reasoning* ou balises <think> inline)
   toolCalls: StreamedToolCall[]
   finishReason: string
   truncated: boolean // fin de flux sans [DONE] ni finish_reason — réponse probablement incomplète
@@ -16,11 +17,65 @@ export interface StreamChatResult {
 
 interface SseDelta {
   content?: unknown
+  reasoning?: unknown // Ollama
+  reasoning_content?: unknown // DeepSeek, vLLM, LM Studio…
+  thinking?: unknown // variante rencontrée sur certains proxys
   tool_calls?: {
     index?: number
     id?: string
     function?: { name?: string; arguments?: string }
   }[]
+}
+
+// Certains backends (KoboldCpp…) ne séparent pas le raisonnement : il arrive
+// dans content, entre balises <think>…</think> — potentiellement coupées en
+// deux chunks. Ce séparateur retient les fins de buffer ambiguës (préfixe de
+// balise) jusqu'au chunk suivant.
+const THINK_TAGS = ['<think>', '</think>']
+
+function ambiguousTailLength(buffer: string): number {
+  const max = Math.min(buffer.length, THINK_TAGS[1].length - 1)
+  for (let n = max; n > 0; n--) {
+    const tail = buffer.slice(buffer.length - n)
+    if (THINK_TAGS.some((tag) => tag.startsWith(tail))) return n
+  }
+  return 0
+}
+
+class ThinkSplitter {
+  private buffer = ''
+  private inThink = false
+
+  push(text: string): { content: string; thinking: string } {
+    this.buffer += text
+    let content = ''
+    let thinking = ''
+    for (;;) {
+      const tag = this.inThink ? '</think>' : '<think>'
+      const idx = this.buffer.indexOf(tag)
+      if (idx === -1) break
+      const before = this.buffer.slice(0, idx)
+      if (this.inThink) thinking += before
+      else content += before
+      this.buffer = this.buffer.slice(idx + tag.length)
+      this.inThink = !this.inThink
+    }
+    const held = ambiguousTailLength(this.buffer)
+    const emit = this.buffer.slice(0, this.buffer.length - held)
+    this.buffer = this.buffer.slice(this.buffer.length - held)
+    if (this.inThink) thinking += emit
+    else content += emit
+    return { content, thinking }
+  }
+
+  /** Fin de flux : vide le reliquat (balise jamais refermée = resté du thinking). */
+  flush(): { content: string; thinking: string } {
+    const out = this.inThink
+      ? { content: '', thinking: this.buffer }
+      : { content: this.buffer, thinking: '' }
+    this.buffer = ''
+    return out
+  }
 }
 
 interface SseChunk {
@@ -33,8 +88,9 @@ export async function streamChatCompletion(opts: {
   tools?: unknown[]
   signal: AbortSignal
   onDelta: (t: string) => void
+  onThinking?: (t: string) => void
 }): Promise<StreamChatResult> {
-  const { settings, messages, tools, signal, onDelta } = opts
+  const { settings, messages, tools, signal, onDelta, onThinking } = opts
   const url = settings.backendUrl.replace(/\/+$/, '') + '/chat/completions'
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -57,11 +113,24 @@ export async function streamChatCompletion(opts: {
   if (!res.body) throw new Error('Backend LLM : réponse sans corps')
 
   let content = ''
+  let thinking = ''
+  const splitter = new ThinkSplitter()
   const toolCalls: StreamedToolCall[] = []
   let currentSlot = -1 // slot du dernier tool_call vu — cible des fragments sans index
   let finishReason = ''
   let done = false
   let parsedChunk = false
+
+  const emitContent = (text: string): void => {
+    if (!text) return
+    content += text
+    onDelta(text)
+  }
+  const emitThinking = (text: string): void => {
+    if (!text) return
+    thinking += text
+    onThinking?.(text)
+  }
 
   const processLine = (rawLine: string): void => {
     // "data:" sans espace accepté (certains backends compat collent le payload).
@@ -82,9 +151,14 @@ export async function streamChatCompletion(opts: {
     const choice = chunk.choices?.[0]
     if (!choice) return
     const delta = choice.delta ?? {}
+    // Raisonnement séparé par le backend (Ollama, DeepSeek, vLLM…).
+    for (const field of [delta.reasoning, delta.reasoning_content, delta.thinking]) {
+      if (typeof field === 'string' && field.length > 0) emitThinking(field)
+    }
     if (typeof delta.content === 'string' && delta.content.length > 0) {
-      content += delta.content
-      onDelta(delta.content)
+      const parts = splitter.push(delta.content)
+      emitContent(parts.content)
+      emitThinking(parts.thinking)
     }
     if (Array.isArray(delta.tool_calls)) {
       for (const tc of delta.tool_calls) {
@@ -129,6 +203,10 @@ export async function streamChatCompletion(opts: {
     }
   }
   if (!done && buffer.length > 0) processLine(buffer)
+  // Reliquat du séparateur <think> (fin ambiguë retenue, ou balise jamais fermée).
+  const rest = splitter.flush()
+  emitContent(rest.content)
+  emitThinking(rest.thinking)
   if (done) {
     try {
       await reader.cancel()
@@ -147,6 +225,7 @@ export async function streamChatCompletion(opts: {
 
   return {
     content,
+    thinking,
     toolCalls: toolCalls
       .filter((t) => t.name !== '')
       .map((t, i) => ({ ...t, id: t.id || 'call_fallback_' + i })),

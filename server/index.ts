@@ -11,6 +11,7 @@ import { charactersRouter } from './api/characters'
 import { memoryRouter } from './api/memory'
 import { importRouter } from './api/importer'
 import { assetsRouter } from './api/assets'
+import { ttsRouter } from './api/tts'
 
 function firstLanIPv4(): string {
   for (const list of Object.values(os.networkInterfaces())) {
@@ -63,6 +64,7 @@ async function main(): Promise<void> {
   app.use(memoryRouter)
   app.use(importRouter)
   app.use(assetsRouter)
+  app.use(ttsRouter)
 
   // Statiques (non gardés).
   app.use('/vrm', express.static(VRM_DIR))

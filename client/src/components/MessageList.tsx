@@ -30,7 +30,7 @@ function summarizeArgs(args: string): string {
   return out.length > 48 ? out.slice(0, 45) + '…' : out
 }
 
-function Item({ item }: { item: FeedItem }) {
+function Item({ item, showThoughts }: { item: FeedItem; showThoughts: boolean }) {
   const { lang, t } = useI18n()
 
   switch (item.kind) {
@@ -39,6 +39,12 @@ function Item({ item }: { item: FeedItem }) {
       const text = isUser ? item.msg.content : stripEmotionTags(item.msg.content)
       return (
         <div className={`msg ${isUser ? 'user' : 'assistant'}`}>
+          {!isUser && showThoughts && item.msg.thinking && (
+            <details className="thoughts">
+              <summary>{t('thoughts')}</summary>
+              <div className="thoughts-body">{item.msg.thinking}</div>
+            </details>
+          )}
           <div className="bubble">
             {item.pending && !text ? (
               <span className="typing" aria-label={t('replyInProgress')}>
@@ -74,7 +80,7 @@ function Item({ item }: { item: FeedItem }) {
   }
 }
 
-export default function MessageList({ items }: { items: FeedItem[] }) {
+export default function MessageList({ items, showThoughts }: { items: FeedItem[]; showThoughts: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
 
@@ -94,7 +100,7 @@ export default function MessageList({ items }: { items: FeedItem[] }) {
       }}
     >
       {items.map((it, i) => (
-        <Item key={i} item={it} />
+        <Item key={i} item={it} showThoughts={showThoughts} />
       ))}
     </div>
   )

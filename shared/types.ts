@@ -12,6 +12,11 @@ export interface Settings {
   allowDelete: boolean // autorise delete_file (toggle ON/OFF)
   toolsRoot: string // dossier sandbox des outils fichiers
   password: string // '' = pas d'authentification (usage local)
+  showThoughts: boolean // affiche le raisonnement du modèle dans le fil (bloc repliable)
+  ttsEnabled: boolean // lit les réponses à voix haute via le serveur TTS
+  ttsUrl: string // base OpenAI-compat du serveur TTS (POST {ttsUrl}/audio/speech)
+  ttsModel: string // modèle TTS (certains serveurs l'ignorent)
+  ttsVoice: string // voix TTS (certains serveurs l'ignorent)
 }
 
 export interface CharacterMeta {
@@ -32,6 +37,7 @@ export interface ChatMessage {
   content: string
   ts: string
   emotion?: string // tag d'émotion détecté en tête de message ([happy] etc.)
+  thinking?: string // raisonnement du modèle (<think> ou champ reasoning) — jamais renvoyé au backend
 }
 
 export interface ChatMeta {
@@ -50,6 +56,7 @@ export interface MemoryFile {
 // Événements SSE émis par POST /api/chat
 export type ChatEvent =
   | { type: 'delta'; text: string }
+  | { type: 'thinking'; text: string }
   | { type: 'tool'; name: string; args: string; result: string }
   | { type: 'done'; message: ChatMessage }
   | { type: 'error'; message: string; partial?: ChatMessage } // partial = message sauvegardé malgré l'erreur

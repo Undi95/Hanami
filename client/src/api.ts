@@ -236,6 +236,24 @@ export async function getBackgrounds(): Promise<string[]> {
   return r.backgrounds
 }
 
+// ── Synthèse vocale ────────────────────────────────────────────────────────
+
+/** Renvoie l'audio de la réponse (le serveur proxifie le serveur TTS configuré). */
+export async function tts(text: string): Promise<Blob> {
+  let res: Response
+  try {
+    res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ text }),
+    })
+  } catch {
+    throw new ApiError(t('serverUnreachable'), 0)
+  }
+  if (!res.ok) return throwFromResponse(res)
+  return res.blob()
+}
+
 // ── Inspecteur de prompt ───────────────────────────────────────────────────
 
 export function getPromptPreview(

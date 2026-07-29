@@ -15,7 +15,8 @@ export const chatRouter = Router()
 
 const MAX_TOOL_ITERATIONS = 6
 // Non ancrée : première occurrence n'importe où, comme extractEmotion côté client.
-const EMOTION_RE = /\[(neutral|happy|sad|angry|surprised|relaxed)\]/i
+// \s* : les modèles écrivent parfois « [ happy ] » avec des espaces.
+const EMOTION_RE = /\[\s*(neutral|happy|sad|angry|surprised|relaxed)\s*\]/i
 
 interface BackendPayload {
   messages: unknown[]
@@ -59,10 +60,11 @@ function buildPayload(
   return { systemText, payload }
 }
 
-function toAssistantMessage(text: string): ChatMessage {
+function toAssistantMessage(text: string, thinking?: string): ChatMessage {
   const m = EMOTION_RE.exec(text)
   const msg: ChatMessage = { role: 'assistant', content: text, ts: new Date().toISOString() }
   if (m) msg.emotion = m[1].toLowerCase()
+  if (thinking) msg.thinking = thinking
   return msg
 }
 
@@ -130,11 +132,13 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   })
 
   let assistantText = ''
+  let assistantThinking = ''
 
   // Un appel streaming. Entre deux itérations, un séparateur "\n\n" est inséré dans le texte
   // ET émis comme delta : le flux affiché et le texte sauvegardé restent identiques.
   const streamOnce = (withTools: boolean) => {
     let firstDelta = true
+    let firstThinking = true
     return streamChatCompletion({
       settings,
       messages,
@@ -150,6 +154,14 @@ async function handleChat(req: Request, res: Response): Promise<void> {
         }
         assistantText += text
         writeEvent(res, { type: 'delta', text })
+      },
+      onThinking: (text) => {
+        if (firstThinking) {
+          firstThinking = false
+          if (assistantThinking.length > 0) assistantThinking += '\n\n'
+        }
+        assistantThinking += text
+        writeEvent(res, { type: 'thinking', text })
       },
     })
   }
@@ -206,7 +218,7 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     }
 
     // Contenu INTÉGRAL, tel que généré (le tag d'émotion reste dans le texte).
-    const message = toAssistantMessage(assistantText)
+    const message = toAssistantMessage(assistantText, assistantThinking)
     appendChatMessage(characterId, chatId, message)
     writeEvent(res, { type: 'done', message })
     // Signalé APRÈS la sauvegarde et le done : le client affiche la bulle d'erreur discrète.
@@ -223,7 +235,7 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     if (abort.signal.aborted) {
       // Client parti : on sauvegarde le partiel si au moins un delta est arrivé.
       if (assistantText.length > 0) {
-        appendChatMessage(characterId, chatId, toAssistantMessage(assistantText))
+        appendChatMessage(characterId, chatId, toAssistantMessage(assistantText, assistantThinking))
       }
       try {
         res.end()
@@ -235,7 +247,7 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     const message = e instanceof Error ? e.message : String(e)
     if (assistantText.length > 0) {
       // Erreur mi-flux : le partiel déjà affiché côté client est sauvegardé, et joint à l'événement.
-      const partial = toAssistantMessage(assistantText)
+      const partial = toAssistantMessage(assistantText, assistantThinking)
       appendChatMessage(characterId, chatId, partial)
       writeEvent(res, { type: 'error', message, partial })
     } else {

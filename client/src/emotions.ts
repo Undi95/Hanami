@@ -1,8 +1,9 @@
 // Détection/nettoyage des tags d'émotion ([happy] etc.) dans les messages.
 import { EMOTIONS, type Emotion } from '../../shared/types'
 
-const FIRST_TAG = new RegExp(`\\[(${EMOTIONS.join('|')})\\]`, 'i')
-const ALL_TAGS = new RegExp(`\\[(${EMOTIONS.join('|')})\\]`, 'gi')
+// \s* : les modèles écrivent parfois « [ happy ] » avec des espaces.
+const FIRST_TAG = new RegExp(`\\[\\s*(${EMOTIONS.join('|')})\\s*\\]`, 'i')
+const ALL_TAGS = new RegExp(`\\[\\s*(${EMOTIONS.join('|')})\\s*\\]`, 'gi')
 
 /** Première occurrence d'un tag d'émotion dans le texte (null si aucun). */
 export function extractEmotion(text: string): Emotion | null {

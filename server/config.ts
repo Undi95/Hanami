@@ -18,6 +18,11 @@ export const DEFAULT_SETTINGS: Settings = {
   allowDelete: false,
   toolsRoot: path.join(DATA_DIR, 'workspace'),
   password: '',
+  showThoughts: false,
+  ttsEnabled: false,
+  ttsUrl: '',
+  ttsModel: '',
+  ttsVoice: '',
 }
 
 export function loadSettings(): Settings {

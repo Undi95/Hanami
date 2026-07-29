@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CharacterFull, CharacterMeta, ChatMessage, ChatMeta, Settings } from '../../shared/types'
 import type { VrmStage } from './scene/types'
 import * as api from './api'
-import { extractEmotion } from './emotions'
+import { extractEmotion, stripEmotionTags } from './emotions'
 import { I18nProvider, localeOf, useI18n } from './i18n'
 import TopBar, { type DialogKind } from './components/TopBar'
 import MessageList, { type FeedItem } from './components/MessageList'
@@ -40,6 +40,10 @@ function AppInner() {
   const stageRef = useRef<VrmStage | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const lastEmotionRef = useRef('neutral')
+  // Fenêtre parlante relancée à chaque delta de TEXTE (le raisonnement et les
+  // outils ne font pas bouger les lèvres) + audio TTS en cours de lecture.
+  const speakTimerRef = useRef<number | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   // Compteur de génération : invalide les chargements perso/chat dépassés par un
   // choix plus récent (évite qu'une réponse lente écrase la sélection courante).
   const loadGenRef = useRef(0)
@@ -63,6 +67,57 @@ function AppInner() {
       .catch(() => setBackendDown(true))
   }
 
+  // ── Lèvres & voix ────────────────────────────────────────────────────────
+
+  // Un delta de texte vient d'arriver : bouche animée, refermée 600 ms après le
+  // dernier delta (couvre les pauses de thinking et d'appels d'outils mi-flux).
+  function pokeSpeaking() {
+    stageRef.current?.setSpeaking(true)
+    if (speakTimerRef.current !== null) window.clearTimeout(speakTimerRef.current)
+    speakTimerRef.current = window.setTimeout(() => {
+      speakTimerRef.current = null
+      stageRef.current?.setSpeaking(false)
+    }, 600)
+  }
+
+  function stopSpeaking() {
+    if (speakTimerRef.current !== null) {
+      window.clearTimeout(speakTimerRef.current)
+      speakTimerRef.current = null
+    }
+    stageRef.current?.setSpeaking(false)
+  }
+
+  function stopTts() {
+    const audio = audioRef.current
+    if (!audio) return
+    audioRef.current = null
+    audio.pause()
+    if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src)
+    stageRef.current?.setSpeaking(false)
+  }
+
+  async function playTts(text: string) {
+    const clean = stripEmotionTags(text).trim()
+    if (!clean) return
+    const blob = await api.tts(clean)
+    stopTts()
+    const url = URL.createObjectURL(blob)
+    const audio = new Audio(url)
+    audioRef.current = audio
+    audio.onplay = () => stageRef.current?.setSpeaking(true)
+    const end = () => {
+      if (audioRef.current === audio) {
+        audioRef.current = null
+        stageRef.current?.setSpeaking(false)
+      }
+      URL.revokeObjectURL(url)
+    }
+    audio.onended = end
+    audio.onerror = end
+    await audio.play()
+  }
+
   // ── Scène 3D (import lazy, contrat scene/types.ts) ───────────────────────
 
   useEffect(() => {
@@ -79,9 +134,12 @@ function AppInner() {
     })
     return () => {
       cancelled = true
+      stopTts()
+      if (speakTimerRef.current !== null) window.clearTimeout(speakTimerRef.current)
       stageRef.current?.dispose()
       stageRef.current = null
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Changement de personnage (ou scène prête) → charger son modèle VRM.
@@ -198,8 +256,12 @@ function AppInner() {
     const ac = new AbortController()
     abortRef.current = ac
     setStreaming(true)
-    stageRef.current?.setSpeaking(true)
+    // Un nouveau message coupe la lecture TTS de la réponse précédente. Les
+    // lèvres, elles, n'attendent que les deltas de TEXTE (pokeSpeaking) : rien
+    // ne bouge pendant la connexion ni pendant le raisonnement du modèle.
+    stopTts()
     let acc = ''
+    let thinkingAcc = ''
     let emotionFound = false
     let finished = false
 
@@ -212,6 +274,7 @@ function AppInner() {
         onEvent: (ev) => {
           if (ev.type === 'delta') {
             acc += ev.text
+            pokeSpeaking()
             if (!emotionFound) {
               const em = extractEmotion(acc)
               if (em) {
@@ -222,6 +285,12 @@ function AppInner() {
             const text = acc
             setFeed((f) =>
               f.map((it) => (it.kind === 'msg' && it.pending ? { ...it, msg: { ...it.msg, content: text } } : it)),
+            )
+          } else if (ev.type === 'thinking') {
+            thinkingAcc += ev.text
+            const thinking = thinkingAcc
+            setFeed((f) =>
+              f.map((it) => (it.kind === 'msg' && it.pending ? { ...it, msg: { ...it.msg, thinking } } : it)),
             )
           } else if (ev.type === 'tool') {
             const chip: FeedItem = { kind: 'tool', name: ev.name, args: ev.args }
@@ -238,6 +307,11 @@ function AppInner() {
             }
             setFeed((f) => f.map((it) => (it.kind === 'msg' && it.pending ? { kind: 'msg', msg: ev.message } : it)))
             setChatMeta((m) => (m ? { ...m, messageCount: m.messageCount + 2, updatedAt: ev.message.ts } : m))
+            if (settings?.ttsEnabled) {
+              playTts(ev.message.content).catch((e) => {
+                setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }])
+              })
+            }
           } else if (ev.type === 'error') {
             finished = true
             keepPartialDraft({ kind: 'error', text: ev.message })
@@ -257,7 +331,7 @@ function AppInner() {
       }
     } finally {
       setStreaming(false)
-      stageRef.current?.setSpeaking(false)
+      stopSpeaking()
       abortRef.current = null
     }
   }
@@ -399,7 +473,7 @@ function AppInner() {
         ) : (
           // key : remonte le fil à chaque changement de chat (réinitialise le
           // scroll et l'autoscroll collé en bas).
-          <MessageList key={chatMeta?.id ?? 'no-chat'} items={feed} />
+          <MessageList key={chatMeta?.id ?? 'no-chat'} items={feed} showThoughts={settings?.showThoughts ?? false} />
         )}
 
         <Composer
