@@ -134,18 +134,26 @@ function AppInner() {
 
   // ── Lèvres & voix ────────────────────────────────────────────────────────
 
-  // Un delta de texte vient d'arriver : bouche animée, refermée 600 ms après le
-  // dernier delta (couvre les pauses de thinking et d'appels d'outils mi-flux).
-  function pokeSpeaking() {
+  // Un delta de texte vient d'arriver : la bouche reste animée le temps de
+  // « prononcer » ce qui vient de s'afficher (~35 ms/caractère, plancher 600 ms,
+  // plafond 4 s d'avance) — sinon une réponse arrivée en une rafale ne ferait
+  // bouger les lèvres qu'un clignement. Rien ne bouge pendant le thinking.
+  const speakUntilRef = useRef(0)
+
+  function pokeSpeaking(chars = 0) {
+    const now = performance.now()
+    const base = Math.max(speakUntilRef.current, now + 600)
+    speakUntilRef.current = Math.min(base + chars * 35, now + 4000)
     stageRef.current?.setSpeaking(true)
     if (speakTimerRef.current !== null) window.clearTimeout(speakTimerRef.current)
     speakTimerRef.current = window.setTimeout(() => {
       speakTimerRef.current = null
       stageRef.current?.setSpeaking(false)
-    }, 600)
+    }, speakUntilRef.current - now)
   }
 
   function stopSpeaking() {
+    speakUntilRef.current = 0
     if (speakTimerRef.current !== null) {
       window.clearTimeout(speakTimerRef.current)
       speakTimerRef.current = null
@@ -216,6 +224,13 @@ function AppInner() {
     if (!clean) return
     const blob = await api.tts(clean)
     stopTts()
+    // Le timer des lèvres « texte » ne doit pas refermer la bouche en pleine
+    // lecture audio : l'audio pilote seul à partir d'ici.
+    speakUntilRef.current = 0
+    if (speakTimerRef.current !== null) {
+      window.clearTimeout(speakTimerRef.current)
+      speakTimerRef.current = null
+    }
     const url = URL.createObjectURL(blob)
     const audio = new Audio(url)
     audioRef.current = audio
@@ -550,7 +565,7 @@ function AppInner() {
         onEvent: (ev) => {
           if (ev.type === 'delta') {
             acc += ev.text
-            pokeSpeaking()
+            pokeSpeaking(ev.text.length)
             if (!emotionFound) {
               const em = extractEmotion(acc)
               if (em) {
@@ -639,7 +654,9 @@ function AppInner() {
       }
     } finally {
       setStreaming(false)
-      stopSpeaking()
+      // Fin NORMALE : la bouche finit de « prononcer » la dernière rafale (le
+      // timer de pokeSpeaking la refermera). Interruption/abandon : on coupe net.
+      if (!finished) stopSpeaking()
       abortRef.current = null
     }
   }
