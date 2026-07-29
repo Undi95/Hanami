@@ -1,6 +1,9 @@
 /* Hanami — thème sombre sakura, mobile-first. Aucune lib CSS. */
 
 :root {
+  /* Widgets NATIFS en sombre (liste déroulante des <select>, autofill…) —
+     sans ça, le navigateur ouvre des popups blancs illisibles sur notre thème. */
+  color-scheme: dark;
   --bg: #171221;
   --bg-2: #211a30;
   --accent: #f5a3c7;
@@ -49,6 +52,13 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+/* Ceinture en plus de color-scheme : les items des listes déroulantes suivent
+   le thème même sur les navigateurs qui les peignent eux-mêmes. */
+select option {
+  background-color: var(--bg-2);
+  color: var(--text);
 }
 
 :focus-visible {
