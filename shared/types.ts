@@ -36,6 +36,7 @@ export type GreetingMode = 'written' | 'generated' | 'ask'
 export interface CharacterMeta {
   id: string
   name: string
+  theme?: string // thème de couleurs propre au personnage (absent = thème de l'app)
   vrm: string // ex: /vrm/reference.vrm ('' = pas de modèle 3D)
   background: string // ex: /backgrounds/room.png ('' = dégradé par défaut)
   greeting: string // premier message affiché dans un nouveau chat

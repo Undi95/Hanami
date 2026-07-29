@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { CharacterFull, CharacterMeta, GreetingMode } from '../../../shared/types'
 import * as api from '../api'
 import { useI18n } from '../i18n'
+import { THEMES, THEME_LABELS } from '../themes'
 import Dialog from './Dialog'
 
 interface Props {
@@ -21,6 +22,7 @@ interface FormState {
   name: string
   vrm: string
   background: string
+  theme: string // '' = thème de l'app
   greeting: string
   greetings: string[]
   greetingMode: GreetingMode
@@ -31,6 +33,7 @@ const EMPTY_FORM: FormState = {
   name: '',
   vrm: '',
   background: '',
+  theme: '',
   greeting: '',
   greetings: [],
   greetingMode: 'written',
@@ -89,6 +92,7 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
         name: c.name,
         vrm: c.vrm,
         background: c.background,
+        theme: c.theme ?? '',
         greeting: c.greeting,
         greetings: c.greetings ?? [],
         greetingMode: c.greetingMode ?? 'written',
@@ -138,6 +142,7 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
           name: form.name.trim(),
           vrm: form.vrm,
           background: form.background,
+          theme: form.theme,
           greeting: form.greeting,
           greetings,
           greetingMode: form.greetingMode,
@@ -149,6 +154,7 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
           name: form.name.trim(),
           vrm: form.vrm,
           background: form.background,
+          theme: form.theme,
           greeting: form.greeting,
           greetings,
           greetingMode: form.greetingMode,
@@ -269,6 +275,18 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
                 ))}
               </select>
             </div>
+          </div>
+          <div className="field">
+            <label htmlFor="char-theme">{t('theme')}</label>
+            {/* Toute l'app prend les couleurs de ce personnage tant qu'il est actif. */}
+            <select id="char-theme" value={form.theme} onChange={(e) => set('theme', e.target.value)}>
+              <option value="">{t('themeAppDefault')}</option>
+              {THEMES.map((id) => (
+                <option key={id} value={id}>
+                  {t(THEME_LABELS[id])}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="field">
             <label>{t('greetingMode')}</label>

@@ -11,6 +11,7 @@ import type {
 import type { VrmStage } from './scene/types'
 import * as api from './api'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
+import { applyTheme, resolveTheme, saveTheme, savedTheme, type ThemeId } from './themes'
 import { I18nProvider, localeOf, useI18n } from './i18n'
 import TopBar, { type DialogKind } from './components/TopBar'
 import MessageList, { VnBox, type FeedItem } from './components/MessageList'
@@ -79,6 +80,9 @@ function AppInner() {
   })
   const [stageReady, setStageReady] = useState(false)
   const [vrmError, setVrmError] = useState<string | null>(null)
+  // Thème de l'app (préférence locale, comme la langue) — le thème propre au
+  // personnage actif, s'il existe, prend le dessus.
+  const [appTheme, setAppTheme] = useState<ThemeId>(savedTheme)
   // Mode d'accueil « demander » : question posée une seule fois par ouverture de
   // chat vide (le personnage et le chat visés sont figés dans l'état).
   const [greetingAsk, setGreetingAsk] = useState<{ char: CharacterFull; chat: ChatMeta } | null>(null)
@@ -436,6 +440,12 @@ function AppInner() {
   useEffect(() => {
     boot().catch((e) => console.error('[boot]', e))
   }, [boot])
+
+  // ── Thème ────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    applyTheme(resolveTheme(character?.theme, appTheme))
+  }, [character?.theme, appTheme])
 
   // ── Mode visual novel ────────────────────────────────────────────────────
 
@@ -940,7 +950,16 @@ function AppInner() {
       </div>
 
       {dialog === 'settings' && settings && (
-        <SettingsDialog settings={settings} onSaved={handleSettingsSaved} onClose={() => setDialog(null)} />
+        <SettingsDialog
+          settings={settings}
+          theme={appTheme}
+          onPickTheme={(t) => {
+            setAppTheme(t)
+            saveTheme(t)
+          }}
+          onSaved={handleSettingsSaved}
+          onClose={() => setDialog(null)}
+        />
       )}
       {dialog === 'settings' && !settings && (
         <Dialog title={t('settings')} onClose={() => setDialog(null)}>

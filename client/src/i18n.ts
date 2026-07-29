@@ -29,6 +29,15 @@ const FR = {
   langFr: 'Français',
   langEn: 'English',
 
+  // ── Thèmes ───────────────────────────────────────────────────────────────
+  theme: 'Thème',
+  themeSakura: 'Sakura',
+  themeMinuit: 'Minuit',
+  themeMatcha: 'Matcha',
+  themeBraise: 'Braise',
+  themeEncre: 'Encre',
+  themeAppDefault: 'Thème de l’app',
+
   // ── Coquille de l’application ────────────────────────────────────────────
   collapseChat: 'Replier le chat pour voir l’avatar',
   expandChat: 'Déplier le chat',
@@ -261,6 +270,15 @@ const EN: Record<Key, string> = {
   language: 'Language',
   langFr: 'Français',
   langEn: 'English',
+
+  // ── Themes ───────────────────────────────────────────────────────────────
+  theme: 'Theme',
+  themeSakura: 'Sakura',
+  themeMinuit: 'Midnight',
+  themeMatcha: 'Matcha',
+  themeBraise: 'Ember',
+  themeEncre: 'Ink',
+  themeAppDefault: 'App theme',
 
   // ── App shell ────────────────────────────────────────────────────────────
   collapseChat: 'Collapse the chat to see the avatar',

@@ -65,6 +65,7 @@ charactersRouter.post('/api/characters', (req, res) => {
       greeting: typeof body.greeting === 'string' ? body.greeting : undefined,
       greetings: greetingsOf(body.greetings),
       greetingMode: greetingModeOf(body.greetingMode),
+      theme: typeof body.theme === 'string' ? body.theme : undefined,
     })
     res.json(character)
   } catch (e) {

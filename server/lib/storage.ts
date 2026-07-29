@@ -131,7 +131,13 @@ export interface CreateCharacterInput {
   greeting?: string
   greetings?: string[]
   greetingMode?: GreetingMode
+  theme?: string
   systemPrompt?: string
+}
+
+/** Thème par personnage : clé écrite seulement quand elle porte une valeur. */
+function themeField(theme: unknown): Partial<CharacterMeta> {
+  return typeof theme === 'string' && theme.trim() ? { theme: theme.trim() } : {}
 }
 
 /**
@@ -161,6 +167,7 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
     background: input.background ?? '',
     greeting: input.greeting ?? '',
     ...greetingFields(input.greetings, input.greetingMode),
+    ...themeField(input.theme),
     createdAt: new Date().toISOString(),
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
@@ -181,6 +188,8 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     greeting: patch.greeting ?? current.greeting,
     // Un tableau vide dans le patch EST une valeur : il efface les variantes.
     ...greetingFields(patch.greetings ?? current.greetings, patch.greetingMode ?? current.greetingMode),
+    // '' explicite dans le patch = retour au thème de l'app.
+    ...themeField(patch.theme ?? current.theme),
     createdAt: current.createdAt,
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))

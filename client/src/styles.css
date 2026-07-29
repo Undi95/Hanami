@@ -7,7 +7,7 @@
   --bg: #171221;
   --bg-2: #211a30;
   --accent: #f5a3c7;
-  --accent-soft: rgba(245, 163, 199, 0.16);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --accent-ink: #241322;
   --text: #ece7f2;
   --text-dim: rgba(236, 231, 242, 0.55);
@@ -17,6 +17,68 @@
   --danger: #ff7a90;
   --ok: #7fe0b2;
   --mono: ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', monospace;
+  /* Fond de scène (mode sans décor 3D) — deux halos + un dégradé de base. */
+  --scene-bg:
+    radial-gradient(1200px 800px at 70% 18%, #2c2142 0%, transparent 55%),
+    radial-gradient(900px 700px at 18% 85%, #251a3a 0%, transparent 60%),
+    linear-gradient(160deg, #1e1731 0%, #171221 60%, #110d19 100%);
+}
+
+/* ── Thèmes préfaits ──────────────────────────────────────────────────────
+   Chaque thème redéfinit la base ; tout le reste (accent-soft, bordures roses,
+   scrollbars…) suit automatiquement via color-mix(var(--accent)).
+   Défaut sans data-theme = Sakura (les valeurs ci-dessus). */
+
+:root[data-theme='minuit'] {
+  --bg: #0f1420;
+  --bg-2: #182238;
+  --accent: #8fc1ee;
+  --accent-ink: #10202e;
+  --panel: rgba(15, 20, 32, 0.68);
+  --panel-strong: rgba(20, 27, 44, 0.94);
+  --scene-bg:
+    radial-gradient(1200px 800px at 70% 18%, #1d2a45 0%, transparent 55%),
+    radial-gradient(900px 700px at 18% 85%, #16223a 0%, transparent 60%),
+    linear-gradient(160deg, #141d31 0%, #0f1420 60%, #0a0e17 100%);
+}
+
+:root[data-theme='matcha'] {
+  --bg: #111a13;
+  --bg-2: #1a2a1e;
+  --accent: #a5d9a7;
+  --accent-ink: #122014;
+  --panel: rgba(14, 21, 15, 0.68);
+  --panel-strong: rgba(19, 29, 21, 0.94);
+  --scene-bg:
+    radial-gradient(1200px 800px at 70% 18%, #24382a 0%, transparent 55%),
+    radial-gradient(900px 700px at 18% 85%, #1c2f22 0%, transparent 60%),
+    linear-gradient(160deg, #18271c 0%, #111a13 60%, #0b120d 100%);
+}
+
+:root[data-theme='braise'] {
+  --bg: #1a1210;
+  --bg-2: #2a1d18;
+  --accent: #f0b183;
+  --accent-ink: #26160e;
+  --panel: rgba(23, 15, 12, 0.68);
+  --panel-strong: rgba(33, 22, 17, 0.94);
+  --scene-bg:
+    radial-gradient(1200px 800px at 70% 18%, #3a2620 0%, transparent 55%),
+    radial-gradient(900px 700px at 18% 85%, #2f1f1a 0%, transparent 60%),
+    linear-gradient(160deg, #2a1c16 0%, #1a1210 60%, #120c0a 100%);
+}
+
+:root[data-theme='encre'] {
+  --bg: #121214;
+  --bg-2: #1c1c20;
+  --accent: #c9c9d4;
+  --accent-ink: #1a1a1e;
+  --panel: rgba(16, 16, 18, 0.68);
+  --panel-strong: rgba(24, 24, 27, 0.94);
+  --scene-bg:
+    radial-gradient(1200px 800px at 70% 18%, #232329 0%, transparent 55%),
+    radial-gradient(900px 700px at 18% 85%, #1d1d22 0%, transparent 60%),
+    linear-gradient(160deg, #1c1c21 0%, #121214 60%, #0c0c0e 100%);
 }
 
 * {
@@ -69,14 +131,14 @@ select option {
 /* Scrollbars fines */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(245, 163, 199, 0.35) transparent;
+  scrollbar-color: color-mix(in srgb, var(--accent) 35%, transparent) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(245, 163, 199, 0.3);
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
   border-radius: 4px;
 }
 *::-webkit-scrollbar-track {
@@ -88,10 +150,7 @@ select option {
 .scene {
   position: fixed;
   inset: 0;
-  background:
-    radial-gradient(1200px 800px at 70% 18%, #2c2142 0%, transparent 55%),
-    radial-gradient(900px 700px at 18% 85%, #251a3a 0%, transparent 60%),
-    linear-gradient(160deg, #1e1731 0%, #171221 60%, #110d19 100%);
+  background: var(--scene-bg);
   background-size: cover;
   background-position: center;
 }
@@ -334,7 +393,7 @@ select option {
 
 .msg.user .bubble {
   background: var(--accent-soft);
-  border-color: rgba(245, 163, 199, 0.3);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
   border-bottom-right-radius: 5px;
 }
 
@@ -722,7 +781,7 @@ select option {
 
 /* Correspondances dans les bulles (la courante ressort seule) */
 .search-hit {
-  background: rgba(245, 163, 199, 0.3);
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
   color: inherit;
   border-radius: 3px;
 }
@@ -881,7 +940,7 @@ select option {
 
 .composer textarea:focus {
   outline: none;
-  border-color: rgba(245, 163, 199, 0.55);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .composer textarea:disabled {
@@ -1173,7 +1232,7 @@ select option {
 .login-card input:focus,
 .memory-textarea:focus {
   outline: none;
-  border-color: rgba(245, 163, 199, 0.55);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .hint {
@@ -1281,6 +1340,31 @@ select option {
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
+/* Pastilles bicolores du sélecteur de thème */
+.theme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.theme-dot {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.theme-dot span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: block;
+}
+
 .seg-btn:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
@@ -1288,7 +1372,7 @@ select option {
 
 .seg-btn[aria-pressed='true'] {
   background: var(--accent-soft);
-  border-color: rgba(245, 163, 199, 0.4);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   color: var(--text);
   font-weight: 600;
 }
@@ -1503,7 +1587,7 @@ select option {
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
-  border: 1px solid rgba(245, 163, 199, 0.3);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   flex: none;
 }
 
@@ -1622,7 +1706,7 @@ select option {
 
 .tab.active {
   background: var(--accent-soft);
-  border-color: rgba(245, 163, 199, 0.4);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   color: var(--text);
 }
 
@@ -1650,10 +1734,7 @@ select option {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background:
-    radial-gradient(1200px 800px at 70% 18%, #2c2142 0%, transparent 55%),
-    radial-gradient(900px 700px at 18% 85%, #251a3a 0%, transparent 60%),
-    linear-gradient(160deg, #1e1731 0%, #171221 60%, #110d19 100%);
+  background: var(--scene-bg);
 }
 
 .login-card {
@@ -1757,7 +1838,7 @@ select option {
   gap: 14px;
   padding: 0 14px 7px;
   background: rgba(19, 14, 29, 0.95); /* le ton sombre des sections basses */
-  border: 1px solid rgba(245, 163, 199, 0.28);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   border-top: none;
   border-radius: 0 0 12px 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
@@ -1817,7 +1898,7 @@ select option {
   margin: 0 auto 10px;
   padding: 7px 10px;
   background: rgba(19, 14, 29, 0.95);
-  border: 1px solid rgba(245, 163, 199, 0.28);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   border-top: 1px solid var(--border);
   border-radius: 0 0 12px 12px;
 }
@@ -1831,7 +1912,7 @@ select option {
   margin: 14px auto 0;
   padding: 15px 18px 10px;
   background: var(--panel-strong);
-  border: 1px solid rgba(245, 163, 199, 0.28);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   border-radius: 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
@@ -1852,7 +1933,7 @@ select option {
   letter-spacing: 0.05em;
   color: var(--accent);
   background: var(--panel-strong);
-  border: 1px solid rgba(245, 163, 199, 0.28);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   border-radius: 8px;
 }
 

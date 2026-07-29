@@ -6,10 +6,13 @@ import { useState } from 'react'
 import type { ModelMode, Settings } from '../../../shared/types'
 import * as api from '../api'
 import { isPlural, useI18n, type Lang } from '../i18n'
+import { THEMES, THEME_DOTS, THEME_LABELS, type ThemeId } from '../themes'
 import Dialog from './Dialog'
 
 interface Props {
   settings: Settings
+  theme: ThemeId
+  onPickTheme: (theme: ThemeId) => void
   onSaved: (s: Settings) => void
   onClose: () => void
 }
@@ -151,7 +154,7 @@ function Seg<T extends string>({
 const LANG_OPTIONS: readonly Lang[] = ['fr', 'en']
 const MODEL_MODE_OPTIONS: readonly ModelMode[] = ['full', 'simple']
 
-export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
+export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, onClose }: Props) {
   const { lang, setLang, t } = useI18n()
   const [form, setForm] = useState<FormState>(() => toForm(settings))
   const [initialForm] = useState<FormState>(() => toForm(settings))
@@ -263,6 +266,28 @@ export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
         onPick={setLang}
         ariaLabel={t('language')}
       />
+
+      <h3 className="section-title">{t('theme')}</h3>
+      {/* Appliqué immédiatement, comme la langue — pas lié au bouton Enregistrer. */}
+      <div className="seg" role="group" aria-label={t('theme')}>
+        {THEMES.map((id) => (
+          <button
+            key={id}
+            type="button"
+            className="seg-btn theme-btn"
+            aria-pressed={theme === id}
+            onClick={() => onPickTheme(id)}
+          >
+            <span
+              className="theme-dot"
+              style={{ background: THEME_DOTS[id][1], borderColor: THEME_DOTS[id][0] }}
+            >
+              <span style={{ background: THEME_DOTS[id][0] }} />
+            </span>
+            {t(THEME_LABELS[id])}
+          </button>
+        ))}
+      </div>
 
       <h3 className="section-title">{t('sectionBackend')}</h3>
       <div className="field">

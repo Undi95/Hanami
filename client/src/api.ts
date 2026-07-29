@@ -158,6 +158,7 @@ export function createCharacter(input: {
   greeting?: string
   greetings?: string[]
   greetingMode?: GreetingMode
+  theme?: string
 }): Promise<CharacterFull> {
   return req('POST', '/api/characters', input)
 }
