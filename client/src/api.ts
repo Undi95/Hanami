@@ -207,6 +207,11 @@ export function deleteMemoryFile(charId: string, name: string): Promise<{ ok: tr
   return req('DELETE', `/api/characters/${encodeURIComponent(charId)}/memory/${encodeURIComponent(name)}`)
 }
 
+/** « Retiens ça » : épingle un passage dans la mémoire du personnage (moments.md). */
+export function rememberText(charId: string, text: string): Promise<{ ok: true }> {
+  return req('POST', `/api/characters/${encodeURIComponent(charId)}/memory/remember`, { text })
+}
+
 // ── Imports ────────────────────────────────────────────────────────────────
 
 export function importCard(name: string, file: Blob): Promise<{ character: CharacterMeta }> {

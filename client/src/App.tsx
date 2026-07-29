@@ -689,6 +689,17 @@ function AppInner() {
             showThoughts={settings?.showThoughts ?? false}
             editable={!streaming && !compacting}
             onSaveEdit={handleEditMessage}
+            onRemember={(msg) => {
+              const char = character
+              if (!char) return
+              api
+                .rememberText(char.id, stripEmotionTags(msg.content).trim())
+                .then(() => setFeed((f) => [...f, { kind: 'info', text: t('remembered') }]))
+                .catch((e) => {
+                  if (e instanceof api.AuthRequiredError) setNeedLogin(true)
+                  else setFeed((f) => [...f, { kind: 'error', text: api.errorMessage(e) }])
+                })
+            }}
           />
         )}
 

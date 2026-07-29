@@ -67,6 +67,8 @@ const FR = {
   regenerate: 'Régénérer',
   continueReply: 'Continuer',
   editMessage: 'Modifier le message',
+  rememberThis: 'Retenir ce message (mémoire)',
+  remembered: 'Épinglé dans la mémoire (moments.md).',
 
   // ── Conversations ────────────────────────────────────────────────────────
   newChat: 'Nouvelle conversation',
@@ -258,6 +260,8 @@ const EN: Record<Key, string> = {
   regenerate: 'Regenerate',
   continueReply: 'Continue',
   editMessage: 'Edit message',
+  rememberThis: 'Remember this message (memory)',
+  remembered: 'Pinned to memory (moments.md).',
 
   // ── Conversations ────────────────────────────────────────────────────────
   newChat: 'New conversation',

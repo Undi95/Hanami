@@ -19,6 +19,8 @@ interface Props {
   editable: boolean
   /** Sauvegarde une édition — ordinal = position parmi les messages sauvegardés. */
   onSaveEdit: (ordinal: number, content: string) => Promise<void>
+  /** « Retiens ça » : épingle le contenu du message dans la mémoire. */
+  onRemember: (msg: ChatMessage) => void
 }
 
 function fmtTime(ts: string, lang: Lang): string {
@@ -41,7 +43,7 @@ function summarizeArgs(args: string): string {
   return out.length > 48 ? out.slice(0, 45) + '…' : out
 }
 
-export default function MessageList({ items, showThoughts, editable, onSaveEdit }: Props) {
+export default function MessageList({ items, showThoughts, editable, onSaveEdit, onRemember }: Props) {
   const { lang, t } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
@@ -123,16 +125,28 @@ export default function MessageList({ items, showThoughts, editable, onSaveEdit 
               <div className="msg-ts">
                 {fmtTime(item.msg.ts, lang)}
                 {editable && ordinal !== null && (
-                  <button
-                    className="msg-edit"
-                    title={t('editMessage')}
-                    aria-label={t('editMessage')}
-                    onClick={() => startEdit(ordinal, item.msg)}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17z" />
-                    </svg>
-                  </button>
+                  <>
+                    <button
+                      className="msg-edit"
+                      title={t('editMessage')}
+                      aria-label={t('editMessage')}
+                      onClick={() => startEdit(ordinal, item.msg)}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17z" />
+                      </svg>
+                    </button>
+                    <button
+                      className="msg-edit"
+                      title={t('rememberThis')}
+                      aria-label={t('rememberThis')}
+                      onClick={() => onRemember(item.msg)}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6.5 3.5h11v17l-5.5-4-5.5 4z" />
+                      </svg>
+                    </button>
+                  </>
                 )}
               </div>
             )}
