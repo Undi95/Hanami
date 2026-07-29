@@ -36,7 +36,11 @@ const FR = {
   themeMatcha: 'Matcha',
   themeBraise: 'Braise',
   themeEncre: 'Encre',
+  themeCustom: 'Perso',
   themeAppDefault: 'Thème de l’app',
+  customThemeBg: 'Fond',
+  customThemeAccent: 'Accent',
+  themeCode: 'Code du thème (partageable — collez-en un ici)',
 
   // ── Coquille de l’application ────────────────────────────────────────────
   collapseChat: 'Replier le chat pour voir l’avatar',
@@ -278,7 +282,11 @@ const EN: Record<Key, string> = {
   themeMatcha: 'Matcha',
   themeBraise: 'Ember',
   themeEncre: 'Ink',
+  themeCustom: 'Custom',
   themeAppDefault: 'App theme',
+  customThemeBg: 'Background',
+  customThemeAccent: 'Accent',
+  themeCode: 'Theme code (shareable — paste one here)',
 
   // ── App shell ────────────────────────────────────────────────────────────
   collapseChat: 'Collapse the chat to see the avatar',

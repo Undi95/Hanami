@@ -6,13 +6,24 @@ import { useState } from 'react'
 import type { ModelMode, Settings } from '../../../shared/types'
 import * as api from '../api'
 import { isPlural, useI18n, type Lang } from '../i18n'
-import { THEMES, THEME_DOTS, THEME_LABELS, type ThemeId } from '../themes'
+import {
+  THEMES,
+  THEME_DOTS,
+  THEME_LABELS,
+  applyTheme,
+  parseThemeCode,
+  saveCustom,
+  savedCustom,
+  themeCode,
+  type AppTheme,
+  type CustomTheme,
+} from '../themes'
 import Dialog from './Dialog'
 
 interface Props {
   settings: Settings
-  theme: ThemeId
-  onPickTheme: (theme: ThemeId) => void
+  theme: AppTheme
+  onPickTheme: (theme: AppTheme) => void
   onSaved: (s: Settings) => void
   onClose: () => void
 }
@@ -155,6 +166,40 @@ const LANG_OPTIONS: readonly Lang[] = ['fr', 'en']
 const MODEL_MODE_OPTIONS: readonly ModelMode[] = ['full', 'simple']
 
 export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, onClose }: Props) {
+  // Thème perso : deux couleurs, persistées à chaque changement et appliquées
+  // en direct quand le thème « Perso » est actif. Le code texte permet de
+  // partager/importer un thème d'un copier-coller.
+  const [custom, setCustom] = useState<CustomTheme>(() => savedCustom())
+  const [codeDraft, setCodeDraft] = useState<string>(() => themeCode(savedCustom()))
+  const [codeCopied, setCodeCopied] = useState(false)
+
+  function commitCustom(next: CustomTheme) {
+    setCustom(next)
+    setCodeDraft(themeCode(next))
+    saveCustom(next)
+    if (theme === 'custom') applyTheme('custom')
+  }
+
+  function setCustomColor(key: keyof CustomTheme, value: string) {
+    commitCustom({ ...custom, [key]: value })
+  }
+
+  function applyCode() {
+    const parsed = parseThemeCode(codeDraft)
+    if (parsed) commitCustom(parsed)
+    else setCodeDraft(themeCode(custom)) // code invalide : on réaffiche l'actuel
+  }
+
+  function copyCode() {
+    navigator.clipboard
+      .writeText(themeCode(custom))
+      .then(() => {
+        setCodeCopied(true)
+        setTimeout(() => setCodeCopied(false), 1500)
+      })
+      .catch((e) => console.error('[theme]', e))
+  }
+
   const { lang, setLang, t } = useI18n()
   const [form, setForm] = useState<FormState>(() => toForm(settings))
   const [initialForm] = useState<FormState>(() => toForm(settings))
@@ -287,7 +332,55 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
             {t(THEME_LABELS[id])}
           </button>
         ))}
+        <button
+          type="button"
+          className="seg-btn theme-btn"
+          aria-pressed={theme === 'custom'}
+          onClick={() => onPickTheme('custom')}
+        >
+          <span
+            className="theme-dot"
+            style={{ background: custom.bg, borderColor: custom.accent }}
+          >
+            <span style={{ background: custom.accent }} />
+          </span>
+          {t('themeCustom')}
+        </button>
       </div>
+      {theme === 'custom' && (
+        <div className="custom-theme">
+          {/* Deux couleurs suffisent : tout le shading est dérivé en CSS. */}
+          <label className="custom-color">
+            {t('customThemeBg')}
+            <input type="color" value={custom.bg} onChange={(e) => setCustomColor('bg', e.target.value)} />
+          </label>
+          <label className="custom-color">
+            {t('customThemeAccent')}
+            <input
+              type="color"
+              value={custom.accent}
+              onChange={(e) => setCustomColor('accent', e.target.value)}
+            />
+          </label>
+          <div className="row" style={{ flex: 1, minWidth: 160 }}>
+            <input
+              type="text"
+              value={codeDraft}
+              aria-label={t('themeCode')}
+              title={t('themeCode')}
+              style={{ flex: 1, minWidth: 0, fontFamily: 'var(--mono)', fontSize: 12 }}
+              onChange={(e) => setCodeDraft(e.target.value)}
+              onBlur={applyCode}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') applyCode()
+              }}
+            />
+            <button className="btn small" type="button" onClick={copyCode}>
+              {codeCopied ? t('copied') : t('copy')}
+            </button>
+          </div>
+        </div>
+      )}
 
       <h3 className="section-title">{t('sectionBackend')}</h3>
       <div className="field">

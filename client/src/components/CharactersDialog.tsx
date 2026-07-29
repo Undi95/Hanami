@@ -286,6 +286,7 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
                   {t(THEME_LABELS[id])}
                 </option>
               ))}
+              <option value="custom">{t('themeCustom')}</option>
             </select>
           </div>
           <div className="field">

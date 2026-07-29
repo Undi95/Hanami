@@ -68,6 +68,39 @@
     linear-gradient(160deg, #2a1c16 0%, #1a1210 60%, #120c0a 100%);
 }
 
+/* Thème PERSO : deux couleurs choisies par l'utilisateur (--custom-bg /
+   --custom-accent, posées en inline par themes.ts) — tout le reste est dérivé,
+   avec le même soin de shading que les thèmes préfaits. */
+:root[data-theme='custom'] {
+  --bg: var(--custom-bg, #1a1030);
+  --bg-2: color-mix(in srgb, var(--custom-bg, #1a1030) 90%, white);
+  --accent: var(--custom-accent, #a0e8d8);
+  --accent-ink: color-mix(in srgb, var(--custom-accent, #a0e8d8) 25%, black);
+  --panel: color-mix(in srgb, var(--custom-bg, #1a1030) 68%, transparent);
+  --panel-strong: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--custom-bg, #1a1030) 92%, white) 94%,
+    transparent
+  );
+  --scene-bg:
+    radial-gradient(
+      1200px 800px at 70% 18%,
+      color-mix(in srgb, var(--custom-bg, #1a1030) 78%, var(--custom-accent, #a0e8d8)) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      900px 700px at 18% 85%,
+      color-mix(in srgb, var(--custom-bg, #1a1030) 88%, var(--custom-accent, #a0e8d8)) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--custom-bg, #1a1030) 92%, white) 0%,
+      var(--custom-bg, #1a1030) 60%,
+      color-mix(in srgb, var(--custom-bg, #1a1030) 78%, black) 100%
+    );
+}
+
 :root[data-theme='encre'] {
   --bg: #121214;
   --bg-2: #1c1c20;
@@ -1338,6 +1371,37 @@ select option {
   color: var(--text-dim);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+/* Éditeur compact du thème perso (visible uniquement quand « Perso » est actif) */
+.custom-theme {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.custom-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.custom-color input[type='color'] {
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: none;
+  cursor: pointer;
 }
 
 /* Pastilles bicolores du sélecteur de thème */
