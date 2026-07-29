@@ -514,10 +514,13 @@ export function VnBox({ items, characterName }: { items: FeedItem[]; characterNa
           : stripEmotionTags(last.msg.content)
 
   return (
-    <div className="vn-box" ref={boxRef}>
+    // L'étiquette de nom chevauche la bordure supérieure (namebox de visual
+    // novel) : la boîte ne défile pas elle-même — c'est .vn-text qui scrolle,
+    // sinon l'étiquette en position négative serait rognée par l'overflow.
+    <div className="vn-box">
       {last !== null && <div className="vn-name">{isUser ? t('vnYou') : characterName}</div>}
       {last !== null && (
-        <div className="vn-text">
+        <div className="vn-text" ref={boxRef}>
           {pending && !text ? (
             <span className="typing" aria-label={t('replyInProgress')}>
               <i />

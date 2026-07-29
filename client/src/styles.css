@@ -1724,13 +1724,40 @@ select {
   border-radius: 10px;
 }
 
-/* Régénérer/Continuer : posés sur la scène, donc opaques (le style ajouré du
-   fil de messages y serait illisible). */
+/* Régénérer/Continuer : quick-menu INTÉGRÉ à la boîte de dialogue — la bande
+   basse de la même boîte (mêmes bordures), comme dans un vrai visual novel. */
+.chat-panel.vn .reply-actions {
+  width: min(900px, calc(100% - 28px));
+  margin: 0 auto;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 0 14px 7px;
+  background: var(--panel-strong);
+  border: 1px solid rgba(245, 163, 199, 0.28);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+/* Quand la bande d'actions est là, la boîte s'ouvre vers elle : une seule forme. */
+.chat-panel.vn:has(.reply-actions) .vn-box {
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  padding-bottom: 4px;
+}
+
 .chat-panel.vn .reply-actions .btn {
-  background: var(--panel);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  border-style: solid;
+  background: none;
+  border: none;
+  padding: 1px 2px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.chat-panel.vn .reply-actions .btn:hover {
+  color: var(--accent);
 }
 
 .chat-panel.vn .sheet-handle,
@@ -1754,28 +1781,28 @@ select {
   backdrop-filter: blur(12px);
 }
 
+/* Composer solidaire de la boîte : même largeur, fin, fond assorti. */
 .chat-panel.vn .composer {
-  width: 100%;
-  max-width: 1024px;
-  margin: 0 auto;
-  padding-left: 12px;
-  padding-right: 12px;
-  border-top: none;
-}
-
-/* Boîte de dialogue : pleine largeur avec marges, hauteur libre puis défilement. */
-.vn-box {
-  flex: 0 1 auto;
-  width: calc(100% - 24px);
-  max-width: 1000px;
-  margin: 0 auto 10px;
-  max-height: 40dvh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 11px 16px 14px;
+  width: min(900px, calc(100% - 28px));
+  margin: 4px auto 10px;
+  padding: 6px 8px;
   background: var(--panel-strong);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* Boîte de dialogue façon visual novel : hauteur stable, étiquette de nom
+   chevauchant la bordure supérieure, texte défilant À L'INTÉRIEUR. */
+.vn-box {
+  position: relative; /* ancre de l'étiquette de nom */
+  flex: 0 1 auto;
+  width: min(900px, calc(100% - 28px));
+  margin: 14px auto 0;
+  padding: 15px 18px 10px;
+  background: var(--panel-strong);
+  border: 1px solid rgba(245, 163, 199, 0.28);
+  border-radius: 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
@@ -1784,18 +1811,30 @@ select {
   margin: 6px auto 0;
 }
 
+/* Namebox : petite étiquette posée à cheval sur la bordure, en haut à gauche. */
 .vn-name {
-  font-size: 12px;
+  position: absolute;
+  top: -13px;
+  left: 16px;
+  padding: 2px 14px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.05em;
   color: var(--accent);
-  margin-bottom: 5px;
+  background: var(--panel-strong);
+  border: 1px solid rgba(245, 163, 199, 0.28);
+  border-radius: 8px;
 }
 
+/* Le texte occupe une hauteur de boîte VN constante et défile au-delà. */
 .vn-text {
+  min-height: 84px;
+  max-height: 24dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 /* ── Divers ───────────────────────────────────────────────────────────── */
