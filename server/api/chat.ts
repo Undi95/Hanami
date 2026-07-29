@@ -16,6 +16,7 @@ import {
 import { streamChatCompletion } from '../llm/openai'
 import { MEMORY_TOOL_NAMES, executeMemoryTool, memoryToolDefs } from '../tools/memoryTools'
 import { FILE_TOOL_NAMES, executeFileTool, fileToolDefs } from '../tools/fileTools'
+import { CHAT_TOOL_NAMES, chatToolDefs, executeChatTool } from '../tools/chatTools'
 import type { ChatEvent, ChatMessage, ContextInfo, Settings } from '../../shared/types'
 
 export const chatRouter = Router()
@@ -103,7 +104,8 @@ function buildPayload(
   if (pendingUserContent !== undefined) messages.push({ role: 'user', content: pendingUserContent })
 
   const tools: unknown[] = [
-    ...(settings.memoryEnabled ? memoryToolDefs : []),
+    // chat_search voyage avec la mémoire : c'est le même « souvenir de l'autre ».
+    ...(settings.memoryEnabled ? [...memoryToolDefs, ...chatToolDefs] : []),
     ...(settings.fileToolsEnabled ? fileToolDefs : []),
   ]
   const payload: BackendPayload = {
@@ -134,6 +136,9 @@ function executeTool(characterId: string, settings: Settings, name: string, rawA
   }
   if ((MEMORY_TOOL_NAMES as readonly string[]).includes(name)) {
     return executeMemoryTool(characterId, name, args)
+  }
+  if ((CHAT_TOOL_NAMES as readonly string[]).includes(name)) {
+    return executeChatTool(characterId, name, args)
   }
   if ((FILE_TOOL_NAMES as readonly string[]).includes(name)) {
     return executeFileTool(settings, name, args)
