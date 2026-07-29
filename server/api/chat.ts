@@ -78,8 +78,11 @@ function timeBlock(lastMessageTs: string | null): string {
   return block
 }
 
-/** Construit le payload EXACT envoyé au backend (aussi renvoyé tel quel par /api/prompt-preview). */
-function buildPayload(
+/**
+ * Construit le payload EXACT envoyé au backend (aussi renvoyé tel quel par
+ * /api/prompt-preview, et réutilisé par le moteur de messages spontanés).
+ */
+export function buildPayload(
   characterId: string,
   chatId: string,
   settings: Settings,

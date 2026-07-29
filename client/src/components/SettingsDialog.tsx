@@ -44,6 +44,9 @@ interface FormState {
   password: string
   contextSize: string
   autoCompact: boolean
+  spontaneousEnabled: boolean
+  spontaneousStartHour: string
+  spontaneousEndHour: string
   timeAwareness: boolean
   showThoughts: boolean
   ttsEnabled: boolean
@@ -69,6 +72,9 @@ function toForm(s: Settings): FormState {
     password: '',
     contextSize: String(s.contextSize),
     autoCompact: s.autoCompact,
+    spontaneousEnabled: s.spontaneousEnabled,
+    spontaneousStartHour: String(s.spontaneousStartHour),
+    spontaneousEndHour: String(s.spontaneousEndHour),
     timeAwareness: s.timeAwareness,
     showThoughts: s.showThoughts,
     ttsEnabled: s.ttsEnabled,
@@ -98,6 +104,9 @@ function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassw
     password: clearPassword ? api.CLEAR_SECRET : f.password,
     contextSize: Math.round(num(f.contextSize, base.contextSize)),
     autoCompact: f.autoCompact,
+    spontaneousEnabled: f.spontaneousEnabled,
+    spontaneousStartHour: Math.round(num(f.spontaneousStartHour, base.spontaneousStartHour)),
+    spontaneousEndHour: Math.round(num(f.spontaneousEndHour, base.spontaneousEndHour)),
     timeAwareness: f.timeAwareness,
     showThoughts: f.showThoughts,
     ttsEnabled: f.ttsEnabled,
@@ -538,6 +547,42 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
         </div>
       </div>
       <span className="hint">{t('ttsHint')}</span>
+
+      <h3 className="section-title">{t('sectionSpontaneous')}</h3>
+      <Toggle
+        label={t('spontaneousEnabled')}
+        sub={t('spontaneousEnabledSub')}
+        checked={form.spontaneousEnabled}
+        onChange={(v) => set('spontaneousEnabled', v)}
+      />
+      {form.spontaneousEnabled && (
+        <div className="grid-2">
+          <div className="field">
+            <label htmlFor="set-sp-start">{t('spontaneousStart')}</label>
+            <input
+              id="set-sp-start"
+              type="number"
+              step="1"
+              min="0"
+              max="23"
+              value={form.spontaneousStartHour}
+              onChange={(e) => set('spontaneousStartHour', e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="set-sp-end">{t('spontaneousEnd')}</label>
+            <input
+              id="set-sp-end"
+              type="number"
+              step="1"
+              min="0"
+              max="23"
+              value={form.spontaneousEndHour}
+              onChange={(e) => set('spontaneousEndHour', e.target.value)}
+            />
+          </div>
+        </div>
+      )}
 
       <h3 className="section-title">{t('sectionMemoryTools')}</h3>
       <Toggle

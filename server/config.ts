@@ -27,6 +27,16 @@ export const DEFAULT_SETTINGS: Settings = {
   ttsUrl: '',
   ttsModel: '',
   ttsVoice: '',
+  // Opt-in : par défaut le personnage n'écrit JAMAIS de lui-même.
+  spontaneousEnabled: false,
+  spontaneousStartHour: 9,
+  spontaneousEndHour: 22,
+}
+
+/** Heure locale valide (entier 0-23) — sinon la valeur par défaut. */
+function normalizeHour(value: unknown, fallback: number): number {
+  const n = Math.floor(Number(value))
+  return Number.isFinite(n) && n >= 0 && n <= 23 ? n : fallback
 }
 
 export function loadSettings(): Settings {
@@ -41,6 +51,10 @@ export function loadSettings(): Settings {
     if (merged.modelMode !== 'full' && merged.modelMode !== 'simple') {
       merged.modelMode = DEFAULT_SETTINGS.modelMode
     }
+    // Même raison : le PUT accepte n'importe quel nombre, la plage horaire doit
+    // rester un couple d'heures réelles (sinon le moteur spontané ne s'ouvrirait jamais).
+    merged.spontaneousStartHour = normalizeHour(merged.spontaneousStartHour, DEFAULT_SETTINGS.spontaneousStartHour)
+    merged.spontaneousEndHour = normalizeHour(merged.spontaneousEndHour, DEFAULT_SETTINGS.spontaneousEndHour)
     return merged
   } catch {
     return { ...DEFAULT_SETTINGS }

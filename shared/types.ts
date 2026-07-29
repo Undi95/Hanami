@@ -26,6 +26,9 @@ export interface Settings {
   ttsUrl: string // base OpenAI-compat du serveur TTS (POST {ttsUrl}/audio/speech)
   ttsModel: string // modèle TTS (certains serveurs l'ignorent)
   ttsVoice: string // voix TTS (certains serveurs l'ignorent)
+  spontaneousEnabled: boolean // le personnage écrit de lui-même pendant votre absence
+  spontaneousStartHour: number // heure locale à partir de laquelle il peut écrire (0-23)
+  spontaneousEndHour: number // heure locale après laquelle il n'écrit plus (0-23)
 }
 
 // Comment s'ouvre une conversation vide : 'written' = une des salutations écrites
@@ -55,6 +58,7 @@ export interface ChatMessage {
   ts: string
   emotion?: string // tag d'émotion détecté en tête de message ([happy] etc.)
   thinking?: string // raisonnement du modèle (<think> ou champ reasoning) — jamais renvoyé au backend
+  spontaneous?: true // message écrit à l'initiative du personnage (moteur server/lib/spontaneous.ts)
 }
 
 export interface ChatMeta {

@@ -13,6 +13,7 @@ import { importRouter } from './api/importer'
 import { assetsRouter } from './api/assets'
 import { ttsRouter } from './api/tts'
 import { statsRouter } from './api/stats'
+import { startSpontaneous } from './lib/spontaneous'
 import { uiRouter } from './api/ui'
 
 function firstLanIPv4(): string {
@@ -136,6 +137,9 @@ async function main(): Promise<void> {
       console.log(`  réseau : non exposé — HOST=0.0.0.0 npm run dev pour le LAN, ou npm start`)
     }
   })
+
+  // Messages spontanés : le personnage peut écrire de lui-même (opt-in, Réglages).
+  startSpontaneous()
 }
 
 main().catch((e) => {

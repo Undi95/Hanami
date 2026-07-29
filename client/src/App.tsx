@@ -481,6 +481,40 @@ function AppInner() {
     applyTheme(resolveTheme(character?.theme, appTheme))
   }, [character?.theme, appTheme, customVersion])
 
+  // ── Rafraîchissement doux ────────────────────────────────────────────────
+  // Au retour sur l'onglet : les messages spontanés arrivés pendant l'absence
+  // apparaissent sans recharger la page (comparaison du nombre de messages).
+  useEffect(() => {
+    function onVisible() {
+      if (document.hidden) return
+      const char = character
+      const chat = chatMeta
+      if (!char || !chat || streaming || compacting) return
+      api
+        .getChat(char.id, chat.id)
+        .then(({ meta, messages }) => {
+          if (chatIdRef.current !== chat.id || meta.messageCount === chat.messageCount) return
+          setChatMeta(meta)
+          const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
+          if (items.length === 0 && char.greeting) items.push({ kind: 'greeting', text: char.greeting })
+          setFeed(items)
+          const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+          if (lastAssistant) {
+            applyEmotion(lastAssistant.emotion ?? extractEmotion(lastAssistant.content) ?? 'neutral')
+          }
+        })
+        .catch(() => {
+          /* serveur injoignable : le fil actuel reste affiché */
+        })
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [character, chatMeta, streaming, compacting])
+
   // ── Mode visual novel ────────────────────────────────────────────────────
 
   // Bascule explicite (bouton ou Échap) : la préférence part au serveur. Rien

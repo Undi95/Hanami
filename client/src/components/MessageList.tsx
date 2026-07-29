@@ -257,13 +257,16 @@ export default function MessageList({
                     <i />
                   </span>
                 ) : (
-                  highlightAll(renderMarkdown(text), hits)
+                  <>
+                    {highlightAll(renderMarkdown(text), hits)}
+                    {/* Horodatage DANS la bulle, en bas à droite (façon messagerie). */}
+                    <span className="bubble-ts">{fmtTime(item.msg.ts, lang)}</span>
+                  </>
                 )}
               </div>
             )}
             {!item.pending && !isEditing && (
               <div className="msg-ts">
-                {fmtTime(item.msg.ts, lang)}
                 {editable && ordinal !== null && (
                   <>
                     <button

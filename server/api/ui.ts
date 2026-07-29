@@ -95,8 +95,12 @@ function normalize(raw: unknown): UiPrefs {
 
 // ── Fichier ────────────────────────────────────────────────────────────────
 
-/** data/ui.json ({} s'il est absent, illisible ou corrompu — jamais une erreur). */
-function readUi(): UiPrefs {
+/**
+ * data/ui.json ({} s'il est absent, illisible ou corrompu — jamais une erreur).
+ * Exporté : le moteur de messages spontanés y lit le personnage et la
+ * conversation actifs, sans passer par HTTP.
+ */
+export function readUiPrefs(): UiPrefs {
   try {
     return normalize(JSON.parse(fs.readFileSync(UI_FILE, 'utf8')))
   } catch {
@@ -125,7 +129,7 @@ function writeUi(json: string): void {
 
 uiRouter.get('/api/ui', (_req, res) => {
   res.set('Cache-Control', 'no-store')
-  res.json(readUi())
+  res.json(readUiPrefs())
 })
 
 // Merge SUPERFICIEL : une clé envoyée remplace la précédente, `null` la
@@ -138,7 +142,7 @@ uiRouter.put('/api/ui', (req, res) => {
     return
   }
   const patch = body as Record<string, unknown>
-  const next = readUi() as Record<string, unknown>
+  const next = readUiPrefs() as Record<string, unknown>
   for (const key of UI_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(patch, key)) continue
     const raw = patch[key]
