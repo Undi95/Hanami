@@ -1,4 +1,91 @@
-// STUB de contrat — implémenté par l'agent serveur-données.
-import { Router } from 'express'
+// Router import : character cards PNG SillyTavern + chats JSONL SillyTavern.
+import express, { Router, type Response } from 'express'
+import { parseCharacterCard, type ParsedCard } from '../lib/pngCard'
+import { convertStChat } from '../lib/stChat'
+import { createCharacter, getCharacter, writeImportedChat } from '../lib/storage'
 
 export const importRouter = Router()
+
+function sendError(res: Response, status: number, e: unknown): void {
+  res.status(status).json({ error: e instanceof Error ? e.message : String(e) })
+}
+
+function queryString(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : ''
+}
+
+/**
+ * Compose le system prompt LISIBLEMENT à partir de la card :
+ * system_prompt tel quel en tête, puis sections markdown pour les champs
+ * non vides — contenu VERBATIM, aucune réécriture.
+ */
+function composeSystemPrompt(card: ParsedCard): string {
+  const parts: string[] = []
+  if (card.systemPrompt.trim()) parts.push(card.systemPrompt)
+  if (card.description.trim()) parts.push(`## Description\n\n${card.description}`)
+  if (card.personality.trim()) parts.push(`## Personality\n\n${card.personality}`)
+  if (card.scenario.trim()) parts.push(`## Scenario\n\n${card.scenario}`)
+  return parts.join('\n\n')
+}
+
+importRouter.post(
+  '/api/import/card',
+  express.raw({ type: () => true, limit: '25mb' }),
+  (req, res) => {
+    try {
+      const buf = req.body as unknown
+      if (!Buffer.isBuffer(buf) || buf.length === 0) {
+        res.status(400).json({ error: 'Corps de requête PNG requis' })
+        return
+      }
+      const card = parseCharacterCard(buf)
+      if (!card) {
+        res.status(400).json({ error: 'PNG sans character card (chunk tEXt chara/ccv3 absent ou invalide)' })
+        return
+      }
+      const name = queryString(req.query.name) || card.name || 'Importé'
+      const character = createCharacter({
+        name,
+        greeting: card.firstMes,
+        systemPrompt: composeSystemPrompt(card),
+      })
+      res.json({ character })
+    } catch (e) {
+      sendError(res, 500, e)
+    }
+  },
+)
+
+importRouter.post(
+  '/api/import/chat',
+  express.raw({ type: () => true, limit: '200mb' }),
+  (req, res) => {
+    try {
+      const characterId = queryString(req.query.characterId)
+      if (!characterId) {
+        res.status(400).json({ error: 'Paramètre "characterId" requis' })
+        return
+      }
+      let character = null
+      try {
+        character = getCharacter(characterId)
+      } catch {
+        /* id invalide → introuvable */
+      }
+      if (!character) {
+        res.status(404).json({ error: `Personnage introuvable : ${characterId}` })
+        return
+      }
+      const body = req.body as unknown
+      const jsonl = Buffer.isBuffer(body) ? body.toString('utf8') : typeof body === 'string' ? body : ''
+      const messages = convertStChat(jsonl)
+      const title =
+        queryString(req.query.title) ||
+        `Import SillyTavern ${new Date().toLocaleDateString('fr-FR')}`
+      const chat = writeImportedChat(characterId, title, messages)
+      res.json({ chat, imported: messages.length })
+    } catch (e) {
+      sendError(res, 500, e)
+    }
+  },
+)
