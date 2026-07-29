@@ -1795,14 +1795,19 @@ select option {
   padding: 0 12px 6px;
 }
 
-/* Rangée d'icônes rejetée à droite et posée sur un fond discret : lisible
-   quelle que soit la scène derrière. */
+/* Icônes en COLONNE dans le coin haut droit (quick-menu de visual novel) :
+   la zone au-dessus de la boîte de dialogue reste entièrement à la scène. */
 .chat-panel.vn .topbar nav {
-  margin-left: auto;
-  border-radius: 12px;
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  flex-direction: column;
+  border-radius: 14px;
   background: var(--panel);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  padding: 2px;
 }
 
 /* Saisie : section médiane de la boîte — même largeur, mêmes bords, ton
