@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import type { ChatMessage } from '../../../shared/types'
 import { stripEmotionTags } from '../emotions'
 import { localeOf, useI18n, type Lang } from '../i18n'
+import { renderMarkdown } from '../markdown'
 
 export type FeedItem =
   | { kind: 'msg'; msg: ChatMessage; pending?: boolean }
@@ -53,7 +54,7 @@ function Item({ item, showThoughts }: { item: FeedItem; showThoughts: boolean })
                 <i />
               </span>
             ) : (
-              text
+              renderMarkdown(text)
             )}
           </div>
           {!item.pending && <div className="msg-ts">{fmtTime(item.msg.ts, lang)}</div>}
@@ -63,7 +64,7 @@ function Item({ item, showThoughts }: { item: FeedItem; showThoughts: boolean })
     case 'greeting':
       return (
         <div className="msg assistant">
-          <div className="bubble">{stripEmotionTags(item.text)}</div>
+          <div className="bubble">{renderMarkdown(stripEmotionTags(item.text))}</div>
         </div>
       )
     case 'tool':

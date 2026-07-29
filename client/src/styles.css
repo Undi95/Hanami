@@ -297,6 +297,34 @@ select {
   border-bottom-left-radius: 5px;
 }
 
+/* Markdown dans les bulles (rendu par markdown.tsx) */
+.bubble code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+.bubble pre {
+  margin: 6px 0;
+  padding: 8px 11px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.bubble em {
+  color: rgba(236, 231, 242, 0.85);
+}
+
 .msg-ts {
   font-size: 10.5px;
   color: var(--text-dim);
