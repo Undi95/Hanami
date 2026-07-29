@@ -147,6 +147,16 @@ export async function testModels(input: { backendUrl?: string; apiKey?: string }
   return r.models
 }
 
+/**
+ * Le modèle configuré sait-il lire une image ? Réponse du serveur selon le
+ * réglage « Images (vision) » : forcé, jamais, ou détecté auprès du backend.
+ * Faux dès que le doute existe — le composer ne propose alors aucune image.
+ */
+export async function getVision(): Promise<boolean> {
+  const r = await req<{ vision: boolean }>('GET', '/api/vision')
+  return r.vision === true
+}
+
 // ── Préférences d'interface ────────────────────────────────────────────────
 // Langue, thème, dernier personnage/conversation, cadrages caméra : le serveur
 // fait foi (data/ui.json) pour que les réglages suivent l'utilisateur d'un
@@ -362,7 +372,8 @@ export type ChatMode = 'regenerate' | 'continue' | 'open'
 export interface StreamChatOptions {
   characterId: string
   chatId: string
-  content?: string // requis en mode normal, ignoré en regenerate/continue/open
+  content?: string // requis en mode normal (sauf si des images l'accompagnent), ignoré en regenerate/continue/open
+  images?: string[] // data URLs jointes au message courant (modèles à vision)
   mode?: ChatMode
   signal: AbortSignal
   onEvent: (ev: ChatEvent) => void
@@ -378,6 +389,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<void> {
         characterId: opts.characterId,
         chatId: opts.chatId,
         ...(opts.content !== undefined ? { content: opts.content } : {}),
+        ...(opts.images && opts.images.length > 0 ? { images: opts.images } : {}),
         ...(opts.mode ? { mode: opts.mode } : {}),
       }),
       signal: opts.signal,

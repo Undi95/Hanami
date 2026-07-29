@@ -87,6 +87,9 @@ function AppInner() {
   const [streaming, setStreaming] = useState(false)
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   const [backendDown, setBackendDown] = useState(false)
+  // Le modèle configuré lit-il les images ? (réglage « Images (vision) » : forcé,
+  // jamais, ou détecté auprès du backend). Faux = le composer ne propose rien.
+  const [visionEnabled, setVisionEnabled] = useState(false)
   const [context, setContext] = useState<ContextInfo | null>(null)
   const [compacting, setCompacting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
@@ -153,6 +156,15 @@ function AppInner() {
       .getModels()
       .then(() => setBackendDown(false))
       .catch(() => setBackendDown(true))
+  }
+
+  // Jamais attendu : en mode 'auto' la détection interroge le backend (jusqu'à
+  // 4 s) — le boot ne patiente pas, le trombone apparaît dès la réponse.
+  function probeVision() {
+    api
+      .getVision()
+      .then(setVisionEnabled)
+      .catch(() => setVisionEnabled(false))
   }
 
   // ── Lèvres & voix ────────────────────────────────────────────────────────
@@ -442,6 +454,7 @@ function AppInner() {
       const pick = chars.find((c) => c.id === saved) ?? chars[0]
       if (pick) await selectCharacter(pick.id)
       probeBackend()
+      probeVision()
     } catch (e) {
       handleError(e, 'boot')
     } finally {
@@ -552,12 +565,12 @@ function AppInner() {
 
   // Réponse à un message précis : la citation est écrite EN TÊTE du message
   // envoyé et sauvegardé — aucune mécanique cachée, le modèle la lit telle quelle.
-  async function send(content: string) {
+  async function send(content: string, images: string[]) {
     const quoted = replyTo
     setReplyTo(null)
-    if (!quoted) return runGeneration({ content })
+    if (!quoted) return runGeneration({ content, images })
     const line = t('quotedLine', { name: speakerOf(quoted), text: excerpt(quoted.content, QUOTE_MAX) })
-    return runGeneration({ content: `> ${line}\n\n${content}` })
+    return runGeneration({ content: `> ${line}\n\n${content}`, images })
   }
 
   // Génération : envoi normal, régénération de la dernière réponse, continuation
@@ -565,6 +578,7 @@ function AppInner() {
   // conversation ('open' : le modèle écrit le premier message).
   async function runGeneration(opts: {
     content?: string
+    images?: string[] // data URLs jointes au message courant (modèles à vision)
     mode?: api.ChatMode
     // Ouverture automatique : le personnage et le chat viennent d'être chargés,
     // les états React ne sont pas encore à jour — openChat les passe en direct.
@@ -581,6 +595,8 @@ function AppInner() {
 
     if (!mode) {
       const userMsg: ChatMessage = { role: 'user', content: opts.content ?? '', ts: new Date().toISOString() }
+      // Vignettes visibles dans la bulle dès l'envoi (le serveur sauvegarde les mêmes).
+      if (opts.images && opts.images.length > 0) userMsg.images = opts.images
       const draft: ChatMessage = { role: 'assistant', content: '', ts: new Date().toISOString() }
       setFeed((f) => [...f, { kind: 'msg', msg: userMsg }, { kind: 'msg', msg: draft, pending: true }])
     } else {
@@ -637,6 +653,7 @@ function AppInner() {
         characterId: char.id,
         chatId: chat.id,
         content: opts.content,
+        images: opts.images,
         mode,
         signal: ac.signal,
         onEvent: (ev) => {
@@ -794,6 +811,8 @@ function AppInner() {
     // Contrat : le token EST le mot de passe. On le synchronise pour rester connecté.
     api.setToken(next.password || null)
     probeBackend()
+    // Le modèle ou le mode vision viennent peut-être de changer.
+    probeVision()
   }
 
   async function handleChatDeleted(deletedId: string) {
@@ -1011,7 +1030,8 @@ function AppInner() {
         <Composer
           disabled={booting || !character || !chatMeta}
           streaming={streaming}
-          onSend={(text) => send(text).catch((e) => console.error('[send]', e))}
+          vision={visionEnabled}
+          onSend={(text, images) => send(text, images).catch((e) => console.error('[send]', e))}
           onStop={stopStreaming}
         />
       </div>

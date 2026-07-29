@@ -92,3 +92,66 @@ settingsRouter.post('/api/settings/models', async (req, res) => {
   const apiKey = typeof body.apiKey === 'string' ? body.apiKey : settings.apiKey
   await probeModels(backendUrl, apiKey, res)
 })
+
+// ── Vision ─────────────────────────────────────────────────────────────────
+// Le client ne montre le trombone du composer que si le modèle SAIT lire une
+// image. En mode 'auto' la question est posée au backend : Ollama expose les
+// capacités du modèle sur POST /api/show (hors /v1, c'est son API native). Tout
+// autre backend ne répondra pas → false, donc aucun pixel n'est jamais envoyé
+// à un modèle qui ne les comprend pas. Rien n'est mis en cache : l'appel est
+// rare (démarrage + enregistrement des réglages).
+
+const VISION_PROBE_TIMEOUT_MS = 4000
+
+/** Origine du backendUrl (le /v1 et tout autre chemin sont retirés) — null si l'URL est invalide. */
+function backendOrigin(backendUrl: string): string | null {
+  try {
+    return new URL(backendUrl).origin
+  } catch {
+    return null
+  }
+}
+
+/** Le modèle configuré annonce-t-il la capacité « vision » ? Toute erreur = non. */
+async function probeVision(settings: Settings): Promise<boolean> {
+  const origin = backendOrigin(settings.backendUrl)
+  if (!origin || !settings.model.trim()) return false
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), VISION_PROBE_TIMEOUT_MS)
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`
+    const r = await fetch(`${origin}/api/show`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model: settings.model.trim() }),
+      signal: ctrl.signal,
+    })
+    if (!r.ok) return false
+    const json = (await r.json()) as { capabilities?: unknown }
+    return (
+      Array.isArray(json.capabilities) &&
+      json.capabilities.some((c) => typeof c === 'string' && c.toLowerCase() === 'vision')
+    )
+  } catch {
+    // Backend non-Ollama, injoignable, ou modèle inconnu : pas d'images.
+    return false
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// GET /api/vision → { vision: boolean }
+settingsRouter.get('/api/vision', async (_req, res) => {
+  const settings = loadSettings()
+  res.set('Cache-Control', 'no-store')
+  if (settings.visionMode === 'on') {
+    res.json({ vision: true })
+    return
+  }
+  if (settings.visionMode === 'off') {
+    res.json({ vision: false })
+    return
+  }
+  res.json({ vision: await probeVision(settings) })
+})

@@ -4,6 +4,7 @@
 // réplique du même fil.
 import { cloneElement, isValidElement, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { ChatMessage } from '../../../shared/types'
 import { stripEmotionTags } from '../emotions'
 import { localeOf, useI18n, type Lang } from '../i18n'
@@ -100,6 +101,47 @@ function highlightAll(nodes: ReactNode[], hits: Hits): ReactNode[] {
   return hits.needle === '' ? nodes : nodes.map((n) => highlight(n, hits))
 }
 
+// ── Images jointes ─────────────────────────────────────────────────────────
+
+/** Vignettes d'un message (images jointes) — clic = image en grand. */
+function Shots({ images, onOpen }: { images: string[]; onOpen: (url: string) => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="msg-shots">
+      {images.map((url, i) => (
+        <button
+          key={i}
+          className="msg-shot"
+          title={t('viewImage')}
+          aria-label={t('viewImage')}
+          onClick={() => onOpen(url)}
+        >
+          <img src={url} alt={t('imageAlt')} />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Image en grand : un simple calque plein écran qui se ferme au clic (ou au
+ * clavier, c'est un bouton). Volontairement PAS un Dialog — rien à titrer, rien
+ * à valider, et Échap reste à la recherche du fil et au mode visual novel.
+ *
+ * Rendu en portail sur <body> : le panneau de chat porte un backdrop-filter,
+ * qui fait de lui le bloc conteneur de ses descendants `position: fixed` — sans
+ * portail, le « plein écran » se limiterait à la largeur du panneau.
+ */
+function ImageOverlay({ url, onClose }: { url: string; onClose: () => void }) {
+  const { t } = useI18n()
+  return createPortal(
+    <button className="image-overlay" title={t('closeImage')} aria-label={t('closeImage')} onClick={onClose}>
+      <img src={url} alt={t('imageAlt')} />
+    </button>,
+    document.body,
+  )
+}
+
 function fmtTime(ts: string, lang: Lang): string {
   const d = new Date(ts)
   if (Number.isNaN(d.getTime())) return ''
@@ -140,6 +182,8 @@ export default function MessageList({
   const [editError, setEditError] = useState<string | null>(null)
   // Bandeau épinglé : replié (2 lignes) par défaut, déplié au clic.
   const [pinOpen, setPinOpen] = useState(false)
+  // Image affichée en grand (null = aucune) — calque fermé au clic.
+  const [zoom, setZoom] = useState<string | null>(null)
   // Recherche : rien à l'écran tant qu'elle n'est pas ouverte (Ctrl+F).
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -258,6 +302,10 @@ export default function MessageList({
                   </span>
                 ) : (
                   <>
+                    {/* Images jointes AU-DESSUS du texte (un message peut n'être qu'une image). */}
+                    {item.msg.images && item.msg.images.length > 0 && (
+                      <Shots images={item.msg.images} onOpen={setZoom} />
+                    )}
                     {highlightAll(renderMarkdown(text), hits)}
                     {/* Horodatage DANS la bulle, en bas à droite (façon messagerie). */}
                     <span className="bubble-ts">{fmtTime(item.msg.ts, lang)}</span>
@@ -466,6 +514,8 @@ export default function MessageList({
       >
         {rows}
       </div>
+
+      {zoom && <ImageOverlay url={zoom} onClose={() => setZoom(null)} />}
     </div>
   )
 }
@@ -483,6 +533,7 @@ type VnItem = Extract<FeedItem, { kind: 'msg' } | { kind: 'greeting' }>
 export function VnBox({ items, characterName }: { items: FeedItem[]; characterName: string }) {
   const { t } = useI18n()
   const boxRef = useRef<HTMLDivElement>(null)
+  const [zoom, setZoom] = useState<string | null>(null)
 
   // Une réplique plus haute que la boîte défile : on reste collé au bas pendant
   // que le texte arrive (une seule réplique affichée, pas d'autoscroll malin).
@@ -507,6 +558,8 @@ export function VnBox({ items, characterName }: { items: FeedItem[]; characterNa
 
   const isUser = last !== null && last.kind === 'msg' && last.msg.role === 'user'
   const pending = last !== null && last.kind === 'msg' && !!last.pending
+  // Images de la réplique affichée : elles ont autant leur place ici qu'en bulle.
+  const images = last !== null && last.kind === 'msg' ? last.msg.images : undefined
   const text =
     last === null
       ? ''
@@ -531,11 +584,15 @@ export function VnBox({ items, characterName }: { items: FeedItem[]; characterNa
               <i />
             </span>
           ) : (
-            renderMarkdown(text)
+            <>
+              {images && images.length > 0 && <Shots images={images} onOpen={setZoom} />}
+              {renderMarkdown(text)}
+            </>
           )}
         </div>
       )}
       {trailingError && <div className="error-bubble vn-error">{trailingError}</div>}
+      {zoom && <ImageOverlay url={zoom} onClose={() => setZoom(null)} />}
     </div>
   )
 }

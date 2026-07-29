@@ -3,7 +3,7 @@
 // les champs démarrent vides ('' = conserver la valeur configurée) et le bouton
 // « Retirer » envoie la sentinelle CLEAR_SECRET.
 import { useState } from 'react'
-import type { ModelMode, Settings } from '../../../shared/types'
+import type { ModelMode, Settings, VisionMode } from '../../../shared/types'
 import * as api from '../api'
 import { isPlural, useI18n, type Lang } from '../i18n'
 import {
@@ -34,6 +34,7 @@ interface FormState {
   apiKey: string
   model: string
   modelMode: ModelMode
+  visionMode: VisionMode
   temperature: string
   maxTokens: string
   maxHistoryMessages: string
@@ -62,6 +63,7 @@ function toForm(s: Settings): FormState {
     apiKey: '',
     model: s.model,
     modelMode: s.modelMode,
+    visionMode: s.visionMode,
     temperature: String(s.temperature),
     maxTokens: String(s.maxTokens),
     maxHistoryMessages: String(s.maxHistoryMessages),
@@ -94,6 +96,7 @@ function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassw
     apiKey: clearApiKey ? api.CLEAR_SECRET : f.apiKey,
     model: f.model.trim(),
     modelMode: f.modelMode,
+    visionMode: f.visionMode,
     temperature: num(f.temperature, base.temperature),
     maxTokens: Math.round(num(f.maxTokens, base.maxTokens)),
     maxHistoryMessages: Math.round(num(f.maxHistoryMessages, base.maxHistoryMessages)),
@@ -173,6 +176,7 @@ function Seg<T extends string>({
 
 const LANG_OPTIONS: readonly Lang[] = ['fr', 'en']
 const MODEL_MODE_OPTIONS: readonly ModelMode[] = ['full', 'simple']
+const VISION_MODE_OPTIONS: readonly VisionMode[] = ['auto', 'on', 'off']
 
 export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, onClose }: Props) {
   // Thème perso : deux couleurs, persistées à chaque changement et appliquées
@@ -463,6 +467,20 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
             ))}
           </select>
         )}
+      </div>
+      <div className="field">
+        <label>{t('visionMode')}</label>
+        {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+        <div>
+          <Seg
+            value={form.visionMode}
+            options={VISION_MODE_OPTIONS}
+            labels={{ auto: t('visionModeAuto'), on: t('visionModeOn'), off: t('visionModeOff') }}
+            onPick={(v) => set('visionMode', v)}
+            ariaLabel={t('visionMode')}
+          />
+        </div>
+        <span className="hint">{t('visionModeSub')}</span>
       </div>
 
       <h3 className="section-title">{t('sectionGeneration')}</h3>

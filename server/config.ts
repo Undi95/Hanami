@@ -31,6 +31,8 @@ export const DEFAULT_SETTINGS: Settings = {
   spontaneousEnabled: false,
   spontaneousStartHour: 9,
   spontaneousEndHour: 22,
+  // 'auto' : Hanami demande au backend si le modèle voit les images (GET /api/vision).
+  visionMode: 'auto',
 }
 
 /** Heure locale valide (entier 0-23) — sinon la valeur par défaut. */
@@ -50,6 +52,9 @@ export function loadSettings(): Settings {
     // Le PUT ne valide que le TYPE des valeurs : une chaîne inconnue passerait.
     if (merged.modelMode !== 'full' && merged.modelMode !== 'simple') {
       merged.modelMode = DEFAULT_SETTINGS.modelMode
+    }
+    if (merged.visionMode !== 'auto' && merged.visionMode !== 'on' && merged.visionMode !== 'off') {
+      merged.visionMode = DEFAULT_SETTINGS.visionMode
     }
     // Même raison : le PUT accepte n'importe quel nombre, la plage horaire doit
     // rester un couple d'heures réelles (sinon le moteur spontané ne s'ouvrirait jamais).

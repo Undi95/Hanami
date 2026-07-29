@@ -5,6 +5,11 @@
 // dont le tool-calling est le talon d'Achille.
 export type ModelMode = 'full' | 'simple'
 
+// Envoi d'images au modèle : 'auto' = détecté auprès du backend (Ollama expose
+// les capacités du modèle), 'on' = forcé, 'off' = jamais. En 'off' (ou détection
+// négative) le trombone du composer n'existe même pas.
+export type VisionMode = 'auto' | 'on' | 'off'
+
 export interface Settings {
   backendUrl: string // base OpenAI-compat, ex: http://127.0.0.1:5001/v1
   apiKey: string // optionnel (backends locaux : souvent vide)
@@ -29,6 +34,7 @@ export interface Settings {
   spontaneousEnabled: boolean // le personnage écrit de lui-même pendant votre absence
   spontaneousStartHour: number // heure locale à partir de laquelle il peut écrire (0-23)
   spontaneousEndHour: number // heure locale après laquelle il n'écrit plus (0-23)
+  visionMode: VisionMode // envoi d'images au modèle (détection auprès du backend par défaut)
 }
 
 // Comment s'ouvre une conversation vide : 'written' = une des salutations écrites
@@ -54,7 +60,8 @@ export interface CharacterFull extends CharacterMeta {
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
-  content: string
+  content: string // TOUJOURS le texte seul (les images vivent dans `images`)
+  images?: string[] // data URLs (image/jpeg ou png) jointes au message — modèles à vision
   ts: string
   emotion?: string // tag d'émotion détecté en tête de message ([happy] etc.)
   thinking?: string // raisonnement du modèle (<think> ou champ reasoning) — jamais renvoyé au backend

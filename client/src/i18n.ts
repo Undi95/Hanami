@@ -89,6 +89,13 @@ const FR = {
   pinMessage: 'Épingler ce message',
   unpin: 'Retirer l’épingle',
 
+  // ── Images (modèles à vision) ────────────────────────────────────────────
+  attachImage: 'Joindre une image',
+  removeImage: 'Retirer cette image',
+  imageAlt: 'Image jointe',
+  viewImage: 'Voir l’image en grand',
+  closeImage: 'Fermer l’image',
+
   // ── Recherche dans la conversation (Ctrl+F, aucun bouton permanent) ───────
   searchPlaceholder: 'Rechercher dans la conversation…',
   searchCount: '{n}/{m}',
@@ -157,6 +164,12 @@ const FR = {
   testOkMany: 'Connexion réussie — {n} modèles détectés.',
   chooseDetectedModel: 'Choisir un modèle détecté',
   chooseDetectedModelOption: '— choisir un modèle détecté —',
+  visionMode: 'Images (vision)',
+  visionModeAuto: 'Auto',
+  visionModeOn: 'Activé',
+  visionModeOff: 'Désactivé',
+  visionModeSub:
+    'Auto : détection auprès du backend (Ollama). Activé : forcer. Désactivé : jamais. Le trombone de la saisie n’apparaît que si le modèle sait lire une image.',
   sectionGeneration: 'Génération',
   modelMode: 'Mode du modèle',
   modelModeFull: 'Complet',
@@ -341,6 +354,13 @@ const EN: Record<Key, string> = {
   pinMessage: 'Pin this message',
   unpin: 'Remove the pin',
 
+  // ── Images (vision models) ───────────────────────────────────────────────
+  attachImage: 'Attach an image',
+  removeImage: 'Remove this image',
+  imageAlt: 'Attached image',
+  viewImage: 'View the image larger',
+  closeImage: 'Close the image',
+
   // ── In-conversation search (Ctrl+F, no permanent button) ─────────────────
   searchPlaceholder: 'Search this conversation…',
   searchCount: '{n}/{m}',
@@ -406,6 +426,12 @@ const EN: Record<Key, string> = {
   testOkMany: 'Connected — {n} models detected.',
   chooseDetectedModel: 'Choose a detected model',
   chooseDetectedModelOption: '— choose a detected model —',
+  visionMode: 'Images (vision)',
+  visionModeAuto: 'Auto',
+  visionModeOn: 'On',
+  visionModeOff: 'Off',
+  visionModeSub:
+    'Auto: detected from the backend (Ollama). On: force it. Off: never. The paperclip in the composer only shows up when the model can read an image.',
   sectionGeneration: 'Generation',
   modelMode: 'Model mode',
   modelModeFull: 'Full',
