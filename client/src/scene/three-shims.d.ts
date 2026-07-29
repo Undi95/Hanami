@@ -95,6 +95,22 @@ declare module 'three' {
 
   export const SRGBColorSpace: 'srgb'
 
+  // Enums de mappage souris/tactile (OrbitControls.mouseButtons / .touches).
+  export const MOUSE: {
+    LEFT: number
+    MIDDLE: number
+    RIGHT: number
+    ROTATE: number
+    DOLLY: number
+    PAN: number
+  }
+  export const TOUCH: {
+    ROTATE: number
+    PAN: number
+    DOLLY_PAN: number
+    DOLLY_ROTATE: number
+  }
+
   export class WebGLRenderer {
     constructor(parameters?: { alpha?: boolean; antialias?: boolean; canvas?: HTMLCanvasElement })
     domElement: HTMLCanvasElement
@@ -147,10 +163,15 @@ declare module 'three/examples/jsm/controls/OrbitControls.js' {
     dampingFactor: number
     enablePan: boolean
     enableZoom: boolean
+    screenSpacePanning: boolean
     minDistance: number
     maxDistance: number
     minPolarAngle: number
     maxPolarAngle: number
+    mouseButtons: { LEFT?: number | null; MIDDLE?: number | null; RIGHT?: number | null }
+    touches: { ONE?: number | null; TWO?: number | null }
+    addEventListener(type: 'start' | 'change' | 'end', listener: () => void): void
+    removeEventListener(type: 'start' | 'change' | 'end', listener: () => void): void
     update(): boolean
     dispose(): void
   }

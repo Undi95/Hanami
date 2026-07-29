@@ -5,9 +5,11 @@ import {
   Clock,
   DirectionalLight,
   HemisphereLight,
+  MOUSE,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
+  TOUCH,
   Vector3,
   WebGLRenderer,
 } from 'three'
@@ -15,7 +17,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
 import type { VRM, VRMHumanBoneName } from '@pixiv/three-vrm'
-import type { VrmStage } from './types'
+import type { StageView, VrmStage } from './types'
 import { IdleAnimator } from './idle'
 import type { PosedBone } from './idle'
 import { normalizeEmotion, resolveExpressions } from './emotionMap'
@@ -65,7 +67,14 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
-  controls.enablePan = false
+  // Placement libre de l'avatar — geste PRINCIPAL = déplacement (c'est un
+  // compagnon à poser sur l'écran, pas un objet à inspecter) :
+  // glisser / un doigt = pan · molette / pincement = zoom ·
+  // clic droit = rotation · double-clic = cadrage par défaut.
+  controls.enablePan = true
+  controls.screenSpacePanning = true
+  controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
+  controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN }
   controls.minDistance = 0.5
   controls.maxDistance = 4
   controls.minPolarAngle = Math.PI * 0.15
@@ -80,6 +89,34 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   let currentVrm: VRM | null = null
   let loadGeneration = 0
   let disposed = false
+
+  // ── Cadrage utilisateur (pan/zoom/rotation) : persistance + reset ─────────
+  let lastFrame: { vrm: VRM; h: number } | null = null // cadrage par défaut re-calculable
+  let viewChangeCb: ((view: StageView | null) => void) | null = null
+
+  function currentView(): StageView {
+    return {
+      pos: [camera.position.x, camera.position.y, camera.position.z],
+      target: [controls.target.x, controls.target.y, controls.target.z],
+    }
+  }
+
+  // 'end' ne se déclenche qu'à la fin d'une interaction UTILISATEUR — jamais
+  // sur un setView/frameCamera programmatique.
+  controls.addEventListener('end', () => {
+    viewChangeCb?.(currentView())
+  })
+
+  function resetView(): void {
+    if (!lastFrame) return
+    frameCamera(lastFrame.vrm, lastFrame.h)
+    viewChangeCb?.(null)
+  }
+
+  function onDblClick(): void {
+    resetView()
+  }
+  renderer.domElement.addEventListener('dblclick', onDblClick)
 
   // ── Taille : canvas 100 % du container (ResizeObserver + resize fenêtre) ──
   function resize(): void {
@@ -99,6 +136,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     scene.remove(currentVrm.scene)
     VRMUtils.deepDispose(currentVrm.scene)
     currentVrm = null
+    lastFrame = null
     posedBones.clear()
     idle.setExpressionTable(new Map()) // plus de modèle : aucune expression pilotable
   }
@@ -179,6 +217,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       idle.reset()
       idle.setExpressionTable(resolveExpressions(vrm.expressionManager))
       const height = normalizeScale(vrm)
+      lastFrame = { vrm, h: height }
       frameCamera(vrm, height)
     } catch (e) {
       console.error('[vrm]', e)
@@ -223,6 +262,16 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       idle.setSpeaking(speaking)
     },
 
+    setView(view: StageView): void {
+      camera.position.set(view.pos[0], view.pos[1], view.pos[2])
+      controls.target.set(view.target[0], view.target[1], view.target[2])
+      controls.update()
+    },
+
+    onViewChange(cb: (view: StageView | null) => void): void {
+      viewChangeCb = cb
+    },
+
     dispose(): void {
       disposed = true
       loadGeneration++ // invalide tout chargement encore en vol
@@ -231,6 +280,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('resize', resize)
       observer.disconnect()
+      renderer.domElement.removeEventListener('dblclick', onDblClick)
       controls.dispose()
       unloadCurrent()
       renderer.dispose()

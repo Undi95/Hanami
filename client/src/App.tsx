@@ -26,6 +26,8 @@ import PromptInspector from './components/PromptInspector'
 
 const CHAR_KEY = 'hanami_char'
 const chatKey = (charId: string) => `hanami_chat_${charId}`
+// Cadrage caméra choisi par l'utilisateur (pan/zoom/rotation), par personnage.
+const viewKey = (charId: string) => `hanami_view_${charId}`
 // Seuil d'auto-compaction (% du contexte) — même esprit que Claude Code.
 const AUTO_COMPACT_AT = 80
 
@@ -65,6 +67,9 @@ function AppInner() {
   // Chats dont l'auto-compaction a échoué : pas de nouvel essai automatique
   // (sinon un backend strict serait re-sollicité à chaque message).
   const autoCompactFailedRef = useRef<Set<string>>(new Set())
+  // Personnage courant pour le callback de cadrage (posé une fois à la création
+  // de la scène, qui vit plus longtemps que chaque personnage).
+  const characterIdRef = useRef<string | null>(null)
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -194,6 +199,17 @@ function AppInner() {
       const { createVrmStage } = await import('./scene/vrmStage')
       if (cancelled || !sceneRef.current) return
       stageRef.current = createVrmStage(sceneRef.current)
+      // Cadrage modifié à la main → persisté par personnage ; double-clic → oubli.
+      stageRef.current.onViewChange((view) => {
+        const id = characterIdRef.current
+        if (!id) return
+        try {
+          if (view) localStorage.setItem(viewKey(id), JSON.stringify(view))
+          else localStorage.removeItem(viewKey(id))
+        } catch {
+          /* localStorage indisponible : cadrage non persisté */
+        }
+      })
       setStageReady(true)
     })().catch((e) => {
       console.error('[vrm]', e)
@@ -209,17 +225,32 @@ function AppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Changement de personnage (ou scène prête) → charger son modèle VRM.
+  // Changement de personnage (ou scène prête) → charger son modèle VRM, puis
+  // réappliquer le cadrage caméra que l'utilisateur avait choisi pour lui.
   useEffect(() => {
+    characterIdRef.current = character?.id ?? null
     const stage = stageRef.current
     if (!stage || !stageReady) return
     setVrmError(null)
-    stage.loadModel(character?.vrm ?? '').catch((e) => {
-      console.error('[vrm]', e)
-      setVrmError(api.errorMessage(e))
-    })
+    const charId = character?.id ?? null
+    stage
+      .loadModel(character?.vrm ?? '')
+      .then(() => {
+        if (!charId || characterIdRef.current !== charId) return
+        const raw = localStorage.getItem(viewKey(charId))
+        if (!raw) return
+        try {
+          stage.setView(JSON.parse(raw))
+        } catch {
+          localStorage.removeItem(viewKey(charId)) // cadrage corrompu : oublié
+        }
+      })
+      .catch((e) => {
+        console.error('[vrm]', e)
+        setVrmError(api.errorMessage(e))
+      })
     stage.setEmotion(lastEmotionRef.current)
-  }, [stageReady, character?.vrm])
+  }, [stageReady, character?.vrm, character?.id])
 
   // ── Chargement personnage / chat ─────────────────────────────────────────
 
