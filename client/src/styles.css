@@ -1724,26 +1724,40 @@ select {
   border-radius: 10px;
 }
 
-/* Régénérer/Continuer : quick-menu INTÉGRÉ à la boîte de dialogue — la bande
-   basse de la même boîte (mêmes bordures), comme dans un vrai visual novel. */
+/* Une SEULE boîte de visual novel, trois sections de haut en bas :
+   dialogue → saisie → quick-menu (Régénérer/Continuer). L'ordre visuel est
+   réglé en flex `order` (le DOM garde son ordre logique), et les sections
+   basses partagent un ton légèrement plus sombre qui sert de séparateur. */
+.chat-panel.vn .vn-box {
+  order: 1;
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  padding-bottom: 6px;
+}
+
+.chat-panel.vn .composer {
+  order: 2;
+}
+
 .chat-panel.vn .reply-actions {
+  order: 3;
   width: min(900px, calc(100% - 28px));
-  margin: 0 auto;
+  margin: 0 auto 10px;
   justify-content: flex-end;
   gap: 14px;
   padding: 0 14px 7px;
-  background: var(--panel-strong);
+  background: rgba(19, 14, 29, 0.95); /* le ton sombre des sections basses */
   border: 1px solid rgba(245, 163, 199, 0.28);
   border-top: none;
   border-radius: 0 0 12px 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
-/* Quand la bande d'actions est là, la boîte s'ouvre vers elle : une seule forme. */
-.chat-panel.vn:has(.reply-actions) .vn-box {
+/* Saisie suivie du quick-menu : elle s'ouvre vers lui (pas d'arrondi bas). */
+.chat-panel.vn:has(.reply-actions) .composer {
+  margin-bottom: 0;
   border-bottom: none;
-  border-radius: 12px 12px 0 0;
-  padding-bottom: 4px;
+  border-radius: 0;
 }
 
 .chat-panel.vn .reply-actions .btn {
@@ -1781,15 +1795,16 @@ select {
   backdrop-filter: blur(12px);
 }
 
-/* Composer solidaire de la boîte : même largeur, fin, fond assorti. */
+/* Saisie : section médiane de la boîte — même largeur, mêmes bords, ton
+   assombri, séparée du dialogue par un fin liseré. */
 .chat-panel.vn .composer {
   width: min(900px, calc(100% - 28px));
-  margin: 4px auto 10px;
-  padding: 6px 8px;
-  background: var(--panel-strong);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  margin: 0 auto 10px;
+  padding: 7px 10px;
+  background: rgba(19, 14, 29, 0.95);
+  border: 1px solid rgba(245, 163, 199, 0.28);
   border-top: 1px solid var(--border);
+  border-radius: 0 0 12px 12px;
 }
 
 /* Boîte de dialogue façon visual novel : hauteur stable, étiquette de nom
