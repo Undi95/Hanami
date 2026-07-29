@@ -29,6 +29,7 @@ export default function ChatsDialog({ characterId, activeChatId, onSelect, onDel
   const [chats, setChats] = useState<ChatMeta[] | null>(null)
   const [armed, setArmed] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [stats, setStats] = useState<api.CharacterStats | null>(null)
 
   const load = useCallback(() => {
     api
@@ -38,6 +39,31 @@ export default function ChatsDialog({ characterId, activeChatId, onSelect, onDel
   }, [characterId])
 
   useEffect(load, [load])
+
+  // « Notre histoire » : purement décoratif — un échec ne doit jamais parasiter
+  // la liste des conversations. Rechargé après duplication/suppression.
+  const loadStats = useCallback(() => {
+    api
+      .getStats(characterId)
+      .then(setStats)
+      .catch((e) => console.error('[chats] stats', e))
+  }, [characterId])
+
+  useEffect(loadStats, [loadStats])
+
+  // Rien avant le tout premier message : pas d'histoire à raconter.
+  const statsLine =
+    stats && stats.firstMessageAt
+      ? t('statsLine', {
+          days: t(isPlural(lang, stats.daysTogether) ? 'statsDaysMany' : 'statsDaysOne', { n: stats.daysTogether }),
+          messages: t(isPlural(lang, stats.totalMessages) ? 'messagesMany' : 'messagesOne', {
+            n: stats.totalMessages,
+          }),
+          activeDays: t(isPlural(lang, stats.activeDays) ? 'statsActiveDaysMany' : 'statsActiveDaysOne', {
+            n: stats.activeDays,
+          }),
+        })
+      : null
 
   async function create() {
     try {
@@ -53,6 +79,18 @@ export default function ChatsDialog({ characterId, activeChatId, onSelect, onDel
     }
   }
 
+  // Duplique la conversation ; la branche apparaît dans la liste, sans y basculer.
+  // Le titre localisé vient d'ici : le serveur ne connaît pas la langue de l'UI.
+  async function fork(chat: ChatMeta) {
+    try {
+      await api.forkChat(characterId, chat.id, `${chat.title} (${t('forkSuffix')})`)
+      load()
+      loadStats()
+    } catch (e) {
+      setError(api.errorMessage(e))
+    }
+  }
+
   async function remove(id: string) {
     if (armed !== id) {
       setArmed(id)
@@ -62,6 +100,7 @@ export default function ChatsDialog({ characterId, activeChatId, onSelect, onDel
       await api.deleteChat(characterId, id)
       setArmed(null)
       load()
+      loadStats()
       onDeleted(id)
     } catch (e) {
       setError(api.errorMessage(e))
@@ -73,9 +112,17 @@ export default function ChatsDialog({ characterId, activeChatId, onSelect, onDel
       title={t('chats')}
       onClose={onClose}
       footer={
-        <button className="btn primary" onClick={() => create().catch((e) => console.error('[chats]', e))}>
-          {t('newChat')}
-        </button>
+        <>
+          {statsLine && (
+            // marginRight auto : la ligne se cale à gauche, le bouton reste à droite.
+            <span className="hint" style={{ marginRight: 'auto' }}>
+              {statsLine}
+            </span>
+          )}
+          <button className="btn primary" onClick={() => create().catch((e) => console.error('[chats]', e))}>
+            {t('newChat')}
+          </button>
+        </>
       }
     >
       {error && <p className="msg-err">{error}</p>}
@@ -99,6 +146,9 @@ export default function ChatsDialog({ characterId, activeChatId, onSelect, onDel
                   {fmtDate(c.updatedAt, lang)} ·{' '}
                   {t(isPlural(lang, c.messageCount) ? 'messagesMany' : 'messagesOne', { n: c.messageCount })}
                 </span>
+              </button>
+              <button className="btn small" onClick={() => fork(c).catch((e) => console.error('[chats]', e))}>
+                {t('forkChat')}
               </button>
               <button
                 className={`btn small${armed === c.id ? ' danger' : ''}`}

@@ -57,9 +57,11 @@ const FR = {
   importMenu: 'Importer (SillyTavern)',
   promptInspectorTitle: 'Inspecteur de prompt',
   settings: 'Réglages',
+  vnMode: 'Mode visual novel',
 
   // ── Saisie et fil de messages ────────────────────────────────────────────
   writeMessage: 'Écrire un message…',
+  vnYou: 'Vous',
   send: 'Envoyer',
   stop: 'Arrêter la génération',
   replyInProgress: 'Réponse en cours',
@@ -67,16 +69,37 @@ const FR = {
   regenerate: 'Régénérer',
   continueReply: 'Continuer',
   editMessage: 'Modifier le message',
+  replyToMessage: 'Répondre à ce message',
+  replyingTo: 'En réponse à {name}',
+  quotedLine: '{name} : {text}',
   rememberThis: 'Retenir ce message (mémoire)',
   remembered: 'Épinglé dans la mémoire (moments.md).',
+  pinMessage: 'Épingler ce message',
+  unpin: 'Retirer l’épingle',
+
+  // ── Recherche dans la conversation (Ctrl+F, aucun bouton permanent) ───────
+  searchPlaceholder: 'Rechercher dans la conversation…',
+  searchCount: '{n}/{m}',
+  searchPrev: 'Correspondance précédente',
+  searchNext: 'Correspondance suivante',
+  searchClose: 'Fermer la recherche',
 
   // ── Conversations ────────────────────────────────────────────────────────
   newChat: 'Nouvelle conversation',
   noChats: 'Aucune conversation pour l’instant.',
   defaultChatTitle: 'Conversation du {date}',
   deleteChat: 'Supprimer',
+  forkChat: 'Dupliquer',
+  forkSuffix: 'branche',
   messagesOne: '{n} message',
   messagesMany: '{n} messages',
+  // « Notre histoire » : ligne unique en pied des conversations, montée à partir
+  // des trois fragments ci-dessous (chacun accordé avec isPlural).
+  statsLine: '💗 {days} · {messages} · {activeDays}',
+  statsDaysOne: '{n} jour ensemble',
+  statsDaysMany: '{n} jours ensemble',
+  statsActiveDaysOne: '{n} jour de conversation',
+  statsActiveDaysMany: '{n} jours de conversation',
 
   // ── Personnages ──────────────────────────────────────────────────────────
   newCharacter: 'Nouveau personnage',
@@ -111,6 +134,11 @@ const FR = {
   chooseDetectedModel: 'Choisir un modèle détecté',
   chooseDetectedModelOption: '— choisir un modèle détecté —',
   sectionGeneration: 'Génération',
+  modelMode: 'Mode du modèle',
+  modelModeFull: 'Complet',
+  modelModeSimple: 'Simple',
+  modelModeSub:
+    'Simple : aucun outil n’est exposé au modèle — Hanami gère la mémoire côté serveur (les faits sont extraits à la compaction) et devine l’émotion à partir du texte. À choisir pour les petits modèles, qui échouent souvent au tool-calling.',
   temperature: 'Température',
   maxTokens: 'Tokens max (réponse)',
   maxHistory: 'Messages d’historique max envoyés',
@@ -250,9 +278,11 @@ const EN: Record<Key, string> = {
   importMenu: 'Import (SillyTavern)',
   promptInspectorTitle: 'Prompt inspector',
   settings: 'Settings',
+  vnMode: 'Visual novel mode',
 
   // ── Composer and message feed ────────────────────────────────────────────
   writeMessage: 'Write a message…',
+  vnYou: 'You',
   send: 'Send',
   stop: 'Stop generating',
   replyInProgress: 'Reply in progress',
@@ -260,16 +290,35 @@ const EN: Record<Key, string> = {
   regenerate: 'Regenerate',
   continueReply: 'Continue',
   editMessage: 'Edit message',
+  replyToMessage: 'Reply to this message',
+  replyingTo: 'Replying to {name}',
+  quotedLine: '{name}: {text}',
   rememberThis: 'Remember this message (memory)',
   remembered: 'Pinned to memory (moments.md).',
+  pinMessage: 'Pin this message',
+  unpin: 'Remove the pin',
+
+  // ── In-conversation search (Ctrl+F, no permanent button) ─────────────────
+  searchPlaceholder: 'Search this conversation…',
+  searchCount: '{n}/{m}',
+  searchPrev: 'Previous match',
+  searchNext: 'Next match',
+  searchClose: 'Close search',
 
   // ── Conversations ────────────────────────────────────────────────────────
   newChat: 'New conversation',
   noChats: 'No conversations yet.',
   defaultChatTitle: 'Conversation from {date}',
   deleteChat: 'Delete',
+  forkChat: 'Duplicate',
+  forkSuffix: 'branch',
   messagesOne: '{n} message',
   messagesMany: '{n} messages',
+  statsLine: '💗 {days} · {messages} · {activeDays}',
+  statsDaysOne: '{n} day together',
+  statsDaysMany: '{n} days together',
+  statsActiveDaysOne: '{n} day of conversation',
+  statsActiveDaysMany: '{n} days of conversation',
 
   // ── Characters ───────────────────────────────────────────────────────────
   newCharacter: 'New character',
@@ -303,6 +352,11 @@ const EN: Record<Key, string> = {
   chooseDetectedModel: 'Choose a detected model',
   chooseDetectedModelOption: '— choose a detected model —',
   sectionGeneration: 'Generation',
+  modelMode: 'Model mode',
+  modelModeFull: 'Full',
+  modelModeSimple: 'Simple',
+  modelModeSub:
+    'Simple: no tools are exposed to the model — Hanami handles memory server-side (facts are extracted during compaction) and guesses the emotion from the text. Pick this for small models, which often fail at tool calling.',
   temperature: 'Temperature',
   maxTokens: 'Max tokens (reply)',
   maxHistory: 'Max history messages sent',

@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS: Settings = {
   backendUrl: 'http://127.0.0.1:5001/v1',
   apiKey: '',
   model: '',
+  modelMode: 'full',
   temperature: 0.8,
   maxTokens: 1024,
   maxHistoryMessages: 40,
@@ -35,6 +36,10 @@ export function loadSettings(): Settings {
     // toolsRoot absent, vide ou relatif → la sandbox retomberait sur le cwd : retour au défaut.
     if (typeof merged.toolsRoot !== 'string' || !merged.toolsRoot.trim() || !path.isAbsolute(merged.toolsRoot)) {
       merged.toolsRoot = DEFAULT_SETTINGS.toolsRoot
+    }
+    // Le PUT ne valide que le TYPE des valeurs : une chaîne inconnue passerait.
+    if (merged.modelMode !== 'full' && merged.modelMode !== 'simple') {
+      merged.modelMode = DEFAULT_SETTINGS.modelMode
     }
     return merged
   } catch {

@@ -3,7 +3,7 @@
 // les champs démarrent vides ('' = conserver la valeur configurée) et le bouton
 // « Retirer » envoie la sentinelle CLEAR_SECRET.
 import { useState } from 'react'
-import type { Settings } from '../../../shared/types'
+import type { ModelMode, Settings } from '../../../shared/types'
 import * as api from '../api'
 import { isPlural, useI18n, type Lang } from '../i18n'
 import Dialog from './Dialog'
@@ -19,6 +19,7 @@ interface FormState {
   backendUrl: string
   apiKey: string
   model: string
+  modelMode: ModelMode
   temperature: string
   maxTokens: string
   maxHistoryMessages: string
@@ -43,6 +44,7 @@ function toForm(s: Settings): FormState {
     // Secrets jamais pré-remplis (le serveur les renvoie vides) : '' = inchangé.
     apiKey: '',
     model: s.model,
+    modelMode: s.modelMode,
     temperature: String(s.temperature),
     maxTokens: String(s.maxTokens),
     maxHistoryMessages: String(s.maxHistoryMessages),
@@ -71,6 +73,7 @@ function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassw
     backendUrl: f.backendUrl.trim(),
     apiKey: clearApiKey ? api.CLEAR_SECRET : f.apiKey,
     model: f.model.trim(),
+    modelMode: f.modelMode,
     temperature: num(f.temperature, base.temperature),
     maxTokens: Math.round(num(f.maxTokens, base.maxTokens)),
     maxHistoryMessages: Math.round(num(f.maxHistoryMessages, base.maxHistoryMessages)),
@@ -114,17 +117,28 @@ function Toggle({
   )
 }
 
-/** Sélecteur segmenté de langue — préférence locale, appliquée immédiatement. */
-function LangSwitch({ lang, onPick, labels }: { lang: Lang; onPick: (l: Lang) => void; labels: Record<Lang, string> }) {
-  const options: Lang[] = ['fr', 'en']
+/** Sélecteur segmenté : une valeur parmi quelques-unes, appliquée au clic. */
+function Seg<T extends string>({
+  value,
+  options,
+  labels,
+  onPick,
+  ariaLabel,
+}: {
+  value: T
+  options: readonly T[]
+  labels: Record<T, string>
+  onPick: (v: T) => void
+  ariaLabel: string
+}) {
   return (
-    <div className="seg">
+    <div className="seg" role="group" aria-label={ariaLabel}>
       {options.map((code) => (
         <button
           key={code}
           type="button"
           className="seg-btn"
-          aria-pressed={lang === code}
+          aria-pressed={value === code}
           onClick={() => onPick(code)}
         >
           {labels[code]}
@@ -133,6 +147,9 @@ function LangSwitch({ lang, onPick, labels }: { lang: Lang; onPick: (l: Lang) =>
     </div>
   )
 }
+
+const LANG_OPTIONS: readonly Lang[] = ['fr', 'en']
+const MODEL_MODE_OPTIONS: readonly ModelMode[] = ['full', 'simple']
 
 export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
   const { lang, setLang, t } = useI18n()
@@ -239,7 +256,13 @@ export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
       }
     >
       <h3 className="section-title">{t('language')}</h3>
-      <LangSwitch lang={lang} onPick={setLang} labels={{ fr: t('langFr'), en: t('langEn') }} />
+      <Seg
+        value={lang}
+        options={LANG_OPTIONS}
+        labels={{ fr: t('langFr'), en: t('langEn') }}
+        onPick={setLang}
+        ariaLabel={t('language')}
+      />
 
       <h3 className="section-title">{t('sectionBackend')}</h3>
       <div className="field">
@@ -335,6 +358,20 @@ export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
           <label htmlFor="set-ctx">{t('contextSize')}</label>
           <input id="set-ctx" type="number" step="1" min="0" value={form.contextSize} onChange={(e) => set('contextSize', e.target.value)} />
         </div>
+      </div>
+      <div className="field">
+        <label>{t('modelMode')}</label>
+        {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+        <div>
+          <Seg
+            value={form.modelMode}
+            options={MODEL_MODE_OPTIONS}
+            labels={{ full: t('modelModeFull'), simple: t('modelModeSimple') }}
+            onPick={(v) => set('modelMode', v)}
+            ariaLabel={t('modelMode')}
+          />
+        </div>
+        <span className="hint">{t('modelModeSub')}</span>
       </div>
       <Toggle
         label={t('autoCompact')}

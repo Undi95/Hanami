@@ -235,6 +235,20 @@ select {
   color: var(--text);
 }
 
+/* Boutons-bascule de la barre (mode visual novel) */
+.icon-btn[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Sept icônes en ligne : on resserre leur largeur sur les écrans étroits pour
+   laisser respirer le nom du personnage (la hauteur de touche reste à 44 px). */
+@media (max-width: 430px) {
+  .icon-btn {
+    width: 38px;
+  }
+}
+
 .icon-btn:disabled {
   opacity: 0.3;
   cursor: default;
@@ -263,6 +277,16 @@ select {
 }
 
 /* ── Fil de messages ──────────────────────────────────────────────────── */
+
+/* Enveloppe transparente du fil : n'existe que pour ancrer le champ de
+   recherche flottant (aucun pixel, elle occupe exactement la place du fil). */
+.messages-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
 .messages {
   flex: 1 1 auto;
@@ -309,8 +333,9 @@ select {
   border-bottom-left-radius: 5px;
 }
 
-/* Markdown dans les bulles (rendu par markdown.tsx) */
-.bubble code {
+/* Markdown dans les bulles et dans la boîte VN (rendu par markdown.tsx) */
+.bubble code,
+.vn-text code {
   font-family: var(--mono);
   font-size: 0.9em;
   background: rgba(0, 0, 0, 0.28);
@@ -319,7 +344,8 @@ select {
   padding: 1px 5px;
 }
 
-.bubble pre {
+.bubble pre,
+.vn-text pre {
   margin: 6px 0;
   padding: 8px 11px;
   background: rgba(0, 0, 0, 0.3);
@@ -333,8 +359,19 @@ select {
   max-width: 100%;
 }
 
-.bubble em {
+.bubble em,
+.vn-text em {
   color: rgba(236, 231, 242, 0.85);
+}
+
+/* Citation « > … » — produite entre autres par « Répondre à ce message » */
+.bubble blockquote,
+.vn-text blockquote {
+  margin: 0 0 6px;
+  padding: 1px 0 1px 9px;
+  border-left: 2px solid var(--accent);
+  color: var(--text-dim);
+  font-size: 0.92em;
 }
 
 .msg-ts {
@@ -452,10 +489,47 @@ select {
   color: var(--accent);
 }
 
+/* Punaise du message actuellement épinglé */
+.msg-edit.pinned {
+  opacity: 1;
+  color: var(--accent);
+}
+
 .msg-edit svg {
   width: 11px;
   height: 11px;
   display: inline-block;
+}
+
+/* Souris : la rangée d'icônes n'existe qu'au survol de la bulle — une bulle de
+   chat doit ressembler à une bulle de chat, pas à une barre d'outils. */
+@media (pointer: fine) {
+  .msg-edit {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .msg:hover .msg-edit,
+  .msg:focus-within .msg-edit,
+  .msg-edit:focus-visible {
+    opacity: 0.55;
+  }
+  .msg:hover .msg-edit:hover,
+  .msg:hover .msg-edit.pinned,
+  .msg:focus-within .msg-edit.pinned {
+    opacity: 1;
+  }
+}
+
+/* Tactile : visibles (pas de survol) mais avec une vraie zone de toucher. */
+@media (pointer: coarse) {
+  .msg-edit {
+    padding: 8px 7px;
+    margin-left: 1px;
+  }
+  .msg-edit svg {
+    width: 14px;
+    height: 14px;
+  }
 }
 
 .bubble.editing {
@@ -558,6 +632,212 @@ select {
     opacity: 1;
     transform: translateY(-3px);
   }
+}
+
+/* ── Recherche dans la conversation (Ctrl+F) ──────────────────────────── */
+/* Rien n'existe tant que le raccourci n'a pas été frappé : ni bouton, ni icône.
+   Le champ se pose au-dessus du fil, il ne le décale pas. */
+
+.search-bar {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px 3px 11px;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.search-bar input {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+}
+
+.search-bar input:focus {
+  outline: none;
+}
+
+.search-bar input::placeholder {
+  color: var(--text-dim);
+}
+
+.search-count {
+  flex: none;
+  padding: 0 4px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-nav {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.search-nav:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.search-nav:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.search-nav svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Correspondances dans les bulles (la courante ressort seule) */
+.search-hit {
+  background: rgba(245, 163, 199, 0.3);
+  color: inherit;
+  border-radius: 3px;
+}
+
+.search-hit.current {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* Ruban du message épinglé, en haut du fil : replié à 2 lignes, déplié au clic.
+   Pur affichage — l'épingle n'entre jamais dans le contexte envoyé au modèle. */
+.pin-ribbon {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 8px 12px 0;
+  padding: 5px 4px 5px 10px;
+  background: var(--panel-strong);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.pin-ribbon-text {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.pin-ribbon.open .pin-ribbon-text {
+  display: block;
+  /* dvh : le vh mobile compte la barre d'URL et mangerait le fil. */
+  max-height: min(22dvh, 190px);
+  overflow-y: auto;
+}
+
+.pin-ribbon-close {
+  flex: none;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.pin-ribbon-close:hover {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.pin-ribbon-close svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Bandeau « en réponse à … » : visible jusqu'à l'envoi (ou l'annulation) */
+.reply-quote {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 10px;
+  padding: 4px 4px 4px 9px;
+  font-size: 12px;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.reply-quote-who {
+  flex: none;
+  color: var(--accent);
+}
+
+.reply-quote-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-quote-close {
+  flex: none;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.reply-quote-close:hover {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.reply-quote-close svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* ── Composer ─────────────────────────────────────────────────────────── */
@@ -1118,11 +1398,24 @@ select {
 .item-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  /* wrap : sur écran étroit, les boutons (Dupliquer/Supprimer) passent à la
+     ligne au lieu d'écraser le titre. */
+  flex-wrap: wrap;
+  gap: 6px 10px;
   padding: 6px 10px 6px 12px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border);
+}
+
+.item-row .item-main {
+  flex-basis: 100%;
+}
+
+@media (min-width: 480px) {
+  .item-row .item-main {
+    flex-basis: 0;
+  }
 }
 
 .item-row.active {
@@ -1344,6 +1637,130 @@ select {
 .login-card .hint {
   text-align: center;
   margin: 0;
+}
+
+/* ── Mode visual novel ────────────────────────────────────────────────── */
+/* Le panneau s'efface au profit de la scène : plus de fond, de flou ni de
+   bordure — il ne reste que la boîte de dialogue et le composer, ancrés en bas.
+   Le fil complet n'est pas monté (App.tsx) : rien à masquer ici. */
+
+.chat-panel.vn {
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  height: auto;
+  justify-content: flex-end;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: none;
+  border-radius: 0;
+}
+
+/* La scène reste manipulable (pan/zoom) partout où il n'y a pas de contrôle. */
+.chat-panel.vn,
+.chat-panel.vn .topbar {
+  pointer-events: none;
+}
+
+.chat-panel.vn .reply-actions {
+  pointer-events: none;
+}
+
+.chat-panel.vn .topbar nav,
+.chat-panel.vn .banner,
+.chat-panel.vn .compact-pill,
+.chat-panel.vn .vn-box,
+.chat-panel.vn .reply-actions .btn,
+.chat-panel.vn .reply-quote,
+.chat-panel.vn .empty-state,
+.chat-panel.vn .composer {
+  pointer-events: auto;
+}
+
+/* Bandeau de réponse posé sur la scène : opaque, comme les boutons ci-dessous. */
+.chat-panel.vn .reply-quote {
+  width: calc(100% - 24px);
+  max-width: 1000px;
+  margin: 0 auto 6px;
+  background: var(--panel-strong);
+  border-radius: 10px;
+}
+
+/* Régénérer/Continuer : posés sur la scène, donc opaques (le style ajouré du
+   fil de messages y serait illisible). */
+.chat-panel.vn .reply-actions .btn {
+  background: var(--panel);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-style: solid;
+}
+
+.chat-panel.vn .sheet-handle,
+.chat-panel.vn .topbar-name,
+.chat-panel.vn .topbar-sub {
+  display: none;
+}
+
+.chat-panel.vn .topbar {
+  border-bottom: none;
+  padding: 0 12px 6px;
+}
+
+/* Rangée d'icônes rejetée à droite et posée sur un fond discret : lisible
+   quelle que soit la scène derrière. */
+.chat-panel.vn .topbar nav {
+  margin-left: auto;
+  border-radius: 12px;
+  background: var(--panel);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.chat-panel.vn .composer {
+  width: 100%;
+  max-width: 1024px;
+  margin: 0 auto;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-top: none;
+}
+
+/* Boîte de dialogue : pleine largeur avec marges, hauteur libre puis défilement. */
+.vn-box {
+  flex: 0 1 auto;
+  width: calc(100% - 24px);
+  max-width: 1000px;
+  margin: 0 auto 10px;
+  max-height: 40dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 11px 16px 14px;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+/* Erreur en mode VN : rattachée à la boîte, jamais avalée */
+.vn-error {
+  margin: 6px auto 0;
+}
+
+.vn-name {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  margin-bottom: 5px;
+}
+
+.vn-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
 }
 
 /* ── Divers ───────────────────────────────────────────────────────────── */

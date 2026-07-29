@@ -166,7 +166,7 @@ Ce fichier est injecté dans le contexte à chaque message (si la mémoire est a
 }
 
 // ── Chats ──────────────────────────────────────────────────────────────────
-// Format .jsonl : ligne 1 = { id, title, createdAt, summary?, summaryUpto? },
+// Format .jsonl : ligne 1 = { id, title, createdAt, summary?, summaryUpto?, pinned? },
 // lignes suivantes = ChatMessage.
 
 interface ChatHeader {
@@ -175,6 +175,7 @@ interface ChatHeader {
   createdAt: string
   summary?: string
   summaryUpto?: number
+  pinned?: number // ordinal du message épinglé (gadget d'affichage, hors payload)
 }
 
 function chatFile(charId: string, chatId: string): string {
@@ -240,13 +241,22 @@ export function listChats(charId: string): ChatMeta[] {
       updatedAt: fs.statSync(file).mtime.toISOString(),
       messageCount: lineCount - 1,
       ...(header.summary ? { summary: header.summary, summaryUpto: header.summaryUpto ?? 0 } : {}),
+      ...(typeof header.pinned === 'number' ? { pinned: header.pinned } : {}),
     })
   }
   return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }
 
+/** Identifiant de conversation : date du jour + suffixe aléatoire, libre dans le dossier. */
+function newChatId(charId: string): string {
+  const day = new Date().toISOString().slice(0, 10)
+  let id = `${day}-${newId()}`
+  while (fs.existsSync(chatFile(charId, id))) id = `${day}-${newId()}`
+  return id
+}
+
 export function createChat(charId: string, title?: string): ChatMeta {
-  const id = `${new Date().toISOString().slice(0, 10)}-${newId()}`
+  const id = newChatId(charId)
   const header: ChatHeader = {
     id,
     title: title || `Chat du ${new Date().toLocaleDateString('fr-FR')}`,
@@ -284,14 +294,55 @@ export function deleteChat(charId: string, chatId: string): void {
 }
 
 /**
- * Met à jour l'en-tête d'un chat (résumé de compaction…) en réécrivant la
- * première ligne du .jsonl. Écriture temp + rename : un crash au milieu ne
- * corrompt jamais le fichier d'origine.
+ * Duplique une conversation en une branche indépendante : mêmes messages et
+ * même en-tête (summary/summaryUpto inclus — la branche hérite du même passé),
+ * nouvel identifiant. L'original n'est jamais touché ; le clone est écrit en
+ * tmp + fsync + rename pour ne jamais laisser un .jsonl à moitié écrit.
+ */
+export function forkChat(charId: string, chatId: string, title?: string): ChatMeta {
+  const lines = fs.readFileSync(chatFile(charId, chatId), 'utf8').split('\n').filter(Boolean)
+  if (lines.length === 0) throw new Error(`Chat corrompu : ${chatId}`)
+  const header = JSON.parse(lines[0]) as ChatHeader
+  const id = newChatId(charId)
+  const clone: ChatHeader = {
+    ...header,
+    id,
+    // Titre localisé fourni par le client ; repli neutre pour les appels API bruts.
+    title: title?.trim() || `${header.title} (branch)`,
+    createdAt: new Date().toISOString(),
+  }
+  const file = chatFile(charId, id)
+  const tmp = file + '.tmp'
+  const fd = fs.openSync(tmp, 'w')
+  try {
+    fs.writeSync(fd, [JSON.stringify(clone), ...lines.slice(1)].join('\n') + '\n')
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  fs.renameSync(tmp, file)
+  return {
+    id,
+    title: clone.title,
+    createdAt: clone.createdAt,
+    updatedAt: fs.statSync(file).mtime.toISOString(),
+    messageCount: lines.length - 1,
+    ...(clone.summary ? { summary: clone.summary, summaryUpto: clone.summaryUpto ?? 0 } : {}),
+    ...(typeof clone.pinned === 'number' ? { pinned: clone.pinned } : {}),
+  }
+}
+
+/**
+ * Met à jour l'en-tête d'un chat (résumé de compaction, message épinglé…) en
+ * réécrivant la première ligne du .jsonl. Écriture temp + rename : un crash au
+ * milieu ne corrompt jamais le fichier d'origine. Un champ du patch à
+ * `undefined` disparaît de l'en-tête (JSON.stringify l'omet) — c'est ainsi
+ * qu'on annule un résumé ou qu'on désépingle.
  */
 export function updateChatHeader(
   charId: string,
   chatId: string,
-  patch: Partial<Pick<ChatHeader, 'title' | 'summary' | 'summaryUpto'>>,
+  patch: Partial<Pick<ChatHeader, 'title' | 'summary' | 'summaryUpto' | 'pinned'>>,
 ): void {
   const file = chatFile(charId, chatId)
   const lines = fs.readFileSync(file, 'utf8').split('\n')
@@ -384,8 +435,12 @@ export function deleteMemoryFile(charId: string, name: string): void {
   fs.rmSync(path.join(memoryDir(charId), sanitizeFileName(name)), { force: true })
 }
 
-/** Bloc mémoire injecté dans le system prompt (transparent : visible dans l'inspecteur). */
-export function buildMemoryBlock(charId: string): string {
+/**
+ * Bloc mémoire injecté dans le system prompt (transparent : visible dans l'inspecteur).
+ * toolless (mode modèle « simple ») : AUCUN outil n'existe côté modèle — tout est
+ * injecté, plafonné, et on ne mentionne jamais memory_read.
+ */
+export function buildMemoryBlock(charId: string, toolless = false): string {
   const files = listMemory(charId)
   if (files.length === 0) return ''
   const index = files.find((f) => f.name === 'MEMORY.md')
@@ -393,11 +448,25 @@ export function buildMemoryBlock(charId: string): string {
   const totalLen = others.reduce((n, f) => n + f.content.length, 0)
   let block = `\n\n## Memory (auto-injected by Hanami — edit in the Memory panel)\n`
   if (index) block += index.content + '\n'
-  // Petits volumes : tout injecter. Gros volumes : index seul, le modèle lira via memory_read.
-  if (totalLen <= 8000) {
+  if (toolless) {
+    // Injection intégrale plafonnée : au-delà, les fichiers suivants sont coupés
+    // (les plus gros en dernier pour sacrifier le moins de fichiers possible).
+    const CAP = 24000
+    let used = 0
+    for (const f of [...others].sort((a, b) => a.content.length - b.content.length)) {
+      if (used + f.content.length > CAP) {
+        block += `\n(Memory file ${f.name} omitted — memory too large for simple mode; trim it in the Memory panel.)\n`
+        continue
+      }
+      used += f.content.length
+      block += `\n### ${f.name}\n${f.content}\n`
+    }
+  } else if (totalLen <= 8000) {
+    // Petits volumes : tout injecter.
     for (const f of others) block += `\n### ${f.name}\n${f.content}\n`
   } else if (others.length > 0) {
-    block += `\n(${others.length} fichiers mémoire — utilise l'outil memory_read(name) pour lire un fichier.)\n`
+    // Gros volumes : index seul, le modèle lira via l'outil memory_read.
+    block += `\n(${others.length} memory files — use the memory_read(name) tool to read one.)\n`
   }
   return block
 }

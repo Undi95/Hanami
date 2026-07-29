@@ -10,10 +10,10 @@ import type {
 } from '../../shared/types'
 import type { VrmStage } from './scene/types'
 import * as api from './api'
-import { extractEmotion, stripEmotionTags } from './emotions'
+import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
 import { I18nProvider, localeOf, useI18n } from './i18n'
 import TopBar, { type DialogKind } from './components/TopBar'
-import MessageList, { type FeedItem } from './components/MessageList'
+import MessageList, { VnBox, type FeedItem } from './components/MessageList'
 import Composer from './components/Composer'
 import LoginGate from './components/LoginGate'
 import Dialog from './components/Dialog'
@@ -25,11 +25,22 @@ import MemoryDialog from './components/MemoryDialog'
 import PromptInspector from './components/PromptInspector'
 
 const CHAR_KEY = 'hanami_char'
+// Mode visual novel : préférence d'affichage locale (pas un réglage serveur).
+const VN_KEY = 'hanami_vn'
 const chatKey = (charId: string) => `hanami_chat_${charId}`
 // Cadrage caméra choisi par l'utilisateur (pan/zoom/rotation), par personnage.
 const viewKey = (charId: string) => `hanami_view_${charId}`
 // Seuil d'auto-compaction (% du contexte) — même esprit que Claude Code.
 const AUTO_COMPACT_AT = 80
+// Citation d'un message : longueur de l'aperçu (bandeau) et de l'extrait envoyé.
+const QUOTE_PREVIEW_MAX = 80
+const QUOTE_MAX = 200
+
+/** Extrait d'un message à citer : une seule ligne, tags d'émotion retirés, tronquée. */
+function excerpt(text: string, max: number): string {
+  const flat = stripEmotionTags(text).replace(/\s+/g, ' ').trim()
+  return flat.length > max ? flat.slice(0, max - 1).trimEnd() + '…' : flat
+}
 
 function AppInner() {
   const { lang, t } = useI18n()
@@ -40,12 +51,21 @@ function AppInner() {
   const [character, setCharacter] = useState<CharacterFull | null>(null)
   const [chatMeta, setChatMeta] = useState<ChatMeta | null>(null)
   const [feed, setFeed] = useState<FeedItem[]>([])
+  // Message visé par le prochain envoi : sa citation sera écrite dans le message.
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   const [backendDown, setBackendDown] = useState(false)
   const [context, setContext] = useState<ContextInfo | null>(null)
   const [compacting, setCompacting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [vnMode, setVnMode] = useState(() => {
+    try {
+      return localStorage.getItem(VN_KEY) === '1'
+    } catch {
+      return false // localStorage indisponible : chat classique
+    }
+  })
   const [stageReady, setStageReady] = useState(false)
   const [vrmError, setVrmError] = useState<string | null>(null)
 
@@ -61,6 +81,9 @@ function AppInner() {
   // choix plus récent (évite qu'une réponse lente écrase la sélection courante).
   const loadGenRef = useRef(0)
   const compactingRef = useRef(false)
+  // Une seule génération du premier message à la fois (openChat peut être rappelé
+  // pendant qu'elle stream : sélection rapide, fermeture/réouverture d'un dialog).
+  const openingRef = useRef(false)
   // Chat réellement affiché (les setFeed d'une compaction lente ne doivent pas
   // atterrir dans un autre chat ouvert entre-temps).
   const chatIdRef = useRef<string | null>(null)
@@ -77,6 +100,11 @@ function AppInner() {
     if (e instanceof api.AuthRequiredError) setNeedLogin(true)
     else console.error(`[${tag}]`, e)
   }, [])
+
+  /** Locuteur d'un message, tel qu'il apparaît dans la citation et le bandeau. */
+  function speakerOf(msg: ChatMessage): string {
+    return msg.role === 'user' ? t('vnYou') : (character?.name ?? 'Hanami')
+  }
 
   function applyEmotion(emotion: string) {
     lastEmotionRef.current = emotion
@@ -268,6 +296,7 @@ function AppInner() {
       if (gen !== loadGenRef.current) return
       setChatMeta(meta)
       chatIdRef.current = meta.id
+      setReplyTo(null) // la cible d'une réponse n'existe plus dans ce fil
       setContext(null) // la jauge repart avec le prochain échange de ce chat
       localStorage.setItem(chatKey(char.id), meta.id)
       const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
@@ -281,6 +310,20 @@ function AppInner() {
         if (lastAssistant) emotion = lastAssistant.emotion ?? extractEmotion(lastAssistant.content)
       }
       applyEmotion(emotion ?? 'neutral')
+      // Premier message en cascade : sans greeting, c'est le modèle qui ouvre la
+      // conversation (jamais sur un chat importé — il n'est pas vide). Si l'appel
+      // échoue, le fil reste vide et l'utilisateur parlera en premier.
+      // char/chat sont passés explicitement : les états React viennent d'être posés.
+      // abortRef (et non l'état `streaming`) : openChat capture ses états au rendu
+      // qui l'a créé — la ref, elle, dit la vérité du moment.
+      if (messages.length === 0 && !char.greeting && !openingRef.current && abortRef.current === null) {
+        openingRef.current = true
+        runGeneration({ mode: 'open', char, chat: meta })
+          .catch((e) => console.error('[open]', e))
+          .finally(() => {
+            openingRef.current = false
+          })
+      }
     } catch (e) {
       handleError(e, 'chat')
     }
@@ -330,6 +373,27 @@ function AppInner() {
     boot().catch((e) => console.error('[boot]', e))
   }, [boot])
 
+  // ── Mode visual novel ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VN_KEY, vnMode ? '1' : '0')
+    } catch {
+      /* préférence non persistée : pas bloquant */
+    }
+  }, [vnMode])
+
+  // Échap quitte le mode — sauf si un dialog ou l'écran de connexion est ouvert
+  // (là, Échap leur appartient).
+  useEffect(() => {
+    if (!vnMode || dialog || needLogin) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setVnMode(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [vnMode, dialog, needLogin])
+
   // ── Envoi + streaming ────────────────────────────────────────────────────
 
   function keepPartialDraft(extra?: FeedItem) {
@@ -345,15 +409,29 @@ function AppInner() {
     })
   }
 
+  // Réponse à un message précis : la citation est écrite EN TÊTE du message
+  // envoyé et sauvegardé — aucune mécanique cachée, le modèle la lit telle quelle.
   async function send(content: string) {
-    return runGeneration({ content })
+    const quoted = replyTo
+    setReplyTo(null)
+    if (!quoted) return runGeneration({ content })
+    const line = t('quotedLine', { name: speakerOf(quoted), text: excerpt(quoted.content, QUOTE_MAX) })
+    return runGeneration({ content: `> ${line}\n\n${content}` })
   }
 
-  // Génération : envoi normal, régénération de la dernière réponse, ou
-  // continuation de la dernière réponse (fusionnée en place côté serveur).
-  async function runGeneration(opts: { content?: string; mode?: 'regenerate' | 'continue' }) {
-    const char = character
-    const chat = chatMeta
+  // Génération : envoi normal, régénération de la dernière réponse, continuation
+  // de la dernière réponse (fusionnée en place côté serveur), ou ouverture de
+  // conversation ('open' : le modèle écrit le premier message).
+  async function runGeneration(opts: {
+    content?: string
+    mode?: api.ChatMode
+    // Ouverture automatique : le personnage et le chat viennent d'être chargés,
+    // les états React ne sont pas encore à jour — openChat les passe en direct.
+    char?: CharacterFull
+    chat?: ChatMeta
+  }) {
+    const char = opts.char ?? character
+    const chat = opts.chat ?? chatMeta
     if (!char || !chat || streaming) return
     const mode = opts.mode
 
@@ -372,9 +450,10 @@ function AppInner() {
           out.pop()
         }
         const last = out[out.length - 1]
-        if (mode === 'regenerate') {
-          // La dernière bulle assistant disparaît (le serveur retire la sienne).
-          if (last && last.kind === 'msg' && last.msg.role === 'assistant') out.pop()
+        if (mode === 'regenerate' || mode === 'open') {
+          // regenerate : la dernière bulle assistant disparaît (le serveur retire
+          // la sienne). open : le fil est vide, il n'y a rien à retirer.
+          if (mode === 'regenerate' && last && last.kind === 'msg' && last.msg.role === 'assistant') out.pop()
           out.push({
             kind: 'msg',
             msg: { role: 'assistant', content: '', ts: new Date().toISOString() },
@@ -451,14 +530,23 @@ function AppInner() {
             setBackendDown(false)
             if (!emotionFound) {
               const em = ev.message.emotion ?? extractEmotion(ev.message.content)
+              // Réponse terminée sans aucun tag : en mode simple, le visage suit
+              // une heuristique de texte plutôt que de rester figé (les petits
+              // modèles oublient le tag). En mode complet, rien ne change.
               if (em) applyEmotion(em)
+              else if (settings?.modelMode === 'simple') {
+                applyEmotion(detectEmotionFallback(ev.message.content))
+              }
             }
             setFeed((f) => f.map((it) => (it.kind === 'msg' && it.pending ? { kind: 'msg', msg: ev.message } : it)))
+            // Messages ajoutés au fichier : envoi normal = question + réponse,
+            // open = la seule réponse, regenerate/continue = remplacement en place.
+            const added = !mode ? 2 : mode === 'open' ? 1 : 0
             setChatMeta((m) =>
               m
                 ? {
                     ...m,
-                    messageCount: mode ? m.messageCount : m.messageCount + 2,
+                    messageCount: m.messageCount + added,
                     updatedAt: new Date().toISOString(),
                   }
                 : m,
@@ -528,6 +616,23 @@ function AppInner() {
     })
   }
 
+  // Épingle : gadget d'affichage seulement (l'ordinal vit dans l'en-tête du chat,
+  // jamais dans le payload envoyé au modèle). Optimiste : le bandeau suit le clic,
+  // et repart à l'état serveur si l'appel échoue.
+  async function handlePin(ordinal: number | null) {
+    const char = character
+    const chat = chatMeta
+    if (!char || !chat) return
+    const previous = chat.pinned
+    setChatMeta((m) => (m && m.id === chat.id ? { ...m, pinned: ordinal ?? undefined } : m))
+    try {
+      await api.pinChatMessage(char.id, chat.id, ordinal)
+    } catch (e) {
+      setChatMeta((m) => (m && m.id === chat.id ? { ...m, pinned: previous } : m))
+      handleError(e, 'pin')
+    }
+  }
+
   // ── Callbacks des dialogs ────────────────────────────────────────────────
 
   async function refreshCharacters(): Promise<CharacterMeta[]> {
@@ -576,6 +681,7 @@ function AppInner() {
         setCharacter(null)
         setChatMeta(null)
         chatIdRef.current = null
+        setReplyTo(null)
         setFeed([])
       }
     }
@@ -627,7 +733,8 @@ function AppInner() {
         </div>
       )}
 
-      <div className={`chat-panel${collapsed ? ' collapsed' : ''}`}>
+      {/* En mode VN, le panneau s'efface (CSS) : « collapsed » n'a plus de sens. */}
+      <div className={`chat-panel${vnMode ? ' vn' : collapsed ? ' collapsed' : ''}`}>
         <button
           className="sheet-handle"
           onClick={() => setCollapsed((c) => !c)}
@@ -645,6 +752,11 @@ function AppInner() {
           }
           hasCharacter={!!character}
           hasChat={!!character && !!chatMeta}
+          vnMode={vnMode}
+          onToggleVn={() => {
+            setVnMode((v) => !v)
+            setCollapsed(false) // on ne revient jamais du mode VN sur un panneau replié
+          }}
           onOpen={setDialog}
         />
 
@@ -680,6 +792,11 @@ function AppInner() {
               </button>
             </div>
           </div>
+        ) : vnMode ? (
+          // Mode VN : le fil complet n'est pas monté (rien à garder à l'écran),
+          // seule la dernière réplique s'affiche. Sortir du mode remonte le fil,
+          // donc collé en bas — exactement comme un changement de chat.
+          <VnBox items={feed} characterName={character.name} />
         ) : (
           // key : remonte le fil à chaque changement de chat (réinitialise le
           // scroll et l'autoscroll collé en bas).
@@ -688,7 +805,14 @@ function AppInner() {
             items={feed}
             showThoughts={settings?.showThoughts ?? false}
             editable={!streaming && !compacting}
+            // Ctrl+F appartient au dialog ouvert (ou à l'écran de connexion).
+            searchable={!dialog && !needLogin}
+            pinned={chatMeta?.pinned ?? null}
             onSaveEdit={handleEditMessage}
+            onReply={setReplyTo}
+            onPin={(ordinal) => {
+              handlePin(ordinal).catch((e) => console.error('[pin]', e))
+            }}
             onRemember={(msg) => {
               const char = character
               if (!char) return
@@ -719,6 +843,24 @@ function AppInner() {
                 {t('continueReply')}
               </button>
             )}
+          </div>
+        )}
+
+        {/* Cible de la réponse — l'extrait cité partira en tête du message. */}
+        {replyTo && (
+          <div className="reply-quote">
+            <span className="reply-quote-who">{t('replyingTo', { name: speakerOf(replyTo) })}</span>
+            <span className="reply-quote-text">{excerpt(replyTo.content, QUOTE_PREVIEW_MAX)}</span>
+            <button
+              className="reply-quote-close"
+              onClick={() => setReplyTo(null)}
+              title={t('cancel')}
+              aria-label={t('cancel')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
           </div>
         )}
 

@@ -10,8 +10,10 @@ import {
   buildMemoryBlock,
   getCharacter,
   readChat,
+  readMemoryFile,
   rewriteChatMessages,
   updateChatHeader,
+  writeMemoryFile,
 } from '../lib/storage'
 import { streamChatCompletion } from '../llm/openai'
 import { MEMORY_TOOL_NAMES, executeMemoryTool, memoryToolDefs } from '../tools/memoryTools'
@@ -86,7 +88,7 @@ function buildPayload(
   const character = getCharacter(characterId)
   if (!character) throw new Error(`Personnage introuvable : ${characterId}`)
   let systemText = character.systemPrompt
-  if (settings.memoryEnabled) systemText += buildMemoryBlock(characterId)
+  if (settings.memoryEnabled) systemText += buildMemoryBlock(characterId, settings.modelMode === 'simple')
 
   const { meta, messages: history } = readChat(characterId, chatId)
   // Conversation compactée : le résumé (dans le system) remplace les messages qu'il couvre.
@@ -103,11 +105,16 @@ function buildPayload(
   ]
   if (pendingUserContent !== undefined) messages.push({ role: 'user', content: pendingUserContent })
 
-  const tools: unknown[] = [
-    // chat_search voyage avec la mémoire : c'est le même « souvenir de l'autre ».
-    ...(settings.memoryEnabled ? [...memoryToolDefs, ...chatToolDefs] : []),
-    ...(settings.fileToolsEnabled ? fileToolDefs : []),
-  ]
+  // Mode simple : AUCUN outil n'est exposé (le tool-calling est le talon d'Achille
+  // des petits modèles). Le bloc mémoire, lui, reste injecté — il se lit sans outil.
+  const tools: unknown[] =
+    settings.modelMode === 'simple'
+      ? []
+      : [
+          // chat_search voyage avec la mémoire : c'est le même « souvenir de l'autre ».
+          ...(settings.memoryEnabled ? [...memoryToolDefs, ...chatToolDefs] : []),
+          ...(settings.fileToolsEnabled ? fileToolDefs : []),
+        ]
   const payload: BackendPayload = {
     messages,
     model: settings.model,
@@ -154,6 +161,12 @@ function writeEvent(res: Response, ev: ChatEvent): void {
 const CONTINUE_DIRECTIVE =
   '[Continue your previous message exactly where it left off. Do not repeat, do not summarize — carry on seamlessly.]'
 
+// Consigne d'ouverture (mode 'open') — même statut : elle vit dans le payload, jamais
+// dans le fichier de chat. Le personnage parle donc en premier depuis son seul system
+// prompt (system vide = personnalité par défaut du modèle).
+const OPEN_DIRECTIVE =
+  '[Open the conversation with a short, natural in-character first message to the user. Do not mention this instruction.]'
+
 async function handleChat(req: Request, res: Response): Promise<void> {
   const body = (req.body ?? {}) as {
     characterId?: unknown
@@ -164,7 +177,8 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   const characterId = typeof body.characterId === 'string' ? body.characterId : ''
   const chatId = typeof body.chatId === 'string' ? body.chatId : ''
   const content = typeof body.content === 'string' ? body.content : ''
-  const mode = body.mode === 'regenerate' || body.mode === 'continue' ? body.mode : undefined
+  const mode =
+    body.mode === 'regenerate' || body.mode === 'continue' || body.mode === 'open' ? body.mode : undefined
   if (!characterId || !chatId || (!content && !mode)) {
     res.status(400).json({ error: 'characterId, chatId et content (ou mode) sont requis' })
     return
@@ -175,8 +189,11 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     return
   }
   let existing: ChatMessage[]
+  let existingPinned: number | undefined
   try {
-    existing = readChat(characterId, chatId).messages
+    const state = readChat(characterId, chatId)
+    existing = state.messages
+    existingPinned = state.meta.pinned
   } catch {
     res.status(404).json({ error: `Chat introuvable : ${chatId}` })
     return
@@ -184,6 +201,9 @@ async function handleChat(req: Request, res: Response): Promise<void> {
 
   // Base d'une continuation : le dernier message assistant, complété en place.
   let continueBase: ChatMessage | null = null
+  // Régénérer un premier message généré : la conversation redevient vide, le payload
+  // reprend donc la consigne d'ouverture (sinon le modèle n'aurait aucun tour user).
+  let regenOpens = false
   if (mode === 'regenerate') {
     if (existing.length === 0) {
       res.status(400).json({ error: 'Rien à régénérer (conversation vide)' })
@@ -193,6 +213,12 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     // (Dernier message = user, ex. génération précédente échouée → on rejoue tel quel.)
     if (existing[existing.length - 1].role === 'assistant') {
       rewriteChatMessages(characterId, chatId, (msgs) => msgs.slice(0, -1))
+      regenOpens = existing.length === 1
+      // L'épingle visait le message retiré : on la lève, sinon elle se
+      // recollerait en silence au nouveau texte généré à la même position.
+      if (existingPinned === existing.length - 1) {
+        updateChatHeader(characterId, chatId, { pinned: undefined })
+      }
     }
   } else if (mode === 'continue') {
     const last = existing[existing.length - 1]
@@ -201,12 +227,23 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       return
     }
     continueBase = last
+  } else if (mode === 'open' && existing.length > 0) {
+    // Le premier message ne se génère que dans une conversation encore vierge.
+    res.status(400).json({ error: "La conversation n'est pas vide (rien à ouvrir)" })
+    return
   }
 
   // Payload construit AVANT la sauvegarde : le message courant passe par pendingUserContent,
   // sinon il consommerait un slot d'historique (et ne serait jamais envoyé si
   // maxHistoryMessages = 0).
-  const pendingUser = mode === 'continue' ? CONTINUE_DIRECTIVE : mode === 'regenerate' ? undefined : content
+  const pendingUser =
+    mode === 'continue'
+      ? CONTINUE_DIRECTIVE
+      : mode === 'open' || regenOpens
+        ? OPEN_DIRECTIVE
+        : mode === 'regenerate'
+          ? undefined
+          : content
   const { payload } = buildPayload(characterId, chatId, settings, pendingUser)
   const messages = payload.messages as Record<string, unknown>[]
 
@@ -405,18 +442,66 @@ chatRouter.post('/api/chat', async (req, res) => {
 })
 
 // ── Compaction ─────────────────────────────────────────────────────────────
-// Même mécanique que le /compact de Claude Code : passe mémoire (outils) PUIS
-// résumé, qui remplace les messages couverts dans les prochains payloads.
+// Même mécanique que le /compact de Claude Code : passe mémoire PUIS résumé, qui
+// remplace les messages couverts dans les prochains payloads. La passe mémoire
+// utilise les outils en mode complet ; en mode simple, c'est le serveur qui écrit
+// (le modèle se contente de lister des faits en texte).
 
 const COMPACT_MIN_MESSAGES = 6
 const COMPACT_MAX_ITERATIONS = 4
 const COMPACT_KEEP_RECENT = 4 // messages récents laissés « vivants » après compaction
 const COMPACT_SUMMARY_MAX_CHARS = 20000 // un résumé est un résumé, pas une archive
 
+// ── Mode simple : la mémoire est écrite par le SERVEUR ─────────────────────
+// Le petit modèle n'a aucun outil : on lui demande une simple liste de faits,
+// en texte, et c'est Hanami qui la range dans le fichier mémoire.
+const FACTS_DIRECTIVE =
+  'List the important durable facts from this conversation worth remembering long-term, one per line, ' +
+  'each line starting with "FACT: " — nothing else.'
+const AUTO_MEMORY_FILE = 'auto-memory.md'
+const AUTO_MEMORY_INDEX_LINE = `- [Faits retenus](${AUTO_MEMORY_FILE}) — faits extraits automatiquement lors des compactions`
+const AUTO_MEMORY_MAX_FACTS = 20 // garde-fou : un modèle bavard ne noie pas la mémoire
+const AUTO_MEMORY_MAX_CHARS = 500 // par fait
+
+// Puce et gras optionnels autour du marqueur : les petits modèles écrivent
+// volontiers « - **FACT:** … » malgré la consigne.
+const FACT_LINE = /^[\s>*_-]*FACT[\s*_]*:[\s*_]*(.+)$/i
+
+/** Faits extraits d'une réponse en texte libre (liste vide si le modèle n'a rien suivi). */
+function parseFacts(text: string): string[] {
+  const facts: string[] = []
+  for (const line of text.split('\n')) {
+    const m = FACT_LINE.exec(line)
+    if (!m) continue
+    const fact = m[1].replace(/[*_\s]+$/, '').trim()
+    if (fact) facts.push(fact.slice(0, AUTO_MEMORY_MAX_CHARS))
+    if (facts.length >= AUTO_MEMORY_MAX_FACTS) break
+  }
+  return facts
+}
+
+/** Ajoute les faits datés au fichier mémoire auto + tient l'index MEMORY.md à jour. */
+function appendAutoFacts(charId: string, facts: string[]): void {
+  const date = new Date().toISOString().slice(0, 10)
+  const existing =
+    readMemoryFile(charId, AUTO_MEMORY_FILE) ??
+    '# Faits retenus\n\nExtraits automatiquement des conversations lors des compactions (mode simple).\n'
+  const lines = facts.map((f) => `- **${date}** — ${f}`).join('\n')
+  writeMemoryFile(charId, AUTO_MEMORY_FILE, existing.replace(/\n*$/, '\n') + '\n' + lines + '\n')
+  // Upsert de la ligne d'index. index === null : MEMORY.md illisible — on
+  // n'écrit PAS un index neuf par-dessus un fichier peut-être existant.
+  const index = readMemoryFile(charId, 'MEMORY.md')
+  if (index !== null && !index.includes(`](${AUTO_MEMORY_FILE})`)) {
+    writeMemoryFile(charId, 'MEMORY.md', index.replace(/\n*$/, '\n') + AUTO_MEMORY_INDEX_LINE + '\n')
+  }
+}
+
 // Verrou par chat : jamais deux compactions concurrentes sur le même fichier.
 const compactionsInFlight = new Set<string>()
 
-function compactDirective(hasPrevSummary: boolean, memoryEnabled: boolean, instruction: string): string {
+// memoryTools : la consigne « sers-toi des outils mémoire » n'a de sens que si
+// des outils sont réellement exposés (jamais en mode simple).
+function compactDirective(hasPrevSummary: boolean, memoryTools: boolean, instruction: string): string {
   let d =
     '[HANAMI COMPACTION]\n' +
     'The conversation above is about to be condensed to free up context. Write ONE summary that will ' +
@@ -427,7 +512,7 @@ function compactDirective(hasPrevSummary: boolean, memoryEnabled: boolean, instr
     d +=
       '- A previous conversation summary is already in your system context: merge it with the new messages into one coherent, updated summary.\n'
   }
-  if (memoryEnabled) {
+  if (memoryTools) {
     d +=
       '- BEFORE writing the summary, use the memory tools (memory_save / memory_update) to persist any durable facts worth remembering beyond this conversation.\n'
   }
@@ -451,10 +536,12 @@ async function runCompaction(
     throw new Error(`Rien à compacter (moins de ${COMPACT_MIN_MESSAGES} messages depuis le dernier résumé)`)
   }
 
+  // Mode simple : pas de passe agentique, donc rien à annoncer sur les outils mémoire.
+  const simple = settings.modelMode === 'simple'
   let systemText = character.systemPrompt
-  if (settings.memoryEnabled) systemText += buildMemoryBlock(characterId)
+  if (settings.memoryEnabled) systemText += buildMemoryBlock(characterId, simple)
   if (meta.summary) systemText += summaryBlock(meta.summary)
-  const directive = compactDirective(!!meta.summary, settings.memoryEnabled, instruction)
+  const directive = compactDirective(!!meta.summary, settings.memoryEnabled && !simple, instruction)
 
   // Prompt + complétion doivent tenir dans la fenêtre du modèle : les backends
   // stricts (vLLM, OpenAI…) rejettent sinon, et les permissifs (KoboldCpp)
@@ -483,56 +570,41 @@ async function runCompaction(
   const slice = candidates.slice(0, take)
   const upto = prevUpto + take
 
-  const messages: unknown[] = [
+  const baseMessages: unknown[] = [
     { role: 'system', content: systemText },
     ...slice.map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user', content: directive },
   ]
-  const tools = settings.memoryEnabled ? memoryToolDefs : []
+  const messages: unknown[] = [...baseMessages, { role: 'user', content: directive }]
+  const tools = settings.memoryEnabled && !simple ? memoryToolDefs : []
   const abort = new AbortController()
   const compactSettings: Settings = { ...settings, maxTokens: completionBudget }
 
-  // Boucle agentique silencieuse : le résumé = le texte du DERNIER appel
-  // (les textes intermédiaires accompagnant des appels d'outils sont ignorés).
   let summary = ''
-  let pendingTools = false
   let lastFinish = ''
-  for (let iteration = 0; iteration < COMPACT_MAX_ITERATIONS; iteration++) {
-    const result = await streamChatCompletion({
-      settings: compactSettings,
-      messages,
-      tools: tools.length > 0 ? tools : undefined,
-      signal: abort.signal,
-      onDelta: () => {},
-    })
-    lastFinish = result.finishReason
-    if (result.toolCalls.length === 0) {
-      summary = result.content.trim()
-      pendingTools = false
-      break
-    }
-    pendingTools = true
-    messages.push({
-      role: 'assistant',
-      content: result.content || null,
-      tool_calls: result.toolCalls.map((tc) => ({
-        id: tc.id,
-        type: 'function',
-        function: { name: tc.name, arguments: tc.arguments },
-      })),
-    })
-    for (const tc of result.toolCalls) {
-      let toolResult: string
+  // Faits collectés en mode simple — écrits UNIQUEMENT après un résumé réussi :
+  // si la compaction échoue puis est relancée, les mêmes faits repasseraient et
+  // se dupliqueraient dans le fichier mémoire.
+  let pendingFacts: string[] = []
+
+  if (simple) {
+    // (a) Passe mémoire SANS outils : le modèle liste des faits, le serveur les
+    // range. Une réponse hors format ne donne aucun fait — on continue sans bruit.
+    if (settings.memoryEnabled) {
       try {
-        toolResult = executeTool(characterId, settings, tc.name, tc.arguments)
+        const factsResult = await streamChatCompletion({
+          settings: compactSettings,
+          messages: [...baseMessages, { role: 'user', content: FACTS_DIRECTIVE }],
+          signal: abort.signal,
+          onDelta: () => {},
+        })
+        pendingFacts = parseFacts(factsResult.content)
       } catch (e) {
-        toolResult = `Erreur : ${e instanceof Error ? e.message : String(e)}`
+        // La mémoire est un bonus : l'échec ne doit pas emporter le résumé
+        // (si le backend est vraiment tombé, l'appel suivant le dira).
+        console.warn('[compact:facts]', e instanceof Error ? e.message : String(e))
       }
-      messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
     }
-  }
-  if (pendingTools) {
-    // Budget épuisé : un dernier appel sans outils pour obtenir le résumé.
+    // (b) Résumé, toujours sans outils.
     const result = await streamChatCompletion({
       settings: compactSettings,
       messages,
@@ -541,6 +613,55 @@ async function runCompaction(
     })
     lastFinish = result.finishReason
     summary = result.content.trim()
+  } else {
+    // Boucle agentique silencieuse : le résumé = le texte du DERNIER appel
+    // (les textes intermédiaires accompagnant des appels d'outils sont ignorés).
+    let pendingTools = false
+    for (let iteration = 0; iteration < COMPACT_MAX_ITERATIONS; iteration++) {
+      const result = await streamChatCompletion({
+        settings: compactSettings,
+        messages,
+        tools: tools.length > 0 ? tools : undefined,
+        signal: abort.signal,
+        onDelta: () => {},
+      })
+      lastFinish = result.finishReason
+      if (result.toolCalls.length === 0) {
+        summary = result.content.trim()
+        pendingTools = false
+        break
+      }
+      pendingTools = true
+      messages.push({
+        role: 'assistant',
+        content: result.content || null,
+        tool_calls: result.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: tc.arguments },
+        })),
+      })
+      for (const tc of result.toolCalls) {
+        let toolResult: string
+        try {
+          toolResult = executeTool(characterId, settings, tc.name, tc.arguments)
+        } catch (e) {
+          toolResult = `Erreur : ${e instanceof Error ? e.message : String(e)}`
+        }
+        messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
+      }
+    }
+    if (pendingTools) {
+      // Budget épuisé : un dernier appel sans outils pour obtenir le résumé.
+      const result = await streamChatCompletion({
+        settings: compactSettings,
+        messages,
+        signal: abort.signal,
+        onDelta: () => {},
+      })
+      lastFinish = result.finishReason
+      summary = result.content.trim()
+    }
   }
   if (!summary) {
     throw new Error(
@@ -549,6 +670,10 @@ async function runCompaction(
     )
   }
   summary = summary.slice(0, COMPACT_SUMMARY_MAX_CHARS)
+
+  // Le résumé a réussi : les faits du mode simple peuvent être rangés sans
+  // risque de doublon au prochain essai.
+  if (pendingFacts.length > 0) appendAutoFacts(characterId, pendingFacts)
 
   updateChatHeader(characterId, chatId, { summary, summaryUpto: upto })
   return { summary, summaryUpto: upto, compacted: upto - prevUpto }
@@ -658,6 +783,40 @@ chatRouter.put('/api/chat/summary', (req, res) => {
   const capped = summary.slice(0, COMPACT_SUMMARY_MAX_CHARS)
   updateChatHeader(characterId, chatId, { summary: capped, summaryUpto: meta.summaryUpto ?? 0 })
   res.json({ summary: capped, summaryUpto: meta.summaryUpto ?? 0 })
+})
+
+// PUT /api/chat/pin {characterId, chatId, pinned} — épingle un message (ordinal =
+// position dans le fichier) ou le désépingle (null). Gadget PUREMENT visuel : le
+// message épinglé ne pèse rien dans buildPayload, il ne fait que voyager dans
+// l'en-tête du .jsonl et remonter avec le meta du chat.
+chatRouter.put('/api/chat/pin', (req, res) => {
+  const body = (req.body ?? {}) as { characterId?: unknown; chatId?: unknown; pinned?: unknown }
+  const characterId = typeof body.characterId === 'string' ? body.characterId : ''
+  const chatId = typeof body.chatId === 'string' ? body.chatId : ''
+  // undefined = champ absent ou mal typé (400) ; null = désépingler.
+  const pinned =
+    body.pinned === null
+      ? null
+      : typeof body.pinned === 'number' && Number.isInteger(body.pinned) && body.pinned >= 0
+        ? body.pinned
+        : undefined
+  if (!characterId || !chatId || pinned === undefined) {
+    res.status(400).json({ error: 'characterId, chatId et pinned (entier ≥ 0 ou null) sont requis' })
+    return
+  }
+  let count: number
+  try {
+    count = readChat(characterId, chatId).messages.length
+  } catch {
+    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    return
+  }
+  if (pinned !== null && pinned >= count) {
+    res.status(404).json({ error: `Message introuvable : ${pinned}` })
+    return
+  }
+  updateChatHeader(characterId, chatId, { pinned: pinned ?? undefined })
+  res.json({ pinned })
 })
 
 // GET /api/prompt-preview?characterId=&chatId= — MÊME code que POST /api/chat (buildPayload).

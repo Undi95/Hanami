@@ -6,6 +6,7 @@ import {
   createChat,
   deleteCharacter,
   deleteChat,
+  forkChat,
   getCharacter,
   listCharacters,
   listChats,
@@ -130,6 +131,23 @@ charactersRouter.get('/api/characters/:id/chats/:chatId', (req, res) => {
     res.json(readChat(req.params.id, req.params.chatId))
   } catch {
     // Fichier absent ou id invalide → 404.
+    res.status(404).json({ error: `Chat introuvable : ${req.params.chatId}` })
+  }
+})
+
+// Fork : la branche part du même passé que l'original, qui reste intact.
+charactersRouter.post('/api/characters/:id/chats/:chatId/fork', (req, res) => {
+  if (!findCharacter(req.params.id)) {
+    res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+    return
+  }
+  // Titre localisé fourni par le client (le serveur ne connaît pas la langue de l'UI).
+  const body = (req.body ?? {}) as { title?: unknown }
+  const title = typeof body.title === 'string' ? body.title : undefined
+  try {
+    res.json(forkChat(req.params.id, req.params.chatId, title))
+  } catch {
+    // Fichier absent, id invalide ou en-tête illisible → 404.
     res.status(404).json({ error: `Chat introuvable : ${req.params.chatId}` })
   }
 })

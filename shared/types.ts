@@ -1,9 +1,15 @@
 // Types partagés client/serveur — LE contrat de l'app.
 
+// Mode du modèle : 'full' = les outils sont exposés (tool-calling) ; 'simple' =
+// AUCUN outil, l'intelligence migre côté serveur — pensé pour les petits modèles,
+// dont le tool-calling est le talon d'Achille.
+export type ModelMode = 'full' | 'simple'
+
 export interface Settings {
   backendUrl: string // base OpenAI-compat, ex: http://127.0.0.1:5001/v1
   apiKey: string // optionnel (backends locaux : souvent vide)
   model: string // nom du modèle (certains backends l'ignorent)
+  modelMode: ModelMode // 'simple' : pas d'outils, mémoire et émotions gérées sans le modèle
   temperature: number
   maxTokens: number // max_tokens de la réponse
   maxHistoryMessages: number // nb max de messages d'historique envoyés
@@ -51,6 +57,7 @@ export interface ChatMeta {
   messageCount: number
   summary?: string // résumé de compaction (visible dans l'inspecteur, éditable)
   summaryUpto?: number // nombre de messages couverts par le résumé (slice de l'historique envoyé)
+  pinned?: number // ordinal du message épinglé — pur affichage, JAMAIS envoyé au backend
 }
 
 // Jauge de contexte jointe à l'événement done (estimation, ou usage réel du backend).

@@ -185,8 +185,32 @@ export function getChat(charId: string, chatId: string): Promise<{ meta: ChatMet
   return req('GET', `/api/characters/${encodeURIComponent(charId)}/chats/${encodeURIComponent(chatId)}`)
 }
 
+/** Duplique une conversation en une branche indépendante (même passé, nouvel id). */
+export function forkChat(charId: string, chatId: string, title?: string): Promise<ChatMeta> {
+  return req(
+    'POST',
+    `/api/characters/${encodeURIComponent(charId)}/chats/${encodeURIComponent(chatId)}/fork`,
+    title ? { title } : {},
+  )
+}
+
 export function deleteChat(charId: string, chatId: string): Promise<{ ok: true }> {
   return req('DELETE', `/api/characters/${encodeURIComponent(charId)}/chats/${encodeURIComponent(chatId)}`)
+}
+
+// ── Statistiques ───────────────────────────────────────────────────────────
+
+// Miroir de CharacterStats (server/api/stats.ts) — type local, shared/types.ts intact.
+export interface CharacterStats {
+  firstMessageAt: string | null
+  totalMessages: number
+  totalChats: number
+  activeDays: number
+  daysTogether: number
+}
+
+export function getStats(charId: string): Promise<CharacterStats> {
+  return req('GET', `/api/characters/${encodeURIComponent(charId)}/stats`)
 }
 
 // ── Mémoire ────────────────────────────────────────────────────────────────
@@ -292,6 +316,15 @@ export function editChatMessage(
   return req('PUT', '/api/chat/message', { characterId, chatId, index, content })
 }
 
+/** Épingle un message du chat (ordinal) ou le désépingle (null) — pur affichage. */
+export function pinChatMessage(
+  characterId: string,
+  chatId: string,
+  pinned: number | null,
+): Promise<{ pinned: number | null }> {
+  return req('PUT', '/api/chat/pin', { characterId, chatId, pinned })
+}
+
 /** Édite le résumé de compaction ('' = annule la compaction). */
 export function updateChatSummary(
   characterId: string,
@@ -303,11 +336,14 @@ export function updateChatSummary(
 
 // ── Chat streaming (SSE sur fetch) ─────────────────────────────────────────
 
+/** 'open' = le modèle écrit le premier message d'une conversation vide (refusé si elle ne l'est pas). */
+export type ChatMode = 'regenerate' | 'continue' | 'open'
+
 export interface StreamChatOptions {
   characterId: string
   chatId: string
-  content?: string // requis en mode normal, ignoré en regenerate/continue
-  mode?: 'regenerate' | 'continue'
+  content?: string // requis en mode normal, ignoré en regenerate/continue/open
+  mode?: ChatMode
   signal: AbortSignal
   onEvent: (ev: ChatEvent) => void
 }

@@ -10,6 +10,8 @@ interface Props {
   contextTitle: string // tooltip détaillé (~tokens / limite)
   hasCharacter: boolean
   hasChat: boolean
+  vnMode: boolean // mode visual novel actif (bascule d'affichage, pas un dialog)
+  onToggleVn: () => void
   onOpen: (d: DialogKind) => void
 }
 
@@ -29,6 +31,8 @@ export default function TopBar({
   contextTitle,
   hasCharacter,
   hasChat,
+  vnMode,
+  onToggleVn,
   onOpen,
 }: Props) {
   const { t } = useI18n()
@@ -99,6 +103,19 @@ export default function TopBar({
       <div className="topbar-main">
         <div className="topbar-name">{characterName}</div>
         <nav aria-label={t('menus')}>
+          {/* Bascule d'affichage (pas un dialog) : boîte de dialogue VN par-dessus la scène. */}
+          <button
+            className="icon-btn"
+            title={t('vnMode')}
+            aria-label={t('vnMode')}
+            aria-pressed={vnMode}
+            onClick={onToggleVn}
+          >
+            <Icon
+              d="M5 5h14a2.5 2.5 0 012.5 2.5v9A2.5 2.5 0 0119 19H5a2.5 2.5 0 01-2.5-2.5v-9A2.5 2.5 0 015 5z"
+              extra={<path d="M6.8 13h10.4M6.8 16h6.6" />}
+            />
+          </button>
           {buttons.map((b) => (
             <button
               key={b.kind}
