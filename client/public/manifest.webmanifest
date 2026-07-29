@@ -1,0 +1,12 @@
+{
+  "name": "Hanami",
+  "short_name": "Hanami",
+  "description": "Compagnon de chat LLM avec avatar VRM — local-first et transparent.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#171221",
+  "theme_color": "#171221",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

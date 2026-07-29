@@ -1,0 +1,16 @@
+# Dépendances / build
+node_modules/
+dist/
+
+# Données personnelles (chats, mémoire, config, prompts édités) — JAMAIS committées.
+# Les personnages fournis avec l'app vivent dans presets/ (copiés vers data/ au 1er lancement).
+data/
+
+# Modèles VRM et fonds : fichiers perso / licences tierces — non committés.
+vrm/*
+!vrm/README.md
+backgrounds/*
+!backgrounds/README.md
+
+*.log
+.env

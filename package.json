@@ -1,0 +1,33 @@
+{
+  "name": "hanami",
+  "version": "0.1.0",
+  "description": "Compagnon de chat LLM ultra-léger avec avatar VRM — local-first, transparent, mobile.",
+  "license": "AGPL-3.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false server/index.ts",
+    "build": "vite build",
+    "start": "tsx server/index.ts --prod",
+    "typecheck": "tsc --noEmit",
+    "mock-llm": "node scripts/mock-llm.cjs"
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "^3.1.0",
+    "@pixiv/three-vrm-animation": "^3.1.0",
+    "express": "^4.21.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}

@@ -1,0 +1,40 @@
+// Réglages de l'app — data/config.json, mergé avec les défauts.
+import fs from 'node:fs'
+import path from 'node:path'
+import type { Settings } from '../shared/types'
+import { DATA_DIR } from './lib/storage'
+
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json')
+
+export const DEFAULT_SETTINGS: Settings = {
+  backendUrl: 'http://127.0.0.1:5001/v1',
+  apiKey: '',
+  model: '',
+  temperature: 0.8,
+  maxTokens: 1024,
+  maxHistoryMessages: 40,
+  memoryEnabled: true,
+  fileToolsEnabled: false,
+  allowDelete: false,
+  toolsRoot: path.join(DATA_DIR, 'workspace'),
+  password: '',
+}
+
+export function loadSettings(): Settings {
+  try {
+    const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) as Partial<Settings>
+    return { ...DEFAULT_SETTINGS, ...raw }
+  } catch {
+    return { ...DEFAULT_SETTINGS }
+  }
+}
+
+export function saveSettings(patch: Partial<Settings>): Settings {
+  const next = { ...loadSettings(), ...patch }
+  fs.mkdirSync(DATA_DIR, { recursive: true })
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(next, null, 2))
+  return next
+}
+
+export const PORT = Number(process.env.PORT ?? 7788)
+export const IS_PROD = process.argv.includes('--prod') || process.env.NODE_ENV === 'production'
