@@ -5,7 +5,14 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { loadSettings } from '../config'
-import { appendChatMessage, buildMemoryBlock, getCharacter, readChat, updateChatHeader } from '../lib/storage'
+import {
+  appendChatMessage,
+  buildMemoryBlock,
+  getCharacter,
+  readChat,
+  rewriteChatMessages,
+  updateChatHeader,
+} from '../lib/storage'
 import { streamChatCompletion } from '../llm/openai'
 import { MEMORY_TOOL_NAMES, executeMemoryTool, memoryToolDefs } from '../tools/memoryTools'
 import { FILE_TOOL_NAMES, executeFileTool, fileToolDefs } from '../tools/fileTools'
@@ -138,13 +145,23 @@ function writeEvent(res: Response, ev: ChatEvent): void {
   res.write('data: ' + JSON.stringify(ev) + '\n\n')
 }
 
+// Consigne de continuation — envoyée dans le payload, JAMAIS sauvegardée dans le chat.
+const CONTINUE_DIRECTIVE =
+  '[Continue your previous message exactly where it left off. Do not repeat, do not summarize — carry on seamlessly.]'
+
 async function handleChat(req: Request, res: Response): Promise<void> {
-  const body = (req.body ?? {}) as { characterId?: unknown; chatId?: unknown; content?: unknown }
+  const body = (req.body ?? {}) as {
+    characterId?: unknown
+    chatId?: unknown
+    content?: unknown
+    mode?: unknown
+  }
   const characterId = typeof body.characterId === 'string' ? body.characterId : ''
   const chatId = typeof body.chatId === 'string' ? body.chatId : ''
   const content = typeof body.content === 'string' ? body.content : ''
-  if (!characterId || !chatId || !content) {
-    res.status(400).json({ error: 'characterId, chatId et content sont requis' })
+  const mode = body.mode === 'regenerate' || body.mode === 'continue' ? body.mode : undefined
+  if (!characterId || !chatId || (!content && !mode)) {
+    res.status(400).json({ error: 'characterId, chatId et content (ou mode) sont requis' })
     return
   }
   const settings = loadSettings()
@@ -152,21 +169,46 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     res.status(404).json({ error: `Personnage introuvable : ${characterId}` })
     return
   }
+  let existing: ChatMessage[]
   try {
-    readChat(characterId, chatId)
+    existing = readChat(characterId, chatId).messages
   } catch {
     res.status(404).json({ error: `Chat introuvable : ${chatId}` })
     return
   }
 
+  // Base d'une continuation : le dernier message assistant, complété en place.
+  let continueBase: ChatMessage | null = null
+  if (mode === 'regenerate') {
+    if (existing.length === 0) {
+      res.status(400).json({ error: 'Rien à régénérer (conversation vide)' })
+      return
+    }
+    // Dernier message = réponse de l'assistant → on la retire et on rejoue.
+    // (Dernier message = user, ex. génération précédente échouée → on rejoue tel quel.)
+    if (existing[existing.length - 1].role === 'assistant') {
+      rewriteChatMessages(characterId, chatId, (msgs) => msgs.slice(0, -1))
+    }
+  } else if (mode === 'continue') {
+    const last = existing[existing.length - 1]
+    if (!last || last.role !== 'assistant') {
+      res.status(400).json({ error: 'Rien à continuer (le dernier message n’est pas une réponse)' })
+      return
+    }
+    continueBase = last
+  }
+
   // Payload construit AVANT la sauvegarde : le message courant passe par pendingUserContent,
   // sinon il consommerait un slot d'historique (et ne serait jamais envoyé si
   // maxHistoryMessages = 0).
-  const { payload } = buildPayload(characterId, chatId, settings, content)
+  const pendingUser = mode === 'continue' ? CONTINUE_DIRECTIVE : mode === 'regenerate' ? undefined : content
+  const { payload } = buildPayload(characterId, chatId, settings, pendingUser)
   const messages = payload.messages as Record<string, unknown>[]
 
   // Le message user est sauvegardé AVANT l'appel backend : il survit à toute erreur en aval.
-  appendChatMessage(characterId, chatId, { role: 'user', content, ts: new Date().toISOString() })
+  if (!mode) {
+    appendChatMessage(characterId, chatId, { role: 'user', content, ts: new Date().toISOString() })
+  }
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -213,6 +255,30 @@ async function handleChat(req: Request, res: Response): Promise<void> {
         writeEvent(res, { type: 'thinking', text })
       },
     })
+  }
+
+  // Sauvegarde de la sortie : continuation → fusionnée dans le dernier message
+  // assistant (en place, timestamp d'origine conservé) ; sinon → message ajouté.
+  const persistAssistant = (): ChatMessage => {
+    if (mode === 'continue' && continueBase) {
+      const joiner = continueBase.content.endsWith('\n') || assistantText.startsWith('\n') ? '' : ' '
+      const merged: ChatMessage = { ...continueBase, content: continueBase.content + joiner + assistantText }
+      const m = EMOTION_RE.exec(merged.content)
+      if (m) merged.emotion = m[1].toLowerCase()
+      if (assistantThinking) {
+        merged.thinking = continueBase.thinking
+          ? continueBase.thinking + '\n\n' + assistantThinking
+          : assistantThinking
+      }
+      rewriteChatMessages(characterId, chatId, (msgs) => {
+        if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') msgs[msgs.length - 1] = merged
+        return msgs
+      })
+      return merged
+    }
+    const message = toAssistantMessage(assistantText, assistantThinking)
+    appendChatMessage(characterId, chatId, message)
+    return message
   }
 
   try {
@@ -270,8 +336,7 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     }
 
     // Contenu INTÉGRAL, tel que généré (le tag d'émotion reste dans le texte).
-    const message = toAssistantMessage(assistantText, assistantThinking)
-    appendChatMessage(characterId, chatId, message)
+    const message = persistAssistant()
     // Jauge de contexte : usage réel du backend quand il le fournit, sinon
     // estimation sur le payload final (qui inclut les allers-retours d'outils).
     const tokens =
@@ -295,9 +360,7 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   } catch (e) {
     if (abort.signal.aborted) {
       // Client parti : on sauvegarde le partiel si au moins un delta est arrivé.
-      if (assistantText.length > 0) {
-        appendChatMessage(characterId, chatId, toAssistantMessage(assistantText, assistantThinking))
-      }
+      if (assistantText.length > 0) persistAssistant()
       try {
         res.end()
       } catch {
@@ -308,8 +371,7 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     const message = e instanceof Error ? e.message : String(e)
     if (assistantText.length > 0) {
       // Erreur mi-flux : le partiel déjà affiché côté client est sauvegardé, et joint à l'événement.
-      const partial = toAssistantMessage(assistantText, assistantThinking)
-      appendChatMessage(characterId, chatId, partial)
+      const partial = persistAssistant()
       writeEvent(res, { type: 'error', message, partial })
     } else {
       writeEvent(res, { type: 'error', message })
@@ -516,6 +578,49 @@ chatRouter.post('/api/chat/compact', async (req, res) => {
   } finally {
     compactionsInFlight.delete(lockKey)
   }
+})
+
+// PUT /api/chat/message {characterId, chatId, index, content} — édition d'un message
+// en place (l'émotion est re-détectée pour les messages de l'assistant).
+chatRouter.put('/api/chat/message', (req, res) => {
+  const body = (req.body ?? {}) as {
+    characterId?: unknown
+    chatId?: unknown
+    index?: unknown
+    content?: unknown
+  }
+  const characterId = typeof body.characterId === 'string' ? body.characterId : ''
+  const chatId = typeof body.chatId === 'string' ? body.chatId : ''
+  const index = typeof body.index === 'number' && Number.isInteger(body.index) ? body.index : -1
+  const content = typeof body.content === 'string' ? body.content : ''
+  if (!characterId || !chatId || index < 0 || !content.trim()) {
+    res.status(400).json({ error: 'characterId, chatId, index et content sont requis' })
+    return
+  }
+  let count: number
+  try {
+    count = readChat(characterId, chatId).messages.length
+  } catch {
+    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    return
+  }
+  if (index >= count) {
+    res.status(404).json({ error: `Message introuvable : ${index}` })
+    return
+  }
+  let updated: ChatMessage | null = null
+  rewriteChatMessages(characterId, chatId, (msgs) => {
+    const msg: ChatMessage = { ...msgs[index], content }
+    if (msg.role === 'assistant') {
+      delete msg.emotion
+      const m = EMOTION_RE.exec(content)
+      if (m) msg.emotion = m[1].toLowerCase()
+    }
+    msgs[index] = msg
+    updated = msg
+    return msgs
+  })
+  res.json({ index, message: updated })
 })
 
 // PUT /api/chat/summary {characterId, chatId, summary} — édition (ou retrait) du résumé.

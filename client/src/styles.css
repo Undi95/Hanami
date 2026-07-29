@@ -414,6 +414,64 @@ select {
   text-align: center;
 }
 
+/* Actions sur la dernière réponse (Régénérer / Continuer) */
+.reply-actions {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 2px 12px 4px;
+}
+
+.reply-actions .btn {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px dashed var(--border);
+}
+
+.reply-actions .btn:hover {
+  color: var(--text);
+  border-style: solid;
+}
+
+/* Crayon d'édition à côté de l'horodatage */
+.msg-edit {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  margin-left: 5px;
+  cursor: pointer;
+  color: var(--text-dim);
+  opacity: 0.55;
+  vertical-align: middle;
+}
+
+.msg-edit:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.msg-edit svg {
+  width: 11px;
+  height: 11px;
+  display: inline-block;
+}
+
+.bubble.editing {
+  width: min(420px, 78vw);
+}
+
+.bubble.editing textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+
 /* Ligne d'info discrète (compaction terminée…) — éphémère, jamais sauvegardée */
 .info-line {
   align-self: center;

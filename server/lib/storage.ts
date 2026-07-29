@@ -312,6 +312,33 @@ export function updateChatHeader(
   fs.renameSync(tmp, file)
 }
 
+/**
+ * Réécrit les messages d'un chat via une fonction de transformation
+ * (régénération, édition, continuation). Même protocole sûr que
+ * updateChatHeader : tmp + fsync + rename.
+ */
+export function rewriteChatMessages(
+  charId: string,
+  chatId: string,
+  mutate: (messages: ChatMessage[]) => ChatMessage[],
+): ChatMessage[] {
+  const file = chatFile(charId, chatId)
+  const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)
+  const header = lines[0]
+  const messages = lines.slice(1).map((l) => JSON.parse(l) as ChatMessage)
+  const next = mutate(messages)
+  const tmp = file + '.tmp'
+  const fd = fs.openSync(tmp, 'w')
+  try {
+    fs.writeSync(fd, [header, ...next.map((m) => JSON.stringify(m))].join('\n') + '\n')
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  fs.renameSync(tmp, file)
+  return next
+}
+
 /** Écrit un chat complet d'un coup (utilisé par l'import SillyTavern). */
 export function writeImportedChat(charId: string, title: string, messages: ChatMessage[]): ChatMeta {
   const meta = createChat(charId, title)

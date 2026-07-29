@@ -346,12 +346,47 @@ function AppInner() {
   }
 
   async function send(content: string) {
+    return runGeneration({ content })
+  }
+
+  // Génération : envoi normal, régénération de la dernière réponse, ou
+  // continuation de la dernière réponse (fusionnée en place côté serveur).
+  async function runGeneration(opts: { content?: string; mode?: 'regenerate' | 'continue' }) {
     const char = character
     const chat = chatMeta
     if (!char || !chat || streaming) return
-    const userMsg: ChatMessage = { role: 'user', content, ts: new Date().toISOString() }
-    const draft: ChatMessage = { role: 'assistant', content: '', ts: new Date().toISOString() }
-    setFeed((f) => [...f, { kind: 'msg', msg: userMsg }, { kind: 'msg', msg: draft, pending: true }])
+    const mode = opts.mode
+
+    // TTS d'une continuation : ne lire QUE la suite, pas tout le message fusionné.
+    let ttsFromIndex = 0
+
+    if (!mode) {
+      const userMsg: ChatMessage = { role: 'user', content: opts.content ?? '', ts: new Date().toISOString() }
+      const draft: ChatMessage = { role: 'assistant', content: '', ts: new Date().toISOString() }
+      setFeed((f) => [...f, { kind: 'msg', msg: userMsg }, { kind: 'msg', msg: draft, pending: true }])
+    } else {
+      // Les chips d'erreur/info de fin de fil n'ont plus de sens : on rejoue.
+      setFeed((f) => {
+        const out = [...f]
+        while (out.length > 0 && (out[out.length - 1].kind === 'error' || out[out.length - 1].kind === 'info')) {
+          out.pop()
+        }
+        const last = out[out.length - 1]
+        if (mode === 'regenerate') {
+          // La dernière bulle assistant disparaît (le serveur retire la sienne).
+          if (last && last.kind === 'msg' && last.msg.role === 'assistant') out.pop()
+          out.push({
+            kind: 'msg',
+            msg: { role: 'assistant', content: '', ts: new Date().toISOString() },
+            pending: true,
+          })
+        } else if (last && last.kind === 'msg' && last.msg.role === 'assistant') {
+          // continue : la dernière bulle redevient « en cours » et s'allonge.
+          out[out.length - 1] = { ...last, pending: true }
+        }
+        return out
+      })
+    }
 
     const ac = new AbortController()
     abortRef.current = ac
@@ -361,6 +396,18 @@ function AppInner() {
     // ne bouge pendant la connexion ni pendant le raisonnement du modèle.
     stopTts()
     let acc = ''
+    if (mode === 'continue') {
+      // Le flux reprend là où le texte existant s'arrête (même joint que le serveur).
+      for (let i = feed.length - 1; i >= 0; i--) {
+        const it = feed[i]
+        if (it.kind === 'msg' && it.msg.role === 'assistant') {
+          acc = it.msg.content
+          if (acc && !acc.endsWith('\n')) acc += ' '
+          break
+        }
+      }
+      ttsFromIndex = acc.length
+    }
     let thinkingAcc = ''
     let emotionFound = false
     let finished = false
@@ -369,7 +416,8 @@ function AppInner() {
       await api.streamChat({
         characterId: char.id,
         chatId: chat.id,
-        content,
+        content: opts.content,
+        mode,
         signal: ac.signal,
         onEvent: (ev) => {
           if (ev.type === 'delta') {
@@ -406,7 +454,15 @@ function AppInner() {
               if (em) applyEmotion(em)
             }
             setFeed((f) => f.map((it) => (it.kind === 'msg' && it.pending ? { kind: 'msg', msg: ev.message } : it)))
-            setChatMeta((m) => (m ? { ...m, messageCount: m.messageCount + 2, updatedAt: ev.message.ts } : m))
+            setChatMeta((m) =>
+              m
+                ? {
+                    ...m,
+                    messageCount: mode ? m.messageCount : m.messageCount + 2,
+                    updatedAt: new Date().toISOString(),
+                  }
+                : m,
+            )
             if (ev.context) {
               setContext(ev.context)
               // Auto-compaction au seuil — silencieuse (le serveur refuse s'il
@@ -423,7 +479,7 @@ function AppInner() {
               }
             }
             if (settings?.ttsEnabled) {
-              playTts(ev.message.content).catch((e) => {
+              playTts(ev.message.content.slice(ttsFromIndex)).catch((e) => {
                 setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }])
               })
             }
@@ -453,6 +509,23 @@ function AppInner() {
 
   function stopStreaming() {
     abortRef.current?.abort()
+  }
+
+  // Édition d'un message en place — ordinal = position parmi les messages
+  // SAUVEGARDÉS (les chips outil/erreur/info et le greeting ne comptent pas).
+  async function handleEditMessage(ordinal: number, content: string) {
+    const char = character
+    const chat = chatMeta
+    if (!char || !chat) return
+    const out = await api.editChatMessage(char.id, chat.id, ordinal, content)
+    setFeed((f) => {
+      let n = -1
+      return f.map((it) => {
+        if (it.kind !== 'msg') return it
+        n++
+        return n === ordinal ? { kind: 'msg' as const, msg: out.message } : it
+      })
+    })
   }
 
   // ── Callbacks des dialogs ────────────────────────────────────────────────
@@ -507,6 +580,17 @@ function AppInner() {
       }
     }
   }
+
+  // Dernier message affiché (hors chips) : pilote les boutons Régénérer/Continuer.
+  const lastFeedMsg = (() => {
+    for (let i = feed.length - 1; i >= 0; i--) {
+      const it = feed[i]
+      if (it.kind === 'msg') return it
+    }
+    return null
+  })()
+  const canRegen = !!lastFeedMsg && !lastFeedMsg.pending
+  const canContinue = canRegen && lastFeedMsg.msg.role === 'assistant'
 
   // ── Rendu ────────────────────────────────────────────────────────────────
   // NB : la div .scene reste montée en permanence (le stage 3D y est attaché via
@@ -599,7 +683,32 @@ function AppInner() {
         ) : (
           // key : remonte le fil à chaque changement de chat (réinitialise le
           // scroll et l'autoscroll collé en bas).
-          <MessageList key={chatMeta?.id ?? 'no-chat'} items={feed} showThoughts={settings?.showThoughts ?? false} />
+          <MessageList
+            key={chatMeta?.id ?? 'no-chat'}
+            items={feed}
+            showThoughts={settings?.showThoughts ?? false}
+            editable={!streaming && !compacting}
+            onSaveEdit={handleEditMessage}
+          />
+        )}
+
+        {!booting && character && chatMeta && !streaming && canRegen && (
+          <div className="reply-actions">
+            <button
+              className="btn small"
+              onClick={() => runGeneration({ mode: 'regenerate' }).catch((e) => console.error('[regen]', e))}
+            >
+              {t('regenerate')}
+            </button>
+            {canContinue && (
+              <button
+                className="btn small"
+                onClick={() => runGeneration({ mode: 'continue' }).catch((e) => console.error('[continue]', e))}
+              >
+                {t('continueReply')}
+              </button>
+            )}
+          </div>
         )}
 
         <Composer

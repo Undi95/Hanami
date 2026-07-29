@@ -64,6 +64,9 @@ const FR = {
   stop: 'Arrêter la génération',
   replyInProgress: 'Réponse en cours',
   toolCall: '{name} : {args}',
+  regenerate: 'Régénérer',
+  continueReply: 'Continuer',
+  editMessage: 'Modifier le message',
 
   // ── Conversations ────────────────────────────────────────────────────────
   newChat: 'Nouvelle conversation',
@@ -252,6 +255,9 @@ const EN: Record<Key, string> = {
   stop: 'Stop generating',
   replyInProgress: 'Reply in progress',
   toolCall: '{name}: {args}',
+  regenerate: 'Regenerate',
+  continueReply: 'Continue',
+  editMessage: 'Edit message',
 
   // ── Conversations ────────────────────────────────────────────────────────
   newChat: 'New conversation',

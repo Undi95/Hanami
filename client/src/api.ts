@@ -277,6 +277,16 @@ export function compactChat(
   return req('POST', '/api/chat/compact', { characterId, chatId, instruction })
 }
 
+/** Édite un message du chat en place (index = position dans le fichier). */
+export function editChatMessage(
+  characterId: string,
+  chatId: string,
+  index: number,
+  content: string,
+): Promise<{ index: number; message: ChatMessage }> {
+  return req('PUT', '/api/chat/message', { characterId, chatId, index, content })
+}
+
 /** Édite le résumé de compaction ('' = annule la compaction). */
 export function updateChatSummary(
   characterId: string,
@@ -291,7 +301,8 @@ export function updateChatSummary(
 export interface StreamChatOptions {
   characterId: string
   chatId: string
-  content: string
+  content?: string // requis en mode normal, ignoré en regenerate/continue
+  mode?: 'regenerate' | 'continue'
   signal: AbortSignal
   onEvent: (ev: ChatEvent) => void
 }
@@ -302,7 +313,12 @@ export async function streamChat(opts: StreamChatOptions): Promise<void> {
     res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ characterId: opts.characterId, chatId: opts.chatId, content: opts.content }),
+      body: JSON.stringify({
+        characterId: opts.characterId,
+        chatId: opts.chatId,
+        ...(opts.content !== undefined ? { content: opts.content } : {}),
+        ...(opts.mode ? { mode: opts.mode } : {}),
+      }),
       signal: opts.signal,
     })
   } catch (e) {
