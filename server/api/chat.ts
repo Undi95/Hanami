@@ -36,6 +36,38 @@ function estimateTokens(value: unknown): number {
   return Math.ceil(JSON.stringify(value).length / 4)
 }
 
+/** Écart humanisé entre deux messages (en anglais : langue de travail des prompts). */
+function humanizeGap(ms: number): string {
+  const min = Math.floor(ms / 60000)
+  if (min < 1) return 'less than a minute'
+  if (min < 60) return `${min} minute${min > 1 ? 's' : ''}`
+  const h = Math.floor(min / 60)
+  if (h < 48) return `${h} hour${h > 1 ? 's' : ''}`
+  return `${Math.floor(h / 24)} days`
+}
+
+// Bloc temporel : le personnage sait QUAND on lui parle (matin/soir, retour
+// après des jours…). Faits bruts en anglais — le modèle les exprime dans la
+// langue de la conversation. Visible dans l'inspecteur comme tout le reste.
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function timeBlock(lastMessageTs: string | null): string {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  let block =
+    '\n\n## Current time (auto-injected by Hanami)\n' +
+    `Now: ${WEEKDAYS[now.getDay()]} ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}, ` +
+    `${pad(now.getHours())}:${pad(now.getMinutes())} (user's local time).\n`
+  if (lastMessageTs) {
+    const gap = now.getTime() - new Date(lastMessageTs).getTime()
+    if (Number.isFinite(gap) && gap >= 0) {
+      block += `Time since the previous message in this conversation: ${humanizeGap(gap)}.\n`
+    }
+  }
+  block += 'Let this inform your replies naturally (greetings, time of day, absences) — never recite it.\n'
+  return block
+}
+
 /** Construit le payload EXACT envoyé au backend (aussi renvoyé tel quel par /api/prompt-preview). */
 function buildPayload(
   characterId: string,
@@ -52,6 +84,9 @@ function buildPayload(
   // Conversation compactée : le résumé (dans le system) remplace les messages qu'il couvre.
   const upto = meta.summary ? Math.min(meta.summaryUpto ?? 0, history.length) : 0
   if (meta.summary) systemText += summaryBlock(meta.summary)
+  if (settings.timeAwareness) {
+    systemText += timeBlock(history.length > 0 ? history[history.length - 1].ts : null)
+  }
   const live = history.slice(upto)
   const recent = settings.maxHistoryMessages > 0 ? live.slice(-settings.maxHistoryMessages) : []
   const messages: unknown[] = [

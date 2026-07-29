@@ -14,6 +14,7 @@ export interface Settings {
   password: string // '' = pas d'authentification (usage local)
   contextSize: number // taille de contexte du modèle (tokens) — sert à la jauge et à l'auto-compaction
   autoCompact: boolean // compacte automatiquement la conversation à ~80 % du contexte
+  timeAwareness: boolean // injecte date/heure + temps écoulé depuis le dernier message
   showThoughts: boolean // affiche le raisonnement du modèle dans le fil (bloc repliable)
   ttsEnabled: boolean // lit les réponses à voix haute via le serveur TTS
   ttsUrl: string // base OpenAI-compat du serveur TTS (POST {ttsUrl}/audio/speech)

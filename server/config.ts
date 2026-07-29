@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   password: '',
   contextSize: 8192,
   autoCompact: true,
+  timeAwareness: true,
   showThoughts: false,
   ttsEnabled: false,
   ttsUrl: '',
