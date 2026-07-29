@@ -12,6 +12,8 @@ export interface Settings {
   allowDelete: boolean // autorise delete_file (toggle ON/OFF)
   toolsRoot: string // dossier sandbox des outils fichiers
   password: string // '' = pas d'authentification (usage local)
+  contextSize: number // taille de contexte du modèle (tokens) — sert à la jauge et à l'auto-compaction
+  autoCompact: boolean // compacte automatiquement la conversation à ~80 % du contexte
   showThoughts: boolean // affiche le raisonnement du modèle dans le fil (bloc repliable)
   ttsEnabled: boolean // lit les réponses à voix haute via le serveur TTS
   ttsUrl: string // base OpenAI-compat du serveur TTS (POST {ttsUrl}/audio/speech)
@@ -46,6 +48,15 @@ export interface ChatMeta {
   createdAt: string
   updatedAt: string
   messageCount: number
+  summary?: string // résumé de compaction (visible dans l'inspecteur, éditable)
+  summaryUpto?: number // nombre de messages couverts par le résumé (slice de l'historique envoyé)
+}
+
+// Jauge de contexte jointe à l'événement done (estimation, ou usage réel du backend).
+export interface ContextInfo {
+  tokens: number // tokens du dernier payload envoyé (+ réponse)
+  limit: number // taille de contexte configurée (Settings.contextSize)
+  percent: number // tokens / limit, arrondi (0 si limit inconnue)
 }
 
 export interface MemoryFile {
@@ -58,7 +69,7 @@ export type ChatEvent =
   | { type: 'delta'; text: string }
   | { type: 'thinking'; text: string }
   | { type: 'tool'; name: string; args: string; result: string }
-  | { type: 'done'; message: ChatMessage }
+  | { type: 'done'; message: ChatMessage; context?: ContextInfo }
   | { type: 'error'; message: string; partial?: ChatMessage } // partial = message sauvegardé malgré l'erreur
 
 export const EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'surprised', 'relaxed'] as const

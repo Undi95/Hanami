@@ -13,6 +13,7 @@ export interface StreamChatResult {
   toolCalls: StreamedToolCall[]
   finishReason: string
   truncated: boolean // fin de flux sans [DONE] ni finish_reason — réponse probablement incomplète
+  promptTokens: number // usage.prompt_tokens du backend (0 si non fourni)
 }
 
 interface SseDelta {
@@ -80,6 +81,7 @@ class ThinkSplitter {
 
 interface SseChunk {
   choices?: { delta?: SseDelta; finish_reason?: string | null }[]
+  usage?: { prompt_tokens?: number } | null
 }
 
 export async function streamChatCompletion(opts: {
@@ -101,11 +103,19 @@ export async function streamChatCompletion(opts: {
     temperature: settings.temperature,
     max_tokens: settings.maxTokens,
     stream: true,
+    // Sans cette option, les backends conformes au contrat OpenAI n'émettent
+    // pas l'usage en streaming (la jauge de contexte retomberait sur l'estimation).
+    stream_options: { include_usage: true },
   }
   if (settings.model) body.model = settings.model
   if (tools && tools.length > 0) body.tools = tools
 
-  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal })
+  let res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal })
+  if (res.status === 400 && body.stream_options) {
+    // Vieux backend qui rejette le champ inconnu : on retente une fois sans.
+    delete body.stream_options
+    res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal })
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(`Backend LLM : HTTP ${res.status} — ${text.slice(0, 500) || '(corps vide)'}`)
@@ -120,6 +130,7 @@ export async function streamChatCompletion(opts: {
   let finishReason = ''
   let done = false
   let parsedChunk = false
+  let promptTokens = 0
 
   const emitContent = (text: string): void => {
     if (!text) return
@@ -148,6 +159,8 @@ export async function streamChatCompletion(opts: {
       return // ligne partielle ou bruit — ignorée
     }
     parsedChunk = true
+    // Certains backends joignent l'usage au dernier chunk (souvent sans choices).
+    if (typeof chunk.usage?.prompt_tokens === 'number') promptTokens = chunk.usage.prompt_tokens
     const choice = chunk.choices?.[0]
     if (!choice) return
     const delta = choice.delta ?? {}
@@ -231,5 +244,6 @@ export async function streamChatCompletion(opts: {
       .map((t, i) => ({ ...t, id: t.id || 'call_fallback_' + i })),
     finishReason,
     truncated,
+    promptTokens,
   }
 }

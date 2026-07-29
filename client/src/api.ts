@@ -259,11 +259,31 @@ export async function tts(text: string): Promise<Blob> {
 export function getPromptPreview(
   characterId: string,
   chatId: string,
-): Promise<{ systemText: string; payload: object }> {
+): Promise<{ systemText: string; payload: object; tokens: number; contextSize: number }> {
   return req(
     'GET',
     `/api/prompt-preview?characterId=${encodeURIComponent(characterId)}&chatId=${encodeURIComponent(chatId)}`,
   )
+}
+
+// ── Compaction ─────────────────────────────────────────────────────────────
+
+/** Compacte la conversation (passe mémoire + résumé) — instruction optionnelle façon /compact. */
+export function compactChat(
+  characterId: string,
+  chatId: string,
+  instruction = '',
+): Promise<{ summary: string; summaryUpto: number; compacted: number }> {
+  return req('POST', '/api/chat/compact', { characterId, chatId, instruction })
+}
+
+/** Édite le résumé de compaction ('' = annule la compaction). */
+export function updateChatSummary(
+  characterId: string,
+  chatId: string,
+  summary: string,
+): Promise<{ summary: string; summaryUpto: number }> {
+  return req('PUT', '/api/chat/summary', { characterId, chatId, summary })
 }
 
 // ── Chat streaming (SSE sur fetch) ─────────────────────────────────────────

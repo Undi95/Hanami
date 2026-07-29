@@ -6,6 +6,8 @@ export type DialogKind = 'chats' | 'characters' | 'memory' | 'import' | 'inspect
 interface Props {
   characterName: string
   chatTitle: string
+  contextPercent: number | null // jauge de contexte (null = inconnue, rien d'affiché)
+  contextTitle: string // tooltip détaillé (~tokens / limite)
   hasCharacter: boolean
   hasChat: boolean
   onOpen: (d: DialogKind) => void
@@ -20,7 +22,15 @@ function Icon({ d, extra }: { d: string; extra?: React.ReactNode }) {
   )
 }
 
-export default function TopBar({ characterName, chatTitle, hasCharacter, hasChat, onOpen }: Props) {
+export default function TopBar({
+  characterName,
+  chatTitle,
+  contextPercent,
+  contextTitle,
+  hasCharacter,
+  hasChat,
+  onOpen,
+}: Props) {
   const { t } = useI18n()
   const buttons: { kind: DialogKind; title: string; disabled: boolean; icon: React.ReactNode }[] = [
     {
@@ -84,24 +94,35 @@ export default function TopBar({ characterName, chatTitle, hasCharacter, hasChat
 
   return (
     <header className="topbar">
-      <div className="topbar-id">
+      {/* Ligne 1 : nom + icônes. Ligne 2 : titre du chat pleine largeur + jauge —
+          plus jamais tronqué par la rangée d'icônes. */}
+      <div className="topbar-main">
         <div className="topbar-name">{characterName}</div>
-        {chatTitle && <div className="topbar-sub">{chatTitle}</div>}
+        <nav aria-label={t('menus')}>
+          {buttons.map((b) => (
+            <button
+              key={b.kind}
+              className="icon-btn"
+              title={b.title}
+              aria-label={b.title}
+              disabled={b.disabled}
+              onClick={() => onOpen(b.kind)}
+            >
+              {b.icon}
+            </button>
+          ))}
+        </nav>
       </div>
-      <nav aria-label={t('menus')}>
-        {buttons.map((b) => (
-          <button
-            key={b.kind}
-            className="icon-btn"
-            title={b.title}
-            aria-label={b.title}
-            disabled={b.disabled}
-            onClick={() => onOpen(b.kind)}
-          >
-            {b.icon}
-          </button>
-        ))}
-      </nav>
+      {chatTitle && (
+        <div className="topbar-sub">
+          <span className="topbar-title">{chatTitle}</span>
+          {contextPercent !== null && (
+            <span className={`ctx-badge${contextPercent >= 80 ? ' high' : ''}`} title={contextTitle}>
+              {t('contextBadge', { percent: contextPercent })}
+            </span>
+          )}
+        </div>
+      )}
     </header>
   )
 }

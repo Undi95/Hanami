@@ -9,6 +9,7 @@ export type FeedItem =
   | { kind: 'msg'; msg: ChatMessage; pending?: boolean }
   | { kind: 'tool'; name: string; args: string }
   | { kind: 'error'; text: string }
+  | { kind: 'info'; text: string } // ligne discrète (compaction…) — jamais sauvegardée
   | { kind: 'greeting'; text: string }
 
 function fmtTime(ts: string, lang: Lang): string {
@@ -78,6 +79,8 @@ function Item({ item, showThoughts }: { item: FeedItem; showThoughts: boolean })
       )
     case 'error':
       return <div className="error-bubble">{item.text}</div>
+    case 'info':
+      return <div className="info-line">{item.text}</div>
   }
 }
 

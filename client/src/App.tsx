@@ -1,6 +1,13 @@
 // Hanami — composant racine : boot, scène VRM, chat streaming, dialogs.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CharacterFull, CharacterMeta, ChatMessage, ChatMeta, Settings } from '../../shared/types'
+import type {
+  CharacterFull,
+  CharacterMeta,
+  ChatMessage,
+  ChatMeta,
+  ContextInfo,
+  Settings,
+} from '../../shared/types'
 import type { VrmStage } from './scene/types'
 import * as api from './api'
 import { extractEmotion, stripEmotionTags } from './emotions'
@@ -19,6 +26,8 @@ import PromptInspector from './components/PromptInspector'
 
 const CHAR_KEY = 'hanami_char'
 const chatKey = (charId: string) => `hanami_chat_${charId}`
+// Seuil d'auto-compaction (% du contexte) — même esprit que Claude Code.
+const AUTO_COMPACT_AT = 80
 
 function AppInner() {
   const { lang, t } = useI18n()
@@ -32,6 +41,8 @@ function AppInner() {
   const [streaming, setStreaming] = useState(false)
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   const [backendDown, setBackendDown] = useState(false)
+  const [context, setContext] = useState<ContextInfo | null>(null)
+  const [compacting, setCompacting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [stageReady, setStageReady] = useState(false)
   const [vrmError, setVrmError] = useState<string | null>(null)
@@ -47,6 +58,13 @@ function AppInner() {
   // Compteur de génération : invalide les chargements perso/chat dépassés par un
   // choix plus récent (évite qu'une réponse lente écrase la sélection courante).
   const loadGenRef = useRef(0)
+  const compactingRef = useRef(false)
+  // Chat réellement affiché (les setFeed d'une compaction lente ne doivent pas
+  // atterrir dans un autre chat ouvert entre-temps).
+  const chatIdRef = useRef<string | null>(null)
+  // Chats dont l'auto-compaction a échoué : pas de nouvel essai automatique
+  // (sinon un backend strict serait re-sollicité à chaque message).
+  const autoCompactFailedRef = useRef<Set<string>>(new Set())
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -95,6 +113,55 @@ function AppInner() {
     audio.pause()
     if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src)
     stageRef.current?.setSpeaking(false)
+  }
+
+  // ── Compaction ───────────────────────────────────────────────────────────
+  // Le fil affiché ne change JAMAIS : la compaction n'agit que sur le payload
+  // envoyé au modèle (résumé côté serveur). Ici : pastille discrète pendant le
+  // travail, ligne d'info éphémère à la fin. En mode silencieux (auto), l'échec
+  // se note et se tait ; sinon il remonte à l'appelant (l'inspecteur l'affiche).
+  async function compact(charId: string, chatId: string, instruction = '', silent = false): Promise<void> {
+    if (compactingRef.current) return
+    compactingRef.current = true
+    setCompacting(true)
+    try {
+      const out = await api.compactChat(charId, chatId, instruction)
+      autoCompactFailedRef.current.delete(chatId)
+      setChatMeta((m) =>
+        m && m.id === chatId ? { ...m, summary: out.summary, summaryUpto: out.summaryUpto } : m,
+      )
+      if (chatIdRef.current === chatId) {
+        setFeed((f) => [...f, { kind: 'info', text: t('compactDone', { n: out.compacted }) }])
+      }
+      // Rafraîchit la jauge — sinon le badge resterait au rouge (≥ 80 %)
+      // jusqu'au prochain message alors que le contexte vient d'être libéré.
+      try {
+        const p = await api.getPromptPreview(charId, chatId)
+        if (chatIdRef.current === chatId && p.contextSize > 0) {
+          setContext({
+            tokens: p.tokens,
+            limit: p.contextSize,
+            percent: Math.min(100, Math.round((p.tokens / p.contextSize) * 100)),
+          })
+        }
+      } catch {
+        /* la jauge se resynchronisera au prochain message */
+      }
+    } catch (e) {
+      if (e instanceof api.AuthRequiredError) {
+        setNeedLogin(true)
+        return
+      }
+      if (silent) {
+        autoCompactFailedRef.current.add(chatId)
+        console.warn('[compact]', e)
+        return
+      }
+      throw e
+    } finally {
+      compactingRef.current = false
+      setCompacting(false)
+    }
   }
 
   async function playTts(text: string) {
@@ -169,6 +236,8 @@ function AppInner() {
       const { meta, messages } = await api.getChat(char.id, chatId)
       if (gen !== loadGenRef.current) return
       setChatMeta(meta)
+      chatIdRef.current = meta.id
+      setContext(null) // la jauge repart avec le prochain échange de ce chat
       localStorage.setItem(chatKey(char.id), meta.id)
       const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
       if (items.length === 0 && char.greeting) items.push({ kind: 'greeting', text: char.greeting })
@@ -307,6 +376,21 @@ function AppInner() {
             }
             setFeed((f) => f.map((it) => (it.kind === 'msg' && it.pending ? { kind: 'msg', msg: ev.message } : it)))
             setChatMeta((m) => (m ? { ...m, messageCount: m.messageCount + 2, updatedAt: ev.message.ts } : m))
+            if (ev.context) {
+              setContext(ev.context)
+              // Auto-compaction au seuil — silencieuse (le serveur refuse s'il
+              // n'y a pas assez de nouveaux messages, on l'ignore sans bruit).
+              // Un chat dont l'auto-compaction a échoué n'est plus retenté
+              // automatiquement (le bouton manuel de l'inspecteur reste là).
+              if (
+                settings?.autoCompact &&
+                ev.context.limit > 0 &&
+                ev.context.percent >= AUTO_COMPACT_AT &&
+                !autoCompactFailedRef.current.has(chat.id)
+              ) {
+                compact(char.id, chat.id, '', true).catch((err) => console.warn('[compact]', err))
+              }
+            }
             if (settings?.ttsEnabled) {
               playTts(ev.message.content).catch((e) => {
                 setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }])
@@ -387,6 +471,7 @@ function AppInner() {
       else {
         setCharacter(null)
         setChatMeta(null)
+        chatIdRef.current = null
         setFeed([])
       }
     }
@@ -439,6 +524,10 @@ function AppInner() {
         <TopBar
           characterName={character?.name ?? 'Hanami'}
           chatTitle={chatMeta?.title ?? ''}
+          contextPercent={context && context.limit > 0 ? context.percent : null}
+          contextTitle={
+            context ? t('contextBadgeTitle', { tokens: context.tokens, limit: context.limit }) : ''
+          }
           hasCharacter={!!character}
           hasChat={!!character && !!chatMeta}
           onOpen={setDialog}
@@ -450,6 +539,12 @@ function AppInner() {
             <button className="btn small" onClick={() => setDialog('settings')}>
               {t('openSettings')}
             </button>
+          </div>
+        )}
+
+        {compacting && (
+          <div className="compact-pill" role="status">
+            {t('compacting')}
           </div>
         )}
 
@@ -554,7 +649,27 @@ function AppInner() {
       )}
 
       {dialog === 'inspector' && character && chatMeta && (
-        <PromptInspector characterId={character.id} chatId={chatMeta.id} onClose={() => setDialog(null)} />
+        <PromptInspector
+          characterId={character.id}
+          chatId={chatMeta.id}
+          summary={chatMeta.summary ?? ''}
+          compacting={compacting}
+          streaming={streaming}
+          onCompact={(instruction) => compact(character.id, chatMeta.id, instruction)}
+          onSaveSummary={async (text) => {
+            const out = await api.updateChatSummary(character.id, chatMeta.id, text)
+            setChatMeta((m) =>
+              m && m.id === chatMeta.id
+                ? {
+                    ...m,
+                    summary: out.summary || undefined,
+                    summaryUpto: out.summary ? out.summaryUpto : undefined,
+                  }
+                : m,
+            )
+          }}
+          onClose={() => setDialog(null)}
+        />
       )}
 
       {/* Overlay plein écran (z-index 100, au-dessus du chat-panel et des dialogs). */}

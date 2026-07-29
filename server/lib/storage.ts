@@ -166,12 +166,15 @@ Ce fichier est injecté dans le contexte à chaque message (si la mémoire est a
 }
 
 // ── Chats ──────────────────────────────────────────────────────────────────
-// Format .jsonl : ligne 1 = { id, title, createdAt }, lignes suivantes = ChatMessage.
+// Format .jsonl : ligne 1 = { id, title, createdAt, summary?, summaryUpto? },
+// lignes suivantes = ChatMessage.
 
 interface ChatHeader {
   id: string
   title: string
   createdAt: string
+  summary?: string
+  summaryUpto?: number
 }
 
 function chatFile(charId: string, chatId: string): string {
@@ -236,6 +239,7 @@ export function listChats(charId: string): ChatMeta[] {
       createdAt: header.createdAt,
       updatedAt: fs.statSync(file).mtime.toISOString(),
       messageCount: lineCount - 1,
+      ...(header.summary ? { summary: header.summary, summaryUpto: header.summaryUpto ?? 0 } : {}),
     })
   }
   return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -277,6 +281,35 @@ export function appendChatMessage(charId: string, chatId: string, msg: ChatMessa
 
 export function deleteChat(charId: string, chatId: string): void {
   fs.rmSync(chatFile(charId, chatId), { force: true })
+}
+
+/**
+ * Met à jour l'en-tête d'un chat (résumé de compaction…) en réécrivant la
+ * première ligne du .jsonl. Écriture temp + rename : un crash au milieu ne
+ * corrompt jamais le fichier d'origine.
+ */
+export function updateChatHeader(
+  charId: string,
+  chatId: string,
+  patch: Partial<Pick<ChatHeader, 'title' | 'summary' | 'summaryUpto'>>,
+): void {
+  const file = chatFile(charId, chatId)
+  const lines = fs.readFileSync(file, 'utf8').split('\n')
+  const firstIdx = lines.findIndex((l) => l.trim().length > 0)
+  if (firstIdx === -1) throw new Error(`Chat corrompu : ${chatId}`)
+  const header = JSON.parse(lines[firstIdx]) as ChatHeader
+  lines[firstIdx] = JSON.stringify({ ...header, ...patch })
+  const tmp = file + '.tmp'
+  // fsync avant rename : sans lui, un crash machine peut laisser un tmp vide
+  // renommé par-dessus le transcript.
+  const fd = fs.openSync(tmp, 'w')
+  try {
+    fs.writeSync(fd, lines.join('\n'))
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  fs.renameSync(tmp, file)
 }
 
 /** Écrit un chat complet d'un coup (utilisé par l'import SillyTavern). */

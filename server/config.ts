@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS: Settings = {
   allowDelete: false,
   toolsRoot: path.join(DATA_DIR, 'workspace'),
   password: '',
+  contextSize: 8192,
+  autoCompact: true,
   showThoughts: false,
   ttsEnabled: false,
   ttsUrl: '',

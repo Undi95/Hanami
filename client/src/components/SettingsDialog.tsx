@@ -27,6 +27,8 @@ interface FormState {
   allowDelete: boolean
   toolsRoot: string
   password: string
+  contextSize: string
+  autoCompact: boolean
   showThoughts: boolean
   ttsEnabled: boolean
   ttsUrl: string
@@ -48,6 +50,8 @@ function toForm(s: Settings): FormState {
     allowDelete: s.allowDelete,
     toolsRoot: s.toolsRoot,
     password: '',
+    contextSize: String(s.contextSize),
+    autoCompact: s.autoCompact,
     showThoughts: s.showThoughts,
     ttsEnabled: s.ttsEnabled,
     ttsUrl: s.ttsUrl,
@@ -73,6 +77,8 @@ function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassw
     allowDelete: f.allowDelete,
     toolsRoot: f.toolsRoot.trim(),
     password: clearPassword ? api.CLEAR_SECRET : f.password,
+    contextSize: Math.round(num(f.contextSize, base.contextSize)),
+    autoCompact: f.autoCompact,
     showThoughts: f.showThoughts,
     ttsEnabled: f.ttsEnabled,
     ttsUrl: f.ttsUrl.trim(),
@@ -317,10 +323,22 @@ export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
           <input id="set-max" type="number" step="1" min="1" value={form.maxTokens} onChange={(e) => set('maxTokens', e.target.value)} />
         </div>
       </div>
-      <div className="field">
-        <label htmlFor="set-hist">{t('maxHistory')}</label>
-        <input id="set-hist" type="number" step="1" min="0" value={form.maxHistoryMessages} onChange={(e) => set('maxHistoryMessages', e.target.value)} />
+      <div className="grid-2">
+        <div className="field">
+          <label htmlFor="set-hist">{t('maxHistory')}</label>
+          <input id="set-hist" type="number" step="1" min="0" value={form.maxHistoryMessages} onChange={(e) => set('maxHistoryMessages', e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="set-ctx">{t('contextSize')}</label>
+          <input id="set-ctx" type="number" step="1" min="0" value={form.contextSize} onChange={(e) => set('contextSize', e.target.value)} />
+        </div>
       </div>
+      <Toggle
+        label={t('autoCompact')}
+        sub={t('autoCompactSub')}
+        checked={form.autoCompact}
+        onChange={(v) => set('autoCompact', v)}
+      />
       <Toggle
         label={t('showThoughts')}
         sub={t('showThoughtsSub')}
