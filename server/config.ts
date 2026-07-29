@@ -23,7 +23,12 @@ export const DEFAULT_SETTINGS: Settings = {
 export function loadSettings(): Settings {
   try {
     const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) as Partial<Settings>
-    return { ...DEFAULT_SETTINGS, ...raw }
+    const merged = { ...DEFAULT_SETTINGS, ...raw }
+    // toolsRoot absent, vide ou relatif → la sandbox retomberait sur le cwd : retour au défaut.
+    if (typeof merged.toolsRoot !== 'string' || !merged.toolsRoot.trim() || !path.isAbsolute(merged.toolsRoot)) {
+      merged.toolsRoot = DEFAULT_SETTINGS.toolsRoot
+    }
+    return merged
   } catch {
     return { ...DEFAULT_SETTINGS }
   }

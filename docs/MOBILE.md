@@ -1,26 +1,35 @@
-# Hanami sur téléphone
+**English** | [Français](MOBILE.fr.md)
 
-## Accès
+# Hanami on a phone
 
-- **Même Wi-Fi que le PC** : ouvre `http://<ip-du-pc>:7788` (l'IP réseau s'affiche dans la
-  console au démarrage de Hanami).
-- **Depuis l'extérieur** (4G/5G, en déplacement…) : via Cloudflare Tunnel → [CLOUDFLARE.md](CLOUDFLARE.md).
+Related: [CLOUDFLARE.md](CLOUDFLARE.md) · [back to the README](../README.md)
 
-## Installer comme une app (PWA)
+## Reaching it
+
+- **Same Wi-Fi as the PC**: open `http://<pc-ip>:7788`. The LAN address is printed in the
+  console when Hanami starts.
+- **From anywhere else** (4G/5G, on the move…): through a Cloudflare Tunnel →
+  [CLOUDFLARE.md](CLOUDFLARE.md).
+
+## Installing it as an app (PWA)
 
 ### Android (Chrome)
-1. Ouvre l'URL de Hanami.
-2. Menu ⋮ → **« Ajouter à l'écran d'accueil »** (ou « Installer l'application »).
-3. Hanami s'ouvre en plein écran, sans barre d'adresse.
+
+1. Open the Hanami URL.
+2. Menu ⋮ → **"Add to Home screen"** (or "Install app").
+3. Hanami opens full-screen, without the address bar.
 
 ### iPhone / iPad (Safari)
-1. Ouvre l'URL de Hanami.
-2. Bouton Partager □↑ → **« Sur l'écran d'accueil »**.
 
-## Astuces
+1. Open the Hanami URL.
+2. Share button □↑ → **"Add to Home Screen"**.
 
-- L'interface mobile affiche l'avatar en plein écran avec le chat en feuille basse —
-  tire la poignée vers le bas pour voir le personnage en grand.
-- Le rendu 3D se met en pause quand l'app est en arrière-plan (économie de batterie).
-- Si la connexion est lente (Wi-Fi public…), le chat fonctionne même si le modèle 3D met du
-  temps à charger — le texte n'attend jamais la 3D.
+## Tips
+
+- The mobile layout shows the avatar full-screen with the chat in a bottom sheet — drag the
+  handle down to see more of your character.
+- 3D rendering pauses when the app goes to the background, to save battery.
+- On a slow connection (public Wi-Fi…), the chat still works while the 3D model is loading:
+  text never waits for the avatar.
+- If you expose Hanami outside your home network, set an access password first — see the
+  security section of [CLOUDFLARE.md](CLOUDFLARE.md).

@@ -3,7 +3,7 @@ import express from 'express'
 import os from 'node:os'
 import path from 'node:path'
 import { IS_PROD, PORT } from './config'
-import { BACKGROUNDS_DIR, ROOT, VRM_DIR, ensureDataDirs } from './lib/storage'
+import { BACKGROUNDS_DIR, DATA_DIR, ROOT, VRM_DIR, ensureDataDirs } from './lib/storage'
 import { authMiddleware, loginRouter } from './lib/auth'
 import { settingsRouter } from './api/settings'
 import { chatRouter } from './api/chat'
@@ -24,6 +24,32 @@ function firstLanIPv4(): string {
 async function main(): Promise<void> {
   ensureDataDirs()
   const app = express()
+
+  // Garde CSRF : refus des requêtes mutantes cross-site. Les requêtes
+  // same-origin du client et les outils sans header Origin (curl) passent.
+  app.use((req, res, next) => {
+    if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
+      if (req.headers['sec-fetch-site'] === 'cross-site') {
+        res.status(403).json({ error: 'Requête cross-site refusée' })
+        return
+      }
+      const origin = req.headers.origin
+      if (origin) {
+        let originHost = ''
+        try {
+          originHost = new URL(origin).host
+        } catch {
+          /* Origin malformé (ex. "null") → refus */
+        }
+        if (!originHost || originHost !== req.headers.host) {
+          res.status(403).json({ error: 'Origin non autorisé' })
+          return
+        }
+      }
+    }
+    next()
+  })
+
   app.use(express.json({ limit: '5mb' }))
 
   // Auth : tout /api/* est gardé SAUF /api/login (enregistré avant le middleware).
@@ -65,14 +91,44 @@ async function main(): Promise<void> {
       server: { middlewareMode: true },
       appType: 'spa',
     })
+    // Défense en profondeur : /@fs/ (Vite) sert des fichiers arbitraires du
+    // disque — on interdit tout chemin qui tombe sous data/ (config, chats,
+    // mémoire), en plus du server.fs.deny de vite.config.ts. On décode la
+    // pathname (%5C, %2E…) et on normalise les séparateurs Windows.
+    app.use((req, res, next) => {
+      const [rawPath] = req.url.split('?')
+      let pathname = rawPath
+      try {
+        pathname = decodeURIComponent(rawPath)
+      } catch {
+        /* séquence % malformée → version brute */
+      }
+      pathname = pathname.replace(/\\/g, '/')
+      if (pathname.startsWith('/@fs/')) {
+        const target = path.resolve(pathname.slice('/@fs/'.length))
+        const rel = path.relative(DATA_DIR, target)
+        if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
+          res.status(403).json({ error: 'Accès interdit' })
+          return
+        }
+      }
+      next()
+    })
     app.use(vite.middlewares)
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  // Dev : écoute locale par défaut (l'outillage Vite comme /@fs/ ne doit pas
+  // être exposé au LAN) ; HOST=0.0.0.0 pour l'ouvrir explicitement. Prod : LAN.
+  const host = process.env.HOST || (IS_PROD ? '0.0.0.0' : '127.0.0.1')
+  app.listen(PORT, host, () => {
     console.log(`Hanami démarré (${IS_PROD ? 'prod' : 'dev'})`)
     console.log(`  local  : http://127.0.0.1:${PORT}`)
     const lan = firstLanIPv4()
-    if (lan) console.log(`  réseau : http://${lan}:${PORT} (accès mobile)`)
+    if (host === '0.0.0.0' && lan) {
+      console.log(`  réseau : http://${lan}:${PORT} (accès mobile)`)
+    } else if (!IS_PROD) {
+      console.log(`  réseau : non exposé — HOST=0.0.0.0 npm run dev pour le LAN, ou npm start`)
+    }
   })
 }
 

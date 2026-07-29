@@ -4,6 +4,7 @@ import type { CharacterFull, CharacterMeta, ChatMessage, ChatMeta, Settings } fr
 import type { VrmStage } from './scene/types'
 import * as api from './api'
 import { extractEmotion } from './emotions'
+import { I18nProvider, localeOf, useI18n } from './i18n'
 import TopBar, { type DialogKind } from './components/TopBar'
 import MessageList, { type FeedItem } from './components/MessageList'
 import Composer from './components/Composer'
@@ -19,7 +20,8 @@ import PromptInspector from './components/PromptInspector'
 const CHAR_KEY = 'hanami_char'
 const chatKey = (charId: string) => `hanami_chat_${charId}`
 
-export default function App() {
+function AppInner() {
+  const { lang, t } = useI18n()
   const [booting, setBooting] = useState(true)
   const [needLogin, setNeedLogin] = useState(false)
   const [settings, setSettings] = useState<Settings | null>(null)
@@ -32,11 +34,15 @@ export default function App() {
   const [backendDown, setBackendDown] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [stageReady, setStageReady] = useState(false)
+  const [vrmError, setVrmError] = useState<string | null>(null)
 
   const sceneRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<VrmStage | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const lastEmotionRef = useRef('neutral')
+  // Compteur de génération : invalide les chargements perso/chat dépassés par un
+  // choix plus récent (évite qu'une réponse lente écrase la sélection courante).
+  const loadGenRef = useRef(0)
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -61,12 +67,16 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
+    setVrmError(null)
     ;(async () => {
       const { createVrmStage } = await import('./scene/vrmStage')
       if (cancelled || !sceneRef.current) return
       stageRef.current = createVrmStage(sceneRef.current)
       setStageReady(true)
-    })().catch((e) => console.error('[vrm]', e))
+    })().catch((e) => {
+      console.error('[vrm]', e)
+      if (!cancelled) setVrmError(api.errorMessage(e))
+    })
     return () => {
       cancelled = true
       stageRef.current?.dispose()
@@ -78,16 +88,28 @@ export default function App() {
   useEffect(() => {
     const stage = stageRef.current
     if (!stage || !stageReady) return
-    stage.loadModel(character?.vrm ?? '').catch((e) => console.error('[vrm]', e))
+    setVrmError(null)
+    stage.loadModel(character?.vrm ?? '').catch((e) => {
+      console.error('[vrm]', e)
+      setVrmError(api.errorMessage(e))
+    })
     stage.setEmotion(lastEmotionRef.current)
   }, [stageReady, character?.vrm])
 
   // ── Chargement personnage / chat ─────────────────────────────────────────
 
+  // Titre par défaut d'une conversation créée côté client (le serveur ne connaît
+  // pas la langue de l'interface).
+  function defaultChatTitle(): string {
+    return t('defaultChatTitle', { date: new Date().toLocaleDateString(localeOf(lang)) })
+  }
+
   async function openChat(char: CharacterFull, chatId: string) {
+    const gen = ++loadGenRef.current
     abortRef.current?.abort()
     try {
       const { meta, messages } = await api.getChat(char.id, chatId)
+      if (gen !== loadGenRef.current) return
       setChatMeta(meta)
       localStorage.setItem(chatKey(char.id), meta.id)
       const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
@@ -107,16 +129,23 @@ export default function App() {
   }
 
   async function selectCharacter(id: string) {
+    const gen = ++loadGenRef.current
     try {
       const full = await api.getCharacter(id)
+      if (gen !== loadGenRef.current) return
       setCharacter(full)
       localStorage.setItem(CHAR_KEY, id)
       const chats = await api.listChats(id)
+      if (gen !== loadGenRef.current) return
       const savedChat = localStorage.getItem(chatKey(id))
-      const meta = chats.find((c) => c.id === savedChat) ?? chats[0] ?? (await api.createChat(id))
+      let meta = chats.find((c) => c.id === savedChat) ?? chats[0]
+      if (!meta) {
+        meta = await api.createChat(id, defaultChatTitle())
+        if (gen !== loadGenRef.current) return
+      }
       await openChat(full, meta.id)
     } catch (e) {
-      handleError(e, 'perso')
+      handleError(e, 'character')
     }
   }
 
@@ -215,7 +244,7 @@ export default function App() {
           }
         },
       })
-      if (!finished) keepPartialDraft({ kind: 'error', text: 'Réponse interrompue par le serveur.' })
+      if (!finished) keepPartialDraft({ kind: 'error', text: t('responseInterrupted') })
     } catch (e) {
       if (e instanceof api.AuthRequiredError) {
         keepPartialDraft()
@@ -245,7 +274,7 @@ export default function App() {
       setCharacters(chars)
       return chars
     } catch (e) {
-      handleError(e, 'persos')
+      handleError(e, 'characters')
       return characters
     }
   }
@@ -260,9 +289,11 @@ export default function App() {
   async function handleChatDeleted(deletedId: string) {
     const char = character
     if (!char || chatMeta?.id !== deletedId) return
+    // Le chat actif vient d'être supprimé : couper un éventuel stream en cours.
+    abortRef.current?.abort()
     try {
       const chats = await api.listChats(char.id)
-      const next = chats[0] ?? (await api.createChat(char.id))
+      const next = chats[0] ?? (await api.createChat(char.id, defaultChatTitle()))
       await openChat(char, next.id)
     } catch (e) {
       handleError(e, 'chats')
@@ -273,6 +304,9 @@ export default function App() {
     localStorage.removeItem(chatKey(id))
     const chars = await refreshCharacters()
     if (character?.id === id) {
+      // Le personnage actif vient d'être supprimé : couper un éventuel stream en
+      // cours (y compris quand il ne reste plus aucun personnage).
+      abortRef.current?.abort()
       localStorage.removeItem(CHAR_KEY)
       const next = chars.find((c) => c.id !== id)
       if (next) await selectCharacter(next.id)
@@ -285,10 +319,9 @@ export default function App() {
   }
 
   // ── Rendu ────────────────────────────────────────────────────────────────
-
-  if (needLogin) {
-    return <LoginGate onDone={() => boot().catch((e) => console.error('[boot]', e))} />
-  }
+  // NB : la div .scene reste montée en permanence (le stage 3D y est attaché via
+  // un effet à deps []) — l'écran de connexion se rend en OVERLAY, jamais à la
+  // place de l'arbre principal.
 
   return (
     <div className="app">
@@ -299,11 +332,32 @@ export default function App() {
         style={character?.background ? { backgroundImage: `url("${character.background}")` } : undefined}
       />
 
+      {vrmError && (
+        <div
+          className="banner"
+          role="alert"
+          style={{
+            position: 'fixed',
+            top: 10,
+            left: 10,
+            zIndex: 5,
+            margin: 0,
+            maxWidth: 320,
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            gap: 2,
+          }}
+        >
+          <span>{t('vrmLoadError')}</span>
+          <span style={{ fontSize: 11, opacity: 0.75 }}>{vrmError}</span>
+        </div>
+      )}
+
       <div className={`chat-panel${collapsed ? ' collapsed' : ''}`}>
         <button
           className="sheet-handle"
           onClick={() => setCollapsed((c) => !c)}
-          aria-label={collapsed ? 'Déplier le chat' : 'Replier le chat pour voir l’avatar'}
+          aria-label={collapsed ? t('expandChat') : t('collapseChat')}
         >
           <span className="handle-bar" />
         </button>
@@ -318,38 +372,40 @@ export default function App() {
 
         {backendDown && settings && (
           <div className="banner" role="alert">
-            <span>Backend LLM injoignable — vérifiez l'URL dans les réglages.</span>
+            <span>{t('backendDown')}</span>
             <button className="btn small" onClick={() => setDialog('settings')}>
-              Réglages
+              {t('openSettings')}
             </button>
           </div>
         )}
 
         {booting ? (
           <div className="empty-state">
-            <p>Chargement…</p>
+            <p>{t('loading')}</p>
           </div>
         ) : !character ? (
           <div className="empty-state">
-            <h2>Bienvenue dans Hanami</h2>
-            <p>Aucun personnage pour l'instant. Créez-en un, ou importez une carte SillyTavern.</p>
+            <h2>{t('welcomeTitle')}</h2>
+            <p>{t('noCharacters')}</p>
             <div className="row" style={{ justifyContent: 'center' }}>
               <button className="btn primary" onClick={() => setDialog('characters')}>
-                Créer un personnage
+                {t('createCharacter')}
               </button>
               <button className="btn" onClick={() => setDialog('import')}>
-                Importer
+                {t('importTitle')}
               </button>
             </div>
           </div>
         ) : (
-          <MessageList items={feed} />
+          // key : remonte le fil à chaque changement de chat (réinitialise le
+          // scroll et l'autoscroll collé en bas).
+          <MessageList key={chatMeta?.id ?? 'no-chat'} items={feed} />
         )}
 
         <Composer
           disabled={booting || !character || !chatMeta}
           streaming={streaming}
-          onSend={(text) => send(text).catch((e) => console.error('[envoi]', e))}
+          onSend={(text) => send(text).catch((e) => console.error('[send]', e))}
           onStop={stopStreaming}
         />
       </div>
@@ -358,8 +414,8 @@ export default function App() {
         <SettingsDialog settings={settings} onSaved={handleSettingsSaved} onClose={() => setDialog(null)} />
       )}
       {dialog === 'settings' && !settings && (
-        <Dialog title="Réglages" onClose={() => setDialog(null)}>
-          <p className="hint">Réglages indisponibles (serveur injoignable).</p>
+        <Dialog title={t('settings')} onClose={() => setDialog(null)}>
+          <p className="hint">{t('settingsUnavailable')}</p>
         </Dialog>
       )}
 
@@ -382,19 +438,19 @@ export default function App() {
           characters={characters}
           activeId={character?.id ?? null}
           onSelect={(id) => {
-            if (id !== character?.id) selectCharacter(id).catch((e) => console.error('[perso]', e))
+            if (id !== character?.id) selectCharacter(id).catch((e) => console.error('[character]', e))
           }}
           onCreated={(c) => {
             refreshCharacters()
               .then(() => selectCharacter(c.id))
-              .catch((e) => console.error('[persos]', e))
+              .catch((e) => console.error('[characters]', e))
           }}
           onUpdated={(c) => {
-            refreshCharacters().catch((e) => console.error('[persos]', e))
+            refreshCharacters().catch((e) => console.error('[characters]', e))
             if (character?.id === c.id) setCharacter(c)
           }}
           onDeleted={(id) => {
-            handleCharacterDeleted(id).catch((e) => console.error('[persos]', e))
+            handleCharacterDeleted(id).catch((e) => console.error('[characters]', e))
           }}
           onClose={() => setDialog(null)}
         />
@@ -408,8 +464,13 @@ export default function App() {
         <ImportDialog
           characters={characters}
           defaultCharacterId={character?.id ?? null}
-          onCharacterImported={() => {
-            refreshCharacters().catch((e) => console.error('[import]', e))
+          onCharacterImported={(c) => {
+            refreshCharacters()
+              .then(() => {
+                // Premier personnage importé : le sélectionner directement.
+                if (!character) return selectCharacter(c.id)
+              })
+              .catch((e) => console.error('[import]', e))
           }}
           onChatsImported={() => {
             /* la liste des chats est rechargée à l'ouverture du dialog Conversations */
@@ -421,6 +482,18 @@ export default function App() {
       {dialog === 'inspector' && character && chatMeta && (
         <PromptInspector characterId={character.id} chatId={chatMeta.id} onClose={() => setDialog(null)} />
       )}
+
+      {/* Overlay plein écran (z-index 100, au-dessus du chat-panel et des dialogs). */}
+      {needLogin && <LoginGate onDone={() => boot().catch((e) => console.error('[boot]', e))} />}
     </div>
+  )
+}
+
+// Racine : le fournisseur de langue enveloppe toute l'UI (préférence locale, pas un réglage serveur).
+export default function App() {
+  return (
+    <I18nProvider>
+      <AppInner />
+    </I18nProvider>
   )
 }

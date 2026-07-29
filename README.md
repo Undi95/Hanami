@@ -1,46 +1,50 @@
+**English** | [Français](README.fr.md)
+
 # 🌸 Hanami
 
-**Compagnon de chat LLM ultra-léger avec avatar 3D (VRM) — local-first, transparent, mobile.**
+**An ultra-light LLM chat companion with a 3D (VRM) avatar — local-first, transparent, mobile-ready.**
 
-Hanami est une alternative minimaliste à SillyTavern, pensée pour une seule chose : discuter
-avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
+Hanami is a minimal alternative to SillyTavern, built around one thing: talking to a
+character, and doing it well. No macro language, no forty nested menus, no hidden magic.
 
-## Principes
+## Principles
 
-1. **Ton prompt, tel quel.** Ce que tu écris dans le system prompt est envoyé au backend
-   **sans aucune modification**. Le bouton 🔍 *Inspecteur* montre l'exact payload envoyé —
-   la seule chose que Hanami ajoute (si activée) est le bloc mémoire, et il est affiché.
-2. **Local-first.** Tout vit dans des fichiers lisibles (`data/`) : personnages, chats,
-   mémoire, réglages. Pas de base de données, pas de cloud. Tes données ne quittent pas ta machine.
-3. **Un personnage = un dossier.** `data/characters/<id>/` contient `character.json`,
-   `system-prompt.md`, `memory/` et `chats/`. Copiable, partageable, versionnable.
+1. **Your prompt, verbatim.** Whatever you write in the system prompt is sent to the backend
+   **unmodified**. The 🔍 *Prompt Inspector* shows the exact payload that goes out — the only
+   thing Hanami ever adds (when memory is enabled) is the memory block, and it is shown to you.
+2. **Local-first.** Everything lives in plain, readable files under `data/`: characters, chats,
+   memory, settings. No database, no cloud. Your data never leaves your machine — the only
+   outbound requests Hanami makes go to the backend URL you configure yourself.
+3. **One character = one folder.** `data/characters/<id>/` holds `character.json`,
+   `system-prompt.md`, `memory/` and `chats/`. Copy it, share it, put it under version control.
 
-## Fonctionnalités
+## Features
 
-- 💬 Chat en streaming avec n'importe quel backend **OpenAI-compatible**
-  (KoboldCpp, llama.cpp, TabbyAPI, LM Studio, Ollama, APIs cloud…)
-- 🧍 **Avatar VRM 3D** : idle animé (respiration, clignements), expressions pilotées par le
-  modèle via tags `[happy]`…, lipsync pendant la réponse — dépose tes `.vrm` dans `vrm/`
-- 🧠 **Mémoire persistante** : fichiers markdown injectés dans le contexte + outils
-  (`memory_save`…) pour que le personnage retienne de lui-même — panneau d'édition inclus
-- 🛠️ **Outils fichiers** optionnels pour le modèle (lire/écrire/éditer, suppression derrière
-  un toggle dédié), sandboxés dans un dossier de ton choix
-- 📥 **Import SillyTavern** : cartes de personnage (PNG V2/V3) et historiques de chat (`.jsonl`)
-- 📱 **Mobile/PWA** : interface responsive, installable sur l'écran d'accueil
-- 🔒 Mot de passe optionnel (recommandé si exposé via Cloudflare Tunnel)
+- 💬 Streaming chat with any **OpenAI-compatible** backend
+  (KoboldCpp, llama.cpp, TabbyAPI, LM Studio, Ollama, cloud APIs…)
+- 🧍 **3D VRM avatar**: animated idle (breathing, blinking), expressions driven by the model
+  through `[happy]`-style tags, lipsync while it speaks — drop your `.vrm` files into `vrm/`
+- 🧠 **Persistent memory**: markdown files injected into the context, plus tools
+  (`memory_save`, `memory_read`, `memory_update`, `memory_delete`) so the character can
+  remember on its own — with a built-in editing panel
+- 🛠️ Optional **file tools** for the model (`list_files`, `read_file`, `write_file`,
+  `edit_file`, and `delete_file` behind its own dedicated toggle), sandboxed to a folder you pick
+- 📥 **SillyTavern import**: character cards (PNG V2/V3) and chat logs (`.jsonl`)
+- 📱 **Mobile / PWA**: responsive interface, installable on your home screen
+- 🔒 Optional password (recommended if you expose Hanami through a Cloudflare Tunnel)
 
-## Démarrage
+## Getting started
 
 ```bash
 npm install
 npm run dev
 ```
 
-Ouvre <http://localhost:7788>. Dans ⚙️ *Réglages*, renseigne l'URL de ton backend
-(ex. KoboldCpp : `http://127.0.0.1:5001/v1`) et clique *Tester la connexion*.
+Open <http://localhost:7788>. In ⚙️ *Settings*, fill in your backend URL
+(KoboldCpp, for example: `http://127.0.0.1:5001/v1`) and hit *Test connection*.
 
-Sans backend sous la main ? `npm run mock-llm` lance un faux backend de test sur le port 5199
-(`http://127.0.0.1:5199/v1`).
+No backend at hand? `npm run mock-llm` starts a fake OpenAI-compatible backend on port 5199
+(`http://127.0.0.1:5199/v1`), enough to see streaming, emotions and the avatar in action.
 
 ### Production
 
@@ -49,28 +53,51 @@ npm run build
 npm start
 ```
 
-## Accès distant & mobile
+The server listens on port `7788` by default; set the `PORT` environment variable to change it.
 
-- Depuis ton réseau local : `http://<ip-du-pc>:7788` (l'IP s'affiche au démarrage).
-- Depuis l'extérieur : voir [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md) (Cloudflare Tunnel, HTTPS gratuit).
-- Installation sur téléphone : voir [docs/MOBILE.md](docs/MOBILE.md).
+## Language / Langue
 
-## Arborescence
+- **Interface**: Hanami ships in English and French. Switch language in ⚙️ *Settings* — it only
+  changes the app's own labels, nothing else.
+- **The character**: your character replies in the language of **its own system prompt**. Hanami
+  never injects a language instruction, so nothing is imposed: if you want English, write the
+  prompt in English; if you want French, write it in French. The prompt decides.
+
+## Remote & mobile access
+
+- From your local network: `http://<pc-ip>:7788` (the LAN address is printed on startup).
+- From anywhere else: see [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md) (Cloudflare Tunnel, free HTTPS).
+- Installing it on a phone: see [docs/MOBILE.md](docs/MOBILE.md).
+
+## Privacy
+
+- **`data/` is never committed** (see `.gitignore`). Your chats, memory files, edited prompts
+  and `config.json` — including the API key and password you may have set — stay on your disk only.
+- **VRM models and backgrounds are never committed either**: `vrm/` and `backgrounds/` are
+  git-ignored except for their `README.md`. Most VRoid Hub / Booth models forbid redistribution,
+  so each user brings their own.
+- `presets/sakura/` is the only character shipped with the repository. On first launch, every
+  folder in `presets/` is copied into `data/characters/` and never overwritten afterwards —
+  so editing your character never touches the repo, and pulling never touches your character.
+
+## Project layout
 
 ```
-data/                  # TES données (jamais committées)
-  config.json          # réglages
-  characters/<id>/     # un dossier par personnage
-    character.json     # nom, modèle 3D, fond, greeting
-    system-prompt.md   # LE prompt — édite-le librement
-    memory/            # MEMORY.md (index) + un fait par fichier
-    chats/             # un .jsonl par conversation
-presets/               # personnages livrés avec l'app (copiés dans data/ au 1er lancement)
-vrm/                   # tes modèles .vrm
-backgrounds/           # tes fonds d'écran
+data/                  # YOUR data (never committed)
+  config.json          # settings
+  characters/<id>/     # one folder per character
+    character.json     # name, 3D model, background, greeting
+    system-prompt.md   # THE prompt — edit it freely
+    memory/            # MEMORY.md (index) + one fact per file
+    chats/             # one .jsonl per conversation
+presets/               # characters shipped with the app (copied into data/ on first launch)
+vrm/                   # your .vrm models
+backgrounds/           # your background images
+client/                # React front-end (Vite)
+server/                # Express server + API
+shared/                # types shared by client and server
 ```
 
-## Licence
+## License
 
-AGPL-3.0. Les modèles VRM et les images ne sont pas inclus — respecte la licence de
-chaque modèle que tu utilises.
+AGPL-3.0. VRM models and images are not included — respect the license of every model you use.

@@ -52,7 +52,7 @@ export type ChatEvent =
   | { type: 'delta'; text: string }
   | { type: 'tool'; name: string; args: string; result: string }
   | { type: 'done'; message: ChatMessage }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; partial?: ChatMessage } // partial = message sauvegardé malgré l'erreur
 
 export const EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'surprised', 'relaxed'] as const
 export type Emotion = (typeof EMOTIONS)[number]

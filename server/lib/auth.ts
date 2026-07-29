@@ -1,4 +1,5 @@
 // Authentification par mot de passe unique (réglage `password` ; vide = accès libre, usage local).
+// Le token de session est OPAQUE (aléatoire, en mémoire) — jamais le mot de passe lui-même.
 import crypto from 'node:crypto'
 import { Router } from 'express'
 import type { NextFunction, Request, Response } from 'express'
@@ -11,7 +12,24 @@ function safeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(ha, hb)
 }
 
-/** Garde /api/* : si un mot de passe est défini, exige "Authorization: Bearer <password>". */
+// Tokens de session émis par /api/login. En mémoire uniquement : un redémarrage
+// du serveur déconnecte tout le monde (les clients repassent par le LoginGate).
+const validTokens = new Set<string>()
+const MAX_TOKENS = 200
+
+/** Révoque toutes les sessions — appelé quand le mot de passe change (PUT /api/settings). */
+export function revokeAllTokens(): void {
+  validTokens.clear()
+}
+
+function isValidToken(token: string): boolean {
+  for (const known of validTokens) {
+    if (safeEqual(token, known)) return true
+  }
+  return false
+}
+
+/** Garde /api/* : si un mot de passe est défini, exige "Authorization: Bearer <token de session>". */
 export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
   const { password } = loadSettings()
   if (!password) {
@@ -20,7 +38,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   }
   const header = req.header('authorization') ?? ''
   const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : ''
-  if (token && safeEqual(token, password)) {
+  if (token && isValidToken(token)) {
     next()
     return
   }
@@ -29,13 +47,20 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 
 export const loginRouter = Router()
 
-// POST /api/login {password} → {token} (le token EST le mot de passe) ou 401.
+// POST /api/login {password} → {token} (opaque, aléatoire) ou 401.
 loginRouter.post('/api/login', (req, res) => {
   const { password } = loadSettings()
   const body = (req.body ?? {}) as { password?: unknown }
   const provided = typeof body.password === 'string' ? body.password : ''
   if (!password || safeEqual(provided, password)) {
-    res.json({ token: password })
+    const token = crypto.randomBytes(32).toString('hex')
+    // Borne de sécurité : on évince la session la plus ancienne au-delà du plafond.
+    if (validTokens.size >= MAX_TOKENS) {
+      const oldest = validTokens.values().next().value
+      if (oldest !== undefined) validTokens.delete(oldest)
+    }
+    validTokens.add(token)
+    res.json({ token })
     return
   }
   res.status(401).json({ error: 'Mot de passe incorrect' })

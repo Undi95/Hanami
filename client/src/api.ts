@@ -1,5 +1,6 @@
 // Couche API — tous les appels HTTP du client passent par ici.
-// Le token (= mot de passe) est envoyé en Authorization sur toutes les requêtes.
+// Le token de session (opaque, émis par /api/login) est envoyé en Authorization
+// sur toutes les requêtes.
 import type {
   CharacterFull,
   CharacterMeta,
@@ -9,6 +10,7 @@ import type {
   MemoryFile,
   Settings,
 } from '../../shared/types'
+import { translate as t } from './i18n'
 
 const TOKEN_KEY = 'hanami_token'
 
@@ -24,7 +26,7 @@ export function setToken(token: string | null): void {
 /** 401 du serveur → l'App affiche l'écran de connexion. */
 export class AuthRequiredError extends Error {
   constructor() {
-    super('Authentification requise')
+    super(t('authRequired'))
     this.name = 'AuthRequiredError'
   }
 }
@@ -49,7 +51,8 @@ function authHeaders(): Record<string, string> {
 
 async function throwFromResponse(res: Response): Promise<never> {
   if (res.status === 401) throw new AuthRequiredError()
-  let message = `Erreur serveur (${res.status})`
+  // Un message d'erreur renvoyé par le serveur est affiché tel quel (jamais traduit).
+  let message = t('serverError', { status: res.status })
   try {
     const data = (await res.json()) as { error?: string }
     if (data.error) message = data.error
@@ -71,7 +74,7 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
   } catch {
-    throw new ApiError('Serveur Hanami injoignable', 0)
+    throw new ApiError(t('serverUnreachable'), 0)
   }
   if (!res.ok) return throwFromResponse(res)
   return (await res.json()) as T
@@ -87,7 +90,7 @@ async function reqRaw<T>(url: string, file: Blob): Promise<T> {
       body: file,
     })
   } catch {
-    throw new ApiError('Serveur Hanami injoignable', 0)
+    throw new ApiError(t('serverUnreachable'), 0)
   }
   if (!res.ok) return throwFromResponse(res)
   return (await res.json()) as T
@@ -104,9 +107,9 @@ export async function login(password: string): Promise<string> {
       body: JSON.stringify({ password }),
     })
   } catch {
-    throw new ApiError('Serveur Hanami injoignable', 0)
+    throw new ApiError(t('serverUnreachable'), 0)
   }
-  if (res.status === 401) throw new ApiError('Mot de passe incorrect', 401)
+  if (res.status === 401) throw new ApiError(t('wrongPassword'), 401)
   if (!res.ok) return throwFromResponse(res)
   const { token } = (await res.json()) as { token: string }
   setToken(token)
@@ -115,16 +118,29 @@ export async function login(password: string): Promise<string> {
 
 // ── Réglages ───────────────────────────────────────────────────────────────
 
-export function getSettings(): Promise<Settings> {
+// Le serveur ne renvoie JAMAIS les secrets en clair : password/apiKey arrivent
+// vides, accompagnés d'indicateurs de présence. Type local (shared/types.ts intact).
+export type SettingsView = Settings & { passwordSet: boolean; apiKeySet: boolean }
+
+// Sentinelle du PUT : '' = secret inchangé, CLEAR_SECRET = secret effacé (contrat serveur).
+export const CLEAR_SECRET = '__clear__'
+
+export function getSettings(): Promise<SettingsView> {
   return req('GET', '/api/settings')
 }
 
-export function putSettings(patch: Partial<Settings>): Promise<Settings> {
+export function putSettings(patch: Partial<Settings>): Promise<SettingsView> {
   return req('PUT', '/api/settings', patch)
 }
 
 export async function getModels(): Promise<string[]> {
   const r = await req<{ models: string[] }>('GET', '/api/settings/models')
+  return r.models
+}
+
+/** Teste un backend avec des valeurs de formulaire SANS les persister (champs absents = réglages enregistrés). */
+export async function testModels(input: { backendUrl?: string; apiKey?: string }): Promise<string[]> {
+  const r = await req<{ models: string[] }>('POST', '/api/settings/models', input)
   return r.models
 }
 
@@ -253,10 +269,10 @@ export async function streamChat(opts: StreamChatOptions): Promise<void> {
     })
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e
-    throw new ApiError('Serveur Hanami injoignable', 0)
+    throw new ApiError(t('serverUnreachable'), 0)
   }
   if (!res.ok) return throwFromResponse(res)
-  if (!res.body) throw new ApiError('Flux de réponse indisponible', 0)
+  if (!res.body) throw new ApiError(t('streamUnavailable'), 0)
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
@@ -268,7 +284,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<void> {
       try {
         opts.onEvent(JSON.parse(line.slice(6)) as ChatEvent)
       } catch (e) {
-        console.error('[chat] événement SSE illisible', e)
+        console.error('[chat] unreadable SSE event', e)
       }
     }
   }

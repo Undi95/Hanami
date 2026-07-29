@@ -1,4 +1,5 @@
 // Barre compacte : nom du personnage actif + boutons icônes vers les dialogs.
+import { useI18n } from '../i18n'
 
 export type DialogKind = 'chats' | 'characters' | 'memory' | 'import' | 'inspector' | 'settings'
 
@@ -20,16 +21,17 @@ function Icon({ d, extra }: { d: string; extra?: React.ReactNode }) {
 }
 
 export default function TopBar({ characterName, chatTitle, hasCharacter, hasChat, onOpen }: Props) {
+  const { t } = useI18n()
   const buttons: { kind: DialogKind; title: string; disabled: boolean; icon: React.ReactNode }[] = [
     {
       kind: 'chats',
-      title: 'Conversations',
+      title: t('chats'),
       disabled: !hasCharacter,
       icon: <Icon d="M4.5 5h15v11h-11l-4 3.5z" />,
     },
     {
       kind: 'characters',
-      title: 'Personnages',
+      title: t('characters'),
       disabled: false,
       icon: (
         <Icon
@@ -45,19 +47,19 @@ export default function TopBar({ characterName, chatTitle, hasCharacter, hasChat
     },
     {
       kind: 'memory',
-      title: 'Mémoire',
+      title: t('memory'),
       disabled: !hasCharacter,
       icon: <Icon d="M5 19.5V6a2 2 0 012-2h12v14H7a1.8 1.8 0 000 3.6h12M8 8h7M8 11.5h5" />,
     },
     {
       kind: 'import',
-      title: 'Importer (SillyTavern)',
+      title: t('importMenu'),
       disabled: false,
       icon: <Icon d="M12 3.5V13m0 0l-3.8-3.8M12 13l3.8-3.8M4.5 16.5v2a2 2 0 002 2h11a2 2 0 002-2v-2" />,
     },
     {
       kind: 'inspector',
-      title: 'Inspecteur de prompt',
+      title: t('promptInspectorTitle'),
       disabled: !hasChat,
       icon: (
         <Icon
@@ -68,7 +70,7 @@ export default function TopBar({ characterName, chatTitle, hasCharacter, hasChat
     },
     {
       kind: 'settings',
-      title: 'Réglages',
+      title: t('settings'),
       disabled: false,
       icon: (
         <Icon
@@ -85,7 +87,7 @@ export default function TopBar({ characterName, chatTitle, hasCharacter, hasChat
         <div className="topbar-name">{characterName}</div>
         {chatTitle && <div className="topbar-sub">{chatTitle}</div>}
       </div>
-      <nav aria-label="Menus">
+      <nav aria-label={t('menus')}>
         {buttons.map((b) => (
           <button
             key={b.kind}

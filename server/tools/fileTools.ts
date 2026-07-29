@@ -3,6 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Settings } from '../../shared/types'
+import { DATA_DIR, ROOT } from '../lib/storage'
 
 const READ_CAP = 256 * 1024 // 256 Ko
 
@@ -92,7 +93,23 @@ function requireString(args: Record<string, unknown>, field: string): string {
 
 /** Racine réelle de la sandbox (créée au besoin, symlinks résolus). */
 function sandboxRoot(settings: Settings): string {
+  // Défense en profondeur (loadSettings valide déjà) : une racine vide ou relative
+  // retomberait sur le cwd, c'est-à-dire la racine du projet.
+  if (typeof settings.toolsRoot !== 'string' || !settings.toolsRoot.trim() || !path.isAbsolute(settings.toolsRoot)) {
+    throw new Error('toolsRoot invalide : un chemin absolu est requis dans les réglages')
+  }
   const root = path.resolve(settings.toolsRoot)
+  // Refuse la racine projet, data/ et tout ancêtre de ceux-ci : le modèle pourrait
+  // sinon lire data/config.json ou écrire dans server/.
+  const norm = (s: string) => (process.platform === 'win32' ? s.toLowerCase() : s)
+  for (const forbidden of [ROOT, DATA_DIR]) {
+    const f = path.resolve(forbidden)
+    if (norm(root) === norm(f) || isInside(norm(root), norm(f))) {
+      throw new Error(
+        `toolsRoot invalide : ${root} englobe les fichiers de l'app — choisis un dossier dédié (ex. data/workspace)`,
+      )
+    }
+  }
   fs.mkdirSync(root, { recursive: true })
   return fs.realpathSync(root)
 }
@@ -103,21 +120,28 @@ function isInside(root: string, candidate: string): boolean {
 
 /**
  * Résout `p` contre la racine et refuse toute sortie de sandbox.
- * Anti-symlink : le chemin réel (realpathSync) du plus proche ancêtre existant
- * — ou du fichier lui-même s'il existe — doit rester dans la racine.
+ * Anti-symlink : les ancêtres sont sondés via lstat (qui ne suit PAS les liens,
+ * contrairement à existsSync qui rend false sur un lien cassé) ; le plus proche
+ * ancêtre existant est résolu en chemin réel (realpathSync), le chemin cible est
+ * reconstruit dessus et re-vérifié contre la racine. Le composant final ne doit
+ * pas être un lien symbolique, même cassé.
  */
 function resolveSafe(root: string, p: string): string {
   const resolved = path.resolve(root, p)
   if (!isInside(root, resolved)) throw new Error(`chemin hors du dossier autorisé : ${p}`)
-  let probe = resolved
-  while (!fs.existsSync(probe)) {
+  if (fs.lstatSync(resolved, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    throw new Error(`chemin hors du dossier autorisé (lien symbolique) : ${p}`)
+  }
+  let probe = path.dirname(resolved)
+  while (!fs.lstatSync(probe, { throwIfNoEntry: false })) {
     const up = path.dirname(probe)
     if (up === probe) break
     probe = up
   }
-  const real = fs.realpathSync(probe)
-  if (!isInside(root, real)) throw new Error(`chemin hors du dossier autorisé (lien symbolique) : ${p}`)
-  return resolved
+  const realDir = fs.realpathSync(probe)
+  const target = path.join(realDir, path.relative(probe, resolved))
+  if (!isInside(root, target)) throw new Error(`chemin hors du dossier autorisé (lien symbolique) : ${p}`)
+  return target
 }
 
 /** Exécute un outil fichier ; renvoie une chaîne courte pour le modèle. Erreurs → throw. */

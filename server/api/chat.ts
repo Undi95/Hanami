@@ -14,7 +14,8 @@ import type { ChatEvent, ChatMessage, Settings } from '../../shared/types'
 export const chatRouter = Router()
 
 const MAX_TOOL_ITERATIONS = 6
-const EMOTION_RE = /^\s*\[(neutral|happy|sad|angry|surprised|relaxed)\]/i
+// Non ancrée : première occurrence n'importe où, comme extractEmotion côté client.
+const EMOTION_RE = /\[(neutral|happy|sad|angry|surprised|relaxed)\]/i
 
 interface BackendPayload {
   messages: unknown[]
@@ -107,6 +108,12 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     return
   }
 
+  // Payload construit AVANT la sauvegarde : le message courant passe par pendingUserContent,
+  // sinon il consommerait un slot d'historique (et ne serait jamais envoyé si
+  // maxHistoryMessages = 0).
+  const { payload } = buildPayload(characterId, chatId, settings, content)
+  const messages = payload.messages as Record<string, unknown>[]
+
   // Le message user est sauvegardé AVANT l'appel backend : il survit à toute erreur en aval.
   appendChatMessage(characterId, chatId, { role: 'user', content, ts: new Date().toISOString() })
 
@@ -123,22 +130,44 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   })
 
   let assistantText = ''
+
+  // Un appel streaming. Entre deux itérations, un séparateur "\n\n" est inséré dans le texte
+  // ET émis comme delta : le flux affiché et le texte sauvegardé restent identiques.
+  const streamOnce = (withTools: boolean) => {
+    let firstDelta = true
+    return streamChatCompletion({
+      settings,
+      messages,
+      tools: withTools ? payload.tools : undefined,
+      signal: abort.signal,
+      onDelta: (text) => {
+        if (firstDelta) {
+          firstDelta = false
+          if (assistantText.length > 0) {
+            assistantText += '\n\n'
+            writeEvent(res, { type: 'delta', text: '\n\n' })
+          }
+        }
+        assistantText += text
+        writeEvent(res, { type: 'delta', text })
+      },
+    })
+  }
+
   try {
-    const { payload } = buildPayload(characterId, chatId, settings)
-    const messages = payload.messages as Record<string, unknown>[]
+    let truncated = false
+    let finishReason = ''
+    let pendingTools = false
 
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
-      const result = await streamChatCompletion({
-        settings,
-        messages,
-        tools: payload.tools,
-        signal: abort.signal,
-        onDelta: (text) => {
-          assistantText += text
-          writeEvent(res, { type: 'delta', text })
-        },
-      })
-      if (result.toolCalls.length === 0) break
+      const result = await streamOnce(true)
+      truncated = result.truncated
+      finishReason = result.finishReason
+      if (result.toolCalls.length === 0) {
+        pendingTools = false
+        break
+      }
+      pendingTools = true
 
       // Trace fidèle de l'aller-retour outil dans le contexte de la boucle.
       messages.push({
@@ -162,10 +191,33 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       }
     }
 
+    if (pendingTools) {
+      // Budget d'itérations épuisé alors que le modèle demande encore des outils :
+      // un dernier appel SANS outils pour obtenir la réponse finale.
+      const result = await streamOnce(false)
+      truncated = result.truncated
+      finishReason = result.finishReason
+      if (assistantText.length === 0) {
+        // Rien à sauvegarder : pas de message vide, pas de done.
+        writeEvent(res, { type: 'error', message: "Budget d'outils épuisé sans réponse du modèle" })
+        res.end()
+        return
+      }
+    }
+
     // Contenu INTÉGRAL, tel que généré (le tag d'émotion reste dans le texte).
     const message = toAssistantMessage(assistantText)
     appendChatMessage(characterId, chatId, message)
     writeEvent(res, { type: 'done', message })
+    // Signalé APRÈS la sauvegarde et le done : le client affiche la bulle d'erreur discrète.
+    if (truncated || finishReason === 'length') {
+      writeEvent(res, {
+        type: 'error',
+        message: truncated
+          ? 'Réponse probablement tronquée (flux interrompu avant la fin)'
+          : 'Réponse coupée (max_tokens atteint)',
+      })
+    }
     res.end()
   } catch (e) {
     if (abort.signal.aborted) {
@@ -181,7 +233,14 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       return
     }
     const message = e instanceof Error ? e.message : String(e)
-    writeEvent(res, { type: 'error', message })
+    if (assistantText.length > 0) {
+      // Erreur mi-flux : le partiel déjà affiché côté client est sauvegardé, et joint à l'événement.
+      const partial = toAssistantMessage(assistantText)
+      appendChatMessage(characterId, chatId, partial)
+      writeEvent(res, { type: 'error', message, partial })
+    } else {
+      writeEvent(res, { type: 'error', message })
+    }
     res.end()
   }
 }

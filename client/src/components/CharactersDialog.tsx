@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import type { CharacterFull, CharacterMeta } from '../../../shared/types'
 import * as api from '../api'
+import { useI18n } from '../i18n'
 import Dialog from './Dialog'
 
 interface Props {
@@ -38,8 +39,11 @@ export function pastilleHue(id: string): number {
 }
 
 export default function CharactersDialog({ characters, activeId, onSelect, onCreated, onUpdated, onDeleted, onClose }: Props) {
+  const { t } = useI18n()
   const [view, setView] = useState<View>({ kind: 'list' })
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  // État initial du formulaire (création ou édition) — sert à détecter les saisies non enregistrées.
+  const [initialForm, setInitialForm] = useState<FormState>(EMPTY_FORM)
   const [vrms, setVrms] = useState<string[]>([])
   const [bgs, setBgs] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
@@ -48,8 +52,8 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
 
   useEffect(() => {
     if (view.kind === 'list') return
-    api.getVrmModels().then(setVrms).catch((e) => console.error('[persos]', e))
-    api.getBackgrounds().then(setBgs).catch((e) => console.error('[persos]', e))
+    api.getVrmModels().then(setVrms).catch((e) => console.error('[characters]', e))
+    api.getBackgrounds().then(setBgs).catch((e) => console.error('[characters]', e))
   }, [view.kind])
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -59,6 +63,7 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
   function backToList() {
     setView({ kind: 'list' })
     setForm(EMPTY_FORM)
+    setInitialForm(EMPTY_FORM)
     setError(null)
     setArmed(false)
   }
@@ -68,16 +73,22 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
     setArmed(false)
     try {
       const c = await api.getCharacter(id)
-      setForm({ name: c.name, vrm: c.vrm, background: c.background, greeting: c.greeting, systemPrompt: c.systemPrompt })
+      const f: FormState = { name: c.name, vrm: c.vrm, background: c.background, greeting: c.greeting, systemPrompt: c.systemPrompt }
+      setForm(f)
+      setInitialForm(f)
       setView({ kind: 'edit', id })
     } catch (e) {
       setError(api.errorMessage(e))
     }
   }
 
+  // Saisies non enregistrées dans le formulaire de création/édition.
+  const dirty =
+    view.kind !== 'list' && (Object.keys(form) as (keyof FormState)[]).some((k) => form[k] !== initialForm[k])
+
   async function submit() {
     if (!form.name.trim()) {
-      setError('Le nom est requis.')
+      setError(t('nameRequired'))
       return
     }
     setBusy(true)
@@ -128,25 +139,27 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
     }
   }
 
-  const title = view.kind === 'list' ? 'Personnages' : view.kind === 'create' ? 'Nouveau personnage' : 'Modifier le personnage'
+  const title =
+    view.kind === 'list' ? t('characters') : view.kind === 'create' ? t('newCharacter') : t('editCharacter')
 
   return (
     <Dialog
       title={title}
       onClose={onClose}
+      guardClose={() => !dirty || window.confirm(t('unsavedConfirm'))}
       wide={view.kind === 'edit'}
       footer={
         view.kind === 'list' ? (
           <button className="btn primary" onClick={() => setView({ kind: 'create' })}>
-            Nouveau personnage
+            {t('newCharacter')}
           </button>
         ) : (
           <>
             <button className="btn" onClick={backToList} disabled={busy}>
-              Annuler
+              {t('cancel')}
             </button>
-            <button className="btn primary" onClick={() => submit().catch((e) => console.error('[persos]', e))} disabled={busy}>
-              {busy ? 'Enregistrement…' : view.kind === 'create' ? 'Créer' : 'Enregistrer'}
+            <button className="btn primary" onClick={() => submit().catch((e) => console.error('[characters]', e))} disabled={busy}>
+              {busy ? t('saving') : view.kind === 'create' ? t('create') : t('save')}
             </button>
           </>
         )
@@ -156,7 +169,7 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
 
       {view.kind === 'list' && (
         characters.length === 0 ? (
-          <p className="hint">Aucun personnage. Créez-en un, ou importez une carte SillyTavern via le menu Importer.</p>
+          <p className="hint">{t('charactersEmpty')}</p>
         ) : (
           <div className="char-grid">
             {characters.map((c) => (
@@ -169,10 +182,10 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
                   className="btn small"
                   onClick={(e) => {
                     e.stopPropagation()
-                    openEdit(c.id).catch((err) => console.error('[persos]', err))
+                    openEdit(c.id).catch((err) => console.error('[characters]', err))
                   }}
                 >
-                  Modifier
+                  {t('edit')}
                 </button>
               </div>
             ))}
@@ -183,14 +196,14 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
       {view.kind !== 'list' && (
         <>
           <div className="field">
-            <label htmlFor="char-name">Nom</label>
+            <label htmlFor="char-name">{t('name')}</label>
             <input id="char-name" type="text" value={form.name} onChange={(e) => set('name', e.target.value)} autoFocus />
           </div>
           <div className="grid-2">
             <div className="field">
-              <label htmlFor="char-vrm">Modèle 3D (VRM)</label>
+              <label htmlFor="char-vrm">{t('vrmModel')}</label>
               <select id="char-vrm" value={form.vrm} onChange={(e) => set('vrm', e.target.value)}>
-                <option value="">Aucun modèle</option>
+                <option value="">{t('noModel')}</option>
                 {form.vrm && !vrms.includes(form.vrm) && <option value={form.vrm}>{basename(form.vrm)}</option>}
                 {vrms.map((v) => (
                   <option key={v} value={v}>
@@ -200,9 +213,9 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
               </select>
             </div>
             <div className="field">
-              <label htmlFor="char-bg">Fond</label>
+              <label htmlFor="char-bg">{t('background')}</label>
               <select id="char-bg" value={form.background} onChange={(e) => set('background', e.target.value)}>
-                <option value="">Dégradé par défaut</option>
+                <option value="">{t('defaultGradient')}</option>
                 {form.background && !bgs.includes(form.background) && (
                   <option value={form.background}>{basename(form.background)}</option>
                 )}
@@ -215,19 +228,19 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
             </div>
           </div>
           <div className="field">
-            <label htmlFor="char-greeting">Message d'accueil</label>
+            <label htmlFor="char-greeting">{t('greeting')}</label>
             <textarea
               id="char-greeting"
               value={form.greeting}
               onChange={(e) => set('greeting', e.target.value)}
-              placeholder="[happy] Bonjour ! …"
+              placeholder={t('greetingPlaceholder')}
             />
-            <span className="hint">Affiché en première bulle d'un nouveau chat — jamais envoyé au backend.</span>
+            <span className="hint">{t('greetingHint')}</span>
           </div>
           {view.kind === 'edit' && (
             <>
               <div className="field">
-                <label htmlFor="char-prompt">Prompt système</label>
+                <label htmlFor="char-prompt">{t('systemPrompt')}</label>
                 <textarea
                   id="char-prompt"
                   className="mono"
@@ -237,17 +250,13 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
                 />
               </div>
               <div className="danger-zone">
-                <p className="warn-text">
-                  {armed
-                    ? 'Dernière chance : cette action supprime le personnage, ses chats et sa mémoire. Irréversible.'
-                    : 'Supprimer ce personnage supprime aussi tous ses chats et sa mémoire.'}
-                </p>
-                <button className="btn danger" onClick={() => remove().catch((e) => console.error('[persos]', e))} disabled={busy}>
-                  {armed ? 'Confirmer la suppression' : 'Supprimer le personnage'}
+                <p className="warn-text">{armed ? t('deleteCharacterArmed') : t('deleteCharacterWarn')}</p>
+                <button className="btn danger" onClick={() => remove().catch((e) => console.error('[characters]', e))} disabled={busy}>
+                  {armed ? t('confirmDelete') : t('deleteCharacter')}
                 </button>
                 {armed && (
                   <button className="btn small" style={{ marginLeft: 8 }} onClick={() => setArmed(false)}>
-                    Annuler
+                    {t('cancel')}
                   </button>
                 )}
               </div>

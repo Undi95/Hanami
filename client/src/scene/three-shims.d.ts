@@ -13,8 +13,17 @@ declare module 'three' {
     z: number
     constructor(x?: number, y?: number, z?: number)
     set(x: number, y: number, z: number): this
+    setScalar(scalar: number): this
+    multiplyScalar(scalar: number): this
     copy(v: Vector3): this
     clone(): Vector3
+  }
+
+  export class Box3 {
+    min: Vector3
+    max: Vector3
+    constructor(min?: Vector3, max?: Vector3)
+    setFromObject(object: Object3D, precise?: boolean): this
   }
 
   export class Euler {
@@ -32,6 +41,7 @@ declare module 'three' {
     name: string
     position: Vector3
     rotation: Euler
+    scale: Vector3
     visible: boolean
     parent: Object3D | null
     children: Object3D[]
@@ -50,6 +60,8 @@ declare module 'three' {
     constructor(fov?: number, aspect?: number, near?: number, far?: number)
     fov: number
     aspect: number
+    near: number
+    far: number
     updateProjectionMatrix(): void
   }
 

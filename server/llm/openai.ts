@@ -11,6 +11,7 @@ export interface StreamChatResult {
   content: string
   toolCalls: StreamedToolCall[]
   finishReason: string
+  truncated: boolean // fin de flux sans [DONE] ni finish_reason — réponse probablement incomplète
 }
 
 interface SseDelta {
@@ -57,14 +58,17 @@ export async function streamChatCompletion(opts: {
 
   let content = ''
   const toolCalls: StreamedToolCall[] = []
+  let currentSlot = -1 // slot du dernier tool_call vu — cible des fragments sans index
   let finishReason = ''
   let done = false
+  let parsedChunk = false
 
   const processLine = (rawLine: string): void => {
-    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
-    if (!line.startsWith('data: ')) return
-    const payload = line.slice('data: '.length).trim()
+    // "data:" sans espace accepté (certains backends compat collent le payload).
+    if (!rawLine.startsWith('data:')) return
+    const payload = rawLine.slice('data:'.length).trim()
     if (payload === '[DONE]') {
+      parsedChunk = true
       done = true
       return
     }
@@ -74,6 +78,7 @@ export async function streamChatCompletion(opts: {
     } catch {
       return // ligne partielle ou bruit — ignorée
     }
+    parsedChunk = true
     const choice = chunk.choices?.[0]
     if (!choice) return
     const delta = choice.delta ?? {}
@@ -83,9 +88,20 @@ export async function streamChatCompletion(opts: {
     }
     if (Array.isArray(delta.tool_calls)) {
       for (const tc of delta.tool_calls) {
-        const i = typeof tc.index === 'number' ? tc.index : 0
-        while (toolCalls.length <= i) toolCalls.push({ id: '', name: '', arguments: '' })
-        const slot = toolCalls[i]
+        if (typeof tc.index === 'number') {
+          // Backend conforme : slot désigné par index.
+          while (toolCalls.length <= tc.index) toolCalls.push({ id: '', name: '', arguments: '' })
+          currentSlot = tc.index
+        } else if (tc.id && (currentSlot < 0 || toolCalls[currentSlot].id !== tc.id)) {
+          // Pas d'index mais un id nouveau : on ouvre un nouveau slot.
+          toolCalls.push({ id: '', name: '', arguments: '' })
+          currentSlot = toolCalls.length - 1
+        } else if (currentSlot < 0) {
+          // Fragment sans index ni id avant tout slot : slot initial.
+          toolCalls.push({ id: '', name: '', arguments: '' })
+          currentSlot = 0
+        }
+        const slot = toolCalls[currentSlot]
         if (tc.id) slot.id = tc.id
         if (tc.function?.name) slot.name = tc.function.name
         if (typeof tc.function?.arguments === 'string') slot.arguments += tc.function.arguments
@@ -99,15 +115,17 @@ export async function streamChatCompletion(opts: {
   const reader = res.body.getReader()
   const decoder = new TextDecoder('utf-8')
   let buffer = ''
+  let sawRaw = false
   while (!done) {
     const { done: eof, value } = await reader.read()
     if (eof) break
+    if (value && value.length > 0) sawRaw = true
     buffer += decoder.decode(value, { stream: true })
-    let nl: number
-    while (!done && (nl = buffer.indexOf('\n')) !== -1) {
-      const line = buffer.slice(0, nl)
-      buffer = buffer.slice(nl + 1)
-      processLine(line)
+    const parts = buffer.split(/\r?\n/)
+    buffer = parts.pop() ?? ''
+    for (const part of parts) {
+      processLine(part)
+      if (done) break
     }
   }
   if (!done && buffer.length > 0) processLine(buffer)
@@ -119,5 +137,20 @@ export async function streamChatCompletion(opts: {
     }
   }
 
-  return { content, toolCalls: toolCalls.filter((t) => t.name !== ''), finishReason }
+  // Du flux brut reçu mais pas un seul chunk SSE exploitable : réponse non-SSE ou corrompue.
+  if (sawRaw && !parsedChunk) {
+    throw new Error('Backend LLM : flux reçu mais aucun chunk SSE exploitable')
+  }
+  // Fin sans [DONE] ni finish_reason : troncature probable, signalée à l'appelant (pas de throw,
+  // certains backends compat terminent légitimement sans [DONE] mais avec un finish_reason).
+  const truncated = !done && finishReason === ''
+
+  return {
+    content,
+    toolCalls: toolCalls
+      .filter((t) => t.name !== '')
+      .map((t, i) => ({ ...t, id: t.id || 'call_fallback_' + i })),
+    finishReason,
+    truncated,
+  }
 }

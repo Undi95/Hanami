@@ -6,7 +6,7 @@ import type { Euler, Object3D } from 'three'
 import type { VRM, VRMExpressionManager, VRMHumanBoneName } from '@pixiv/three-vrm'
 import type { Emotion } from '../../../shared/types'
 import { EMOTION_EXPRESSIONS } from './emotionMap'
-import type { EmotionExpression } from './emotionMap'
+import type { CanonicalExpression, EmotionExpression, ExpressionTable } from './emotionMap'
 
 /** Os + pose de base (Euler) mémorisée juste après la pose anti T-pose. */
 export interface PosedBone {
@@ -54,9 +54,18 @@ export class IdleAnimator {
   private mouthFreq = 9 // Hz, retiré au hasard à chaque cycle (8–10)
   private mouthAmp = 0.4 // amplitude, retirée à chaque cycle (0.15–0.7)
 
+  // Table nom canonique → nom disponible sur le modèle (résolue au chargement
+  // par vrmStage). Expression absente = no-op silencieux, sans warn par frame.
+  private expressions: ExpressionTable = new Map()
+
   setEmotion(emotion: Emotion): void {
     this.emotion = emotion
     this.emotionSetAt = this.t
+  }
+
+  /** Table de résolution des expressions du modèle courant (cf. emotionMap). */
+  setExpressionTable(table: ExpressionTable): void {
+    this.expressions = table
   }
 
   setSpeaking(speaking: boolean): void {
@@ -80,9 +89,23 @@ export class IdleAnimator {
     this.updateBones(bones)
     const manager = vrm?.expressionManager
     if (!manager) return // pas de modèle, ou modèle sans expressions : os seulement
-    this.updateBlink(manager, dt)
+    // Émotion d'abord : le clignement atténue selon les poids de CETTE frame.
     this.updateEmotion(manager, dt)
+    this.updateBlink(manager, dt)
     this.updateMouth(manager, dt)
+  }
+
+  /** setValue via la table de résolution ; expression non résolue = no-op. */
+  private setExpr(manager: VRMExpressionManager, name: CanonicalExpression, value: number): void {
+    const resolved = this.expressions.get(name)
+    if (resolved !== undefined) manager.setValue(resolved, value)
+  }
+
+  // Poids oculaire courant : ces émotions ferment ou plissent les paupières ;
+  // un clignement plein par-dessus fait clipper les VRM 0.x sans overrideBlink.
+  private ocularWeight(): number {
+    const w = this.weights
+    return Math.max(w.happy, w.relaxed, w.angry, w.sad)
   }
 
   // ── Respiration + sway ───────────────────────────────────────────────────
@@ -125,7 +148,7 @@ export class IdleAnimator {
       this.blinkElapsed += dt
       const p = this.blinkElapsed / BLINK_DURATION
       if (p >= 1) {
-        manager.setValue('blink', 0)
+        this.setExpr(manager, 'blink', 0)
         this.blinkElapsed = -1
         if (this.doubleBlink) {
           this.doubleBlink = false
@@ -135,11 +158,19 @@ export class IdleAnimator {
         }
       } else {
         const v = p < 0.5 ? p * 2 : (1 - p) * 2
-        manager.setValue('blink', Math.min(1, Math.max(0, v)))
+        // Atténué par le poids oculaire de l'émotion (sinon les paupières
+        // clippent sur les VRM 0.x sans overrideBlink). Émotion neutre : ×1.
+        const damped = Math.min(1, Math.max(0, v)) * (1 - this.ocularWeight())
+        this.setExpr(manager, 'blink', damped)
       }
     } else if (this.t >= this.nextBlinkAt) {
-      this.blinkElapsed = 0
-      if (!this.doubleBlink) this.doubleBlink = Math.random() < 0.2
+      if (this.ocularWeight() > 0.5) {
+        // Yeux déjà très pilotés par l'émotion : on reporte le clignement.
+        this.nextBlinkAt = this.t + 1 + Math.random() * 2
+      } else {
+        this.blinkElapsed = 0
+        if (!this.doubleBlink) this.doubleBlink = Math.random() < 0.2
+      }
     }
   }
 
@@ -153,7 +184,7 @@ export class IdleAnimator {
     for (const name of EMOTION_EXPRESSIONS) {
       const target = name === this.emotion ? 1 : 0
       this.weights[name] = moveTowards(this.weights[name], target, step)
-      manager.setValue(name, this.weights[name])
+      this.setExpr(manager, name, this.weights[name])
     }
   }
 
@@ -172,6 +203,6 @@ export class IdleAnimator {
     } else if (this.mouth > 0) {
       this.mouth = moveTowards(this.mouth, 0, dt / MOUTH_DECAY)
     }
-    manager.setValue('aa', this.mouth)
+    this.setExpr(manager, 'aa', this.mouth)
   }
 }

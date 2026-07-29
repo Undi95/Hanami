@@ -5,6 +5,8 @@ export default defineConfig({
   root: 'client',
   plugins: [react()],
   build: { outDir: '../dist', emptyOutDir: true },
+  // L'endpoint dev /@fs/ ne doit JAMAIS servir data/ (config, chats, mémoire).
+  server: { fs: { deny: ['**/data/**'] } },
   // Mode middleware (serveur Express) : sans dédup explicite, react peut être
   // résolu en double (copie pré-bundlée + copie brute) → « Invalid hook call ».
   resolve: { dedupe: ['react', 'react-dom'] },

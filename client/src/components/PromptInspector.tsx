@@ -1,6 +1,7 @@
 // Inspecteur de prompt : montre EXACTEMENT ce que Hanami envoie au backend.
 import { useEffect, useState } from 'react'
 import * as api from '../api'
+import { useI18n } from '../i18n'
 import Dialog from './Dialog'
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function PromptInspector({ characterId, chatId, onClose }: Props) {
+  const { t } = useI18n()
   const [data, setData] = useState<{ systemText: string; payload: object } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'system' | 'payload'>('system')
@@ -31,29 +33,29 @@ export default function PromptInspector({ characterId, chatId, onClose }: Props)
         setCopied(true)
         setTimeout(() => setCopied(false), 1500)
       })
-      .catch((e) => console.error('[copie]', e))
+      .catch((e) => console.error('[copy]', e))
   }
 
   return (
-    <Dialog title="Inspecteur de prompt" onClose={onClose} wide>
+    <Dialog title={t('promptInspectorTitle')} onClose={onClose} wide>
       <p className="hint" style={{ marginTop: 0 }}>
-        Ceci est exactement ce que Hanami envoie au backend — rien d'autre.
+        {t('promptInspectorNote')}
       </p>
       {error && <p className="msg-err">{error}</p>}
-      {data === null && !error && <p className="hint">Chargement…</p>}
+      {data === null && !error && <p className="hint">{t('loading')}</p>}
       {data && (
         <>
           <div className="tabs" role="tablist">
             <button className={`tab${tab === 'system' ? ' active' : ''}`} role="tab" aria-selected={tab === 'system'} onClick={() => setTab('system')}>
-              Prompt système
+              {t('systemPromptTab')}
             </button>
             <button className={`tab${tab === 'payload' ? ' active' : ''}`} role="tab" aria-selected={tab === 'payload'} onClick={() => setTab('payload')}>
-              Payload complet
+              {t('payloadTab')}
             </button>
           </div>
           <div className="row" style={{ justifyContent: 'flex-end', marginBottom: 8 }}>
             <button className="btn small" onClick={copy}>
-              {copied ? 'Copié !' : 'Copier'}
+              {copied ? t('copied') : t('copy')}
             </button>
           </div>
           <pre className="code-block">{current}</pre>

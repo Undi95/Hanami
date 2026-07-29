@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { MemoryFile } from '../../../shared/types'
 import * as api from '../api'
+import { useI18n } from '../i18n'
 import Dialog from './Dialog'
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function MemoryDialog({ characterId, onClose }: Props) {
+  const { t } = useI18n()
   const [files, setFiles] = useState<MemoryFile[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [content, setContent] = useState('')
@@ -59,7 +61,7 @@ export default function MemoryDialog({ characterId, onClose }: Props) {
     try {
       await api.updateMemoryFile(characterId, selected, content)
       setDirty(false)
-      setNote({ ok: true, text: 'Enregistré.' })
+      setNote({ ok: true, text: t('saved') })
       load(selected)
     } catch (e) {
       setNote({ ok: false, text: api.errorMessage(e) })
@@ -96,14 +98,13 @@ export default function MemoryDialog({ characterId, onClose }: Props) {
   }
 
   return (
-    <Dialog title="Mémoire" onClose={onClose} wide>
+    <Dialog title={t('memory')} onClose={onClose} guardClose={() => !dirty || window.confirm(t('unsavedConfirm'))} wide>
       <p className="hint" style={{ marginTop: 0 }}>
-        Ces fichiers sont injectés dans le contexte du personnage (si la mémoire est activée) et librement
-        éditables. MEMORY.md sert d'index.
+        {t('memoryHelp')}
       </p>
       {note && <p className={note.ok ? 'msg-ok' : 'msg-err'}>{note.text}</p>}
       {files === null ? (
-        <p className="hint">Chargement…</p>
+        <p className="hint">{t('loading')}</p>
       ) : (
         <div className="memory-layout">
           <div className="memory-files">
@@ -114,23 +115,23 @@ export default function MemoryDialog({ characterId, onClose }: Props) {
                 onClick={() => select(f)}
               >
                 <span className="item-title">{f.name}</span>
-                {f.name === 'MEMORY.md' && <span className="badge">index</span>}
+                {f.name === 'MEMORY.md' && <span className="badge">{t('indexBadge')}</span>}
               </button>
             ))}
             <div className="row" style={{ marginTop: 6 }}>
               <input
                 type="text"
                 value={newName}
-                placeholder="nouveau.md"
-                aria-label="Nom du nouveau fichier mémoire"
+                placeholder={t('newMemoryFilePlaceholder')}
+                aria-label={t('newMemoryFile')}
                 style={{ flex: 1, minWidth: 0 }}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') create().catch((err) => console.error('[mémoire]', err))
+                  if (e.key === 'Enter') create().catch((err) => console.error('[memory]', err))
                 }}
               />
-              <button className="btn small" onClick={() => create().catch((e) => console.error('[mémoire]', e))} disabled={!newName.trim()}>
-                Créer
+              <button className="btn small" onClick={() => create().catch((e) => console.error('[memory]', e))} disabled={!newName.trim()}>
+                {t('create')}
               </button>
             </div>
           </div>
@@ -141,7 +142,7 @@ export default function MemoryDialog({ characterId, onClose }: Props) {
                   className="mono memory-textarea"
                   value={content}
                   spellCheck={false}
-                  aria-label={`Contenu de ${selected}`}
+                  aria-label={t('memoryFileContent', { name: selected })}
                   onChange={(e) => {
                     setContent(e.target.value)
                     setDirty(true)
@@ -149,17 +150,17 @@ export default function MemoryDialog({ characterId, onClose }: Props) {
                 />
                 <div className="row" style={{ marginTop: 8, justifyContent: 'flex-end' }}>
                   {selected !== 'MEMORY.md' && (
-                    <button className={`btn small${armed ? ' danger' : ''}`} onClick={() => remove().catch((e) => console.error('[mémoire]', e))}>
-                      {armed ? 'Confirmer la suppression ?' : 'Supprimer'}
+                    <button className={`btn small${armed ? ' danger' : ''}`} onClick={() => remove().catch((e) => console.error('[memory]', e))}>
+                      {armed ? t('confirmDelete') : t('deleteFile')}
                     </button>
                   )}
-                  <button className="btn primary small" onClick={() => save().catch((e) => console.error('[mémoire]', e))} disabled={!dirty}>
-                    Enregistrer
+                  <button className="btn primary small" onClick={() => save().catch((e) => console.error('[memory]', e))} disabled={!dirty}>
+                    {t('save')}
                   </button>
                 </div>
               </>
             ) : (
-              <p className="hint">Aucun fichier mémoire.</p>
+              <p className="hint">{t('noMemoryFiles')}</p>
             )}
           </div>
         </div>

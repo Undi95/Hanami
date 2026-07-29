@@ -1,8 +1,10 @@
 // Écran de connexion (affiché quand le serveur répond 401).
 import { useState } from 'react'
 import * as api from '../api'
+import { useI18n } from '../i18n'
 
 export default function LoginGate({ onDone }: { onDone: () => void }) {
+  const { t } = useI18n()
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -33,18 +35,18 @@ export default function LoginGate({ onDone }: { onDone: () => void }) {
         <h1>
           Hanami <span>&#10047;</span>
         </h1>
-        <p className="hint">Cette instance est protégée par un mot de passe.</p>
+        <p className="hint">{t('loginHint')}</p>
         <input
           type="password"
           value={password}
-          placeholder="Mot de passe"
+          placeholder={t('password')}
           autoFocus
           autoComplete="current-password"
           onChange={(e) => setPassword(e.target.value)}
         />
         {error && <p className="msg-err">{error}</p>}
         <button className="btn primary" type="submit" disabled={busy || !password}>
-          {busy ? 'Connexion…' : 'Entrer'}
+          {busy ? t('loggingIn') : t('login')}
         </button>
       </form>
     </div>

@@ -1,7 +1,11 @@
 // Réglages : backend LLM, génération, mémoire/outils, mot de passe d'accès.
+// Les secrets (clé API, mot de passe) ne sont jamais renvoyés par le serveur :
+// les champs démarrent vides ('' = conserver la valeur configurée) et le bouton
+// « Retirer » envoie la sentinelle CLEAR_SECRET.
 import { useState } from 'react'
 import type { Settings } from '../../../shared/types'
 import * as api from '../api'
+import { isPlural, useI18n, type Lang } from '../i18n'
 import Dialog from './Dialog'
 
 interface Props {
@@ -28,7 +32,8 @@ interface FormState {
 function toForm(s: Settings): FormState {
   return {
     backendUrl: s.backendUrl,
-    apiKey: s.apiKey,
+    // Secrets jamais pré-remplis (le serveur les renvoie vides) : '' = inchangé.
+    apiKey: '',
     model: s.model,
     temperature: String(s.temperature),
     maxTokens: String(s.maxTokens),
@@ -37,18 +42,18 @@ function toForm(s: Settings): FormState {
     fileToolsEnabled: s.fileToolsEnabled,
     allowDelete: s.allowDelete,
     toolsRoot: s.toolsRoot,
-    password: s.password,
+    password: '',
   }
 }
 
-function fromForm(f: FormState, base: Settings): Partial<Settings> {
+function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassword: boolean): Partial<Settings> {
   const num = (v: string, fallback: number) => {
     const n = Number(v.replace(',', '.'))
     return Number.isFinite(n) ? n : fallback
   }
   return {
     backendUrl: f.backendUrl.trim(),
-    apiKey: f.apiKey,
+    apiKey: clearApiKey ? api.CLEAR_SECRET : f.apiKey,
     model: f.model.trim(),
     temperature: num(f.temperature, base.temperature),
     maxTokens: Math.round(num(f.maxTokens, base.maxTokens)),
@@ -57,7 +62,7 @@ function fromForm(f: FormState, base: Settings): Partial<Settings> {
     fileToolsEnabled: f.fileToolsEnabled,
     allowDelete: f.allowDelete,
     toolsRoot: f.toolsRoot.trim(),
-    password: f.password,
+    password: clearPassword ? api.CLEAR_SECRET : f.password,
   }
 }
 
@@ -85,16 +90,57 @@ function Toggle({
   )
 }
 
+/** Sélecteur segmenté de langue — préférence locale, appliquée immédiatement. */
+function LangSwitch({ lang, onPick, labels }: { lang: Lang; onPick: (l: Lang) => void; labels: Record<Lang, string> }) {
+  const options: Lang[] = ['fr', 'en']
+  return (
+    <div className="seg">
+      {options.map((code) => (
+        <button
+          key={code}
+          type="button"
+          className="seg-btn"
+          aria-pressed={lang === code}
+          onClick={() => onPick(code)}
+        >
+          {labels[code]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
+  const { lang, setLang, t } = useI18n()
   const [form, setForm] = useState<FormState>(() => toForm(settings))
+  const [initialForm] = useState<FormState>(() => toForm(settings))
+  // Demandes d'effacement des secrets (envoient la sentinelle au PUT).
+  const [clearApiKey, setClearApiKey] = useState(false)
+  const [clearPassword, setClearPassword] = useState(false)
   const [models, setModels] = useState<string[] | null>(null)
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Indicateurs de présence des secrets — la réponse serveur les porte (type local api.SettingsView),
+  // shared/types.ts reste intact, d'où la lecture défensive.
+  const flags = settings as Settings & Partial<Pick<api.SettingsView, 'passwordSet' | 'apiKeySet'>>
+  const apiKeySet = flags.apiKeySet === true
+  const passwordSet = flags.passwordSet === true
+
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  const dirty =
+    clearApiKey ||
+    clearPassword ||
+    (Object.keys(form) as (keyof FormState)[]).some((k) => form[k] !== initialForm[k])
+
+  function secretPlaceholder(configured: boolean, clearing: boolean): string {
+    if (clearing) return t('secretWillClearPlaceholder')
+    return configured ? t('secretConfiguredPlaceholder') : t('secretNotConfiguredPlaceholder')
   }
 
   async function test() {
@@ -102,11 +148,19 @@ export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
     setTestMsg(null)
     setModels(null)
     try {
-      // Le proxy /models teste les réglages ENREGISTRÉS : on pousse d'abord URL + clé.
-      await api.putSettings({ backendUrl: form.backendUrl.trim(), apiKey: form.apiKey })
-      const list = await api.getModels()
+      // Test SANS persistance : les valeurs COURANTES du formulaire partent au
+      // POST /models ; champ vide = le serveur retombe sur la valeur enregistrée.
+      const input: { backendUrl?: string; apiKey?: string } = {}
+      const url = form.backendUrl.trim()
+      if (url) input.backendUrl = url
+      if (clearApiKey) input.apiKey = ''
+      else if (form.apiKey) input.apiKey = form.apiKey
+      const list = await api.testModels(input)
       setModels(list)
-      setTestMsg({ ok: true, text: `Connexion réussie — ${list.length} modèle${list.length > 1 ? 's' : ''} détecté${list.length > 1 ? 's' : ''}.` })
+      setTestMsg({
+        ok: true,
+        text: t(isPlural(lang, list.length) ? 'testOkMany' : 'testOkOne', { n: list.length }),
+      })
     } catch (e) {
       setTestMsg({ ok: false, text: api.errorMessage(e) })
     } finally {
@@ -118,8 +172,23 @@ export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
     setSaving(true)
     setSaveError(null)
     try {
-      const next = await api.putSettings(fromForm(form, settings))
-      onSaved(next)
+      const passwordChanged = clearPassword || form.password.length > 0
+      const newPassword = clearPassword ? '' : form.password
+      const next = await api.putSettings(fromForm(form, settings, clearApiKey, clearPassword))
+      // Le PUT ne renvoie plus les secrets, et un changement de mot de passe
+      // révoque toutes les sessions côté serveur : on se reconnecte tout de
+      // suite via le flux login standard pour garder une session valide.
+      if (passwordChanged && newPassword) {
+        try {
+          await api.login(newPassword)
+        } catch {
+          /* le LoginGate prendra le relais au prochain 401 */
+        }
+      }
+      // App.handleSettingsSaved resynchronise le token depuis `password` : on lui
+      // passe la valeur à conserver (token courant, ou '' si l'auth est retirée).
+      const keepToken = passwordChanged && !newPassword ? '' : api.getToken() ?? ''
+      onSaved({ ...next, password: keepToken })
       onClose()
     } catch (e) {
       setSaveError(api.errorMessage(e))
@@ -130,23 +199,27 @@ export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
 
   return (
     <Dialog
-      title="Réglages"
+      title={t('settings')}
       onClose={onClose}
+      guardClose={() => !dirty || window.confirm(t('unsavedConfirm'))}
       footer={
         <>
           {saveError && <span className="msg-err">{saveError}</span>}
           <button className="btn" onClick={onClose} disabled={saving}>
-            Annuler
+            {t('cancel')}
           </button>
-          <button className="btn primary" onClick={() => save().catch((e) => console.error('[réglages]', e))} disabled={saving}>
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          <button className="btn primary" onClick={() => save().catch((e) => console.error('[settings]', e))} disabled={saving}>
+            {saving ? t('saving') : t('save')}
           </button>
         </>
       }
     >
-      <h3 className="section-title">Backend LLM</h3>
+      <h3 className="section-title">{t('language')}</h3>
+      <LangSwitch lang={lang} onPick={setLang} labels={{ fr: t('langFr'), en: t('langEn') }} />
+
+      <h3 className="section-title">{t('sectionBackend')}</h3>
       <div className="field">
-        <label htmlFor="set-url">URL du backend (compatible OpenAI)</label>
+        <label htmlFor="set-url">{t('backendUrl')}</label>
         <input
           id="set-url"
           type="url"
@@ -156,41 +229,59 @@ export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
         />
       </div>
       <div className="field">
-        <label htmlFor="set-key">Clé API</label>
-        <input
-          id="set-key"
-          type="password"
-          value={form.apiKey}
-          placeholder="(souvent vide pour un backend local)"
-          autoComplete="off"
-          onChange={(e) => set('apiKey', e.target.value)}
-        />
+        <label htmlFor="set-key">{t('apiKey')}</label>
+        <div className="row">
+          <input
+            id="set-key"
+            type="password"
+            value={form.apiKey}
+            placeholder={secretPlaceholder(apiKeySet, clearApiKey)}
+            autoComplete="off"
+            style={{ flex: 1, minWidth: 0 }}
+            onChange={(e) => {
+              setClearApiKey(false)
+              set('apiKey', e.target.value)
+            }}
+          />
+          {apiKeySet && !clearApiKey && (
+            <button
+              className="btn small"
+              type="button"
+              onClick={() => {
+                setClearApiKey(true)
+                set('apiKey', '')
+              }}
+            >
+              {t('removeSecret')}
+            </button>
+          )}
+        </div>
       </div>
       <div className="field">
-        <label htmlFor="set-model">Modèle</label>
+        <label htmlFor="set-model">{t('model')}</label>
         <div className="row">
           <input
             id="set-model"
             type="text"
             value={form.model}
-            placeholder="(certains backends l'ignorent)"
+            placeholder={t('modelPlaceholder')}
             style={{ flex: 1 }}
             onChange={(e) => set('model', e.target.value)}
           />
-          <button className="btn" onClick={() => test().catch((e) => console.error('[réglages]', e))} disabled={testing}>
-            {testing ? 'Test…' : 'Tester la connexion'}
+          <button className="btn" onClick={() => test().catch((e) => console.error('[settings]', e))} disabled={testing}>
+            {testing ? t('testing') : t('testConnection')}
           </button>
         </div>
         {testMsg && <span className={testMsg.ok ? 'msg-ok' : 'msg-err'}>{testMsg.text}</span>}
         {models && models.length > 0 && (
           <select
-            aria-label="Choisir un modèle détecté"
+            aria-label={t('chooseDetectedModel')}
             value={models.includes(form.model) ? form.model : ''}
             onChange={(e) => {
               if (e.target.value) set('model', e.target.value)
             }}
           >
-            <option value="">— choisir un modèle détecté —</option>
+            <option value="">{t('chooseDetectedModelOption')}</option>
             {models.map((m) => (
               <option key={m} value={m}>
                 {m}
@@ -200,59 +291,79 @@ export default function SettingsDialog({ settings, onSaved, onClose }: Props) {
         )}
       </div>
 
-      <h3 className="section-title">Génération</h3>
+      <h3 className="section-title">{t('sectionGeneration')}</h3>
       <div className="grid-2">
         <div className="field">
-          <label htmlFor="set-temp">Température</label>
+          <label htmlFor="set-temp">{t('temperature')}</label>
           <input id="set-temp" type="number" step="0.1" min="0" max="2" value={form.temperature} onChange={(e) => set('temperature', e.target.value)} />
         </div>
         <div className="field">
-          <label htmlFor="set-max">Tokens max (réponse)</label>
+          <label htmlFor="set-max">{t('maxTokens')}</label>
           <input id="set-max" type="number" step="1" min="1" value={form.maxTokens} onChange={(e) => set('maxTokens', e.target.value)} />
         </div>
       </div>
       <div className="field">
-        <label htmlFor="set-hist">Messages d'historique max envoyés</label>
+        <label htmlFor="set-hist">{t('maxHistory')}</label>
         <input id="set-hist" type="number" step="1" min="0" value={form.maxHistoryMessages} onChange={(e) => set('maxHistoryMessages', e.target.value)} />
       </div>
 
-      <h3 className="section-title">Mémoire &amp; outils</h3>
+      <h3 className="section-title">{t('sectionMemoryTools')}</h3>
       <Toggle
-        label="Mémoire"
-        sub="Injecte le bloc mémoire dans le contexte et expose les outils mémoire."
+        label={t('memoryToggle')}
+        sub={t('memoryToggleSub')}
         checked={form.memoryEnabled}
         onChange={(v) => set('memoryEnabled', v)}
       />
       <Toggle
-        label="Outils fichiers"
-        sub="Le modèle peut lire/écrire dans le dossier sandbox."
+        label={t('fileTools')}
+        sub={t('fileToolsSub')}
         checked={form.fileToolsEnabled}
         onChange={(v) => set('fileToolsEnabled', v)}
       />
       <Toggle
-        label="Autoriser la suppression de fichiers"
-        sub="Danger : le modèle pourra supprimer des fichiers dans le dossier sandbox."
+        label={t('allowDelete')}
+        sub={t('allowDeleteSub')}
         checked={form.allowDelete}
         onChange={(v) => set('allowDelete', v)}
         danger
       />
       <div className="field">
-        <label htmlFor="set-root">Dossier sandbox des outils</label>
+        <label htmlFor="set-root">{t('sandboxDir')}</label>
         <input id="set-root" type="text" value={form.toolsRoot} onChange={(e) => set('toolsRoot', e.target.value)} />
       </div>
 
-      <h3 className="section-title">Accès</h3>
+      <h3 className="section-title">{t('sectionAccess')}</h3>
       <div className="field">
-        <label htmlFor="set-pw">Mot de passe d'accès</label>
-        <input
-          id="set-pw"
-          type="password"
-          value={form.password}
-          placeholder="(vide = pas d'authentification)"
-          autoComplete="new-password"
-          onChange={(e) => set('password', e.target.value)}
-        />
-        <span className="hint">Utile si Hanami est exposé sur le réseau. Vide = accès libre en local.</span>
+        <label htmlFor="set-pw">{t('accessPassword')}</label>
+        <div className="row">
+          <input
+            id="set-pw"
+            type="password"
+            value={form.password}
+            placeholder={secretPlaceholder(passwordSet, clearPassword)}
+            autoComplete="new-password"
+            style={{ flex: 1, minWidth: 0 }}
+            onChange={(e) => {
+              setClearPassword(false)
+              set('password', e.target.value)
+            }}
+          />
+          {passwordSet && !clearPassword && (
+            <button
+              className="btn small"
+              type="button"
+              onClick={() => {
+                if (window.confirm(t('removePasswordConfirm'))) {
+                  setClearPassword(true)
+                  set('password', '')
+                }
+              }}
+            >
+              {t('removeSecret')}
+            </button>
+          )}
+        </div>
+        <span className="hint">{t('accessPasswordHint')}</span>
       </div>
     </Dialog>
   )

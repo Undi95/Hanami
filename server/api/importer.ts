@@ -30,7 +30,9 @@ function composeSystemPrompt(card: ParsedCard): string {
 
 importRouter.post(
   '/api/import/card',
-  express.raw({ type: () => true, limit: '25mb' }),
+  // Types explicites (le client envoie application/octet-stream) : accepter
+  // n'importe quel type ouvrirait la route aux requêtes cross-site « simples ».
+  express.raw({ type: ['application/octet-stream', 'image/png'], limit: '25mb' }),
   (req, res) => {
     try {
       const buf = req.body as unknown
@@ -58,7 +60,8 @@ importRouter.post(
 
 importRouter.post(
   '/api/import/chat',
-  express.raw({ type: () => true, limit: '200mb' }),
+  // Types explicites (cf. /api/import/card) ; limite alignée sur les cards.
+  express.raw({ type: ['application/octet-stream', 'image/png'], limit: '25mb' }),
   (req, res) => {
     try {
       const characterId = queryString(req.query.characterId)

@@ -1,6 +1,7 @@
 // Scène 3D de l'avatar VRM — implémente le contrat VrmStage (./types).
 // three + @pixiv/three-vrm ; l'UI importe createVrmStage dynamiquement.
 import {
+  Box3,
   Clock,
   DirectionalLight,
   HemisphereLight,
@@ -17,7 +18,7 @@ import type { VRM, VRMHumanBoneName } from '@pixiv/three-vrm'
 import type { VrmStage } from './types'
 import { IdleAnimator } from './idle'
 import type { PosedBone } from './idle'
-import { normalizeEmotion } from './emotionMap'
+import { normalizeEmotion, resolveExpressions } from './emotionMap'
 
 // Pose de repos (anti T-pose : les VRM chargent bras en croix) — rotation Z par os.
 const REST_POSE_Z: ReadonlyArray<readonly [VRMHumanBoneName, number]> = [
@@ -99,6 +100,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     VRMUtils.deepDispose(currentVrm.scene)
     currentVrm = null
     posedBones.clear()
+    idle.setExpressionTable(new Map()) // plus de modèle : aucune expression pilotable
   }
 
   // Pose anti T-pose, puis mémorisation de la base (Euler) par os : l'idle
@@ -115,15 +117,40 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     }
   }
 
+  // Normalisation d'échelle : un VRM exporté en centimètres (ou en unités
+  // minuscules) est irrécupérable avec un cadrage à constantes absolues.
+  // Hauteur hors [0.5, 3] m → remise à ~1.6 m. Retourne la hauteur effective.
+  function normalizeScale(vrm: VRM): number {
+    const box = new Box3().setFromObject(vrm.scene)
+    const rawHeight = Math.max(box.max.y - box.min.y, 1e-6)
+    if (rawHeight >= 0.5 && rawHeight <= 3) return rawHeight // modèle normal : intact
+    console.warn(
+      `[vrm] model height ${rawHeight.toFixed(3)} m is out of the [0.5, 3] range — ` +
+        `rescaling by ${(1.6 / rawHeight).toFixed(5)} to a 1.6 m height`,
+    )
+    // multiplyScalar (et non setScalar) : correct même si la racine a déjà une
+    // échelle ≠ 1, puisque rawHeight la contient déjà.
+    vrm.scene.scale.multiplyScalar(1.6 / rawHeight)
+    vrm.scene.updateMatrixWorld(true)
+    return 1.6
+  }
+
   // Cadrage buste + tête : cible légèrement sous la tête, caméra de face.
-  function frameCamera(vrm: VRM): void {
+  // Tout est dérivé de la hauteur effective `h` : pour h = 1.6 m les bornes
+  // valent exactement les anciennes constantes (0.6, 4) — rendu inchangé pour
+  // les modèles normaux.
+  function frameCamera(vrm: VRM, h: number): void {
     scene.updateMatrixWorld(true)
     const head = vrm.humanoid.getNormalizedBoneNode('head')
-    const headPos = new Vector3(0, 1.35, 0) // repli si modèle sans os "head"
+    const headPos = new Vector3(0, h * (1.35 / 1.6), 0) // repli si modèle sans os "head"
     if (head) head.getWorldPosition(headPos)
     controls.target.set(headPos.x, headPos.y - 0.12, headPos.z)
-    const distance = Math.min(4, Math.max(0.6, headPos.y * 1.4))
+    const distance = Math.min(2.5 * h, Math.max(0.375 * h, headPos.y * 1.4))
     camera.position.set(0, controls.target.y, distance)
+    controls.minDistance = 0.3 * h
+    controls.maxDistance = 3 * h
+    camera.far = 15 * h
+    camera.updateProjectionMatrix()
     controls.update()
   }
 
@@ -150,7 +177,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       scene.add(vrm.scene)
       currentVrm = vrm
       idle.reset()
-      frameCamera(vrm)
+      idle.setExpressionTable(resolveExpressions(vrm.expressionManager))
+      const height = normalizeScale(vrm)
+      frameCamera(vrm, height)
     } catch (e) {
       console.error('[vrm]', e)
       throw e // l'UI affiche l'erreur

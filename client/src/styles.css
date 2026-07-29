@@ -752,6 +752,40 @@ select {
   margin: 4px 0;
 }
 
+/* ── Sélecteur segmenté (langue) ──────────────────────────────────────── */
+
+.seg {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.seg-btn {
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.seg-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.seg-btn[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: rgba(245, 163, 199, 0.4);
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* ── Toggles ──────────────────────────────────────────────────────────── */
 
 .toggle {

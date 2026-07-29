@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react'
 import type { ChatMessage } from '../../../shared/types'
 import { stripEmotionTags } from '../emotions'
+import { localeOf, useI18n, type Lang } from '../i18n'
 
 export type FeedItem =
   | { kind: 'msg'; msg: ChatMessage; pending?: boolean }
@@ -9,10 +10,10 @@ export type FeedItem =
   | { kind: 'error'; text: string }
   | { kind: 'greeting'; text: string }
 
-function fmtTime(ts: string): string {
+function fmtTime(ts: string, lang: Lang): string {
   const d = new Date(ts)
   if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleTimeString(localeOf(lang), { hour: '2-digit', minute: '2-digit' })
 }
 
 /** Résumé court des arguments d'un appel d'outil (ex. "memory_save : souvenirs.md"). */
@@ -30,6 +31,8 @@ function summarizeArgs(args: string): string {
 }
 
 function Item({ item }: { item: FeedItem }) {
+  const { lang, t } = useI18n()
+
   switch (item.kind) {
     case 'msg': {
       const isUser = item.msg.role === 'user'
@@ -38,7 +41,7 @@ function Item({ item }: { item: FeedItem }) {
         <div className={`msg ${isUser ? 'user' : 'assistant'}`}>
           <div className="bubble">
             {item.pending && !text ? (
-              <span className="typing" aria-label="Réponse en cours">
+              <span className="typing" aria-label={t('replyInProgress')}>
                 <i />
                 <i />
                 <i />
@@ -47,7 +50,7 @@ function Item({ item }: { item: FeedItem }) {
               text
             )}
           </div>
-          {!item.pending && <div className="msg-ts">{fmtTime(item.msg.ts)}</div>}
+          {!item.pending && <div className="msg-ts">{fmtTime(item.msg.ts, lang)}</div>}
         </div>
       )
     }
@@ -63,9 +66,7 @@ function Item({ item }: { item: FeedItem }) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M14.5 6.5a4 4 0 015.5-3.7l-3 3 1.2 1.2 3-3a4 4 0 01-5.2 5.2l-8.5 8.5a1.8 1.8 0 01-2.5-2.5l8.5-8.5a4 4 0 011-.2z" />
           </svg>
-          <span>
-            {item.name} : {summarizeArgs(item.args)}
-          </span>
+          <span>{t('toolCall', { name: item.name, args: summarizeArgs(item.args) })}</span>
         </div>
       )
     case 'error':

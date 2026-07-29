@@ -86,6 +86,10 @@ charactersRouter.put('/api/characters/:id', (req, res) => {
 
 charactersRouter.delete('/api/characters/:id', (req, res) => {
   try {
+    if (!findCharacter(req.params.id)) {
+      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      return
+    }
     deleteCharacter(req.params.id)
     res.json({ ok: true })
   } catch (e) {

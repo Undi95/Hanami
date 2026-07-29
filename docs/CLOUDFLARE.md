@@ -1,65 +1,75 @@
-# Accès distant via Cloudflare Tunnel
+**English** | [Français](CLOUDFLARE.fr.md)
 
-Objectif : accéder à Hanami depuis l'extérieur (4G, en déplacement, au travail) **sans ouvrir de port**
-sur ta box, avec HTTPS automatique.
+# Remote access with Cloudflare Tunnel
 
-## 1. Prérequis
+Goal: reach Hanami from outside your home (mobile data, on the move, the office) **without opening a
+port** on your router, with automatic HTTPS.
 
-- Un compte Cloudflare (gratuit) avec ton domaine ajouté (ou un sous-domaine `*.trycloudflare.com` jetable).
-- `cloudflared` installé : <https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/>
+Related: [MOBILE.md](MOBILE.md) · [back to the README](../README.md)
 
-## 2. Test rapide (URL jetable, sans compte)
+## 1. Requirements
+
+- A (free) Cloudflare account with your domain added — or a throwaway `*.trycloudflare.com`
+  subdomain, which needs no account at all.
+- `cloudflared` installed: <https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/>
+
+## 2. Quick test (throwaway URL, no account)
+
+Start Hanami first **in production mode** (`npm run build` then `npm start`), then:
+
+⚠️ **Never point the tunnel at `npm run dev`**: dev mode exposes Vite tooling (such as the
+`/@fs/` endpoint) that can serve local files — only a production instance should be tunneled.
 
 ```bash
 cloudflared tunnel --url http://localhost:7788
 ```
 
-Cloudflare affiche une URL `https://xxxx.trycloudflare.com` → ouvre-la depuis ton téléphone.
-⚠️ L'URL change à chaque lancement — pratique pour tester, pas pour tous les jours.
+Cloudflare prints a `https://xxxx.trycloudflare.com` URL — open it on your phone.
+⚠️ That URL changes on every run: handy for a quick test, not for daily use.
 
-## 3. Tunnel permanent (recommandé)
+## 3. Permanent tunnel (recommended)
 
 ```bash
 cloudflared tunnel login
 cloudflared tunnel create hanami
-cloudflared tunnel route dns hanami hanami.ton-domaine.tld
+cloudflared tunnel route dns hanami hanami.your-domain.tld
 ```
 
-Crée `%UserProfile%\.cloudflared\config.yml` :
+Create `%UserProfile%\.cloudflared\config.yml`:
 
 ```yaml
 tunnel: hanami
-credentials-file: C:\Users\<toi>\.cloudflared\<uuid>.json
+credentials-file: C:\Users\<you>\.cloudflared\<uuid>.json
 ingress:
-  - hostname: hanami.ton-domaine.tld
+  - hostname: hanami.your-domain.tld
     service: http://localhost:7788
   - service: http_status:404
 ```
 
-Puis :
+Then:
 
 ```bash
 cloudflared tunnel run hanami
 ```
 
-Pour le lancer automatiquement au démarrage de Windows :
+To start it automatically with Windows:
 
 ```bash
 cloudflared service install
 ```
 
-## 4. Sécurité — indispensable avant d'exposer
+## 4. Security — do this before exposing anything
 
-1. **Mot de passe Hanami** : ⚙️ Réglages → « Mot de passe d'accès ». Sans lui, n'importe qui
-   avec l'URL peut lire tes conversations.
-2. **Mieux : Cloudflare Access** (gratuit jusqu'à 50 utilisateurs) : dans le dashboard
-   Zero Trust → Access → Applications → ajoute `hanami.ton-domaine.tld` avec une policy
-   « Emails autorisés : ton@email.com ». Cloudflare exige alors un code par e-mail avant
-   même d'atteindre Hanami. Les deux protections se cumulent.
-3. Ne partage l'URL avec personne en qui tu n'as pas confiance : le backend LLM et les
-   outils fichiers tournent sur TA machine.
+1. **Set the Hanami password**: ⚙️ *Settings* → "Access password". Without it, anyone holding
+   the URL can read your conversations.
+2. **Better still: Cloudflare Access** (free up to 50 users). In the Zero Trust dashboard →
+   Access → Applications, add `hanami.your-domain.tld` with a policy such as
+   "Allowed emails: you@example.com". Cloudflare then requires an emailed code before the
+   request even reaches Hanami. Both protections stack — use both.
+3. Only share the URL with people you trust: the LLM backend and the file tools run on **your**
+   machine.
 
 ## 5. Note
 
-Le PC (et ton backend LLM local) doivent rester allumés pour que Hanami réponde à distance.
-Pense à désactiver la mise en veille (Paramètres Windows → Alimentation).
+Your PC (and your local LLM backend) must stay awake for Hanami to answer remotely. Consider
+disabling sleep (Windows Settings → Power).

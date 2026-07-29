@@ -34,7 +34,8 @@ export function ensureDataDirs(): void {
 /** Nom de fichier sûr (pas de traversée, pas de séparateurs). */
 export function sanitizeFileName(name: string): string {
   const clean = name.replace(/[\\/:*?"<>|]/g, '').replace(/\.\./g, '').trim()
-  if (!clean) throw new Error('Nom de fichier invalide')
+  // Vide ou composé uniquement de points ("...", ".") → résoudrait vers le dossier parent.
+  if (!clean || /^\.+$/.test(clean)) throw new Error('Nom de fichier invalide')
   return clean
 }
 
@@ -138,7 +139,10 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
 }
 
 export function deleteCharacter(id: string): void {
-  fs.rmSync(charDir(id), { recursive: true, force: true })
+  const dir = charDir(id)
+  // Ceinture : ne jamais supprimer le dossier characters/ lui-même.
+  if (path.resolve(dir) === path.resolve(CHARACTERS_DIR)) throw new Error(`Identifiant invalide : ${id}`)
+  fs.rmSync(dir, { recursive: true, force: true })
 }
 
 /** Prompt par défaut d'un personnage créé via l'UI — volontairement minimal et visible. */
@@ -174,6 +178,48 @@ function chatFile(charId: string, chatId: string): string {
   return path.join(charDir(charId), 'chats', `${sanitizeFileName(chatId)}.jsonl`)
 }
 
+/**
+ * Scanne un .jsonl par blocs de 64 Ko sans le charger en mémoire :
+ * 1re ligne non vide (l'en-tête) + nombre de lignes non vides.
+ */
+function scanJsonl(file: string): { firstLine: string; lineCount: number } {
+  const fd = fs.openSync(file, 'r')
+  try {
+    const buf = Buffer.alloc(64 * 1024)
+    const firstChunks: Buffer[] = []
+    let firstDone = false
+    let lineCount = 0
+    let segLen = 0 // longueur de la ligne en cours, reportée entre les blocs
+    let bytesRead: number
+    while ((bytesRead = fs.readSync(fd, buf, 0, buf.length, -1)) > 0) {
+      let segStart = 0
+      for (let i = 0; i < bytesRead; i++) {
+        if (buf[i] === 0x0a) {
+          if (segLen + (i - segStart) > 0) {
+            lineCount++
+            if (!firstDone) {
+              firstChunks.push(Buffer.from(buf.subarray(segStart, i)))
+              firstDone = true
+            }
+          }
+          segLen = 0
+          segStart = i + 1
+        }
+      }
+      const tail = bytesRead - segStart
+      if (!firstDone && tail > 0) firstChunks.push(Buffer.from(buf.subarray(segStart, bytesRead)))
+      segLen += tail
+    }
+    if (segLen > 0) {
+      lineCount++
+      firstDone = true
+    }
+    return { firstLine: firstDone ? Buffer.concat(firstChunks).toString('utf8') : '', lineCount }
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
 export function listChats(charId: string): ChatMeta[] {
   const dir = path.join(charDir(charId), 'chats')
   if (!fs.existsSync(dir)) return []
@@ -181,15 +227,15 @@ export function listChats(charId: string): ChatMeta[] {
   for (const f of fs.readdirSync(dir)) {
     if (!f.endsWith('.jsonl')) continue
     const file = path.join(dir, f)
-    const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)
-    const header = lines[0] ? (JSON.parse(lines[0]) as ChatHeader) : null
+    const { firstLine, lineCount } = scanJsonl(file)
+    const header = firstLine ? (JSON.parse(firstLine) as ChatHeader) : null
     if (!header) continue
     out.push({
       id: header.id,
       title: header.title,
       createdAt: header.createdAt,
       updatedAt: fs.statSync(file).mtime.toISOString(),
-      messageCount: lines.length - 1,
+      messageCount: lineCount - 1,
     })
   }
   return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -223,7 +269,10 @@ export function readChat(charId: string, chatId: string): { meta: ChatMeta; mess
 }
 
 export function appendChatMessage(charId: string, chatId: string, msg: ChatMessage): void {
-  fs.appendFileSync(chatFile(charId, chatId), JSON.stringify(msg) + '\n')
+  const file = chatFile(charId, chatId)
+  // Chat supprimé pendant un stream : ne jamais recréer un fichier dont l'en-tête est perdu.
+  if (!fs.existsSync(file)) return
+  fs.appendFileSync(file, JSON.stringify(msg) + '\n')
 }
 
 export function deleteChat(charId: string, chatId: string): void {
@@ -270,7 +319,8 @@ export function writeMemoryFile(charId: string, name: string, content: string): 
 }
 
 export function deleteMemoryFile(charId: string, name: string): void {
-  if (sanitizeFileName(name) === 'MEMORY.md') throw new Error("MEMORY.md est l'index — non supprimable")
+  // Comparaison insensible à la casse : le FS Windows l'est aussi ("memory.MD" = même fichier).
+  if (sanitizeFileName(name).toLowerCase() === 'memory.md') throw new Error("MEMORY.md est l'index — non supprimable")
   fs.rmSync(path.join(memoryDir(charId), sanitizeFileName(name)), { force: true })
 }
 

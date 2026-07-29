@@ -22,7 +22,8 @@ function listFiles(dir: string, extensions: string[]): string[] {
 
 assetsRouter.get('/api/vrm-models', (_req, res) => {
   try {
-    res.json({ models: listFiles(VRM_DIR, ['.vrm']).map((f) => `/vrm/${f}`) })
+    // encodeURIComponent : un nom contenant # ou % casserait l'URL côté client.
+    res.json({ models: listFiles(VRM_DIR, ['.vrm']).map((f) => `/vrm/${encodeURIComponent(f)}`) })
   } catch (e) {
     sendError(res, e)
   }
@@ -32,7 +33,7 @@ assetsRouter.get('/api/backgrounds', (_req, res) => {
   try {
     res.json({
       backgrounds: listFiles(BACKGROUNDS_DIR, ['.png', '.jpg', '.jpeg', '.webp']).map(
-        (f) => `/backgrounds/${f}`,
+        (f) => `/backgrounds/${encodeURIComponent(f)}`,
       ),
     })
   } catch (e) {

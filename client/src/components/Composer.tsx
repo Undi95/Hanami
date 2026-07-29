@@ -1,6 +1,7 @@
 // Zone de saisie : textarea auto-grandissante, Entrée = envoyer (desktop),
 // Maj+Entrée = retour ligne, bouton stop pendant le streaming.
 import { useMemo, useRef, useState } from 'react'
+import { useI18n } from '../i18n'
 
 interface Props {
   disabled: boolean
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function Composer({ disabled, streaming, onSend, onStop }: Props) {
+  const { t } = useI18n()
   const [text, setText] = useState('')
   const taRef = useRef<HTMLTextAreaElement>(null)
   // Sur mobile (pointeur grossier), Entrée fait un retour ligne : le bouton envoie.
@@ -39,7 +41,7 @@ export default function Composer({ disabled, streaming, onSend, onStop }: Props)
         ref={taRef}
         rows={1}
         value={text}
-        placeholder="Écrire un message…"
+        placeholder={t('writeMessage')}
         disabled={disabled}
         onChange={(e) => {
           setText(e.target.value)
@@ -53,7 +55,7 @@ export default function Composer({ disabled, streaming, onSend, onStop }: Props)
         }}
       />
       {streaming ? (
-        <button className="send-btn stop" onClick={onStop} title="Arrêter la génération" aria-label="Arrêter la génération">
+        <button className="send-btn stop" onClick={onStop} title={t('stop')} aria-label={t('stop')}>
           <svg viewBox="0 0 24 24" fill="currentColor">
             <rect x="6.5" y="6.5" width="11" height="11" rx="2" />
           </svg>
@@ -63,8 +65,8 @@ export default function Composer({ disabled, streaming, onSend, onStop }: Props)
           className="send-btn"
           onClick={submit}
           disabled={disabled || !text.trim()}
-          title="Envoyer"
-          aria-label="Envoyer"
+          title={t('send')}
+          aria-label={t('send')}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 12l16-7-5.5 16-3-6.5L4 12z" />
