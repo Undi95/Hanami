@@ -7,6 +7,7 @@ import type {
   ChatEvent,
   ChatMessage,
   ChatMeta,
+  GreetingMode,
   MemoryFile,
   Settings,
 } from '../../shared/types'
@@ -155,6 +156,8 @@ export function createCharacter(input: {
   vrm?: string
   background?: string
   greeting?: string
+  greetings?: string[]
+  greetingMode?: GreetingMode
 }): Promise<CharacterFull> {
   return req('POST', '/api/characters', input)
 }

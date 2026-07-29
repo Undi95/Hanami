@@ -42,6 +42,17 @@ function excerpt(text: string, max: number): string {
   return flat.length > max ? flat.slice(0, max - 1).trimEnd() + '…' : flat
 }
 
+/** Messages d'accueil écrits du personnage : le principal puis ses variantes, vides retirés. */
+function greetingPool(char: CharacterFull): string[] {
+  const variants = Array.isArray(char.greetings) ? char.greetings : []
+  return [char.greeting, ...variants].filter((g) => typeof g === 'string' && g.trim().length > 0)
+}
+
+/** Tirage d'un accueil : chaque nouvelle conversation peut s'ouvrir autrement. */
+function pickGreeting(pool: string[]): string {
+  return pool[Math.floor(Math.random() * pool.length)]
+}
+
 function AppInner() {
   const { lang, t } = useI18n()
   const [booting, setBooting] = useState(true)
@@ -68,6 +79,9 @@ function AppInner() {
   })
   const [stageReady, setStageReady] = useState(false)
   const [vrmError, setVrmError] = useState<string | null>(null)
+  // Mode d'accueil « demander » : question posée une seule fois par ouverture de
+  // chat vide (le personnage et le chat visés sont figés dans l'état).
+  const [greetingAsk, setGreetingAsk] = useState<{ char: CharacterFull; chat: ChatMeta } | null>(null)
 
   const sceneRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<VrmStage | null>(null)
@@ -288,9 +302,43 @@ function AppInner() {
     return t('defaultChatTitle', { date: new Date().toLocaleDateString(localeOf(lang)) })
   }
 
+  // Ouverture de la conversation par le modèle (mode 'open'). char/chat sont
+  // passés explicitement : les états React viennent d'être posés. abortRef (et
+  // non l'état `streaming`) : openChat capture ses états au rendu qui l'a créé —
+  // la ref, elle, dit la vérité du moment. Si l'appel échoue, le fil reste vide
+  // et l'utilisateur parlera en premier.
+  function startOpening(char: CharacterFull, chat: ChatMeta) {
+    if (openingRef.current || abortRef.current !== null) return
+    openingRef.current = true
+    runGeneration({ mode: 'open', char, chat })
+      .catch((e) => console.error('[open]', e))
+      .finally(() => {
+        openingRef.current = false
+      })
+  }
+
+  // Réponses à la question « comment ouvrir cette conversation ? » (mode 'ask').
+  // Le chat a pu changer pendant que la question était posée : on vérifie.
+  function chooseWrittenGreeting(ask: { char: CharacterFull; chat: ChatMeta }) {
+    setGreetingAsk(null)
+    if (chatIdRef.current !== ask.chat.id || feed.length > 0) return
+    const pool = greetingPool(ask.char)
+    if (pool.length === 0) return
+    const text = pickGreeting(pool)
+    setFeed([{ kind: 'greeting', text }])
+    applyEmotion(extractEmotion(text) ?? 'neutral')
+  }
+
+  function chooseGeneratedGreeting(ask: { char: CharacterFull; chat: ChatMeta }) {
+    setGreetingAsk(null)
+    if (chatIdRef.current !== ask.chat.id) return
+    startOpening(ask.char, ask.chat)
+  }
+
   async function openChat(char: CharacterFull, chatId: string) {
     const gen = ++loadGenRef.current
     abortRef.current?.abort()
+    setGreetingAsk(null) // une question restée ouverte ne survit pas au changement de chat
     try {
       const { meta, messages } = await api.getChat(char.id, chatId)
       if (gen !== loadGenRef.current) return
@@ -300,30 +348,31 @@ function AppInner() {
       setContext(null) // la jauge repart avec le prochain échange de ce chat
       localStorage.setItem(chatKey(char.id), meta.id)
       const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
-      if (items.length === 0 && char.greeting) items.push({ kind: 'greeting', text: char.greeting })
+      // Premier message d'un chat VIDE (jamais sur un chat importé — il n'est pas
+      // vide), selon le mode du personnage : 'written' (défaut) affiche une
+      // salutation écrite tirée au hasard, 'generated' laisse le modèle ouvrir,
+      // 'ask' pose la question. Sans aucun texte écrit, on génère dans tous les cas.
+      const empty = messages.length === 0
+      const mode = char.greetingMode ?? 'written'
+      const pool = empty ? greetingPool(char) : []
+      const ask = empty && mode === 'ask' && pool.length > 0
+      const opening = empty && !ask && mode !== 'generated' && pool.length > 0 ? pickGreeting(pool) : null
+      if (opening) items.push({ kind: 'greeting', text: opening })
       setFeed(items)
-      // Émotion d'ouverture : celle du greeting, sinon du dernier message assistant.
+      // Émotion d'ouverture : celle du greeting réellement affiché, sinon celle
+      // du dernier message assistant.
       let emotion: string | null = null
-      if (messages.length === 0 && char.greeting) emotion = extractEmotion(char.greeting)
-      else {
+      if (opening) emotion = extractEmotion(opening)
+      else if (!empty) {
         const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
         if (lastAssistant) emotion = lastAssistant.emotion ?? extractEmotion(lastAssistant.content)
       }
       applyEmotion(emotion ?? 'neutral')
-      // Premier message en cascade : sans greeting, c'est le modèle qui ouvre la
-      // conversation (jamais sur un chat importé — il n'est pas vide). Si l'appel
-      // échoue, le fil reste vide et l'utilisateur parlera en premier.
-      // char/chat sont passés explicitement : les états React viennent d'être posés.
-      // abortRef (et non l'état `streaming`) : openChat capture ses états au rendu
-      // qui l'a créé — la ref, elle, dit la vérité du moment.
-      if (messages.length === 0 && !char.greeting && !openingRef.current && abortRef.current === null) {
-        openingRef.current = true
-        runGeneration({ mode: 'open', char, chat: meta })
-          .catch((e) => console.error('[open]', e))
-          .finally(() => {
-            openingRef.current = false
-          })
+      if (ask) {
+        setGreetingAsk({ char, chat: meta })
+        return
       }
+      if (empty && !opening) startOpening(char, meta)
     } catch (e) {
       handleError(e, 'chat')
     }
@@ -386,13 +435,13 @@ function AppInner() {
   // Échap quitte le mode — sauf si un dialog ou l'écran de connexion est ouvert
   // (là, Échap leur appartient).
   useEffect(() => {
-    if (!vnMode || dialog || needLogin) return
+    if (!vnMode || dialog || greetingAsk || needLogin) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setVnMode(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [vnMode, dialog, needLogin])
+  }, [vnMode, dialog, greetingAsk, needLogin])
 
   // ── Envoi + streaming ────────────────────────────────────────────────────
 
@@ -682,6 +731,7 @@ function AppInner() {
         setChatMeta(null)
         chatIdRef.current = null
         setReplyTo(null)
+        setGreetingAsk(null)
         setFeed([])
       }
     }
@@ -806,7 +856,7 @@ function AppInner() {
             showThoughts={settings?.showThoughts ?? false}
             editable={!streaming && !compacting}
             // Ctrl+F appartient au dialog ouvert (ou à l'écran de connexion).
-            searchable={!dialog && !needLogin}
+            searchable={!dialog && !greetingAsk && !needLogin}
             pinned={chatMeta?.pinned ?? null}
             onSaveEdit={handleEditMessage}
             onReply={setReplyTo}
@@ -963,6 +1013,26 @@ function AppInner() {
           }}
           onClose={() => setDialog(null)}
         />
+      )}
+
+      {/* Mode d'accueil « demander » : rendu en dernier, donc au-dessus des autres
+          dialogs (le choix arrive parfois depuis la liste des personnages). */}
+      {greetingAsk && (
+        <Dialog
+          title={t('askGreetingTitle')}
+          // Fermer (X, Échap, fond) revient à choisir « écrit » : la question ne
+          // se repose pas — l'utilisateur peut aussi simplement parler le premier.
+          onClose={() => chooseWrittenGreeting(greetingAsk)}
+        >
+          <div className="row">
+            <button className="btn" onClick={() => chooseWrittenGreeting(greetingAsk)}>
+              {t('askGreetingWritten')}
+            </button>
+            <button className="btn primary" onClick={() => chooseGeneratedGreeting(greetingAsk)}>
+              {t('askGreetingGenerated')}
+            </button>
+          </div>
+        </Dialog>
       )}
 
       {/* Overlay plein écran (z-index 100, au-dessus du chat-panel et des dialogs). */}

@@ -28,12 +28,19 @@ export interface Settings {
   ttsVoice: string // voix TTS (certains serveurs l'ignorent)
 }
 
+// Comment s'ouvre une conversation vide : 'written' = une des salutations écrites
+// est affichée, 'generated' = le modèle écrit le premier message, 'ask' = le choix
+// est proposé à l'ouverture. Champ absent = 'written' (character.json historiques).
+export type GreetingMode = 'written' | 'generated' | 'ask'
+
 export interface CharacterMeta {
   id: string
   name: string
   vrm: string // ex: /vrm/reference.vrm ('' = pas de modèle 3D)
   background: string // ex: /backgrounds/room.png ('' = dégradé par défaut)
   greeting: string // premier message affiché dans un nouveau chat
+  greetings?: string[] // variantes supplémentaires (tirage au hasard avec greeting)
+  greetingMode?: GreetingMode // absent = 'written'
   createdAt: string
 }
 

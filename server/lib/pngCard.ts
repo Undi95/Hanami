@@ -7,6 +7,7 @@ export interface ParsedCard {
   personality: string
   scenario: string
   firstMes: string
+  alternateGreetings: string[] // V2/V3 : data.alternate_greetings (vide en V1)
   systemPrompt: string
 }
 
@@ -69,6 +70,7 @@ function normalizeCard(raw: unknown): ParsedCard | null {
     personality: str(src.personality),
     scenario: str(src.scenario),
     firstMes: str(src.first_mes),
+    alternateGreetings: strArray(src.alternate_greetings),
     systemPrompt: str(src.system_prompt),
   }
   if (!card.name && !card.description && !card.firstMes) return null
@@ -77,4 +79,10 @@ function normalizeCard(raw: unknown): ParsedCard | null {
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v : ''
+}
+
+/** Liste de chaînes d'une card (entrées non textuelles ou vides ignorées). */
+function strArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  return v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
 }

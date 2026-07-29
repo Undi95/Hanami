@@ -1171,6 +1171,37 @@ select {
   color: var(--text-dim);
 }
 
+/* Variantes du message d'accueil : une ligne = un texte + son bouton retirer. */
+
+.variant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.variant-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.variant-row textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 62px;
+}
+
+.variant-row .btn {
+  flex: none;
+  padding: 0 10px;
+}
+
+.variant-row .btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1218,6 +1249,10 @@ select {
 
 .seg {
   display: inline-flex;
+  /* Trois options aux libellés longs (premier message) : on passe à la ligne
+     plutôt que de déborder du dialog sur mobile. */
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--border);

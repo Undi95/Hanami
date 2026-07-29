@@ -48,7 +48,10 @@ importRouter.post(
       const name = queryString(req.query.name) || card.name || 'Importé'
       const character = createCharacter({
         name,
+        // first_mes reste le message d'accueil principal ; les alternate_greetings
+        // de la card deviennent des variantes (rien de la card ne se perd).
         greeting: card.firstMes,
+        greetings: card.alternateGreetings,
         systemPrompt: composeSystemPrompt(card),
       })
       res.json({ character })

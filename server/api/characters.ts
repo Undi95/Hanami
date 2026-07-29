@@ -1,6 +1,6 @@
 // Router personnages : CRUD + chats. Toute la persistance passe par lib/storage.
 import express, { Router, type Response } from 'express'
-import type { CharacterFull } from '../../shared/types'
+import type { CharacterFull, GreetingMode } from '../../shared/types'
 import {
   createCharacter,
   createChat,
@@ -19,6 +19,17 @@ charactersRouter.use(express.json({ limit: '5mb' }))
 
 function sendError(res: Response, status: number, e: unknown): void {
   res.status(status).json({ error: e instanceof Error ? e.message : String(e) })
+}
+
+/** Variantes d'accueil d'un corps JSON (les entrées non textuelles sont ignorées). */
+function greetingsOf(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.filter((g): g is string => typeof g === 'string')
+}
+
+/** Mode de premier message d'un corps JSON (valeur inconnue → champ ignoré). */
+function greetingModeOf(value: unknown): GreetingMode | undefined {
+  return value === 'written' || value === 'generated' || value === 'ask' ? value : undefined
 }
 
 /** getCharacter sans throw (id invalide → null). */
@@ -52,6 +63,8 @@ charactersRouter.post('/api/characters', (req, res) => {
       vrm: typeof body.vrm === 'string' ? body.vrm : undefined,
       background: typeof body.background === 'string' ? body.background : undefined,
       greeting: typeof body.greeting === 'string' ? body.greeting : undefined,
+      greetings: greetingsOf(body.greetings),
+      greetingMode: greetingModeOf(body.greetingMode),
     })
     res.json(character)
   } catch (e) {
@@ -78,7 +91,14 @@ charactersRouter.put('/api/characters/:id', (req, res) => {
       res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
       return
     }
-    const patch = (req.body ?? {}) as Partial<CharacterFull>
+    const body = (req.body ?? {}) as Partial<CharacterFull>
+    // Champs d'accueil filtrés : une valeur mal typée est ignorée (le personnage
+    // garde les siens) plutôt qu'interprétée comme un effacement.
+    const patch: Partial<CharacterFull> = {
+      ...body,
+      ...(body.greetings !== undefined ? { greetings: greetingsOf(body.greetings) } : {}),
+      ...(body.greetingMode !== undefined ? { greetingMode: greetingModeOf(body.greetingMode) } : {}),
+    }
     res.json(updateCharacter(req.params.id, patch))
   } catch (e) {
     sendError(res, 500, e)

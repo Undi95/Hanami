@@ -4,7 +4,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-import type { CharacterFull, CharacterMeta, ChatMessage, ChatMeta, MemoryFile } from '../../shared/types'
+import type {
+  CharacterFull,
+  CharacterMeta,
+  ChatMessage,
+  ChatMeta,
+  GreetingMode,
+  MemoryFile,
+} from '../../shared/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ROOT = path.resolve(__dirname, '..', '..')
@@ -68,27 +75,53 @@ function newId(): string {
 
 // ── Personnages ────────────────────────────────────────────────────────────
 
+/** Variantes de message d'accueil : on ne garde que des chaînes non vides. */
+function normalizeGreetings(list: unknown): string[] {
+  if (!Array.isArray(list)) return []
+  return list.filter((g): g is string => typeof g === 'string' && g.trim().length > 0)
+}
+
+/** Mode de premier message : valeur connue, sinon le défaut historique. */
+function normalizeGreetingMode(value: unknown): GreetingMode {
+  return value === 'generated' || value === 'ask' ? value : 'written'
+}
+
+/**
+ * Nettoie un character.json lu sur le disque : les fichiers de data/ sont
+ * éditables à la main, un `greetings` malformé ne doit jamais atteindre le client.
+ * Les champs absents le restent (rétro-compatibilité : pas de clé inventée).
+ */
+function normalizeMeta(raw: CharacterMeta, id: string): CharacterMeta {
+  const meta: CharacterMeta = { ...raw, id }
+  const greetings = normalizeGreetings(raw.greetings)
+  if (greetings.length > 0) meta.greetings = greetings
+  else delete meta.greetings
+  if (raw.greetingMode !== undefined) meta.greetingMode = normalizeGreetingMode(raw.greetingMode)
+  return meta
+}
+
 export function listCharacters(): CharacterMeta[] {
   if (!fs.existsSync(CHARACTERS_DIR)) return []
   const out: CharacterMeta[] = []
   for (const id of fs.readdirSync(CHARACTERS_DIR)) {
     const meta = readJson<CharacterMeta>(path.join(CHARACTERS_DIR, id, 'character.json'))
-    if (meta) out.push({ ...meta, id })
+    if (meta) out.push(normalizeMeta(meta, id))
   }
   return out.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export function getCharacter(id: string): CharacterFull | null {
   const dir = charDir(id)
-  const meta = readJson<CharacterMeta>(path.join(dir, 'character.json'))
-  if (!meta) return null
+  const raw = readJson<CharacterMeta>(path.join(dir, 'character.json'))
+  if (!raw) return null
+  const meta = normalizeMeta(raw, id)
   let systemPrompt = ''
   try {
     systemPrompt = fs.readFileSync(path.join(dir, 'system-prompt.md'), 'utf8')
   } catch {
     /* pas de prompt → chaîne vide */
   }
-  return { ...meta, id, systemPrompt }
+  return { ...meta, systemPrompt }
 }
 
 export interface CreateCharacterInput {
@@ -96,7 +129,23 @@ export interface CreateCharacterInput {
   vrm?: string
   background?: string
   greeting?: string
+  greetings?: string[]
+  greetingMode?: GreetingMode
   systemPrompt?: string
+}
+
+/**
+ * Champs d'accueil optionnels tels qu'ils sont écrits dans character.json :
+ * variantes vides retirées, et mode omis quand il vaut le défaut ('written').
+ * Un character.json sans ces clés reste donc parfaitement valide.
+ */
+function greetingFields(greetings: unknown, greetingMode: unknown): Partial<CharacterMeta> {
+  const list = normalizeGreetings(greetings)
+  const mode = normalizeGreetingMode(greetingMode)
+  return {
+    ...(list.length > 0 ? { greetings: list } : {}),
+    ...(mode !== 'written' ? { greetingMode: mode } : {}),
+  }
 }
 
 export function createCharacter(input: CreateCharacterInput): CharacterFull {
@@ -111,6 +160,7 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
     vrm: input.vrm ?? '',
     background: input.background ?? '',
     greeting: input.greeting ?? '',
+    ...greetingFields(input.greetings, input.greetingMode),
     createdAt: new Date().toISOString(),
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
@@ -129,6 +179,8 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     vrm: patch.vrm ?? current.vrm,
     background: patch.background ?? current.background,
     greeting: patch.greeting ?? current.greeting,
+    // Un tableau vide dans le patch EST une valeur : il efface les variantes.
+    ...greetingFields(patch.greetings ?? current.greetings, patch.greetingMode ?? current.greetingMode),
     createdAt: current.createdAt,
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))

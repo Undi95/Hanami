@@ -1,6 +1,6 @@
 // Personnages : grille de sélection, création, édition (prompt système inclus), suppression.
 import { useEffect, useState } from 'react'
-import type { CharacterFull, CharacterMeta } from '../../../shared/types'
+import type { CharacterFull, CharacterMeta, GreetingMode } from '../../../shared/types'
 import * as api from '../api'
 import { useI18n } from '../i18n'
 import Dialog from './Dialog'
@@ -22,10 +22,22 @@ interface FormState {
   vrm: string
   background: string
   greeting: string
+  greetings: string[]
+  greetingMode: GreetingMode
   systemPrompt: string
 }
 
-const EMPTY_FORM: FormState = { name: '', vrm: '', background: '', greeting: '', systemPrompt: '' }
+const EMPTY_FORM: FormState = {
+  name: '',
+  vrm: '',
+  background: '',
+  greeting: '',
+  greetings: [],
+  greetingMode: 'written',
+  systemPrompt: '',
+}
+
+const GREETING_MODES: readonly GreetingMode[] = ['written', 'generated', 'ask']
 
 function basename(url: string): string {
   return url.split('/').pop() ?? url
@@ -73,7 +85,15 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
     setArmed(false)
     try {
       const c = await api.getCharacter(id)
-      const f: FormState = { name: c.name, vrm: c.vrm, background: c.background, greeting: c.greeting, systemPrompt: c.systemPrompt }
+      const f: FormState = {
+        name: c.name,
+        vrm: c.vrm,
+        background: c.background,
+        greeting: c.greeting,
+        greetings: c.greetings ?? [],
+        greetingMode: c.greetingMode ?? 'written',
+        systemPrompt: c.systemPrompt,
+      }
       setForm(f)
       setInitialForm(f)
       setView({ kind: 'edit', id })
@@ -82,9 +102,24 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
     }
   }
 
-  // Saisies non enregistrées dans le formulaire de création/édition.
+  // Saisies non enregistrées dans le formulaire de création/édition. Le tableau
+  // des variantes n'est recréé qu'à la modification : comparer les références suffit.
   const dirty =
     view.kind !== 'list' && (Object.keys(form) as (keyof FormState)[]).some((k) => form[k] !== initialForm[k])
+
+  // ── Variantes du message d'accueil ─────────────────────────────────────────
+
+  function setVariant(i: number, value: string) {
+    setForm((f) => ({ ...f, greetings: f.greetings.map((g, j) => (j === i ? value : g)) }))
+  }
+
+  function addVariant() {
+    setForm((f) => ({ ...f, greetings: [...f.greetings, ''] }))
+  }
+
+  function removeVariant(i: number) {
+    setForm((f) => ({ ...f, greetings: f.greetings.filter((_, j) => j !== i) }))
+  }
 
   async function submit() {
     if (!form.name.trim()) {
@@ -93,6 +128,10 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
     }
     setBusy(true)
     setError(null)
+    // Les variantes laissées vides ne sont pas enregistrées. Le message d'accueil
+    // et ses variantes sont conservés même en mode « généré » (simplement masqués) :
+    // repasser en « écrit » les retrouve intacts.
+    const greetings = form.greetings.filter((g) => g.trim().length > 0)
     try {
       if (view.kind === 'create') {
         const c = await api.createCharacter({
@@ -100,6 +139,8 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
           vrm: form.vrm,
           background: form.background,
           greeting: form.greeting,
+          greetings,
+          greetingMode: form.greetingMode,
         })
         onCreated(c)
         backToList()
@@ -109,6 +150,8 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
           vrm: form.vrm,
           background: form.background,
           greeting: form.greeting,
+          greetings,
+          greetingMode: form.greetingMode,
           systemPrompt: form.systemPrompt,
         })
         onUpdated(c)
@@ -228,15 +271,81 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
             </div>
           </div>
           <div className="field">
-            <label htmlFor="char-greeting">{t('greeting')}</label>
-            <textarea
-              id="char-greeting"
-              value={form.greeting}
-              onChange={(e) => set('greeting', e.target.value)}
-              placeholder={t('greetingPlaceholder')}
-            />
-            <span className="hint">{t('greetingHint')}</span>
+            <label>{t('greetingMode')}</label>
+            {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+            <div>
+              <div className="seg" role="group" aria-label={t('greetingMode')}>
+                {GREETING_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className="seg-btn"
+                    aria-pressed={form.greetingMode === mode}
+                    onClick={() => set('greetingMode', mode)}
+                  >
+                    {mode === 'written'
+                      ? t('greetingModeWritten')
+                      : mode === 'generated'
+                        ? t('greetingModeGenerated')
+                        : t('greetingModeAsk')}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <span className="hint">{t('greetingModeSub')}</span>
           </div>
+
+          {/* Mode « généré » : le modèle écrit le premier message — les textes
+              écrits sont masqués (conservés en base, jamais utilisés). */}
+          {form.greetingMode !== 'generated' && (
+            <>
+              <div className="field">
+                <label htmlFor="char-greeting">{t('greeting')}</label>
+                <textarea
+                  id="char-greeting"
+                  value={form.greeting}
+                  onChange={(e) => set('greeting', e.target.value)}
+                  placeholder={t('greetingPlaceholder')}
+                />
+                <span className="hint">{t('greetingHint')}</span>
+              </div>
+              <div className="field">
+                <label>{t('greetingVariants')}</label>
+                {form.greetings.length > 0 && (
+                  <div className="variant-list">
+                    {/* Clé = index : les variantes n'ont pas d'identité propre et
+                        chaque textarea est contrôlé (sa valeur suit toujours l'état). */}
+                    {form.greetings.map((g, i) => (
+                      <div className="variant-row" key={i}>
+                        <textarea
+                          value={g}
+                          onChange={(e) => setVariant(i, e.target.value)}
+                          placeholder={t('greetingPlaceholder')}
+                          aria-label={t('greetingVariants')}
+                        />
+                        <button
+                          className="btn small"
+                          type="button"
+                          onClick={() => removeVariant(i)}
+                          title={t('removeVariant')}
+                          aria-label={t('removeVariant')}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                            <path d="M6 6l12 12M18 6L6 18" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div>
+                  <button className="btn small" type="button" onClick={addVariant}>
+                    {t('addGreetingVariant')}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
           {view.kind === 'edit' && (
             <>
               <div className="field">
