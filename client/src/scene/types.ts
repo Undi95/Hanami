@@ -1,10 +1,10 @@
 // Contrat entre l'UI (App) et la scène 3D (vrmStage) — ne pas modifier sans mettre à jour les deux côtés.
 
-/** Cadrage caméra (position + cible, coordonnées monde) — sérialisable tel quel. */
-export interface StageView {
-  pos: [number, number, number]
-  target: [number, number, number]
-}
+// StageView vit désormais dans shared/types.ts : le cadrage caméra est une
+// préférence persistée côté serveur (data/ui.json), donc partie du contrat
+// client/serveur. Réexporté ici pour que la scène garde un import unique.
+export type { StageView } from '../../../shared/types'
+import type { StageView } from '../../../shared/types'
 
 export interface VrmStage {
   /** Charge un modèle .vrm (url '' = décharge le modèle courant). */

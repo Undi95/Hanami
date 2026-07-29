@@ -90,3 +90,33 @@ export type ChatEvent =
 
 export const EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'surprised', 'relaxed'] as const
 export type Emotion = (typeof EMOTIONS)[number]
+
+// ── Préférences d'interface (data/ui.json) ─────────────────────────────────
+// L'utilisateur est SEUL sur son serveur : ses réglages d'interface le suivent
+// du PC au téléphone. Le serveur fait foi ; le localStorage du client n'en est
+// qu'un cache de démarrage. Le token d'accès, lui, reste local (clé par appareil).
+
+/** Cadrage caméra de la scène 3D (position + cible, coordonnées monde) — sérialisable tel quel. */
+export interface StageView {
+  pos: [number, number, number]
+  target: [number, number, number]
+}
+
+/** Thème perso : deux couleurs hex (#rrggbb), tout le shading est dérivé en CSS. */
+export interface UiCustomTheme {
+  bg: string
+  accent: string
+}
+
+export interface UiPrefs {
+  lang?: 'fr' | 'en'
+  theme?: string // identifiant de thème préfait, ou 'custom'
+  customTheme?: UiCustomTheme
+  vnMode?: boolean // mode visual novel
+  activeCharacter?: string // dernier personnage ouvert
+  activeChat?: Record<string, string> // dernière conversation ouverte, par personnage
+  views?: Record<string, StageView> // cadrage caméra choisi, par personnage
+}
+
+/** Corps du PUT /api/ui : merge superficiel — clé absente = inchangée, `null` = supprimée. */
+export type UiPrefsPatch = { [K in keyof UiPrefs]?: UiPrefs[K] | null }

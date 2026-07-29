@@ -11,8 +11,29 @@ import type {
 import type { VrmStage } from './scene/types'
 import * as api from './api'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
-import { applyTheme, resolveTheme, saveTheme, savedTheme, type AppTheme } from './themes'
-import { I18nProvider, localeOf, useI18n } from './i18n'
+import {
+  applyTheme,
+  normalizeTheme,
+  resolveTheme,
+  saveTheme,
+  savedCustom,
+  savedTheme,
+  themeCode,
+  type AppTheme,
+} from './themes'
+import {
+  forgetCharacter,
+  getActiveChat,
+  getPref,
+  getPrefs,
+  getSavedView,
+  loadServerPrefs,
+  setActiveChat,
+  setPref,
+  setSavedView,
+  subscribePrefs,
+} from './prefs'
+import { I18nProvider, getLang, localeOf, useI18n } from './i18n'
 import TopBar, { type DialogKind } from './components/TopBar'
 import MessageList, { VnBox, type FeedItem } from './components/MessageList'
 import Composer from './components/Composer'
@@ -25,12 +46,10 @@ import ImportDialog from './components/ImportDialog'
 import MemoryDialog from './components/MemoryDialog'
 import PromptInspector from './components/PromptInspector'
 
-const CHAR_KEY = 'hanami_char'
-// Mode visual novel : préférence d'affichage locale (pas un réglage serveur).
-const VN_KEY = 'hanami_vn'
-const chatKey = (charId: string) => `hanami_chat_${charId}`
-// Cadrage caméra choisi par l'utilisateur (pan/zoom/rotation), par personnage.
-const viewKey = (charId: string) => `hanami_view_${charId}`
+// Personnage/conversation actifs, mode visual novel, cadrages caméra : toutes
+// ces préférences vivent côté serveur (data/ui.json) via prefs.ts — l'utilisateur
+// retrouve son écran à l'identique en passant du PC au téléphone.
+
 // Seuil d'auto-compaction (% du contexte) — même esprit que Claude Code.
 const AUTO_COMPACT_AT = 80
 // Citation d'un message : longueur de l'aperçu (bandeau) et de l'extrait envoyé.
@@ -55,7 +74,7 @@ function pickGreeting(pool: string[]): string {
 }
 
 function AppInner() {
-  const { lang, t } = useI18n()
+  const { lang, setLang, t } = useI18n()
   const [booting, setBooting] = useState(true)
   const [needLogin, setNeedLogin] = useState(false)
   const [settings, setSettings] = useState<Settings | null>(null)
@@ -71,18 +90,15 @@ function AppInner() {
   const [context, setContext] = useState<ContextInfo | null>(null)
   const [compacting, setCompacting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
-  const [vnMode, setVnMode] = useState(() => {
-    try {
-      return localStorage.getItem(VN_KEY) === '1'
-    } catch {
-      return false // localStorage indisponible : chat classique
-    }
-  })
+  const [vnMode, setVnMode] = useState(() => getPref('vnMode') === true)
   const [stageReady, setStageReady] = useState(false)
   const [vrmError, setVrmError] = useState<string | null>(null)
-  // Thème de l'app (préférence locale, comme la langue) — le thème propre au
+  // Thème de l'app (préférence serveur, comme la langue) — le thème propre au
   // personnage actif, s'il existe, prend le dessus.
   const [appTheme, setAppTheme] = useState<AppTheme>(savedTheme)
+  // Compteur bumpé quand les COULEURS du thème perso changent (elles ne sont pas
+  // dans appTheme) : relance l'effet qui applique le thème.
+  const [customVersion, setCustomVersion] = useState(0)
   // Mode d'accueil « demander » : question posée une seule fois par ouverture de
   // chat vide (le personnage et le chat visés sont figés dans l'état).
   const [greetingAsk, setGreetingAsk] = useState<{ char: CharacterFull; chat: ChatMeta } | null>(null)
@@ -111,6 +127,9 @@ function AppInner() {
   // Personnage courant pour le callback de cadrage (posé une fois à la création
   // de la scène, qui vit plus longtemps que chaque personnage).
   const characterIdRef = useRef<string | null>(null)
+  // Dernières couleurs perso appliquées — sert à ne bumper customVersion que
+  // sur un vrai changement (les notifications de prefs sont fréquentes).
+  const customCodeRef = useRef<string>(themeCode(savedCustom()))
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -264,12 +283,7 @@ function AppInner() {
       stageRef.current.onViewChange((view) => {
         const id = characterIdRef.current
         if (!id) return
-        try {
-          if (view) localStorage.setItem(viewKey(id), JSON.stringify(view))
-          else localStorage.removeItem(viewKey(id))
-        } catch {
-          /* localStorage indisponible : cadrage non persisté */
-        }
+        setSavedView(id, view)
       })
       setStageReady(true)
     })().catch((e) => {
@@ -298,13 +312,8 @@ function AppInner() {
       .loadModel(character?.vrm ?? '')
       .then(() => {
         if (!charId || characterIdRef.current !== charId) return
-        const raw = localStorage.getItem(viewKey(charId))
-        if (!raw) return
-        try {
-          stage.setView(JSON.parse(raw))
-        } catch {
-          localStorage.removeItem(viewKey(charId)) // cadrage corrompu : oublié
-        }
+        const view = getSavedView(charId)
+        if (view) stage.setView(view)
       })
       .catch((e) => {
         console.error('[vrm]', e)
@@ -365,7 +374,7 @@ function AppInner() {
       chatIdRef.current = meta.id
       setReplyTo(null) // la cible d'une réponse n'existe plus dans ce fil
       setContext(null) // la jauge repart avec le prochain échange de ce chat
-      localStorage.setItem(chatKey(char.id), meta.id)
+      setActiveChat(char.id, meta.id)
       const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
       // Premier message d'un chat VIDE (jamais sur un chat importé — il n'est pas
       // vide), selon le mode du personnage : 'written' (défaut) affiche une
@@ -403,10 +412,10 @@ function AppInner() {
       const full = await api.getCharacter(id)
       if (gen !== loadGenRef.current) return
       setCharacter(full)
-      localStorage.setItem(CHAR_KEY, id)
+      setPref({ activeCharacter: id })
       const chats = await api.listChats(id)
       if (gen !== loadGenRef.current) return
-      const savedChat = localStorage.getItem(chatKey(id))
+      const savedChat = getActiveChat(id)
       let meta = chats.find((c) => c.id === savedChat) ?? chats[0]
       if (!meta) {
         meta = await api.createChat(id, defaultChatTitle())
@@ -423,9 +432,13 @@ function AppInner() {
     setNeedLogin(false)
     try {
       setSettings(await api.getSettings())
+      // Auth acquise (getSettings est passé) : les préférences du serveur font
+      // foi et remplacent le cache — l'abonnement ci-dessous applique langue,
+      // thème et mode VN si elles diffèrent, la sélection est lue juste après.
+      await loadServerPrefs()
       const chars = await api.listCharacters()
       setCharacters(chars)
-      const saved = localStorage.getItem(CHAR_KEY)
+      const saved = getPref('activeCharacter')
       const pick = chars.find((c) => c.id === saved) ?? chars[0]
       if (pick) await selectCharacter(pick.id)
       probeBackend()
@@ -441,32 +454,52 @@ function AppInner() {
     boot().catch((e) => console.error('[boot]', e))
   }, [boot])
 
+  // ── Préférences venues du serveur ────────────────────────────────────────
+  // Un seul abonnement, monté une fois : l'état serveur arrivé au boot (ou une
+  // préférence changée ailleurs dans l'app) réaligne langue, thème et mode VN.
+  // Lectures via getLang()/setState fonctionnel : aucune valeur périmée dans la
+  // fermeture. prefs.ts empêche ces applications de repartir en PUT.
+  useEffect(
+    () =>
+      subscribePrefs(() => {
+        const prefs = getPrefs()
+        if ((prefs.lang === 'fr' || prefs.lang === 'en') && prefs.lang !== getLang()) setLang(prefs.lang)
+        if (typeof prefs.vnMode === 'boolean') setVnMode(prefs.vnMode)
+        if (prefs.theme !== undefined) setAppTheme(normalizeTheme(prefs.theme))
+        const code = themeCode(savedCustom())
+        if (code !== customCodeRef.current) {
+          customCodeRef.current = code
+          setCustomVersion((v) => v + 1)
+        }
+      }),
+    [setLang],
+  )
+
   // ── Thème ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     applyTheme(resolveTheme(character?.theme, appTheme))
-  }, [character?.theme, appTheme])
+  }, [character?.theme, appTheme, customVersion])
 
   // ── Mode visual novel ────────────────────────────────────────────────────
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(VN_KEY, vnMode ? '1' : '0')
-    } catch {
-      /* préférence non persistée : pas bloquant */
-    }
-  }, [vnMode])
+  // Bascule explicite (bouton ou Échap) : la préférence part au serveur. Rien
+  // n'est écrit au montage — un boot vierge ne crée aucune préférence.
+  const changeVnMode = useCallback((next: boolean) => {
+    setVnMode(next)
+    setPref({ vnMode: next })
+  }, [])
 
   // Échap quitte le mode — sauf si un dialog ou l'écran de connexion est ouvert
   // (là, Échap leur appartient).
   useEffect(() => {
     if (!vnMode || dialog || greetingAsk || needLogin) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setVnMode(false)
+      if (e.key === 'Escape') changeVnMode(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [vnMode, dialog, greetingAsk, needLogin])
+  }, [vnMode, dialog, greetingAsk, needLogin, changeVnMode])
 
   // ── Envoi + streaming ────────────────────────────────────────────────────
 
@@ -744,13 +777,13 @@ function AppInner() {
   }
 
   async function handleCharacterDeleted(id: string) {
-    localStorage.removeItem(chatKey(id))
+    // Conversation active, cadrage caméra et sélection de ce personnage : oubliés.
+    forgetCharacter(id)
     const chars = await refreshCharacters()
     if (character?.id === id) {
       // Le personnage actif vient d'être supprimé : couper un éventuel stream en
       // cours (y compris quand il ne reste plus aucun personnage).
       abortRef.current?.abort()
-      localStorage.removeItem(CHAR_KEY)
       const next = chars.find((c) => c.id !== id)
       if (next) await selectCharacter(next.id)
       else {
@@ -831,7 +864,7 @@ function AppInner() {
           hasChat={!!character && !!chatMeta}
           vnMode={vnMode}
           onToggleVn={() => {
-            setVnMode((v) => !v)
+            changeVnMode(!vnMode)
             setCollapsed(false) // on ne revient jamais du mode VN sur un panneau replié
           }}
           onOpen={setDialog}

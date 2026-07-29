@@ -10,6 +10,8 @@ import type {
   GreetingMode,
   MemoryFile,
   Settings,
+  UiPrefs,
+  UiPrefsPatch,
 } from '../../shared/types'
 import { translate as t } from './i18n'
 
@@ -143,6 +145,20 @@ export async function getModels(): Promise<string[]> {
 export async function testModels(input: { backendUrl?: string; apiKey?: string }): Promise<string[]> {
   const r = await req<{ models: string[] }>('POST', '/api/settings/models', input)
   return r.models
+}
+
+// ── Préférences d'interface ────────────────────────────────────────────────
+// Langue, thème, dernier personnage/conversation, cadrages caméra : le serveur
+// fait foi (data/ui.json) pour que les réglages suivent l'utilisateur d'un
+// appareil à l'autre. Passer par prefs.ts plutôt que d'appeler ceci en direct.
+
+export function getUiPrefs(): Promise<UiPrefs> {
+  return req('GET', '/api/ui')
+}
+
+/** Merge superficiel côté serveur : clé absente = inchangée, `null` = supprimée. */
+export function putUiPrefs(patch: UiPrefsPatch): Promise<UiPrefs> {
+  return req('PUT', '/api/ui', patch)
 }
 
 // ── Personnages ────────────────────────────────────────────────────────────

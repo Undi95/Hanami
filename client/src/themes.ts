@@ -1,7 +1,9 @@
 // Thèmes préfaits — cinq palettes complètes définies dans styles.css et
-// appliquées via l'attribut data-theme de <html>. Préférence locale (comme la
-// langue) ; un thème propre au personnage actif prend le dessus.
+// appliquées via l'attribut data-theme de <html>. Préférence enregistrée côté
+// serveur (comme la langue), lue au démarrage depuis le cache synchrone de
+// prefs.ts ; un thème propre au personnage actif prend le dessus.
 import type { Key } from './i18n'
+import { getPref, setPref } from './prefs'
 
 export const THEMES = ['sakura', 'minuit', 'matcha', 'braise', 'encre'] as const
 export type ThemeId = (typeof THEMES)[number]
@@ -18,9 +20,6 @@ export const THEME_LABELS: Record<ThemeId, Key> = {
 /** Thème applicable : un préfait, ou « custom » (deux couleurs de l'utilisateur). */
 export type AppTheme = ThemeId | 'custom'
 
-const THEME_KEY = 'hanami_theme'
-const CUSTOM_KEY = 'hanami_custom_theme'
-
 /** Thème perso : deux couleurs seulement — tout le shading est dérivé en CSS. */
 export interface CustomTheme {
   bg: string
@@ -35,46 +34,30 @@ export function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && HEX_RE.test(value)
 }
 
-/** Valeur inconnue (vieux localStorage, character.json édité à la main) → défaut. */
+/** Valeur inconnue (préférence héritée, character.json édité à la main) → défaut. */
 export function normalizeTheme(value: unknown): AppTheme {
   if (value === 'custom') return 'custom'
   return (THEMES as readonly string[]).includes(value as string) ? (value as ThemeId) : 'sakura'
 }
 
 export function savedTheme(): AppTheme {
-  try {
-    return normalizeTheme(localStorage.getItem(THEME_KEY))
-  } catch {
-    return 'sakura'
-  }
+  return normalizeTheme(getPref('theme'))
 }
 
 export function saveTheme(theme: AppTheme): void {
-  try {
-    localStorage.setItem(THEME_KEY, theme)
-  } catch {
-    /* préférence non persistée : pas bloquant */
-  }
+  setPref({ theme })
 }
 
 export function savedCustom(): CustomTheme {
-  try {
-    const raw = JSON.parse(localStorage.getItem(CUSTOM_KEY) ?? '') as Partial<CustomTheme>
-    return {
-      bg: isHexColor(raw.bg) ? raw.bg : DEFAULT_CUSTOM.bg,
-      accent: isHexColor(raw.accent) ? raw.accent : DEFAULT_CUSTOM.accent,
-    }
-  } catch {
-    return { ...DEFAULT_CUSTOM }
+  const raw = getPref('customTheme')
+  return {
+    bg: raw && isHexColor(raw.bg) ? raw.bg : DEFAULT_CUSTOM.bg,
+    accent: raw && isHexColor(raw.accent) ? raw.accent : DEFAULT_CUSTOM.accent,
   }
 }
 
 export function saveCustom(custom: CustomTheme): void {
-  try {
-    localStorage.setItem(CUSTOM_KEY, JSON.stringify(custom))
-  } catch {
-    /* préférence non persistée : pas bloquant */
-  }
+  setPref({ customTheme: custom })
 }
 
 /** Code partageable d'un thème perso : « #fond #accent ». */

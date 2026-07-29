@@ -3,10 +3,9 @@
 // donc une clé manquante côté anglais casse `tsc`.
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
+import { getPref, setPref } from './prefs'
 
 export type Lang = 'fr' | 'en'
-
-const LANG_KEY = 'hanami_lang'
 
 const FR = {
   // ── Commun ───────────────────────────────────────────────────────────────
@@ -507,14 +506,14 @@ function interpolate(text: string, vars?: Vars): string {
   )
 }
 
-/** Langue initiale : préférence enregistrée, sinon langue du navigateur. */
+/**
+ * Langue initiale : préférence enregistrée (cache synchrone de prefs.ts, donc
+ * aucun flash au chargement), sinon langue du navigateur. La valeur du serveur
+ * arrive au boot et s'applique via setLang si elle diffère.
+ */
 export function detectLang(): Lang {
-  try {
-    const saved = localStorage.getItem(LANG_KEY)
-    if (saved === 'fr' || saved === 'en') return saved
-  } catch {
-    /* localStorage indisponible (mode privé strict) */
-  }
+  const saved = getPref('lang')
+  if (saved === 'fr' || saved === 'en') return saved
   const nav = typeof navigator === 'undefined' ? '' : navigator.language
   return nav.toLowerCase().startsWith('fr') ? 'fr' : 'en'
 }
@@ -561,11 +560,7 @@ export function I18nProvider({ children }: { children: ReactNode }): ReactElemen
 
   const setLang = useCallback((next: Lang) => {
     currentLang = next
-    try {
-      localStorage.setItem(LANG_KEY, next)
-    } catch {
-      /* préférence non persistée : pas bloquant */
-    }
+    setPref({ lang: next }) // cache local + PUT débouncé (le serveur fait foi)
     setLangState(next)
   }, [])
 
