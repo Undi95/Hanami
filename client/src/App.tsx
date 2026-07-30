@@ -667,6 +667,13 @@ function AppInner() {
         const prefs = getPrefs()
         if ((prefs.lang === 'fr' || prefs.lang === 'en') && prefs.lang !== getLang()) setLang(prefs.lang)
         if (typeof prefs.vnMode === 'boolean') setVnMode(prefs.vnMode)
+        // Décor 3D et animations : même grammaire que partout ailleurs — seule une
+        // valeur BOOLÉENNE explicite écrase l'état, une clé absente reste « allumé ».
+        // Sans ces deux lignes, un navigateur dont le cache localStorage ne connaît
+        // pas encore la clé téléchargeait la pièce et affichait l'interrupteur coché
+        // en contradiction avec data/ui.json, pendant toute la première ouverture.
+        if (typeof prefs.env3d === 'boolean') setEnv3d(prefs.env3d)
+        if (typeof prefs.vrmaEnabled === 'boolean') setVrmaEnabled(prefs.vrmaEnabled)
         setChatWidth(chatPanelWidth())
         if (prefs.theme !== undefined) setAppTheme(normalizeTheme(prefs.theme))
         const code = themeCode(savedCustom())
