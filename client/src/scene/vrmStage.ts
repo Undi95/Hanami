@@ -197,7 +197,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const h = container.clientHeight
     if (w < CHAT_PANEL_MIN_W || h <= 0) return 0 // écran étroit : avatar centré
     const worldPerPixel = (2 * distance * Math.tan((camera.fov * Math.PI) / 360)) / h
-    return (CHAT_PANEL_W / 2) * worldPerPixel
+    // Le quart (et non la moitié) de la colonne : viser le centre exact de la
+    // zone hors panneau déportait trop l'avatar — retour visuel utilisateur.
+    return (CHAT_PANEL_W / 4) * worldPerPixel
   }
 
   // Cadrage buste + tête : cible légèrement sous la tête, caméra de face (décalée
