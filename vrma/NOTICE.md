@@ -14,12 +14,12 @@ redistribution.*
 
 ## 1. Overte — Apache License 2.0
 
-**Trente fichiers sur trente-cinq** dérivent des animations d'avatar du projet
+**Trente fichiers sur trente-deux** dérivent des animations d'avatar du projet
 **Overte** (`overte-org/overte`, `interface/resources/avatar/animations/`,
 127 fichiers FBX) : **tout le domaine face à face** — les quatre animations de
 repos, qui sont le socle permanent de la scène, et les douze gestes — ainsi que
-tout le domaine monde 3D sauf les transitions assises et le saut. C'est la source
-de la bibliothèque, à cinq fichiers près.
+tout le domaine monde 3D sauf les deux transitions assises. C'est la source
+de la bibliothèque, à deux fichiers près.
 
 Ces animations ont été produites en interne chez High Fidelity par un animateur,
 dans Maya — les métadonnées internes des FBX déclarent
@@ -28,11 +28,11 @@ dans Maya — les métadonnées internes des FBX déclarent
 Mixamo recyclé : la recherche de chaînes ne donne aucune occurrence de « mixamo »
 ou « adobe », et aucun os ne porte le préfixe `mixamorig:`.
 
-*Thirty files out of thirty-five derive from the avatar animations of the
+*Thirty files out of thirty-two derive from the avatar animations of the
 **Overte** project (127 FBX files): the whole face-to-face domain — all four idle
 animations, which are the permanent base of the scene, and the twelve gestures —
-plus the whole 3D-world domain except the seated transitions and the jump. It is
-the library's source, bar five files. These animations were hand-made in-house at
+plus the whole 3D-world domain except the two seated transitions. It is
+the library's source, bar two files. These animations were hand-made in-house at
 High Fidelity by an animator, in Maya.*
 
 ```
@@ -121,8 +121,8 @@ images, et l'image suivant `endFrame` est déjà la copie de `startFrame`.
 | `world-walk-back.vrma` | `walk_bwd.fbx` | 1 → 37 | cycle entier, 1,233 s |
 | `world-turn-left.vrma` | `turn_left.fbx` | 1 → 33 | cycle entier, 1,100 s |
 | `world-turn-right.vrma` | `turn_right.fbx` | 1 → 31 | cycle entier, 1,000 s |
-| `world-walk-start.vrma` | `idle_to_walk.fbx` | 1 → 13 | intégralité, 0,400 s |
-| `world-walk-stop.vrma` | `settle_to_idle.fbx` | 1 → 59 | intégralité, 1,900 s |
+| `world-walk-start.vrma` | `idle_to_walk.fbx` | 1 → 13 | intégralité, 0,400 s, extrémités ancrées (voir ci-dessous) |
+| `world-walk-stop.vrma` | `settle_to_idle.fbx` | 1 → 59 | intégralité, 1,900 s, extrémités ancrées (voir ci-dessous) |
 | `world-sit-idle.vrma` | `sitting_idle.fbx` | 0 → 800 | sous-boucle de 13,333 s |
 | `world-sit-idle-2.vrma` | `sitting_idle04.fbx` | 1 → 800 | sous-boucle de 13,333 s |
 | `world-sit-talking.vrma` | `sitting_talk02.fbx` | 1 → 271 | sous-boucle de 7,133 s |
@@ -133,6 +133,36 @@ images, et l'image suivant `endFrame` est déjà la copie de `startFrame`.
 Modifications apportées / changes made : os Mixamo mappés vers les os humanoïdes
 VRM 1.0, frame de bind pose parasite retirée, échelle cm → m, ré-échantillonnage
 à 30 fps, export en `VRMC_vrm_animation` 1.0.
+
+### Ancrage des transitions de marche / anchoring of the walk transitions
+
+`world-walk-start` et `world-walk-stop` viennent d'Overte comme le cycle qu'ils
+encadrent, et pourtant leurs jointures mesuraient 34,8 et 57,5 cm. La cause n'est
+pas la fenêtre de découpe — balayée de l'image 13 à l'image 40 de
+`idle_to_walk.fbx`, elle ne descend jamais sous 19,5 cm — mais la **phase** : un
+cycle de marche repris à t=0, ou quitté à une phase quelconque, tombe forcément
+loin d'un départ ou d'un arrêt figés. Le graphe d'Overte le dit à sa façon : il
+quitte `WALKFWD` vers `idleSettle` avec `interpType: snapshotPrev` sur quinze
+images, c'est-à-dire en fondu depuis un instantané, sans jamais prétendre raccorder
+les poses.
+
+Les deux clips ont donc été ancrés sur la phase que la mesure désigne : la dernière
+image de `world-walk-start` est la pose de `world-walk` à **0,200 s** (image 6 sur
+30 — la phase la plus proche, 7,6 cm avant ancrage), la première image de
+`world-walk-stop` est celle de `world-walk` à **0** (la couture du cycle, 16,4 cm
+avant ancrage) ; leurs extrémités debout sont ancrées sur `idle`. Corrections :
+31,4° et 28,2° pour le départ, 21,5° et 6,3° pour l'arrêt, dissoutes sur 0,20 à
+0,50 s, sans changer le pic de vitesse du clip (517 → 515 et 140 → 139 °/s).
+
+Les trois jointures de la séquence de marche passent ainsi de 34,8 / 57,5 / 3,2 cm
+à **0 / 0 / 0 cm**, à condition que le code respecte les phases consignées dans
+`world.json` (`enchaine.phaseEntreeCibleS`, `enchaine.phaseSortieCibleS`).
+
+*Both walk transitions were anchored onto the phase of the walk cycle the
+measurement points at — entry at 0.200 s, exit on the cycle seam — after sweeping
+every cut window of `idle_to_walk.fbx` failed to get below 19.5 cm. The seams go
+from 34.8 / 57.5 / 3.2 cm to 0 / 0 / 0 cm, provided the code honours the phases
+recorded in `world.json`.*
 
 Pose de repos imposée. Les FBX assis d'Overte portent la pose **assise** dans la
 transformation locale de leurs nœuds (mesuré : `sitting_idle.fbx` a ses hanches de
@@ -235,11 +265,11 @@ startle emote. The trigger finds nothing and the avatar simply keeps breathing.*
 
 ## 3. Quaternius — CC0 1.0 Universal
 
-**Cinq fichiers** dérivent de l'**Universal Animation Library** de **Quaternius**,
+**Deux fichiers** dérivent de l'**Universal Animation Library** de **Quaternius**,
 publiée sous **CC0 1.0 Universal** — domaine public, aucune attribution requise,
 mais elle reste appréciée et nous la donnons quand même.
 
-*Five files derive from **Quaternius**'s **Universal Animation Library**, released
+*Two files derive from **Quaternius**'s **Universal Animation Library**, released
 under **CC0 1.0 Universal** — public domain, no attribution required, though
 appreciated, and we give it anyway.*
 
@@ -249,9 +279,6 @@ appreciated, and we give it anyway.*
 | --- | --- | --- |
 | `world-sit-enter.vrma` | `Sitting_Enter` | Overte n'a aucune transition debout → assis |
 | `world-sit-exit.vrma` | `Sitting_Exit` | Overte n'a aucune transition assis → debout |
-| `world-jump-start.vrma` | `Jump_Start` | chez Overte, la phase aérienne du saut n'existe que sous forme de trois poses fixes pilotées par le moteur |
-| `world-jump-loop.vrma` | `Jump_Loop` | idem |
-| `world-jump-land.vrma` | `Jump_Land` | idem |
 
 Le reste du pack a été écarté : mesurées au banc contre le VRM réel, les animations
 d'Overte l'emportent partout où elles ont un équivalent. Les animations de repos
@@ -264,43 +291,75 @@ Overte's animations win wherever they have an equivalent.*
 
 ### Retouches sur les transitions assises / changes to the seated transitions
 
-1. **Recalage horizontal.** Ces clips gardaient la translation du bassin (le
-   personnage recule de 27 cm pour se poser) alors que les maintiens assis d'Overte
-   sont recentrés sur l'origine : l'enchaînement téléportait le bassin de 27,6 cm.
-   L'extrémité assise est ramenée sur `(x=0, z=0)`, l'origine assise que tiennent
-   les maintiens. Les 24,5 cm restants sont consignés dans `world.json`
-   (`deplacementM`) : c'est au code de les reporter sur la position du personnage.
-2. **Raccordement de la posture assise.** Les deux studios n'assoient pas leur
-   personnage de la même façon : 13 à 31° d'écart par os du bas du corps, bassin
-   3,8 cm plus haut. Au fondu, un pied glissait de 20 cm au moment précis où le
-   personnage se pose. L'extrémité assise est donc interpolée vers la posture de
-   `world-sit-idle`, avec un poids nul à l'extrémité debout et plein à l'extrémité
-   assise : le début debout est intact, la fin assise devient rigoureusement le
-   maintien. Écart de raccord mesuré : 20,3 → 10,0 cm au maximum, et l'os le plus
-   éloigné n'est plus un pied mais un avant-bras.
+Ce sont les deux seuls clips de la bibliothèque qui ne viennent pas d'Overte, et
+c'est exactement là que la séquence d'assise se décousait : mesurées au banc,
+`idle → world-sit-enter` et `world-sit-exit → idle` valaient **42 cm** d'écart de
+pose, et les jointures avec le maintien assis **10,7 cm**. Le clip ne partait pas
+de la station debout et n'arrivait pas sur la posture assise du studio d'à côté.
+Faute d'équivalent chez Overte — son graphe d'animation passe de `idle` à `seated`
+par un simple fondu de six images, il n'existe aucune animation de « s'asseoir » à
+convertir —, les deux clips ont été **ancrés sur leurs voisines** plutôt que jetés.
 
-### Retouche sur les clips de saut / changes to the jump clips
+1. **Joués sur place.** Ces clips gardaient la translation du bassin (26,7 cm entre
+   la station debout et l'assise) alors que tous les maintiens assis d'Overte sont
+   recentrés sur l'origine : quelle que soit l'extrémité qu'on recale sur zéro,
+   l'autre se retrouvait à 26 cm de sa voisine. La translation horizontale est donc
+   **annulée d'un bout à l'autre**, comme sur les allures, et les 26,7 cm sont
+   consignés dans `world.json` (`deplacementCodeM`) : c'est au code de les reporter sur
+   la position du personnage.
+2. **Extrémités ancrées.** La première et la dernière image sont forcées sur les
+   poses voisines — pose moyenne d'`idle` d'un côté, `world-sit-idle` de l'autre —
+   et la correction se dissout vers l'intérieur sur une fenêtre en `smoothstep`
+   (0,40 s côté debout, 0,30 s côté assis). Elle vaut au maximum 35,2° sur la jambe
+   et 3,8 cm de bassin côté debout, 27,4° sur la main côté assis. La tête et les
+   orteils, que `world-sit-idle` n'anime pas, sont ramenés sur la pose de repos du
+   rig — c'est elle que le lecteur y restaure.
 
-Ils sortaient à 2179 °/s sur le genou droit et 2605 °/s sur une phalange du pouce,
-soit 73 puis 87° en une seule image à 30 images/s : des retournements
-d'articulation, jamais nettoyés parce que `convert-animations.mjs` n'a pas de
-limiteur de vitesse, contrairement à la chaîne Overte. Les 22 os fautifs de
-`world-jump-start` et les 5 de `world-jump-land` ont été écrêtés puis lissés sur
-trois images, plafond 900 °/s. Les clips Overte de la bibliothèque, eux, ne
-dépassent 517 °/s que dans les trois applaudissements (`happy` 670, `happy-3` 765,
-`happy-2` 1000 °/s au poignet gauche à l'impact des mains) : ce sont des pointes de
-mouvement authentiques, pas des retournements d'articulation.
+Écarts aux quatre jointures de la séquence `idle → sit-enter → sit-idle →
+sit-exit → idle`, mesurés sur le VRM réel : **42,1 → 1,7 cm**, **10,7 → 0 cm**,
+**11,0 → 1,0 cm**, **42,0 → 0,3 cm**. Le pic de vitesse angulaire du clip est
+inchangé (321 et 479 °/s, déjà présents avant l'ancrage) : la correction ne rajoute
+aucune secousse.
+
+*Both seated transitions were anchored onto their neighbours instead of being
+dropped: Overte has no sit-down animation at all — its graph cross-fades from
+`idle` to `seated` in six frames. The four seams of the seated sequence went from
+42.1 / 10.7 / 11.0 / 42.0 cm down to 1.7 / 0 / 1.0 / 0.3 cm.*
+
+### Le saut, retiré / the jump, removed
+
+Les trois clips `world-jump-*` (Quaternius `Jump_Start`, `Jump_Loop`, `Jump_Land`)
+**ont été retirés de la bibliothèque**. Mesurés au banc, leurs jointures valaient
+47,5 cm entre `idle` et l'appel, 42 cm entre la phase aérienne et l'atterrissage,
+30,3 cm entre l'atterrissage et `idle` ; deux d'entre eux sautaient de 23 cm de
+pose en une seule image. Les équivalents d'Overte existent pourtant
+(`jump_standing_launch_all.fbx`, `jump_standing_apex_all.fbx`,
+`jump_standing_land_settle_all.fbx`, déclarés dans le graphe sous `takeoffStand`,
+`inAirStand*` et `landStand*`) : convertis et mesurés, ils raccordent bien
+l'atterrissage au repos (3,4 cm) mais pas mieux le reste (25,9 cm depuis `idle`,
+35,8 puis 56,6 cm entre les trois temps). La raison est structurelle : chez Overte
+la phase aérienne n'est pas une animation mais **trois poses fixes mélangées par la
+vitesse verticale du moteur physique**, et la hauteur du saut est portée par la
+simulation, pas par le fichier. Un saut crédible demande donc du code, pas des
+clips — et un compagnon de conversation qui se promène dans une pièce n'en a pas
+besoin. La règle du projet s'applique : mieux vaut une capacité absente qu'un
+mouvement qui accroche l'œil.
+
+*The three jump clips were removed. Neither Quaternius's nor Overte's version joins
+up: Overte's airborne phase is not an animation but three fixed poses blended by
+the physics engine's vertical speed, and the jump height lives in the simulation,
+not in the file. A believable jump needs code, not clips.*
 
 ---
 
 ## 4. Répartition / breakdown
 
-35 fichiers, 5,77 Mo au total :
+32 fichiers, 5,50 Mo au total :
 
 | Source | Licence | Fichiers | Domaine |
 | --- | --- | --- | --- |
 | Overte | Apache-2.0 | 30 | 16 face à face, 14 monde 3D |
-| Quaternius | CC0-1.0 | 5 | monde 3D |
+| Quaternius | CC0-1.0 | 2 | monde 3D (les deux transitions assises) |
 
 **Deux sources, et une seule licence à respecter** : Apache-2.0 pour Overte, le
 reste étant en domaine public. Le domaine face à face est intégralement Overte.
@@ -331,14 +390,29 @@ carried an attribution requirement, so their removal changes no obligation.*
   pose rognés en tête de `happy` et `shake`.
 - **v3** : nouveau socle de repos (Overte `idle.fbx` en remplacement de la garde de
   combat Quaternius), `idle-2` et `idle-3` ajoutés.
-- **v4, la passe courante** : application de la règle d'acceptation au domaine face
+- **v4** : application de la règle d'acceptation au domaine face
   à face (§2). Les corrections de la passe v2 avaient été calées sur l'**ancien**
   socle, donc sur une pose qui n'existe plus ; plutôt que de les refaire, la source
   a été changée. Les six gestes remplacés sortent d'Overte sans aucune correction
   géométrique — même studio, même station, les raccords tombent d'eux-mêmes entre
   1,2 et 8,0 cm sur leurs vingt-quatre mesures.
+- **v5, la passe courante** : la même règle appliquée au domaine monde 3D, mais aux
+  **jointures des séquences** cette fois — ce n'est pas l'écart d'un clip au repos
+  qui compte (un clip assis en est forcément à 45 cm), c'est l'écart à chaque
+  jointure de l'enchaînement que l'application jouera. Les deux transitions assises
+  ont été ancrées sur leurs voisines (§3), les deux transitions de marche sur la
+  phase du cycle que la mesure désigne (§1), et le saut a été retiré (§3). Séquence
+  d'assise : 42,1 / 10,7 / 11,0 / 42,0 cm → **1,7 / 0 / 1,0 / 0,3**. Séquence de
+  marche : 34,8 / 57,5 / 3,2 cm → **0 / 0 / 0**, à la condition, écrite dans
+  `world.json`, que le code entre dans le cycle à 0,200 s et en sorte sur sa
+  couture. Le fichier `world.json` a par ailleurs été remis d'accord avec la mesure :
+  `distanceParCycleM ÷ dureeS` redonne maintenant exactement `vitesseMS` sur les
+  quatre allures, ce qui n'était pas le cas (2,6 à 4 % d'écart), et les valeurs
+  annoncées tiennent dans la fourchette mesurée.
 
-*v4, the current pass: the acceptance rule of §2 applied to the whole face-to-face
-domain. The v2 corrections had been fitted to the OLD idle pose, which no longer
-exists; rather than redo them, the source was changed. The six replacement
-gestures come from Overte with no geometric correction at all.*
+*v5, the current pass: the same rule applied to the 3D-world domain, but at the
+**seams of the sequences** this time. The seated sequence went from
+42.1 / 10.7 / 11.0 / 42.0 cm to 1.7 / 0 / 1.0 / 0.3; the walking sequence from
+34.8 / 57.5 / 3.2 cm to 0 / 0 / 0, provided the code enters the walk cycle at
+0.200 s and leaves it on its seam. The jump was removed. `world.json` was also
+brought back in line with the measurement.*

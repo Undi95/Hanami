@@ -15,7 +15,7 @@ préfixe du nom suffit à les distinguer** :
 | Domaine | Nom | Contenu | Poids |
 | --- | --- | --- | --- |
 | **face à face** | pas de préfixe | l'avatar debout devant l'utilisateur qui discute : repos, repos en train de parler, gestes d'émotion | 16 fichiers, 3,24 Mo |
-| **monde 3D** | préfixe `world-` | la scène interactive où le personnage marche, divague et s'assoit : allures, départ et arrêt, virages, postures assises, saut | 19 fichiers, 2,54 Mo |
+| **monde 3D** | préfixe `world-` | la scène interactive où le personnage marche, divague et s'assoit : allures, départ et arrêt, virages, postures assises | 16 fichiers, 2,26 Mo |
 
 Le face à face est **sévère** : on n'y ajoute un geste que s'il est utile, agréable
 et crédible pour quelqu'un qui discute assis. On enrichit ce qui existe (une
@@ -85,7 +85,6 @@ Le nom du fichier fait office de configuration — il n'y a pas de fichier de ma
 | `world-sit-idle`, `world-sit-idle-2` | maintien assis, en boucle — **remplacent** le socle |
 | `world-sit-talking`, `world-sit-talking-2` | maintien assis pendant qu'une réponse s'écrit |
 | `world-sit-look`, `world-sit-shift` | micro-variations assises, jouées une fois |
-| `world-jump-start`, `world-jump-loop`, `world-jump-land` | saut : appel, phase aérienne, atterrissage |
 
 Tout autre nom est simplement ignoré.
 
@@ -100,8 +99,19 @@ le code a besoin :
 - **postures assises** : la hauteur du bassin, en **fraction de la hauteur de
   hanches au repos**. Tous les clips assis tiennent la même (0,541), y compris les
   extrémités assises des transitions : le siège se place donc à une hauteur unique.
-- **transitions assises** : le déplacement horizontal (24,5 cm) dont le personnage
-  s'écarte du siège en se levant, à reporter sur sa position.
+- **transitions assises** : ces clips sont eux aussi joués **sur place** ; le
+  déplacement horizontal (26,7 cm) dont le personnage s'écarte du siège en se
+  levant est consigné là, à reporter sur sa position.
+- **transitions, `enchaine`** : d'où vient le clip, où il va, et — pour la marche —
+  **à quelle phase du cycle entrer et sortir**. Les extrémités des transitions sont
+  ancrées sur les poses voisines : la dernière image de `world-walk-start` *est* la
+  pose de `world-walk` à 0,200 s, la première de `world-walk-stop` *est* celle de
+  `world-walk` à 0. Respecter ces phases donne un raccord nul ; les ignorer redonne
+  jusqu'à 46 cm d'écart.
+- **`phasesDeRaccord`** : la même chose pour les six cycles, à la racine du fichier —
+  meilleure image d'entrée, meilleure image de sortie, et l'écart en centimètres que
+  chacune laisse. Un cycle n'a pas de « début » : c'est le code qui choisit où y
+  entrer et où en sortir, et c'est ce choix qui décide du raccord.
 - **qualité de boucle** : écart de pose au raccord, et vitesse angulaire juste
   avant et juste après — une boucle peut être parfaite en pose et donner un coup
   de fouet si la vitesse saute.
@@ -118,11 +128,11 @@ projet sont réunis dans le [README](../README.fr.md#crédits) ; le détail fich
 fichier, les avis de licence et les mentions à conserver sont dans
 [`NOTICE.md`](NOTICE.md), à lire avant toute redistribution :
 
-- **Overte** — **Apache 2.0** : **30 clips sur 35**, soit tout le domaine face à
-  face (quatre repos, douze gestes) et tout le domaine monde 3D sauf les transitions
-  assises et le saut (14 clips).
+- **Overte** — **Apache 2.0** : **30 clips sur 32**, soit tout le domaine face à
+  face (quatre repos, douze gestes) et tout le domaine monde 3D sauf les deux
+  transitions assises (14 clips).
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, domaine public :
-  les transitions assises et le saut (5 clips), les deux familles qu'Overte n'a pas.
+  les deux transitions assises, la seule famille qu'Overte n'a pas.
 
 La **CMU Graphics Lab Motion Capture Database** (conversion BVH de Bruce Hahne) a
 fourni quinze gestes d'émotion à la première version de cette bibliothèque ; aucun
@@ -147,7 +157,7 @@ prefix alone tells them apart**:
 | Domain | Name | Contents | Weight |
 | --- | --- | --- | --- |
 | **face to face** | no prefix | the avatar standing in front of the user, talking: idles, talking idle, emotion gestures | 16 files, 3.24 MB |
-| **3D world** | `world-` prefix | the interactive scene where the character walks, wanders and sits down: gaits, start and stop, turns, seated postures, jump | 19 files, 2.54 MB |
+| **3D world** | `world-` prefix | the interactive scene where the character walks, wanders and sits down: gaits, start and stop, turns, seated postures | 16 files, 2.26 MB |
 
 Face to face is **strict**: a gesture only earns its place if it is useful,
 pleasant and believable for someone having a conversation. Enrich what exists (a
@@ -215,7 +225,6 @@ The file name IS the configuration — there is no mapping file.
 | `world-sit-idle`, `world-sit-idle-2` | seated hold, looping — **replaces** the base pose |
 | `world-sit-talking`, `world-sit-talking-2` | seated hold while a reply is being written |
 | `world-sit-look`, `world-sit-shift` | seated micro-variations, played once |
-| `world-jump-start`, `world-jump-loop`, `world-jump-land` | jump: launch, airborne, landing |
 
 Any other name is silently ignored.
 
@@ -229,8 +238,19 @@ for each 3D-world clip, the measured quantities the code needs:
 - **seated postures**: hip height, as a **fraction of the rest hip height**. Every
   seated clip holds the same one (0.541), including the seated ends of the
   transitions: the seat therefore has a single height.
-- **seated transitions**: the horizontal displacement (24.5 cm) by which the
-  character moves away from the seat when standing up, to be applied to its position.
+- **seated transitions**: these clips too are played **in place**; the horizontal
+  displacement (26.7 cm) by which the character moves away from the seat when
+  standing up is recorded there, to be applied to its position.
+- **transitions, `enchaine`**: where the clip comes from, where it goes, and — for
+  walking — **at which phase of the cycle to enter and leave it**. The ends of the
+  transitions are anchored onto the neighbouring poses: the last frame of
+  `world-walk-start` *is* the pose of `world-walk` at 0.200 s, the first frame of
+  `world-walk-stop` *is* the pose of `world-walk` at 0. Honour those phases and the
+  seam is nil; ignore them and it goes back up to 46 cm.
+- **`phasesDeRaccord`**: the same for all six cycles, at the root of the file — best
+  entry frame, best exit frame, and the gap in centimetres each one leaves. A cycle
+  has no "beginning": the code chooses where to enter it and where to leave it, and
+  that choice is what decides the seam.
 - **loop quality**: pose gap at the seam, and angular speed just before and just
   after it — a loop can be perfect in pose and still snap if the speed jumps.
 - fingers animated or not, duration, size.
@@ -246,11 +266,11 @@ in the [README](../README.md#credits); the file-by-file breakdown, the licence
 notices and the mentions to keep are in [`NOTICE.md`](NOTICE.md), which must be
 read before any redistribution:
 
-- **Overte** — **Apache 2.0**: **30 clips out of 35** — the whole face-to-face
+- **Overte** — **Apache 2.0**: **30 clips out of 32** — the whole face-to-face
   domain (four idles, twelve gestures) and the whole 3D-world domain except the
-  seated transitions and the jump (14 clips).
+  two seated transitions (14 clips).
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, public domain: the
-  seated transitions and the jump (5 clips), the two families Overte does not have.
+  two seated transitions, the one family Overte does not have.
 
 The **CMU Graphics Lab Motion Capture Database** (BVH conversion by Bruce Hahne)
 supplied fifteen emotion gestures to the first version of this library; none of

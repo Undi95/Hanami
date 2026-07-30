@@ -223,7 +223,7 @@ no licence obliges us to name**, because a credit that is hidden honours nobody.
 
 ### Animations
 
-- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **30 of the 35 clips**, and by
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **30 of the 32 clips**, and by
   far the primary source: **the whole face-to-face mode** — the four idle animations, the "talking"
   idle, and the twelve gestures (`neutral`, `happy` ×3, `sad`, `angry` ×2, `relaxed` ×2, `nod`,
   `shake`, `think`) — plus all of the 3D scene's locomotion and seated postures: walking, slow and
@@ -233,8 +233,12 @@ no licence obliges us to name**, because a credit that is hidden honours nobody.
   join up with each other, and the loops close. Copyright High Fidelity (2013-2019), Vircadia
   contributors (2019-2021), Overte e.V. (2022-2026).
 - **[Quaternius](https://quaternius.com)**, *Universal Animation Library* — *CC0 1.0*, public
-  domain, **no attribution required**: we give it anyway. Five clips, the two families Overte does
-  not have: sitting down, standing up, and the three beats of a jump.
+  domain, **no attribution required**: we give it anyway. Two clips, the one family Overte does not
+  have: sitting down and standing up. Both ends of each were anchored onto the neighbouring poses so
+  that the seated sequence closes (see [`vrma/NOTICE.md`](vrma/NOTICE.md)). The three beats of a jump
+  came from the same pack; they were **removed** for failing to join up — neither Quaternius's nor
+  Overte's version does, Overte's airborne phase being three poses driven by the physics engine
+  rather than an animation.
 - **[CMU Graphics Lab Motion Capture Database](https://mocap.cs.cmu.edu)**, "Daz-friendly" BVH
   conversion by **Bruce Hahne / cgspeed** (<https://www.cgspeed.com>). This database supplied
   fifteen emotion gestures to the library's first version; **no file derives from it any more** —

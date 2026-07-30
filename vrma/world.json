@@ -3,8 +3,10 @@
     "Métadonnées des clips du domaine « monde 3D » (préfixe world-). Ces clips ne sont JAMAIS joués en face à face : le mode conversation n'a aucune raison de les télécharger.",
     "Toutes les hauteurs sont des FRACTIONS de la hauteur de hanches au repos du fichier (restHipsPosition.y). C'est la seule grandeur qui se transporte d'un modèle à l'autre : @pixiv/three-vrm-animation remet la piste du bassin à l'échelle par hanchesDuVRM / restHipsPosition.y. Pour obtenir des mètres sur un modèle donné, multiplier par la hauteur de hanches au repos de CE modèle (VRMHumanoid.normalizedRestPose.hips.position[1]).",
     "Les allures sont des cycles joués SUR PLACE : leur translation horizontale est nulle, c'est au code de déplacer le personnage. `vitesseMS` est la vitesse que le clip DÉPEINT, mesurée sur la course du pied en appui dans le repère du bassin. Elle vaut pour le rig de mesure (hanches au repos à 1,0167 m) : sur un modèle plus petit, la mettre à l'échelle par hanchesDuVRM / 1,0167, sinon le personnage patine.",
-    "`vitesseDeclareeOverteMS` est la valeur que le moteur d'Overte associe au même clip (characteristicSpeeds de avatar-animation.json). Elle est systématiquement 15 à 20 % au-dessus de la mesure ; en cas de doute, la mesure est ce que l'œil verra.",
-    "Pour les transitions assises, `deplacementM` est le déplacement horizontal que le CODE doit appliquer à la position du personnage sur la durée du clip : le personnage s'écarte du siège de cette distance en se levant, et s'en rapproche d'autant en s'asseyant.",
+    "`distanceParCycleM` et `vitesseMS` sont le MILIEU des deux estimateurs du banc, dont `fourchetteMesureeMS` donne les bornes : l'estimateur prudent ne compte que le recul du pied en appui (il sous-estime l'image où l'appui change), l'estimateur large somme tout recul des deux pieds (il majore). Prendre le milieu garantit deux choses que le fichier n'avait pas : distanceParCycleM ÷ dureeS redonne exactement vitesseMS, et la valeur annoncée reste dans la fourchette mesurée.",
+    "`vitesseDeclareeOverteMS` est la valeur que le moteur d'Overte associe au même clip (characteristicSpeeds de avatar-animation.json). Elle ne décrit pas le clip mais la vitesse à laquelle Overte le joue : 27 à 51 % au-dessus de la mesure en marche avant, 35 % en dessous en marche arrière. En cas de doute, la mesure est ce que l'œil verra.",
+    "LES TRANSITIONS SONT ANCRÉES SUR LEURS VOISINES. La première et la dernière image de chaque clip `transition` sont, à la mesure près, les poses des clips qui l'encadrent, la correction se dissolvant sur une fenêtre de 0,2 à 0,5 s (`retouches` le dit clip par clip). Conséquence pour le code : `enchaine` n'est plus indicatif, c'est un contrat. En particulier `phaseEntreeCibleS` / `phaseSortieCibleS` disent À QUELLE PHASE du cycle il faut entrer et sortir : un cycle de marche quitté n'importe quand tombe à 46 cm de la pose d'arrêt, quitté sur sa couture il tombe à 0.",
+    "Pour les transitions assises, `deplacementCodeM` est le déplacement horizontal que le CODE doit appliquer à la position du personnage sur la durée du clip : comme les allures, ces clips sont joués SUR PLACE (bassin à x=0, z=0 d'un bout à l'autre), sans quoi leur extrémité debout serait à 26 cm de la pose d'idle et le raccord se verrait.",
     "`coutureBoucleDeg` : écart de pose moyen entre la dernière et la première image d'une boucle (0 = raccord exact par construction). `raccordVitesse` : vitesse angulaire juste avant et juste après le point de bouclage — une boucle peut être parfaite en pose et donner un coup de fouet si la vitesse saute."
   ],
   "_genere": "scripts hors dépôt, voir vrma/NOTICE.md",
@@ -15,6 +17,42 @@
   "postureAssiseCanonique": {
     "hanchesFraction": 0.5409,
     "commentaire": "Tous les clips assis tiennent le bassin à cette fraction, y compris les extrémités assises des transitions. Le siège se place donc à une hauteur unique : hauteurAssise ≈ hanchesFraction × hanchesAuReposDuVRM − 0,10 m (le bassin est ~10 cm au-dessus de l'assise)."
+  },
+  "phasesDeRaccord": {
+    "_commentaire": "Un cycle n'a pas de « début » : la phase à laquelle on y entre et celle à laquelle on en sort sont un choix du CODE, et c'est ce choix qui décide du raccord — pas le fichier. Pour chaque cycle, la MEILLEURE phase mesurée et l'écart de pose qu'elle laisse (en cm, sur le VRM du projet, os le plus concerné). `imageOptimale` est l'image du cycle, `tS` l'instant en secondes. Le raccord nul de world-walk n'est pas un hasard : les extrémités de world-walk-start et world-walk-stop ont été ancrées sur ces deux phases-là.",
+    "world-walk": {
+      "imagesParCycle": 30,
+      "depuisWorldWalkStart": { "imageOptimale": 6, "tS": 0.2, "ecartCm": 0, "toleranceTS": [0.167, 0.267], "ecartAuxBornesCm": [5.4, 7.9] },
+      "depuisIdle": { "imageOptimale": 28, "tS": 0.933, "ecartCm": 14.9 },
+      "versWorldWalkStop": { "imageOptimale": 0, "tS": 0, "ecartCm": 0, "toleranceTS": [0.967, 0.033], "ecartAuxBornesCm": [0, 10.9] }
+    },
+    "world-walk-slow": {
+      "imagesParCycle": 39,
+      "depuisWorldWalkStart": { "imageOptimale": 8, "tS": 0.267, "ecartCm": 31.2 },
+      "depuisIdle": { "imageOptimale": 0, "tS": 0, "ecartCm": 10.7 },
+      "versWorldWalkStop": { "imageOptimale": 4, "tS": 0.133, "ecartCm": 8.3 }
+    },
+    "world-walk-fast": {
+      "imagesParCycle": 26,
+      "depuisWorldWalkStart": { "imageOptimale": 5, "tS": 0.167, "ecartCm": 8.3 },
+      "depuisIdle": { "imageOptimale": 24, "tS": 0.8, "ecartCm": 13.2 },
+      "versWorldWalkStop": { "imageOptimale": 0, "tS": 0, "ecartCm": 8.8 }
+    },
+    "world-walk-back": {
+      "imagesParCycle": 37,
+      "depuisIdle": { "imageOptimale": 35, "tS": 1.167, "ecartCm": 14.5 },
+      "versWorldWalkStop": { "imageOptimale": 34, "tS": 1.133, "ecartCm": 5.3 }
+    },
+    "world-turn-left": {
+      "imagesParCycle": 33,
+      "depuisIdle": { "imageOptimale": 5, "tS": 0.167, "ecartCm": 7.9 },
+      "versWorldWalkStop": { "imageOptimale": 17, "tS": 0.567, "ecartCm": 15.7 }
+    },
+    "world-turn-right": {
+      "imagesParCycle": 30,
+      "depuisIdle": { "imageOptimale": 0, "tS": 0, "ecartCm": 9 },
+      "versWorldWalkStop": { "imageOptimale": 25, "tS": 0.833, "ecartCm": 12.2 }
+    }
   },
   "clips": {
     "world-walk-slow": {
@@ -38,10 +76,14 @@
         "fin": 0.9775
       },
       "deplacement": {
-        "distanceParCycleM": 0.522,
-        "vitesseMS": 0.412,
-        "vitesseLateraleMS": -0.064,
-        "vitesseDeclareeOverteMS": 0.5
+        "distanceParCycleM": 0.501,
+        "vitesseMS": 0.385,
+        "vitesseLateraleMS": -0.028,
+        "vitesseDeclareeOverteMS": 0.5,
+        "fourchetteMesureeMS": [
+          0.361,
+          0.41
+        ]
       },
       "coutureBoucleDeg": 0,
       "raccordVitesse": {
@@ -72,10 +114,14 @@
         "fin": 0.9827
       },
       "deplacement": {
-        "distanceParCycleM": 1.561,
-        "vitesseMS": 1.615,
-        "vitesseLateraleMS": 0.148,
-        "vitesseDeclareeOverteMS": 1.8
+        "distanceParCycleM": 1.421,
+        "vitesseMS": 1.421,
+        "vitesseLateraleMS": -0.087,
+        "vitesseDeclareeOverteMS": 1.8,
+        "fourchetteMesureeMS": [
+          1.379,
+          1.462
+        ]
       },
       "coutureBoucleDeg": 0,
       "raccordVitesse": {
@@ -106,10 +152,14 @@
         "fin": 0.9713
       },
       "deplacement": {
-        "distanceParCycleM": 1.586,
-        "vitesseMS": 1.904,
-        "vitesseLateraleMS": 0.146,
-        "vitesseDeclareeOverteMS": 2.5
+        "distanceParCycleM": 1.435,
+        "vitesseMS": 1.656,
+        "vitesseLateraleMS": -0.119,
+        "vitesseDeclareeOverteMS": 2.5,
+        "fourchetteMesureeMS": [
+          1.531,
+          1.781
+        ]
       },
       "coutureBoucleDeg": 0,
       "raccordVitesse": {
@@ -140,10 +190,14 @@
         "fin": 0.9814
       },
       "deplacement": {
-        "distanceParCycleM": -1.44,
-        "vitesseMS": -1.2,
-        "vitesseLateraleMS": 0.165,
-        "vitesseDeclareeOverteMS": 0.6
+        "distanceParCycleM": -1.135,
+        "vitesseMS": -0.92,
+        "vitesseLateraleMS": 0.01,
+        "vitesseDeclareeOverteMS": 0.6,
+        "fourchetteMesureeMS": [
+          -1.063,
+          -0.778
+        ]
       },
       "coutureBoucleDeg": 0,
       "raccordVitesse": {
@@ -175,7 +229,7 @@
       },
       "deplacement": {
         "angleParCycleDeg": 53.2,
-        "vitesseRotationDegS": 49.9
+        "vitesseRotationDegS": 48.4
       },
       "coutureBoucleDeg": 0,
       "raccordVitesse": {
@@ -196,7 +250,7 @@
       },
       "dureeS": 1,
       "osAnimes": 29,
-      "doigtsAnimes": false,
+      "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 1.8,
       "tailleOctets": 90680,
       "hanchesFraction": {
@@ -207,7 +261,7 @@
       },
       "deplacement": {
         "angleParCycleDeg": -52.1,
-        "vitesseRotationDegS": -53.9
+        "vitesseRotationDegS": -52.1
       },
       "coutureBoucleDeg": 0,
       "raccordVitesse": {
@@ -230,17 +284,27 @@
       "osAnimes": 54,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 32.6,
-      "tailleOctets": 111204,
+      "tailleOctets": 112700,
       "enchaine": {
         "depuis": "idle",
-        "vers": "world-walk"
+        "vers": "world-walk",
+        "phaseEntreeCibleS": 0.2,
+        "phaseEntreeToleranceS": [
+          0.167,
+          0.267
+        ],
+        "commentaire": "world-walk est un CYCLE : il ne se reprend pas à t=0. La dernière image de ce clip EST la pose de world-walk à t=0,200 s (image 6 sur 30) — le code doit donc démarrer world-walk à cette phase. Écart mesuré : 0 cm à 0,200 s, 4,2 cm à 0,233, 5,4 cm à 0,167, 7,9 cm à 0,267, et jusqu'à 81 cm à l'opposé du cycle."
       },
       "hanchesFraction": {
-        "min": 0.9377,
-        "max": 0.9966,
-        "debut": 0.9966,
-        "fin": 0.9377
-      }
+        "min": 0.9329,
+        "max": 0.9955,
+        "debut": 0.9955,
+        "fin": 0.9329
+      },
+      "retouches": [
+        "extrémité debout ancrée sur la pose moyenne d'idle (correction max 31,4° sur leftHand, fenêtre 0,20 s)",
+        "extrémité marchante ancrée sur world-walk à t=0,200 s (correction max 28,2° sur rightLowerLeg, fenêtre 0,20 s)"
+      ]
     },
     "world-walk-stop": {
       "role": "arrêt : marche → repos debout",
@@ -255,17 +319,27 @@
       "osAnimes": 50,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 29.9,
-      "tailleOctets": 143516,
+      "tailleOctets": 144712,
       "enchaine": {
         "depuis": "world-walk",
-        "vers": "idle"
+        "vers": "idle",
+        "phaseSortieCibleS": 0,
+        "phaseSortieToleranceS": [
+          0.967,
+          0.033
+        ],
+        "commentaire": "La première image de ce clip EST la pose de world-walk à t=0 : le code doit quitter le cycle SUR SA COUTURE (fin de cycle), pas à une phase quelconque. Écart mesuré : 0 cm à t=0 et t=0,967 ; 10,9 cm dès t=0,033 ; jusqu'à 46 cm au milieu du cycle. Depuis les autres allures, la meilleure phase de sortie donne 5,3 cm (world-walk-back), 8,3 cm (world-walk-slow), 8,8 cm (world-walk-fast), 15,7 cm (pivots)."
       },
       "hanchesFraction": {
-        "min": 0.9769,
-        "max": 0.9954,
-        "debut": 0.9769,
-        "fin": 0.9954
-      }
+        "min": 0.9827,
+        "max": 0.9955,
+        "debut": 0.9827,
+        "fin": 0.9955
+      },
+      "retouches": [
+        "extrémité marchante ancrée sur world-walk à t=0 (correction max 21,5° sur rightHand, fenêtre 0,50 s)",
+        "extrémité debout ancrée sur idle à t=0 (correction max 6,3° sur neck, fenêtre 0,40 s)"
+      ]
     },
     "world-sit-enter": {
       "role": "s'asseoir : debout → assis",
@@ -280,26 +354,27 @@
       "osAnimes": 52,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 95.2,
-      "tailleOctets": 85236,
+      "tailleOctets": 85252,
       "enchaine": {
         "depuis": "idle",
         "vers": "world-sit-idle"
       },
       "hanchesFraction": {
         "min": 0.5409,
-        "max": 0.9569,
-        "debut": 0.9569,
+        "max": 0.9955,
+        "debut": 0.9955,
         "fin": 0.5409
       },
       "deplacement": {
-        "deplacementM": {
-          "x": 0.0025,
-          "z": 0.245
+        "deplacementCodeM": {
+          "x": -0.0028,
+          "z": -0.2672
         }
       },
       "retouches": [
-        "recalage horizontal : l’extrémité assise est ramenée sur (x=0, z=0), l’origine assise que tiennent les maintiens",
-        "raccordement de l’extrémité assise sur la posture de world-sit-idle (correction max 31.3°)"
+        "translation horizontale annulée : le clip est joué SUR PLACE, comme les allures — le déplacement retiré est celui de `deplacement.deplacementM`, à appliquer par le CODE",
+        "extrémité debout ancrée sur la pose moyenne d’idle (correction max 35,2° sur rightLowerLeg et 3,8 cm de bassin, fenêtre 0,40 s)",
+        "extrémité assise ancrée sur world-sit-idle à t=0 (correction max 27,4° sur rightHand, fenêtre 0,30 s) ; tête et orteils, que world-sit-idle n’anime pas, ramenés sur la pose de repos du rig"
       ]
     },
     "world-sit-exit": {
@@ -315,26 +390,27 @@
       "osAnimes": 52,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 81,
-      "tailleOctets": 76856,
+      "tailleOctets": 76876,
       "enchaine": {
         "depuis": "world-sit-idle",
         "vers": "idle"
       },
       "hanchesFraction": {
         "min": 0.5409,
-        "max": 0.9569,
+        "max": 0.9954,
         "debut": 0.5409,
-        "fin": 0.9569
+        "fin": 0.9954
       },
       "deplacement": {
-        "deplacementM": {
-          "x": 0.0025,
-          "z": 0.245
+        "deplacementCodeM": {
+          "x": 0.0028,
+          "z": 0.2672
         }
       },
       "retouches": [
-        "recalage horizontal : l’extrémité assise est ramenée sur (x=0, z=0), l’origine assise que tiennent les maintiens",
-        "raccordement de l’extrémité assise sur la posture de world-sit-idle (correction max 31.3°)"
+        "translation horizontale annulée : le clip est joué SUR PLACE, comme les allures — le déplacement retiré est celui de `deplacement.deplacementM`, à appliquer par le CODE",
+        "extrémité assise ancrée sur la pose moyenne de world-sit-idle (correction max 27,3° sur rightHand, fenêtre 0,30 s)",
+        "extrémité debout ancrée sur idle à t=0 (correction max 35,9° sur rightLowerLeg et 3,8 cm de bassin, fenêtre 0,40 s) ; orteils, qu’idle n’anime pas, ramenés sur la pose de repos du rig"
       ]
     },
     "world-sit-idle": {
@@ -489,77 +565,6 @@
         "max": 0.5411,
         "debut": 0.541,
         "fin": 0.541
-      }
-    },
-    "world-jump-start": {
-      "role": "saut : appel",
-      "famille": "saut",
-      "boucle": false,
-      "source": {
-        "pack": "Quaternius — Universal Animation Library",
-        "licence": "CC0-1.0",
-        "clip": "Jump_Start"
-      },
-      "dureeS": 1.3333,
-      "osAnimes": 52,
-      "doigtsAnimes": true,
-      "amplitudeDoigtsDeg": 95.6,
-      "tailleOctets": 84792,
-      "enchaine": {
-        "depuis": "idle",
-        "vers": "world-jump-loop"
-      },
-      "hanchesFraction": {
-        "min": 0.5701,
-        "max": 0.9565,
-        "debut": 0.5701,
-        "fin": 0.9473
-      }
-    },
-    "world-jump-loop": {
-      "role": "saut : phase aérienne",
-      "famille": "saut",
-      "boucle": true,
-      "source": {
-        "pack": "Quaternius — Universal Animation Library",
-        "licence": "CC0-1.0",
-        "clip": "Jump_Loop"
-      },
-      "dureeS": 2.5,
-      "osAnimes": 52,
-      "doigtsAnimes": false,
-      "amplitudeDoigtsDeg": 0.1,
-      "tailleOctets": 121088,
-      "hanchesFraction": {
-        "min": 0.9465,
-        "max": 0.9474,
-        "debut": 0.9473,
-        "fin": 0.9473
-      }
-    },
-    "world-jump-land": {
-      "role": "saut : atterrissage",
-      "famille": "saut",
-      "boucle": false,
-      "source": {
-        "pack": "Quaternius — Universal Animation Library",
-        "licence": "CC0-1.0",
-        "clip": "Jump_Land"
-      },
-      "dureeS": 1.2667,
-      "osAnimes": 52,
-      "doigtsAnimes": true,
-      "amplitudeDoigtsDeg": 95.6,
-      "tailleOctets": 82688,
-      "enchaine": {
-        "depuis": "world-jump-loop",
-        "vers": "idle"
-      },
-      "hanchesFraction": {
-        "min": 0.4697,
-        "max": 1.0108,
-        "debut": 1.0108,
-        "fin": 0.9568
       }
     }
   }

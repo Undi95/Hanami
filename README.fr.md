@@ -233,7 +233,7 @@ qu'aucune licence n'oblige à citer**, parce qu'un crédit caché n'honore perso
 
 ### Animations
 
-- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **30 des 35 clips**, et de
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **30 des 32 clips**, et de
   loin la source principale : **tout le mode face à face** — les quatre animations de repos, le
   repos « en train de parler », et les douze gestes (`neutral`, `happy` ×3, `sad`, `angry` ×2,
   `relaxed` ×2, `nod`, `shake`, `think`) — plus l'intégralité de la locomotion et des postures
@@ -244,8 +244,12 @@ qu'aucune licence n'oblige à citer**, parce qu'un crédit caché n'honore perso
   boucles se referment.
   Copyright High Fidelity (2013-2019), contributeurs Vircadia (2019-2021), Overte e.V. (2022-2026).
 - **[Quaternius](https://quaternius.com)**, *Universal Animation Library* — *CC0 1.0*, domaine
-  public, **aucune attribution requise** : on la donne quand même. Cinq clips, les deux familles
-  qu'Overte n'a pas : s'asseoir, se lever, et les trois temps du saut.
+  public, **aucune attribution requise** : on la donne quand même. Deux clips, la seule famille
+  qu'Overte n'a pas : s'asseoir et se lever. Leurs deux extrémités ont été ancrées sur les poses
+  voisines pour que la séquence d'assise se referme (voir [`vrma/NOTICE.md`](vrma/NOTICE.md)). Les
+  trois temps du saut venaient du même pack : ils ont été **retirés**, faute de raccorder — ni chez
+  Quaternius ni chez Overte, dont la phase aérienne n'est pas une animation mais trois poses
+  pilotées par le moteur physique.
 - **[CMU Graphics Lab Motion Capture Database](https://mocap.cs.cmu.edu)**, conversion BVH
   « Daz-friendly » de **Bruce Hahne / cgspeed** (<https://www.cgspeed.com>). Cette base a fourni
   quinze gestes d'émotion à la première version de la bibliothèque ; **plus aucun fichier n'en
