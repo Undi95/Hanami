@@ -219,12 +219,14 @@ select {
   width: 30px;
   height: 30px;
   padding: 0;
-  background: none;
+  /* Disque sombre translucide : sans lui, l'icône claire se perd sur un fond
+     d'écran clair (chambre rose + icône rose = invisible). */
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
   border: 1px solid transparent;
   border-radius: 50%;
   color: var(--text-dim);
   cursor: pointer;
-  opacity: 0.4;
+  opacity: 0.55;
   transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 

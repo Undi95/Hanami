@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ChatMeta } from '../../../shared/types'
 import * as api from '../api'
-import { isPlural, localeOf, useI18n, type Lang } from '../i18n'
+import { isPlural, localeOf, localizeChatTitle, useI18n, type Lang } from '../i18n'
 import Dialog from './Dialog'
 
 interface Props {
@@ -141,7 +141,7 @@ export default function ChatsDialog({ characterId, activeChatId, onSelect, onDel
                   onClose()
                 }}
               >
-                <span className="item-title">{c.title}</span>
+                <span className="item-title">{localizeChatTitle(c.title, t)}</span>
                 <span className="item-sub">
                   {fmtDate(c.updatedAt, lang)} ·{' '}
                   {t(isPlural(lang, c.messageCount) ? 'messagesMany' : 'messagesOne', { n: c.messageCount })}

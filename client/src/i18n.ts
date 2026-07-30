@@ -486,7 +486,7 @@ const EN: Record<Key, string> = {
   ttsProbeNoVoices: 'no voice list exposed',
   ttsProbeVoices: 'Voices offered by the server — click one to fill the Voice field',
   ttsError: 'Text-to-speech: {message}',
-  replayTts: 'Replay',
+  replayTts: 'Listen again',
   sectionSpontaneous: 'Spontaneous messages',
   spontaneousEnabled: 'The character can write on their own',
   spontaneousEnabledSub:
@@ -590,6 +590,17 @@ export function translate(key: Key, vars?: Vars): string {
 /** Locale Intl associée à une langue (formats de date/heure). */
 export function localeOf(lang: Lang): string {
   return lang === 'fr' ? 'fr-FR' : 'en-US'
+}
+
+// Les titres de conversation par défaut sont STOCKÉS dans la langue de leur
+// création (« Conversation du 29/07/2026 ») : changer la langue de l'interface
+// ne les retraduisait pas. À l'affichage, un titre reconnu comme titre par
+// défaut est re-rendu dans la langue courante — la date (et un éventuel suffixe
+// de fork) est reprise telle quelle ; un titre personnalisé passe intact.
+const DEFAULT_TITLE_RE = /^Conversation (?:du|from) (.+)$/
+export function localizeChatTitle(title: string, t: (key: 'defaultChatTitle', vars: Vars) => string): string {
+  const m = DEFAULT_TITLE_RE.exec(title)
+  return m ? t('defaultChatTitle', { date: m[1] }) : title
 }
 
 /** Accord du pluriel : le français ne pluralise qu’au-delà de 1, l’anglais dès 0. */

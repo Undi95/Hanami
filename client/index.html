@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Déclaré ICI (avant tout CSS, chargé en module JS) : les surfaces rendues
+         par le navigateur lui-même — scrollbar du popup des <select> en tête —
+         consultent le color-scheme du DOCUMENT, pas celui du CSS arrivé après. -->
+    <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#171221" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />

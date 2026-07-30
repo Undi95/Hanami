@@ -34,7 +34,7 @@ import {
   subscribePrefs,
   type ViewMode,
 } from './prefs'
-import { I18nProvider, getLang, localeOf, useI18n } from './i18n'
+import { I18nProvider, getLang, localeOf, localizeChatTitle, useI18n } from './i18n'
 import TopBar, { CtxBadge, type DialogKind } from './components/TopBar'
 import MessageList, { VnBox, type FeedItem } from './components/MessageList'
 import Composer from './components/Composer'
@@ -909,7 +909,7 @@ function AppInner() {
   const ctxTooltip = context ? t('contextBadgeTitle', { tokens: context.tokens, limit: context.limit }) : ''
   // En mode VN le CSS masque la TopBar : titre du chat et jauge migrent dans la
   // bande basse de la boîte. null = rien à y montrer (pas de titre, pas de jauge).
-  const vnChatTitle = chatMeta?.title ?? ''
+  const vnChatTitle = localizeChatTitle(chatMeta?.title ?? '', t)
   const vnInfo =
     vnMode && (vnChatTitle !== '' || ctxPercent !== null)
       ? { title: vnChatTitle, percent: ctxPercent, tooltip: ctxTooltip }
@@ -983,7 +983,7 @@ function AppInner() {
 
         <TopBar
           characterName={character?.name ?? 'Hanami'}
-          chatTitle={chatMeta?.title ?? ''}
+          chatTitle={localizeChatTitle(chatMeta?.title ?? '', t)}
           contextPercent={ctxPercent}
           contextTitle={ctxTooltip}
           hasCharacter={!!character}
