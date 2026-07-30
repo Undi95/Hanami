@@ -57,6 +57,69 @@ const FILL_LIGHT_SOLO = 0.6
 const KEY_LIGHT_ENV = 1.1
 const FILL_LIGHT_ENV = 0.35
 
+const DEG2RAD = Math.PI / 180
+
+/**
+ * Placement d'un décor, lu dans le sidecar `<décor>.json` posé à côté du .glb.
+ * Toutes les clés sont optionnelles : le fichier n'existe pas dans le cas
+ * général, et ce qui manque garde le comportement automatique.
+ */
+interface EnvPlacement {
+  scale?: number // échelle explicite — DÉSACTIVE l'ajustement automatique
+  rotationY?: number // degrés autour de la verticale
+  spawn?: [number, number, number] // point du décor où poser le personnage (mètres, y depuis le sol)
+  exposure?: number // multiplicateur d'éclairage
+}
+
+/** Nombre fini dans des bornes larges — on ne refuse que l'absurde. */
+function asNumberIn(value: unknown, min: number, max: number): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  return value >= min && value <= max ? value : undefined
+}
+
+/**
+ * Sidecar quelconque → placement propre, dans l'esprit de shared/uiPrefs :
+ * une valeur invalide est OMISE (repli sur l'automatique) et une clé inconnue est
+ * ignorée en silence. C'est ce qui laissera la partie 3 ajouter des clés
+ * (collisions, ancrages) sans casser les décors d'aujourd'hui.
+ */
+function parsePlacement(raw: unknown): EnvPlacement {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const o = raw as Record<string, unknown>
+  const out: EnvPlacement = {}
+  const scale = asNumberIn(o.scale, 0.01, 100)
+  if (scale !== undefined) out.scale = scale
+  const rotationY = asNumberIn(o.rotationY, -3600, 3600)
+  if (rotationY !== undefined) out.rotationY = rotationY
+  const exposure = asNumberIn(o.exposure, 0.1, 5)
+  if (exposure !== undefined) out.exposure = exposure
+  if (Array.isArray(o.spawn) && o.spawn.length === 3) {
+    const t = o.spawn.map((n) => asNumberIn(n, -1000, 1000))
+    if (t.every((n): n is number => n !== undefined)) out.spawn = [t[0], t[1], t[2]]
+  }
+  return out
+}
+
+/**
+ * Lit le sidecar de placement d'un décor. Son absence est le cas NORMAL : ni
+ * erreur, ni trace en console — un 404 ou un JSON illisible rend simplement un
+ * placement vide, et le décor est ajusté automatiquement.
+ * NB : un sidecar absent ne répond PAS 404 ici, mais l'index.html du repli SPA
+ * (Vite en dev, express.static en prod) — d'où la garde sur res.json(), qui lève
+ * sur du HTML. Les deux chemins mènent au même endroit : un placement vide.
+ */
+async function fetchPlacement(url: string): Promise<EnvPlacement> {
+  const jsonUrl = url.replace(/\.(glb|gltf)$/i, '.json')
+  if (jsonUrl === url) return {}
+  try {
+    const res = await fetch(jsonUrl)
+    if (!res.ok) return {}
+    return parsePlacement(await res.json())
+  } catch {
+    return {}
+  }
+}
+
 /**
  * GLTFLoader LÈVE quand un .glb réclame un décodeur qui n'est pas branché
  * (Draco, meshopt, KTX2 : des fichiers à servir, pas des dépendances npm). Son
@@ -155,6 +218,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // Dimensions du décor en place (mètres) : elles pilotent le plan lointain de la
   // caméra et la distance de recul maximale. null = pas de décor.
   let envMetrics: { radius: number; height: number } | null = null
+  // Multiplicateur d'éclairage du décor en place (sidecar `exposure`) : 1 = régime
+  // standard. Rattrape une pièce livrée trop sombre ou trop claire.
+  let envExposure = 1
   let envGeneration = 0
 
   // ── Cadrage utilisateur (pan/zoom/rotation) : persistance + reset ─────────
@@ -310,8 +376,8 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   /** Régime d'éclairage : l'avatar seul dans le vide, ou posé dans une pièce. */
   function applyLightRegime(): void {
     const lit = envRoot !== null
-    keyLight.intensity = lit ? KEY_LIGHT_ENV : KEY_LIGHT_SOLO
-    fillLight.intensity = lit ? FILL_LIGHT_ENV : FILL_LIGHT_SOLO
+    keyLight.intensity = (lit ? KEY_LIGHT_ENV : KEY_LIGHT_SOLO) * envExposure
+    fillLight.intensity = (lit ? FILL_LIGHT_ENV : FILL_LIGHT_SOLO) * envExposure
   }
 
   function unloadEnvironment(): void {
@@ -324,6 +390,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       envRoot = null
     }
     envMetrics = null
+    envExposure = 1
     envGroup.position.set(0, 0, 0)
     envGroup.rotation.set(0, 0, 0)
     envGroup.scale.setScalar(1)
@@ -332,17 +399,22 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   }
 
   /**
-   * Mise à l'échelle et calage au sol du décor, calqués sur normalizeScale : une
-   * hauteur plausible est laissée intacte, une hauteur absurde (décor exporté en
-   * centimètres) est ramenée à ~2,6 m. Le plancher vient à y = 0, là où l'avatar
-   * a les pieds.
+   * Place le décor : échelle, orientation, calage au sol et point d'accueil.
+   * Sans sidecar, l'ajustement est calqué sur normalizeScale — une hauteur
+   * plausible est laissée intacte, une hauteur absurde (décor exporté en
+   * centimètres) est ramenée à ~2,6 m — et le plancher vient à y = 0, là où
+   * l'avatar a les pieds.
    */
-  function fitEnvironment(root: Object3D): void {
+  function fitEnvironment(root: Object3D, placement: EnvPlacement): void {
     envGroup.position.set(0, 0, 0)
+    envGroup.rotation.set(0, (placement.rotationY ?? 0) * DEG2RAD, 0)
+    envGroup.scale.setScalar(placement.scale ?? 1)
     envGroup.updateMatrixWorld(true)
     let box = new Box3().setFromObject(root)
     const rawHeight = Math.max(box.getSize(new Vector3()).y, 1e-6)
-    if (rawHeight < ENV_MIN_HEIGHT || rawHeight > ENV_MAX_HEIGHT) {
+    // Une échelle donnée dans le sidecar est la PAROLE de l'auteur : on ne la
+    // corrige jamais. L'ajustement automatique ne concerne que les décors muets.
+    if (placement.scale === undefined && (rawHeight < ENV_MIN_HEIGHT || rawHeight > ENV_MAX_HEIGHT)) {
       console.warn(
         `[env] environment height ${rawHeight.toFixed(3)} m is out of the ` +
           `[${ENV_MIN_HEIGHT}, ${ENV_MAX_HEIGHT}] range — rescaling by ` +
@@ -353,9 +425,14 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       box = new Box3().setFromObject(root)
     }
     const size = box.getSize(new Vector3())
-    // Plancher aux pieds de l'avatar. Un décor « skybox » dont la boîte
-    // englobante ment (sol infini, min.y à −500) se rattrape par le sidecar.
-    envGroup.position.set(0, -box.min.y, 0)
+    // Le décor se déplace, jamais l'avatar (qui reste à l'origine du monde) :
+    // amener le point d'accueil sous ses pieds, c'est reculer la pièce d'autant.
+    // Le y du spawn se compte DEPUIS LE SOL du décor (une estrade à 1,2 m), ce qui
+    // laisse le calage automatique faire son travail dans le cas courant. Un décor
+    // « skybox » dont la boîte englobante ment (sol infini, min.y à −500) se
+    // rattrape justement par ce spawn.
+    const [sx, sy, sz] = placement.spawn ?? [0, 0, 0]
+    envGroup.position.set(-sx, -(box.min.y + sy), -sz)
     envMetrics = { radius: Math.max(size.length() / 2, 0.5), height: Math.max(size.y, 0.5) }
   }
 
@@ -367,7 +444,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       return
     }
     try {
-      const gltf = await envLoader.loadAsync(url)
+      // Le sidecar part en même temps que le .glb : il est minuscule, et son
+      // absence (le cas normal) ne coûte rien de plus qu'un 404.
+      const [gltf, placement] = await Promise.all([envLoader.loadAsync(url), fetchPlacement(url)])
       if (generation !== envGeneration || disposed) {
         // Un loadEnvironment plus récent (ou dispose) est passé entre-temps.
         VRMUtils.deepDispose(gltf.scene)
@@ -375,8 +454,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       }
       unloadEnvironment()
       envRoot = gltf.scene
+      envExposure = placement.exposure ?? 1
       envGroup.add(envRoot)
-      fitEnvironment(envRoot)
+      fitEnvironment(envRoot, placement)
       applyLightRegime()
       applyEnvLimits()
     } catch (e) {

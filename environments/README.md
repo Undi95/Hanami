@@ -29,10 +29,14 @@ Dépose ici des fichiers `.glb` (ou `.gltf`) — ils apparaissent dans Hanami
 }
 ```
 
-- `scale` — facteur d'échelle appliqué au décor (0,01 à 100).
+- `scale` — facteur d'échelle (0,01 à 100). Le donner **désactive l'ajustement
+  automatique** : c'est votre valeur qui fait foi, même si elle est extravagante.
 - `rotationY` — rotation en **degrés** autour de l'axe vertical.
-- `spawn` — point du décor `[x, y, z]` où placer le personnage (c'est le décor
-  qui se déplace, l'avatar reste à l'origine du monde).
+- `spawn` — point du décor `[x, y, z]`, en mètres, où poser le personnage : c'est
+  le décor qui se déplace, l'avatar reste à l'origine du monde. `x`/`z` se
+  mesurent sur le décor tel qu'il s'affiche (après `scale` et `rotationY`), et `y`
+  se compte **depuis le sol** du décor — `[0, 1.2, 0]` pose le personnage sur une
+  estrade de 1,2 m.
 - `exposure` — multiplicateur de l'éclairage (0,1 à 5) pour un décor déjà sombre
   ou déjà très clair.
 
@@ -81,10 +85,14 @@ Next to `room.glb`, a `room.json` tunes placement without touching the model:
 }
 ```
 
-- `scale` — scale factor applied to the environment (0.01 to 100).
+- `scale` — scale factor (0.01 to 100). Providing it **disables the automatic
+  adjustment**: your value wins, however extravagant.
 - `rotationY` — rotation in **degrees** around the vertical axis.
-- `spawn` — the point `[x, y, z]` of the environment where the character stands
-  (the environment moves; the avatar stays at the world origin).
+- `spawn` — the point `[x, y, z]` of the environment, in meters, where the
+  character stands: the environment moves, the avatar stays at the world origin.
+  `x`/`z` are measured on the environment as displayed (after `scale` and
+  `rotationY`), and `y` counts **from the floor** — `[0, 1.2, 0]` puts the
+  character on a 1.2 m platform.
 - `exposure` — lighting multiplier (0.1 to 5) for an environment that is already
   dark or already very bright.
 
