@@ -33,8 +33,10 @@ pendant qu'une réponse s'écrit. Sous ce seuil, les fondus de 0,3 s (entrée) e
 0,4 s (sortie) sont invisibles ; au-dessus, le corps est tiré et les pieds glissent
 sans pas.
 
-Les 16 clips actuels vont de **0,8 à 8,0 cm**, médiane 4,4. Un clip qui ne tient pas
-ce seuil est retiré, pas rafistolé — une émotion sans geste n'est pas un drame (le
+Les 16 clips actuels tiennent tous entre **4,1 et 8,0 cm** sur la pire de leurs
+quatre mesures (entrée et sortie, contre chacun des deux socles), médiane 6,0 ;
+contre le socle `idle` seul, de **0,8 à 6,7 cm**, médiane 2,3. Un clip qui ne tient
+pas ce seuil est retiré, pas rafistolé — une émotion sans geste n'est pas un drame (le
 déclenchement ne trouve rien, l'avatar continue de respirer), un geste qui accroche
 l'œil en est un. C'est ce qui a coûté leur place aux quinze gestes issus du mocap
 CMU, et à l'émotion `surprised`, qui n'a plus aucun clip : voir
@@ -162,8 +164,10 @@ against `idle-talking.vrma`, since that is what gestures return to while a reply
 being written. Below that threshold the 0.3 s (in) and 0.4 s (out) fades are
 invisible; above it, the body is dragged and the feet slide without a step.
 
-The current 16 clips range from **0.8 to 8.0 cm**, median 4.4. A clip that misses
-the threshold is removed, not patched — an emotion with no gesture is no drama (the
+The current 16 clips all stay between **4.1 and 8.0 cm** on the worst of their four
+measurements (in and out, against each of the two idles), median 6.0; against the
+`idle` base alone, **0.8 to 6.7 cm**, median 2.3. A clip that misses the threshold
+is removed, not patched — an emotion with no gesture is no drama (the
 trigger finds nothing and the avatar keeps breathing), a gesture that catches the
 eye is. That is what cost the fifteen CMU-mocap gestures their place, and the
 `surprised` emotion all of its clips: see [`NOTICE.md`](NOTICE.md) §2.

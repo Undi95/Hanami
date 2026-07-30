@@ -189,9 +189,16 @@ image et cette même pose, doit rester sous **10 cm** d'excursion du pire os maj
 fondus de 0,3 s (entrée) et 0,4 s (sortie) sont invisibles ; au-dessus, le corps
 est tiré et les pieds glissent sans pas.
 
-Les quinze clips CMU échouaient **tous**, aux deux bords, contre les deux socles :
-de 25,1 à 57 cm, médiane 29,7. Les dix clips Overte passaient tous, médiane
-4,4 cm. La cause n'est pas le geste mais la **station** : le sujet capturé se tient
+Chaque clip donne quatre mesures : entrée et sortie, contre chacun des deux socles.
+Les quinze clips CMU échouaient **tous**, sur les **soixante** mesures sans
+exception : de 25,1 à 57 cm, médiane 34,3 (par clip, la pire des quatre allait de
+26,1 à 57 cm, médiane 42,4). Les dix clips Overte passaient tous, sur les quarante
+mesures : de 0,8 à 8,0 cm, médiane 4,4 (pire par clip : 4,3 à 8,0, médiane 5,7).
+Aucune valeur, dans aucun des deux lots, ne tombait entre 8,0 et 25,1 cm — les deux
+sources se séparent d'elles-mêmes, sans zone grise, et n'importe quel seuil posé
+dans ce trou de 17 cm donne la même partition.
+
+La cause n'est pas le geste mais la **station** : le sujet capturé se tient
 autrement (bassin de repos à 0,83 m contre 1,0167 m, jambes à 15° de la pose du
 socle) et les segments étaient découpés automatiquement dans une prise continue,
 donc ni le début ni la fin n'est une pose de repos. Verrouiller le bas du corps sur
@@ -329,7 +336,7 @@ carried an attribution requirement, so their removal changes no obligation.*
   socle, donc sur une pose qui n'existe plus ; plutôt que de les refaire, la source
   a été changée. Les six gestes remplacés sortent d'Overte sans aucune correction
   géométrique — même studio, même station, les raccords tombent d'eux-mêmes entre
-  1,2 et 8,0 cm.
+  1,2 et 8,0 cm sur leurs vingt-quatre mesures.
 
 *v4, the current pass: the acceptance rule of §2 applied to the whole face-to-face
 domain. The v2 corrections had been fitted to the OLD idle pose, which no longer
