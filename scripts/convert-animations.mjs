@@ -13,6 +13,22 @@
  * Sortie : vrma/<slug>.vrma
  *
  * Pack source : Universal Animation Library de Quaternius, CC0 1.0.
+ *
+ * ─── LE CONTRÔLE QUI MANQUAIT ───────────────────────────────────────────────
+ * @pixiv/three-vrm-animation normalise la translation du bassin en multipliant
+ * TOUTE la piste par hanchesVRM / restHipsPosition.y (trois-vrm-animation, vers
+ * la ligne 1710). `restHipsPosition` est la position MONDE du nœud des hanches
+ * dans la pose de repos du fichier, calculée par le plugin lui-même — pas la
+ * translation locale du nœud, qui vaut ici 0,0501 m parce que le nœud racine du
+ * rig porte une rotation de −90° autour de X (Blender Z-up → glTF Y-up) et que
+ * l'axe Y du monde est donc l'axe Z local. Confondre les deux fait croire à un
+ * facteur d'échelle de ×15 : il vaut en réalité 0,82.
+ *
+ * Le seuil d'alerte de la bibliothèque (`< 1e-3`) est mille fois trop bas pour
+ * servir de garde-fou : une hauteur de hanches de 5 cm le franchit sans un mot.
+ * La validation ci-dessous le remplace par un contrôle utile, et surtout ajoute
+ * ce qui manquait vraiment : la vérification que la TRAJECTOIRE du bassin, une
+ * fois normalisée, reste dans des bornes physiquement plausibles.
  */
 
 import fs from 'node:fs';
@@ -463,6 +479,48 @@ async function convertir(cheminSrc) {
 
 // ─── Validation round-trip ──────────────────────────────────────────────────
 
+/**
+ * Bornes de plausibilité de la trajectoire du bassin, en FRACTION de la hauteur
+ * de hanches au repos (la seule grandeur invariante : la bibliothèque remet la
+ * piste à l'échelle par hanchesVRM / restHipsPosition.y, donc une fraction se
+ * transporte telle quelle d'un modèle à l'autre).
+ *
+ *   0,40  un accroupissement complet descend le bassin à ~0,50, une assise à 0,54
+ *   1,15  un saut décolle le bassin de 10 à 15 %
+ *   0,60  un clip joué sur place ne doit pas emmener le bassin plus loin que ça
+ *         de son origine horizontale ; au-delà, le personnage sort du cadre
+ */
+const BORNES_BASSIN = { fractionMin: 0.40, fractionMax: 1.15, horizMax: 0.60 };
+
+/** Hauteur de hanches au repos plancher : en dessous, le fichier est cassé. */
+const REST_HANCHES_MIN = 0.3; // m
+
+/**
+ * Trajectoire du bassin après normalisation, mesurée comme le client la verra.
+ *
+ * `restHipsPosition` sert de dénominateur au facteur d'échelle : on exprime donc
+ * la piste en fraction de cette hauteur, ce qui donne directement la grandeur
+ * physique (« le bassin descend à 54 % de sa hauteur debout »).
+ */
+function mesurerBassin(anim) {
+  const piste = anim.humanoidTracks.translation.get('hips');
+  if (!piste) return null;
+  const rest = anim.restHipsPosition.y;
+  const v = piste.values;
+  let yMin = Infinity, yMax = -Infinity, horiz = 0;
+  for (let i = 0; i < v.length; i += 3) {
+    const y = v[i + 1] / rest;
+    if (y < yMin) yMin = y;
+    if (y > yMax) yMax = y;
+    horiz = Math.max(horiz, Math.hypot(v[i], v[i + 2]) / rest);
+  }
+  return {
+    fraction: [+yMin.toFixed(3), +yMax.toFixed(3)],
+    horiz: +horiz.toFixed(3),
+    cles: v.length / 3,
+  };
+}
+
 /** VRM factice : un humanoïde en T-pose suffit à faire tourner createVRMAnimationClip. */
 function vrmFactice(cheminSrc) {
   const { json } = lireGLB(fs.readFileSync(cheminSrc));
@@ -526,6 +584,8 @@ async function valider(cheminSrc) {
     let nbRot = 0;
     let nbTrans = 0;
     let nbTracksVrm = null;
+    let restY = null;
+    let bassin = null;
     try {
       const gltf = await chargerVRMA(brut);
       const anim = gltf.userData.vrmAnimations?.[0];
@@ -533,14 +593,42 @@ async function valider(cheminSrc) {
       duree = anim.duration;
       nbRot = anim.humanoidTracks.rotation.size;
       nbTrans = anim.humanoidTracks.translation.size;
+      restY = +anim.restHipsPosition.y.toFixed(4);
       if (!(duree > 0)) problemes.push('durée nulle');
       if (nbRot === 0) problemes.push('aucune piste de rotation');
-      if (anim.restHipsPosition.y < 1e-3) problemes.push('hips rest à y≈0 (T-pose violée)');
+
+      // Garde-fou sur la hauteur de hanches au repos. Le seuil de la spec (1e-3)
+      // ne détecte qu'un zéro exact : une valeur absurde mais non nulle passait
+      // sans un mot, alors qu'elle multiplie toute la trajectoire du bassin.
+      if (!(restY > REST_HANCHES_MIN)) {
+        problemes.push(
+          `hanches au repos à y=${restY} m (< ${REST_HANCHES_MIN}) : la pose de repos écrite ` +
+            "n'est pas une station debout, toute la piste du bassin sera mise à l'échelle de travers",
+        );
+      }
+
+      // Le contrôle qui manquait : la trajectoire du bassin, une fois normalisée,
+      // doit rester physiquement plausible.
+      bassin = mesurerBassin(anim);
+      if (bassin) {
+        if (bassin.fraction[1] > BORNES_BASSIN.fractionMax) {
+          problemes.push(`bassin à ${bassin.fraction[1]}× la hauteur de repos (max ${BORNES_BASSIN.fractionMax})`);
+        }
+        if (bassin.fraction[0] < BORNES_BASSIN.fractionMin) {
+          problemes.push(`bassin à ${bassin.fraction[0]}× la hauteur de repos (min ${BORNES_BASSIN.fractionMin})`);
+        }
+        if (bassin.horiz > BORNES_BASSIN.horizMax) {
+          problemes.push(`bassin à ${bassin.horiz}× la hauteur de repos de son origine horizontale`);
+        }
+      }
 
       if (vrm) {
         const clip = createVRMAnimationClip(anim, vrm);
         nbTracksVrm = clip.tracks.length;
         if (nbTracksVrm === 0) problemes.push('clip VRM vide');
+        for (const t of clip.tracks) {
+          if (![...t.values].every(Number.isFinite)) problemes.push(`valeurs non finies dans ${t.name}`);
+        }
       }
     } catch (e) {
       problemes.push(`chargement: ${e.message}`);
@@ -555,6 +643,8 @@ async function valider(cheminSrc) {
       nbRot,
       nbTrans,
       nbTracksVrm,
+      restY,
+      bassin,
       taille: brut.length,
       problemes,
     });
@@ -564,21 +654,24 @@ async function valider(cheminSrc) {
   const d = (v, n) => String(v).padStart(n);
   console.log('');
   console.log(
-    `${c('fichier', 20)} ${d('durée', 7)} ${d('osVRM', 6)} ${d('rot', 4)} ${d('pos', 4)} ${d('clipVRM', 8)} ${d('taille', 9)}  statut`,
+    `${c('fichier', 22)} ${d('durée', 7)} ${d('osVRM', 6)} ${d('rot', 4)} ${d('pos', 4)} ${d('clipVRM', 8)} ` +
+      `${d('restY', 7)} ${d('bassin/repos', 14)} ${d('horiz', 6)} ${d('taille', 9)}  statut`,
   );
-  console.log('─'.repeat(78));
+  console.log('─'.repeat(110));
   for (const l of lignes) {
     if (l.statut === 'ABSENT') {
-      console.log(`${c(`${l.slug}.vrma`, 20)} ${d('—', 7)} ${d('—', 6)} ${d('—', 4)} ${d('—', 4)} ${d('—', 8)} ${d('—', 9)}  ABSENT`);
+      console.log(`${c(`${l.slug}.vrma`, 22)} ${d('—', 7)}${' '.repeat(56)}  ABSENT`);
       continue;
     }
     console.log(
-      `${c(`${l.slug}.vrma`, 20)} ${d(`${l.duree.toFixed(3)}s`, 7)} ${d(l.nbOs, 6)} ${d(l.nbRot, 4)} ` +
-        `${d(l.nbTrans, 4)} ${d(l.nbTracksVrm ?? '—', 8)} ${d(`${(l.taille / 1024).toFixed(1)} Ko`, 9)}  ${l.statut}` +
+      `${c(`${l.slug}.vrma`, 22)} ${d(`${l.duree.toFixed(3)}s`, 7)} ${d(l.nbOs, 6)} ${d(l.nbRot, 4)} ` +
+        `${d(l.nbTrans, 4)} ${d(l.nbTracksVrm ?? '—', 8)} ${d(l.restY ?? '—', 7)} ` +
+        `${d(l.bassin ? `[${l.bassin.fraction.join(', ')}]` : '—', 14)} ${d(l.bassin?.horiz ?? '—', 6)} ` +
+        `${d(`${(l.taille / 1024).toFixed(1)} Ko`, 9)}  ${l.statut}` +
         (l.problemes.length ? ` — ${l.problemes.join(' ; ')}` : ''),
     );
   }
-  console.log('─'.repeat(78));
+  console.log('─'.repeat(110));
   console.log(`${lignes.length - echecs}/${lignes.length} fichiers valides.`);
   return echecs;
 }
