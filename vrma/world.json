@@ -1,0 +1,566 @@
+{
+  "_lisezMoi": [
+    "Métadonnées des clips du domaine « monde 3D » (préfixe world-). Ces clips ne sont JAMAIS joués en face à face : le mode conversation n'a aucune raison de les télécharger.",
+    "Toutes les hauteurs sont des FRACTIONS de la hauteur de hanches au repos du fichier (restHipsPosition.y). C'est la seule grandeur qui se transporte d'un modèle à l'autre : @pixiv/three-vrm-animation remet la piste du bassin à l'échelle par hanchesDuVRM / restHipsPosition.y. Pour obtenir des mètres sur un modèle donné, multiplier par la hauteur de hanches au repos de CE modèle (VRMHumanoid.normalizedRestPose.hips.position[1]).",
+    "Les allures sont des cycles joués SUR PLACE : leur translation horizontale est nulle, c'est au code de déplacer le personnage. `vitesseMS` est la vitesse que le clip DÉPEINT, mesurée sur la course du pied en appui dans le repère du bassin. Elle vaut pour le rig de mesure (hanches au repos à 1,0167 m) : sur un modèle plus petit, la mettre à l'échelle par hanchesDuVRM / 1,0167, sinon le personnage patine.",
+    "`vitesseDeclareeOverteMS` est la valeur que le moteur d'Overte associe au même clip (characteristicSpeeds de avatar-animation.json). Elle est systématiquement 15 à 20 % au-dessus de la mesure ; en cas de doute, la mesure est ce que l'œil verra.",
+    "Pour les transitions assises, `deplacementM` est le déplacement horizontal que le CODE doit appliquer à la position du personnage sur la durée du clip : le personnage s'écarte du siège de cette distance en se levant, et s'en rapproche d'autant en s'asseyant.",
+    "`coutureBoucleDeg` : écart de pose moyen entre la dernière et la première image d'une boucle (0 = raccord exact par construction). `raccordVitesse` : vitesse angulaire juste avant et juste après le point de bouclage — une boucle peut être parfaite en pose et donner un coup de fouet si la vitesse saute."
+  ],
+  "_genere": "scripts hors dépôt, voir vrma/NOTICE.md",
+  "rigDeMesure": {
+    "source": "overte-org/overte, rig Mixamo, T-pose de bind de emote_clap01_all.fbx",
+    "hanchesAuReposM": 1.0167
+  },
+  "postureAssiseCanonique": {
+    "hanchesFraction": 0.5409,
+    "commentaire": "Tous les clips assis tiennent le bassin à cette fraction, y compris les extrémités assises des transitions. Le siège se place donc à une hauteur unique : hauteurAssise ≈ hanchesFraction × hanchesAuReposDuVRM − 0,10 m (le bassin est ~10 cm au-dessus de l'assise)."
+  },
+  "clips": {
+    "world-walk-slow": {
+      "role": "déambulation lente",
+      "famille": "allure",
+      "boucle": true,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "walk_short_fwd.fbx"
+      },
+      "dureeS": 1.3,
+      "osAnimes": 48,
+      "doigtsAnimes": true,
+      "amplitudeDoigtsDeg": 10.3,
+      "tailleOctets": 122552,
+      "hanchesFraction": {
+        "min": 0.9654,
+        "max": 0.978,
+        "debut": 0.9775,
+        "fin": 0.9775
+      },
+      "deplacement": {
+        "distanceParCycleM": 0.522,
+        "vitesseMS": 0.412,
+        "vitesseLateraleMS": -0.064,
+        "vitesseDeclareeOverteMS": 0.5
+      },
+      "coutureBoucleDeg": 0,
+      "raccordVitesse": {
+        "avantDegS": 0,
+        "apresDegS": 22,
+        "sautDegS": 22,
+        "moyenneDegS": 25
+      }
+    },
+    "world-walk": {
+      "role": "marche",
+      "famille": "allure",
+      "boucle": true,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "walk_fwd.fbx"
+      },
+      "dureeS": 1,
+      "osAnimes": 21,
+      "doigtsAnimes": false,
+      "amplitudeDoigtsDeg": 0,
+      "tailleOctets": 81808,
+      "hanchesFraction": {
+        "min": 0.9324,
+        "max": 0.9827,
+        "debut": 0.9827,
+        "fin": 0.9827
+      },
+      "deplacement": {
+        "distanceParCycleM": 1.561,
+        "vitesseMS": 1.615,
+        "vitesseLateraleMS": 0.148,
+        "vitesseDeclareeOverteMS": 1.8
+      },
+      "coutureBoucleDeg": 0,
+      "raccordVitesse": {
+        "avantDegS": 0,
+        "apresDegS": 75,
+        "sautDegS": 75,
+        "moyenneDegS": 58
+      }
+    },
+    "world-walk-fast": {
+      "role": "marche rapide",
+      "famille": "allure",
+      "boucle": true,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "walk_fwd_fast.fbx"
+      },
+      "dureeS": 0.8667,
+      "osAnimes": 22,
+      "doigtsAnimes": false,
+      "amplitudeDoigtsDeg": 0,
+      "tailleOctets": 81532,
+      "hanchesFraction": {
+        "min": 0.9307,
+        "max": 0.9733,
+        "debut": 0.9713,
+        "fin": 0.9713
+      },
+      "deplacement": {
+        "distanceParCycleM": 1.586,
+        "vitesseMS": 1.904,
+        "vitesseLateraleMS": 0.146,
+        "vitesseDeclareeOverteMS": 2.5
+      },
+      "coutureBoucleDeg": 0,
+      "raccordVitesse": {
+        "avantDegS": 0,
+        "apresDegS": 81,
+        "sautDegS": 81,
+        "moyenneDegS": 69
+      }
+    },
+    "world-walk-back": {
+      "role": "recul",
+      "famille": "allure",
+      "boucle": true,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "walk_bwd.fbx"
+      },
+      "dureeS": 1.2333,
+      "osAnimes": 51,
+      "doigtsAnimes": true,
+      "amplitudeDoigtsDeg": 97.3,
+      "tailleOctets": 124108,
+      "hanchesFraction": {
+        "min": 0.9369,
+        "max": 0.9814,
+        "debut": 0.9814,
+        "fin": 0.9814
+      },
+      "deplacement": {
+        "distanceParCycleM": -1.44,
+        "vitesseMS": -1.2,
+        "vitesseLateraleMS": 0.165,
+        "vitesseDeclareeOverteMS": 0.6
+      },
+      "coutureBoucleDeg": 0,
+      "raccordVitesse": {
+        "avantDegS": 0,
+        "apresDegS": 42,
+        "sautDegS": 42,
+        "moyenneDegS": 40
+      }
+    },
+    "world-turn-left": {
+      "role": "pivot sur place vers la gauche",
+      "famille": "pivot",
+      "boucle": true,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "turn_left.fbx"
+      },
+      "dureeS": 1.1,
+      "osAnimes": 20,
+      "doigtsAnimes": false,
+      "amplitudeDoigtsDeg": 0,
+      "tailleOctets": 80964,
+      "hanchesFraction": {
+        "min": 0.9909,
+        "max": 0.997,
+        "debut": 0.9954,
+        "fin": 0.9954
+      },
+      "deplacement": {
+        "angleParCycleDeg": 53.2,
+        "vitesseRotationDegS": 49.9
+      },
+      "coutureBoucleDeg": 0,
+      "raccordVitesse": {
+        "avantDegS": 0,
+        "apresDegS": 20,
+        "sautDegS": 20,
+        "moyenneDegS": 23
+      }
+    },
+    "world-turn-right": {
+      "role": "pivot sur place vers la droite",
+      "famille": "pivot",
+      "boucle": true,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "turn_right.fbx"
+      },
+      "dureeS": 1,
+      "osAnimes": 29,
+      "doigtsAnimes": false,
+      "amplitudeDoigtsDeg": 1.8,
+      "tailleOctets": 90680,
+      "hanchesFraction": {
+        "min": 0.9908,
+        "max": 0.9963,
+        "debut": 0.9955,
+        "fin": 0.9955
+      },
+      "deplacement": {
+        "angleParCycleDeg": -52.1,
+        "vitesseRotationDegS": -53.9
+      },
+      "coutureBoucleDeg": 0,
+      "raccordVitesse": {
+        "avantDegS": 0,
+        "apresDegS": 17,
+        "sautDegS": 17,
+        "moyenneDegS": 18
+      }
+    },
+    "world-walk-start": {
+      "role": "départ : repos debout → marche",
+      "famille": "transition",
+      "boucle": false,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "idle_to_walk.fbx"
+      },
+      "dureeS": 0.4,
+      "osAnimes": 54,
+      "doigtsAnimes": true,
+      "amplitudeDoigtsDeg": 32.6,
+      "tailleOctets": 111204,
+      "enchaine": {
+        "depuis": "idle",
+        "vers": "world-walk"
+      },
+      "hanchesFraction": {
+        "min": 0.9377,
+        "max": 0.9966,
+        "debut": 0.9966,
+        "fin": 0.9377
+      }
+    },
+    "world-walk-stop": {
+      "role": "arrêt : marche → repos debout",
+      "famille": "transition",
+      "boucle": false,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "settle_to_idle.fbx"
+      },
+      "dureeS": 1.9,
+      "osAnimes": 50,
+      "doigtsAnimes": true,
+      "amplitudeDoigtsDeg": 29.9,
+      "tailleOctets": 143516,
+      "enchaine": {
+        "depuis": "world-walk",
+        "vers": "idle"
+      },
+      "hanchesFraction": {
+        "min": 0.9769,
+        "max": 0.9954,
+        "debut": 0.9769,
+        "fin": 0.9954
+      }
+    },
+    "world-sit-enter": {
+      "role": "s'asseoir : debout → assis",
+      "famille": "transition",
+      "boucle": false,
+      "source": {
+        "pack": "Quaternius — Universal Animation Library",
+        "licence": "CC0-1.0",
+        "clip": "Sitting_Enter"
+      },
+      "dureeS": 1.3,
+      "osAnimes": 52,
+      "doigtsAnimes": true,
+      "amplitudeDoigtsDeg": 95.2,
+      "tailleOctets": 85236,
+      "enchaine": {
+        "depuis": "idle",
+        "vers": "world-sit-idle"
+      },
+      "hanchesFraction": {
+        "min": 0.5409,
+        "max": 0.9569,
+        "debut": 0.9569,
+        "fin": 0.5409
+      },
+      "deplacement": {
+        "deplacementM": {
+          "x": 0.0025,
+          "z": 0.245
+        }
+      },
+      "retouches": [
+        "recalage horizontal : l’extrémité assise est ramenée sur (x=0, z=0), l’origine assise que tiennent les maintiens",
+        "raccordement de l’extrémité assise sur la posture de world-sit-idle (correction max 31.3°)"
+      ]
+    },
+    "world-sit-exit": {
+      "role": "se lever : assis → debout",
+      "famille": "transition",
+      "boucle": false,
+      "source": {
+        "pack": "Quaternius — Universal Animation Library",
+        "licence": "CC0-1.0",
+        "clip": "Sitting_Exit"
+      },
+      "dureeS": 1.0333,
+      "osAnimes": 52,
+      "doigtsAnimes": true,
+      "amplitudeDoigtsDeg": 81,
+      "tailleOctets": 76856,
+      "enchaine": {
+        "depuis": "world-sit-idle",
+        "vers": "idle"
+      },
+      "hanchesFraction": {
+        "min": 0.5409,
+        "max": 0.9569,
+        "debut": 0.5409,
+        "fin": 0.9569
+      },
+      "deplacement": {
+        "deplacementM": {
+          "x": 0.0025,
+          "z": 0.245
+        }
+      },
+      "retouches": [
+        "recalage horizontal : l’extrémité assise est ramenée sur (x=0, z=0), l’origine assise que tiennent les maintiens",
+        "raccordement de l’extrémité assise sur la posture de world-sit-idle (correction max 31.3°)"
+      ]
+    },
+    "world-sit-idle": {
+      "role": "assis, au repos — RÉFÉRENCE de posture assise",
+      "famille": "assis",
+      "boucle": true,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "sitting_idle.fbx"
+      },
+      "dureeS": 13.3333,
+      "osAnimes": 19,
+      "doigtsAnimes": false,
+      "amplitudeDoigtsDeg": 0,
+      "tailleOctets": 220248,
+      "hanchesFraction": {
+        "min": 0.5409,
+        "max": 0.5409,
+        "debut": 0.5409,
+        "fin": 0.5409
+      },
+      "coutureBoucleDeg": 0,
+      "raccordVitesse": {
+        "avantDegS": 0,
+        "apresDegS": 1,
+        "sautDegS": 1,
+        "moyenneDegS": 1
+      }
+    },
+    "world-sit-idle-2": {
+      "role": "assis, au repos (variante)",
+      "famille": "assis",
+      "boucle": true,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "sitting_idle04.fbx"
+      },
+      "dureeS": 13.3333,
+      "osAnimes": 20,
+      "doigtsAnimes": false,
+      "amplitudeDoigtsDeg": 0,
+      "tailleOctets": 235160,
+      "hanchesFraction": {
+        "min": 0.5408,
+        "max": 0.5411,
+        "debut": 0.541,
+        "fin": 0.541
+      },
+      "coutureBoucleDeg": 0,
+      "raccordVitesse": {
+        "avantDegS": 0,
+        "apresDegS": 1,
+        "sautDegS": 1,
+        "moyenneDegS": 2
+      }
+    },
+    "world-sit-talking": {
+      "role": "assis, en train de parler",
+      "famille": "assis",
+      "boucle": true,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "sitting_talk02.fbx"
+      },
+      "dureeS": 7.1333,
+      "osAnimes": 50,
+      "doigtsAnimes": true,
+      "amplitudeDoigtsDeg": 118.1,
+      "tailleOctets": 273524,
+      "hanchesFraction": {
+        "min": 0.5409,
+        "max": 0.5409,
+        "debut": 0.5409,
+        "fin": 0.5409
+      },
+      "coutureBoucleDeg": 0,
+      "raccordVitesse": {
+        "avantDegS": 0,
+        "apresDegS": 24,
+        "sautDegS": 24,
+        "moyenneDegS": 23
+      }
+    },
+    "world-sit-talking-2": {
+      "role": "assis, en train de parler (variante)",
+      "famille": "assis",
+      "boucle": true,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "sitting_talk03.fbx"
+      },
+      "dureeS": 6.5333,
+      "osAnimes": 48,
+      "doigtsAnimes": true,
+      "amplitudeDoigtsDeg": 53.3,
+      "tailleOctets": 248852,
+      "hanchesFraction": {
+        "min": 0.5409,
+        "max": 0.5409,
+        "debut": 0.5409,
+        "fin": 0.5409
+      },
+      "coutureBoucleDeg": 0,
+      "raccordVitesse": {
+        "avantDegS": 0,
+        "apresDegS": 11,
+        "sautDegS": 11,
+        "moyenneDegS": 15
+      }
+    },
+    "world-sit-look": {
+      "role": "assis, regarde alentour",
+      "famille": "assis",
+      "boucle": false,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "sitting_idle_once_lookaround.fbx"
+      },
+      "dureeS": 10.7667,
+      "osAnimes": 20,
+      "doigtsAnimes": false,
+      "amplitudeDoigtsDeg": 0,
+      "tailleOctets": 203112,
+      "hanchesFraction": {
+        "min": 0.5401,
+        "max": 0.5408,
+        "debut": 0.5406,
+        "fin": 0.5405
+      }
+    },
+    "world-sit-shift": {
+      "role": "assis, change de position",
+      "famille": "assis",
+      "boucle": false,
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "sitting_idle_once_shiftweight.fbx"
+      },
+      "dureeS": 9.3333,
+      "osAnimes": 20,
+      "doigtsAnimes": false,
+      "amplitudeDoigtsDeg": 0,
+      "tailleOctets": 185200,
+      "hanchesFraction": {
+        "min": 0.5409,
+        "max": 0.5411,
+        "debut": 0.541,
+        "fin": 0.541
+      }
+    },
+    "world-jump-start": {
+      "role": "saut : appel",
+      "famille": "saut",
+      "boucle": false,
+      "source": {
+        "pack": "Quaternius — Universal Animation Library",
+        "licence": "CC0-1.0",
+        "clip": "Jump_Start"
+      },
+      "dureeS": 1.3333,
+      "osAnimes": 52,
+      "doigtsAnimes": true,
+      "amplitudeDoigtsDeg": 95.6,
+      "tailleOctets": 84792,
+      "enchaine": {
+        "depuis": "idle",
+        "vers": "world-jump-loop"
+      },
+      "hanchesFraction": {
+        "min": 0.5701,
+        "max": 0.9565,
+        "debut": 0.5701,
+        "fin": 0.9473
+      }
+    },
+    "world-jump-loop": {
+      "role": "saut : phase aérienne",
+      "famille": "saut",
+      "boucle": true,
+      "source": {
+        "pack": "Quaternius — Universal Animation Library",
+        "licence": "CC0-1.0",
+        "clip": "Jump_Loop"
+      },
+      "dureeS": 2.5,
+      "osAnimes": 52,
+      "doigtsAnimes": false,
+      "amplitudeDoigtsDeg": 0.1,
+      "tailleOctets": 121088,
+      "hanchesFraction": {
+        "min": 0.9465,
+        "max": 0.9474,
+        "debut": 0.9473,
+        "fin": 0.9473
+      }
+    },
+    "world-jump-land": {
+      "role": "saut : atterrissage",
+      "famille": "saut",
+      "boucle": false,
+      "source": {
+        "pack": "Quaternius — Universal Animation Library",
+        "licence": "CC0-1.0",
+        "clip": "Jump_Land"
+      },
+      "dureeS": 1.2667,
+      "osAnimes": 52,
+      "doigtsAnimes": true,
+      "amplitudeDoigtsDeg": 95.6,
+      "tailleOctets": 82688,
+      "enchaine": {
+        "depuis": "world-jump-loop",
+        "vers": "idle"
+      },
+      "hanchesFraction": {
+        "min": 0.4697,
+        "max": 1.0108,
+        "debut": 1.0108,
+        "fin": 0.9568
+      }
+    }
+  }
+}
