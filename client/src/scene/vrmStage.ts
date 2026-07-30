@@ -32,6 +32,9 @@ import type { VRMAnimation } from '@pixiv/three-vrm-animation'
 import { EMOTIONS } from '../../../shared/types'
 import type { Emotion } from '../../../shared/types'
 import { getVrmAnimations } from '../api'
+// Les erreurs de cette scène remontent TELLES QUELLES à l'écran (bandeaux de
+// App.tsx) : elles se traduisent, comme celles de la couche API.
+import { translate } from '../i18n'
 import type { FrameMode, StageView, VrmStage } from './types'
 import { IdleAnimator } from './idle'
 import type { PosedBone } from './idle'
@@ -148,9 +151,7 @@ async function fetchPlacement(url: string): Promise<EnvPlacement> {
 function compressionError(e: unknown): Error | null {
   const msg = e instanceof Error ? e.message : String(e)
   if (!/draco|meshopt|ktx2|basis/i.test(msg)) return null
-  return new Error(
-    'Décor compressé (Draco, meshopt ou KTX2) — non pris en charge : réexporte le .glb sans compression.',
-  )
+  return new Error(translate('envCompressed'))
 }
 
 /**
@@ -329,15 +330,28 @@ vrmaLoader.register((parser) => new VRMAnimationLoaderPlugin(parser))
 // lui, est lié à l'instance de VRM (cf. buildAnimations).
 const vrmaCache = new Map<string, Promise<VRMAnimation | null>>()
 
-/** Charge une .vrma, une seule fois par session ; illisible ou vide → null, sans bruit. */
+/**
+ * Charge une .vrma, une seule fois par session ; illisible ou vide → null, sans bruit.
+ * Seuls les SUCCÈS restent en cache : un `.vrma` tombé pendant que le serveur de
+ * développement redémarre condamnerait sinon l'avatar au repli « aucune animation »
+ * pour toute la session, F5 obligatoire — et il n'y a qu'un `idle.vrma`, donc pas
+ * de variante de secours (cf. la garde `!clips.has(idleUrl)` de buildAnimations).
+ */
 function loadVrmAnimation(url: string): Promise<VRMAnimation | null> {
   let pending = vrmaCache.get(url)
   if (!pending) {
     pending = vrmaLoader
       .loadAsync(url)
-      .then((gltf) => (gltf.userData.vrmAnimations as VRMAnimation[] | undefined)?.[0] ?? null)
+      .then((gltf) => {
+        const animation = (gltf.userData.vrmAnimations as VRMAnimation[] | undefined)?.[0] ?? null
+        // Un .glb lu mais SANS piste d'animation est un échec lui aussi : réponse
+        // tronquée ou fichier qui n'est pas une .vrma. On ne le figera pas.
+        if (!animation) vrmaCache.delete(url)
+        return animation
+      })
       .catch((e) => {
         console.warn('[vrma]', url, e)
+        vrmaCache.delete(url)
         return null
       })
     vrmaCache.set(url, pending)
@@ -347,7 +361,10 @@ function loadVrmAnimation(url: string): Promise<VRMAnimation | null> {
 
 // Catalogue résolu UNE FOIS pour la session : le contenu du dossier ne change pas
 // pendant qu'on s'en sert. Liste injoignable → catalogue vide → aucun mixer, donc
-// exactement le comportement d'avant les animations.
+// exactement le comportement d'avant les animations. Mais cet échec-là n'est PAS
+// mémorisé : la promesse est oubliée pour que le prochain chargement de modèle (ou
+// l'interrupteur des Réglages) retente, au lieu de servir un catalogue vide jusqu'au
+// F5 suivant.
 let catalogPending: Promise<VrmaCatalog> | null = null
 
 function loadCatalog(): Promise<VrmaCatalog> {
@@ -355,6 +372,7 @@ function loadCatalog(): Promise<VrmaCatalog> {
     .then(catalogFromUrls)
     .catch((e) => {
       console.warn('[vrma]', e)
+      catalogPending = null
       return catalogFromUrls([])
     })
   return catalogPending
@@ -753,12 +771,16 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    * pour ce VRM précis — et jeté avec lui.
    * Chaque reprise après un `await` revérifie tout : changer de personnage ou
    * éteindre les animations pendant le téléchargement des .vrma ne doit rien
-   * poser sur le modèle en place.
+   * poser sur le modèle en place. Le test qui fait foi est `currentVrm !== vrm` —
+   * le modèle AFFICHÉ, et non `loadGeneration`, qu'un chargement RATÉ incrémente
+   * lui aussi tout en laissant le modèle précédent à l'écran : ce compteur privait
+   * alors d'animations un avatar parfaitement en place, jusqu'au prochain
+   * changement de personnage.
    */
-  async function buildAnimations(vrm: VRM, generation: number): Promise<void> {
+  async function buildAnimations(vrm: VRM): Promise<void> {
     if (!animationsEnabled) return
     const cat = await loadCatalog()
-    if (!animationsEnabled || generation !== loadGeneration || disposed || currentVrm !== vrm) return
+    if (!animationsEnabled || disposed || currentVrm !== vrm) return
     catalog = cat
     if (cat.idle.length === 0) return // pas de socle : pas de mixer du tout
     // Le socle est tiré au hasard UNE FOIS par chargement de modèle ; les gestes
@@ -771,7 +793,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       ...[...cat.postures.values()].flat(),
     ]
     const loaded = await Promise.all(urls.map(async (url) => [url, await loadVrmAnimation(url)] as const))
-    if (!animationsEnabled || generation !== loadGeneration || disposed || currentVrm !== vrm) return
+    if (!animationsEnabled || disposed || currentVrm !== vrm) return
     const clips = new Map<string, AnimationClip>()
     for (const [url, animation] of loaded) {
       if (animation) clips.set(url, createVRMAnimationClip(animation, vrm))
@@ -1007,6 +1029,12 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       applyEnvLimits()
     } catch (e) {
       console.error('[env]', e)
+      // Décor illisible : retirer celui d'AVANT. Sans ça, le bandeau d'erreur
+      // s'affichait mais la pièce du personnage précédent restait derrière le
+      // nouvel avatar, avec le placement et l'exposition de l'ancien décor.
+      // La garde de génération est indispensable : un loadEnvironment plus récent
+      // a peut-être déjà installé son décor pendant qu'on échouait.
+      if (generation === envGeneration && !disposed) unloadEnvironment()
       throw compressionError(e) ?? e // l'UI affiche l'erreur
     }
   }
@@ -1020,7 +1048,12 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     try {
       const gltf = await loader.loadAsync(url)
       const vrm = gltf.userData.vrm as VRM | undefined
-      if (!vrm) throw new Error(`Fichier sans données VRM : ${url}`)
+      if (!vrm) {
+        // Un .glb quelconque posé comme modèle de personnage : la scène est déjà
+        // parsée, elle se libère comme les deux autres sorties de loadModel.
+        VRMUtils.deepDispose(gltf.scene)
+        throw new Error(translate('vrmNoData', { file: url.split('/').pop() ?? url }))
+      }
       if (generation !== loadGeneration || disposed) {
         // Un loadModel plus récent (ou dispose) est passé entre-temps.
         VRMUtils.deepDispose(vrm.scene)
@@ -1042,7 +1075,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // Les .vrma partent APRÈS le cadrage, sans être attendues : l'avatar est
       // déjà à l'écran et à sa place, les animations s'y posent quand elles
       // arrivent (elles sont en cache dès le deuxième chargement).
-      void buildAnimations(vrm, generation)
+      void buildAnimations(vrm)
     } catch (e) {
       console.error('[vrm]', e)
       throw e // l'UI affiche l'erreur
@@ -1140,7 +1173,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       if (on === animationsEnabled) return
       animationsEnabled = on
       if (on) {
-        if (currentVrm) void buildAnimations(currentVrm, loadGeneration)
+        if (currentVrm) void buildAnimations(currentVrm)
         return
       }
       disposeAnimations()

@@ -168,6 +168,9 @@ const FR = {
   noEnvironment: 'Aucun décor',
   environmentHint:
     'Remplace le fond 2D — l’avatar est posé dans le décor. Fichiers .glb du dossier environments/.',
+  envCompressed:
+    'Décor compressé (Draco, meshopt ou KTX2) — non pris en charge : réexporte le .glb sans compression.',
+  vrmNoData: 'Fichier sans données VRM : {file}',
   addBackground: 'Ajouter une image de fond',
   backgroundFormat: 'Format non pris en charge (png, jpg, webp).',
   backgroundTooLarge: 'Image trop lourde (15 Mo maximum).',
@@ -493,6 +496,9 @@ const EN: Record<Key, string> = {
   noEnvironment: 'No environment',
   environmentHint:
     'Replaces the 2D background — the avatar stands inside the room. .glb files from the environments/ folder.',
+  envCompressed:
+    'Compressed environment (Draco, meshopt or KTX2) — unsupported: re-export the .glb without compression.',
+  vrmNoData: 'File has no VRM data: {file}',
   addBackground: 'Add a background image',
   backgroundFormat: 'Unsupported format (png, jpg, webp).',
   backgroundTooLarge: 'Image too large (15 MB maximum).',
