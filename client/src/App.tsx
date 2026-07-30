@@ -58,6 +58,10 @@ const AUTO_COMPACT_AT = 80
 // Citation d'un message : longueur de l'aperçu (bandeau) et de l'extrait envoyé.
 const QUOTE_PREVIEW_MAX = 80
 const QUOTE_MAX = 200
+// Chargement du modèle VRM : délais avant nouvelle tentative. Un serveur qui
+// redémarre coupe la requête sans que rien ne soit cassé — inutile d'annoncer
+// une erreur au premier échec.
+const VRM_RETRY_DELAYS_MS: readonly number[] = [1000, 3000]
 
 /** Extrait d'un message à citer : une seule ligne, tags d'émotion retirés, tronquée. */
 function excerpt(text: string, max: number): string {
@@ -378,25 +382,47 @@ function AppInner() {
 
   // Changement de personnage (ou scène prête) → charger son modèle VRM, puis
   // réappliquer le cadrage caméra choisi pour lui DANS LE MODE courant.
+  // Un échec (serveur en train de redémarrer) est réessayé deux fois en silence
+  // avant d'afficher l'erreur : ni bouton, ni message intermédiaire.
   useEffect(() => {
     characterIdRef.current = character?.id ?? null
     const stage = stageRef.current
     if (!stage || !stageReady) return
     setVrmError(null)
     const charId = character?.id ?? null
+    const vrm = character?.vrm ?? ''
     // Le cadrage automatique de fin de chargement doit déjà connaître le mode.
     stage.setFrameMode(frameModeOf(viewModeRef.current))
-    stage
-      .loadModel(character?.vrm ?? '')
-      .then(() => {
-        if (!charId || characterIdRef.current !== charId) return
-        applyViewFor(stage, charId)
-      })
-      .catch((e) => {
-        console.error('[vrm]', e)
-        setVrmError(api.errorMessage(e))
-      })
+    let cancelled = false
+    let retryTimer: number | null = null
+    const attempt = (retry: number) => {
+      stage
+        .loadModel(vrm)
+        .then(() => {
+          if (cancelled || !charId || characterIdRef.current !== charId) return
+          applyViewFor(stage, charId)
+        })
+        .catch((e) => {
+          // Personnage changé (ou effet rejoué) entre-temps : ce chargement ne
+          // concerne plus personne, ni erreur ni nouvelle tentative.
+          if (cancelled || characterIdRef.current !== charId) return
+          console.error('[vrm]', e)
+          if (retry >= VRM_RETRY_DELAYS_MS.length) {
+            setVrmError(api.errorMessage(e))
+            return
+          }
+          retryTimer = window.setTimeout(() => {
+            retryTimer = null
+            attempt(retry + 1)
+          }, VRM_RETRY_DELAYS_MS[retry])
+        })
+    }
+    attempt(0)
     stage.setEmotion(lastEmotionRef.current)
+    return () => {
+      cancelled = true
+      if (retryTimer !== null) window.clearTimeout(retryTimer)
+    }
   }, [stageReady, character?.vrm, character?.id, applyViewFor])
 
   // Bascule desktop ↔ VN : la place laissée à la scène change du tout au tout, le

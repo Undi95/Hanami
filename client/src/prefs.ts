@@ -262,6 +262,28 @@ function queuePut(patch: UiPrefsPatch): void {
 }
 
 /**
+ * La page s'en va avec un PUT encore en attente : sans ça, le dernier réglage
+ * (les 600 ms du debounce) serait perdu. Envoi immédiat en keepalive, seule
+ * forme de requête qui survit à la fermeture ET garde l'Authorization.
+ */
+function flushOnExit(): void {
+  if (timer === null) return // rien en attente
+  window.clearTimeout(timer)
+  timer = null
+  const patch = pending
+  pending = {}
+  if (Object.keys(patch).length > 0) api.putUiPrefsOnExit(patch)
+}
+
+// 'pagehide' couvre la fermeture de l'onglet et la navigation ; le passage en
+// arrière-plan ('visibilitychange' → hidden) le complète sur mobile, où l'onglet
+// peut être tué sans autre avertissement.
+window.addEventListener('pagehide', flushOnExit)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushOnExit()
+})
+
+/**
  * Modifie une ou plusieurs préférences : cache mis à jour tout de suite,
  * abonnés prévenus, PUT débouncé (les patchs en attente fusionnent).
  * `null` supprime la clé ; une valeur identique à l'actuelle ne fait rien.

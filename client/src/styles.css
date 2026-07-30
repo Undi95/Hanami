@@ -1107,6 +1107,14 @@ select {
   border-radius: 10px;
 }
 
+/* Recherche ouverte : la barre est en absolute au-dessus du fil (top 8px, hauteur
+   réelle 40px = champ 32 + marge intérieure 3×2 + bordure 1×2), le ruban est dans
+   le flux et passerait dessous. Il glisse donc juste après elle — 8 + 40 + 8 de
+   respiration — sans que la recherche ne bouge d'un pixel. */
+.pin-ribbon.under-search {
+  margin-top: 56px;
+}
+
 .pin-ribbon-text {
   flex: 1;
   min-width: 0;

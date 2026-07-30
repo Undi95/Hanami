@@ -171,6 +171,27 @@ export function putUiPrefs(patch: UiPrefsPatch): Promise<UiPrefs> {
   return req('PUT', '/api/ui', patch)
 }
 
+/**
+ * Même PUT, mais pour la page qui s'en va (onglet fermé, navigation) : keepalive
+ * laisse la requête vivre après la mort du document, là où un fetch normal est
+ * tué. Préféré à sendBeacon, qui ne sait pas poser l'en-tête Authorization.
+ * Sans retour ni erreur remontée : plus personne ne serait là pour la lire.
+ */
+export function putUiPrefsOnExit(patch: UiPrefsPatch): void {
+  try {
+    void fetch('/api/ui', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(patch),
+      keepalive: true,
+    }).catch(() => {
+      /* la page se ferme : rien à signaler */
+    })
+  } catch {
+    /* fetch déjà indisponible : la préférence est perdue, jamais bloquant */
+  }
+}
+
 // ── Personnages ────────────────────────────────────────────────────────────
 
 export function listCharacters(): Promise<CharacterMeta[]> {

@@ -532,7 +532,13 @@ export default function MessageList({
       )}
 
       {pinnedMsg && (
-        <div className={pinOpen ? 'pin-ribbon open' : 'pin-ribbon'}>
+        <div
+          className={
+            // under-search : la barre de recherche flotte au-dessus du fil et
+            // recouvrirait le ruban — il se range dessous (cf. styles.css).
+            'pin-ribbon' + (pinOpen ? ' open' : '') + (searchOpen ? ' under-search' : '')
+          }
+        >
           <button
             className="pin-ribbon-text"
             aria-expanded={pinOpen}

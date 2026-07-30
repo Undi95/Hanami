@@ -288,6 +288,15 @@ function chatFile(charId: string, chatId: string): string {
   return path.join(charDir(charId), 'chats', `${sanitizeFileName(chatId)}.jsonl`)
 }
 
+/** Mtime (ms) du fichier d'une conversation — 0 si introuvable. Sert au cache des stats. */
+export function chatMtimeMs(charId: string, chatId: string): number {
+  try {
+    return fs.statSync(chatFile(charId, chatId)).mtimeMs
+  } catch {
+    return 0
+  }
+}
+
 /**
  * Scanne un .jsonl par blocs de 64 Ko sans le charger en mémoire :
  * 1re ligne non vide (l'en-tête) + nombre de lignes non vides.

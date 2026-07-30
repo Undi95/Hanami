@@ -524,7 +524,26 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   }
 }
 
+// Verrou par chat du mode 'open' : le premier message d'une conversation vide
+// peut être demandé deux fois (deux appareils ouverts, double clic) et la
+// conversation se retrouverait avec DEUX ouvertures empilées.
+const opensInFlight = new Set<string>()
+
 chatRouter.post('/api/chat', async (req, res) => {
+  // Verrou posé AVANT handleChat : dès que le flux SSE est ouvert, plus aucun
+  // code d'erreur HTTP n'est possible.
+  const body = (req.body ?? {}) as { characterId?: unknown; chatId?: unknown; mode?: unknown }
+  const openKey =
+    body.mode === 'open' && typeof body.characterId === 'string' && typeof body.chatId === 'string'
+      ? `${body.characterId}/${body.chatId}`
+      : null
+  if (openKey !== null) {
+    if (opensInFlight.has(openKey)) {
+      res.status(409).json({ error: 'Ouverture déjà en cours pour cette conversation' })
+      return
+    }
+    opensInFlight.add(openKey)
+  }
   try {
     await handleChat(req, res)
   } catch (e) {
@@ -540,6 +559,8 @@ chatRouter.post('/api/chat', async (req, res) => {
         /* connexion fermée */
       }
     }
+  } finally {
+    if (openKey !== null) opensInFlight.delete(openKey)
   }
 })
 
