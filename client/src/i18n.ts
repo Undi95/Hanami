@@ -260,6 +260,10 @@ const FR = {
   secretWillClearPlaceholder: '(sera retiré à l’enregistrement)',
   removeSecret: 'Retirer',
   removePasswordConfirm: 'Retirer le mot de passe d’accès ? L’instance ne sera plus protégée.',
+  sectionData: 'Données',
+  backupDownload: 'Télécharger une sauvegarde',
+  backupDownloading: 'Préparation…',
+  backupHint: 'Un zip de data/ et des portraits — modèles 3D et fonds non inclus.',
 
   // ── Import SillyTavern ───────────────────────────────────────────────────
   importFromSt: 'Importer depuis SillyTavern',
@@ -553,6 +557,10 @@ const EN: Record<Key, string> = {
   secretWillClearPlaceholder: '(will be removed on save)',
   removeSecret: 'Remove',
   removePasswordConfirm: 'Remove the access password? This instance will no longer be protected.',
+  sectionData: 'Data',
+  backupDownload: 'Download a backup',
+  backupDownloading: 'Preparing…',
+  backupHint: 'A zip of data/ and the portraits — 3D models and backgrounds not included.',
 
   // ── SillyTavern import ───────────────────────────────────────────────────
   importFromSt: 'Import from SillyTavern',

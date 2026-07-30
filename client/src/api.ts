@@ -321,6 +321,32 @@ export function importChat(
   )
 }
 
+// ── Sauvegarde ─────────────────────────────────────────────────────────────
+
+/** filename="…" annoncé par le serveur, sinon un nom daté construit ici. */
+function backupFilename(header: string | null): string {
+  // Ni guillemet ni séparateur de chemin : le nom part dans un attribut download.
+  const match = /filename="([^"\\/]+)"/.exec(header ?? '')
+  if (match) return match[1]
+  return `hanami-backup-${new Date().toISOString().slice(0, 10)}.zip`
+}
+
+/**
+ * Récupère l'archive de sauvegarde (data/ + portraits/). Un simple <a href> ne
+ * porterait pas l'en-tête Authorization : le téléchargement passe donc par fetch,
+ * puis par un blob côté client.
+ */
+export async function downloadBackup(): Promise<{ blob: Blob; filename: string }> {
+  let res: Response
+  try {
+    res = await fetch('/api/backup', { headers: authHeaders() })
+  } catch {
+    throw new ApiError(t('serverUnreachable'), 0)
+  }
+  if (!res.ok) return throwFromResponse(res)
+  return { blob: await res.blob(), filename: backupFilename(res.headers.get('content-disposition')) }
+}
+
 // ── Assets ─────────────────────────────────────────────────────────────────
 
 export async function getVrmModels(): Promise<string[]> {

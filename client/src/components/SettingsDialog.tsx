@@ -248,6 +248,9 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
   // résultat ne vaut que pour l'URL testée, donc il s'efface dès qu'elle change.
   const [ttsProbe, setTtsProbe] = useState<{ ok: boolean; text: string; voices: api.TtsVoice[] } | null>(null)
   const [ttsProbing, setTtsProbing] = useState(false)
+  // Sauvegarde : le zip arrive par fetch (l'en-tête d'authentification est
+  // obligatoire), il n'y a donc rien à afficher pendant l'attente sauf l'état du bouton.
+  const [downloading, setDownloading] = useState(false)
 
   // Indicateurs de présence des secrets — la réponse serveur les porte (type local api.SettingsView),
   // shared/types.ts reste intact, d'où la lecture défensive.
@@ -324,6 +327,33 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
       setTtsProbe({ ok: false, text: api.errorMessage(e), voices: [] })
     } finally {
       setTtsProbing(false)
+    }
+  }
+
+  /**
+   * Télécharge l'archive de sauvegarde. Le blob reçu est offert au navigateur
+   * par un <a download> créé à la volée : c'est le seul moyen de déclencher un
+   * enregistrement de fichier depuis une réponse fetch. L'URL objet est révoquée
+   * après coup (différée : certains navigateurs la relisent après le clic).
+   */
+  async function saveBackup() {
+    setDownloading(true)
+    setSaveError(null)
+    try {
+      const { blob, filename } = await api.downloadBackup()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      // Dans le document : Firefox ignore le clic d'un lien détaché.
+      document.body.append(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) {
+      setSaveError(api.errorMessage(e))
+    } finally {
+      setDownloading(false)
     }
   }
 
@@ -802,6 +832,22 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
               )}
             </div>
             <span className="hint">{t('accessPasswordHint')}</span>
+          </div>
+
+          <h3 className="section-title">{t('sectionData')}</h3>
+          <div className="field">
+            {/* .field est une colonne flex : ce bloc empêche le bouton de s'étirer. */}
+            <div>
+              <button
+                className="btn small"
+                type="button"
+                disabled={downloading}
+                onClick={() => saveBackup().catch((e) => console.error('[backup]', e))}
+              >
+                {downloading ? t('backupDownloading') : t('backupDownload')}
+              </button>
+            </div>
+            <span className="hint">{t('backupHint')}</span>
           </div>
         </>
       )}

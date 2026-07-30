@@ -13,6 +13,7 @@ import { importRouter } from './api/importer'
 import { assetsRouter } from './api/assets'
 import { ttsRouter } from './api/tts'
 import { statsRouter } from './api/stats'
+import { backupRouter } from './api/backup'
 import { startSpontaneous } from './lib/spontaneous'
 import { uiRouter } from './api/ui'
 
@@ -70,6 +71,7 @@ async function main(): Promise<void> {
   app.use(ttsRouter)
   app.use(statsRouter)
   app.use(uiRouter)
+  app.use(backupRouter)
 
   // Statiques (non gardés).
   app.use('/vrm', express.static(VRM_DIR))
