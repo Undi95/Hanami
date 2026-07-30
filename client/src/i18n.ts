@@ -56,7 +56,7 @@ const FR = {
   settingsUnavailable: 'Réglages indisponibles (serveur injoignable).',
   responseInterrupted: 'Réponse interrompue par le serveur.',
   vrmLoadError: 'Le modèle 3D n’a pas pu être chargé.',
-  resetView: 'Recentrer l’avatar',
+  resetLayout: 'Réinitialiser l’affichage (avatar et panneaux)',
   resizeChatPanel: 'Largeur du chat — glissez, double-clic pour réinitialiser',
   resizeVnBox: 'Taille de la boîte de dialogue — glissez, double-clic pour réinitialiser',
 
@@ -346,7 +346,7 @@ const EN: Record<Key, string> = {
   settingsUnavailable: 'Settings unavailable (server unreachable).',
   responseInterrupted: 'The server cut the response short.',
   vrmLoadError: 'The 3D model could not be loaded.',
-  resetView: 'Recenter the avatar',
+  resetLayout: 'Reset the layout (avatar and panels)',
   resizeChatPanel: 'Chat width — drag, double-click to reset',
   resizeVnBox: 'Dialogue box size — drag, double-click to reset',
 

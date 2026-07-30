@@ -34,7 +34,7 @@ import {
   subscribePrefs,
   type ViewMode,
 } from './prefs'
-import { chatPanelWidth } from './layout'
+import { chatPanelWidth, saveChatPanelWidth, saveVnBoxWidth, saveVnTextHeight } from './layout'
 import { I18nProvider, chatDisplayTitle, getLang, localeOf, useI18n } from './i18n'
 import TopBar, { CtxBadge, type DialogKind } from './components/TopBar'
 import { ChatPanelGrip } from './components/ResizeGrips'
@@ -1009,23 +1009,28 @@ function AppInner() {
         />
       )}
 
-      {/* Recadrage de l'avatar. Le double-clic dans la scène fait la même chose,
-          mais rien ne le laisse deviner : ce bouton l'expose dans les deux modes.
-          Il vit HORS du chat-panel (le mode VN y coupe les pointer-events) et
-          n'existe que si un modèle est réellement chargé. resetView émet
-          onViewChange(null) : le cadrage sauvegardé DU MODE COURANT est donc
-          oublié par le même chemin que le double-clic. */}
-      {stageReady && !vrmError && !!character?.vrm && (
+      {/* RÉINITIALISER L'AFFICHAGE — un seul bouton pour tout (doctrine : pas un
+          bouton par chose à remettre) : recadre l'avatar du mode courant (même
+          chemin que le double-clic : resetView émet onViewChange(null), le
+          cadrage sauvegardé du mode est oublié) ET rend leurs tailles par défaut
+          aux panneaux (chat desktop, boîte VN — les double-clics des poignées
+          restent en raccourcis). Il vit HORS du chat-panel (le mode VN y coupe
+          les pointer-events). */}
+      {stageReady && !vrmError && !!character && (
         <button
           className={`scene-reset${vnMode ? ' vn' : ''}`}
-          onClick={() => stageRef.current?.resetView()}
-          title={t('resetView')}
-          aria-label={t('resetView')}
+          onClick={() => {
+            stageRef.current?.resetView()
+            saveChatPanelWidth(null)
+            saveVnBoxWidth(null)
+            saveVnTextHeight(null)
+          }}
+          title={t('resetLayout')}
+          aria-label={t('resetLayout')}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-            <circle cx="12" cy="12" r="6.6" />
-            <path d="M12 2.6v3.1M12 18.3v3.1M2.6 12h3.1M18.3 12h3.1" />
-            <circle cx="12" cy="12" r="1.1" />
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19.2 12a7.2 7.2 0 1 1-2.1-5.1" />
+            <path d="M19.5 3.6v3.5H16" />
           </svg>
         </button>
       )}
