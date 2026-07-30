@@ -508,7 +508,7 @@ select {
 .topbar-main {
   display: flex;
   align-items: center;
-  justify-content: flex-end; /* les icônes gardent leur place à droite */
+  justify-content: center; /* la rangée d'icônes est seule : centrée, pas de vide */
   gap: 6px;
   min-height: 46px;
 }
@@ -520,12 +520,14 @@ select {
 }
 
 /* Le nom vit en tête de la ligne 2 : il ne cède JAMAIS sa place au titre
-   (flex none) mais s'arrête à la moitié de la ligne pour les noms fleuves. */
+   (flex none) mais s'arrête à la moitié de la ligne pour les noms fleuves.
+   Bien visible (c'est LUI l'interlocuteur), et un retrait le sépare du titre. */
 .topbar-name {
   flex: none;
   max-width: 50%;
-  font-weight: 600;
-  font-size: 12.5px;
+  margin-right: 8px; /* s'ajoute au gap : le nom respire */
+  font-weight: 650;
+  font-size: 14.5px;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
