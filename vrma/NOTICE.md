@@ -126,3 +126,20 @@ public, aucune attribution requise, mais elle reste appréciée.
 domain, no attribution required, though appreciated.*
 
 <https://quaternius.com>
+
+---
+
+## 4. Modifications supplémentaires de la passe v2 / additional v2 changes
+
+Ce dossier est la **v2** du lot : mêmes sources, mêmes licences, mêmes
+remerciements exigés. Modifications ajoutées par `optimise-emotes.mjs` :
+bas du corps verrouillé en orientation monde sur la pose de repos debout
+d'`idle.vrma` (15 clips), hauteur des hanches recalée sur la même référence
+avec ballant borné, lacet du bassin borné à ±12° image par image avec ancrage
+des bords (10 clips), inclinaison du bassin comprimée au-delà de 15° (2 clips),
+`think` recoupé de 10,77 s à 3,37 s, reliquats de bind pose rognés en tête de
+`happy` et `shake`. Détail et mesures : `rapport.md`.
+
+*This folder is **v2** of the batch: same sources, same licences, same required
+acknowledgements. Changes added on top of the v1 conversion, per clip, are
+documented in `rapport.md`.*
