@@ -17,18 +17,26 @@ interface Props {
   onOpen: (d: DialogKind) => void
 }
 
+// Seuil d'auto-compaction, en % BRUT du contexte du modèle. Déclaré ici parce
+// que la jauge en dérive tout son affichage ; App.tsx l'importe pour déclencher.
+export const AUTO_COMPACT_AT = 80
+
 /**
- * Jauge de contexte : petit badge accolé au titre de la conversation. Seul le
- * TEXTE se colore, par palier — 85 % est le seuil de l'auto-compaction, donc le
- * moment où l'avertissement doit se voir. Exportée parce que le mode VN masque
- * la TopBar et rejoue la jauge dans la bande basse de sa boîte.
+ * Jauge de contexte : petit badge accolé au titre de la conversation. Le %
+ * AFFICHÉ est la progression vers l'auto-compaction (100 % = elle se déclenche),
+ * pas le remplissage brut du modèle — plus lisible : l'utilisateur n'a pas à
+ * savoir que « 80 % » est le moment critique. Le tooltip, lui, garde les tokens
+ * réels. Au-delà de 100 % (compaction auto désactivée), le débordement s'affiche
+ * tel quel. Seul le TEXTE se colore, par palier sur le % affiché. Exportée parce
+ * que le mode VN masque la TopBar et rejoue la jauge dans sa boîte.
  */
 export function CtxBadge({ percent, title }: { percent: number; title: string }) {
   const { t } = useI18n()
-  const tone = percent >= 85 ? 'ctx-high' : percent >= 50 ? 'ctx-warn' : 'ctx-ok'
+  const shown = Math.round((percent / AUTO_COMPACT_AT) * 100)
+  const tone = shown >= 85 ? 'ctx-high' : shown >= 50 ? 'ctx-warn' : 'ctx-ok'
   return (
     <span className={`ctx-badge ${tone}`} title={title}>
-      {t('contextBadge', { percent })}
+      {t('contextBadge', { percent: shown })}
     </span>
   )
 }

@@ -206,7 +206,7 @@ const FR = {
   timeAwarenessSub:
     'Le personnage sait la date, l’heure et le temps écoulé depuis votre dernier message (visible dans l’Inspecteur).',
   autoCompactSub:
-    'À ~80 % du contexte : les faits importants sont sauvés en mémoire, puis la conversation est résumée. Le résumé reste visible et modifiable.',
+    'Quand la jauge atteint 100 % : les faits importants sont sauvés en mémoire, puis la conversation est résumée. Le résumé reste visible et modifiable.',
   contextBadge: '{percent} %',
   contextBadgeTitle: 'Contexte utilisé : ~{tokens} / {limit} tokens',
   contextUsage: 'Prochain envoi : ~{tokens} tokens / {limit} ({percent} %)',
@@ -492,7 +492,7 @@ const EN: Record<Key, string> = {
   timeAwarenessSub:
     'The character knows the date, the time, and how long since your last message (visible in the Inspector).',
   autoCompactSub:
-    'At ~80% of the context: important facts are saved to memory, then the conversation is summarized. The summary stays visible and editable.',
+    'When the gauge reaches 100%: important facts are saved to memory, then the conversation is summarized. The summary stays visible and editable.',
   contextBadge: '{percent}%',
   contextBadgeTitle: 'Context used: ~{tokens} / {limit} tokens',
   contextUsage: 'Next request: ~{tokens} tokens / {limit} ({percent}%)',

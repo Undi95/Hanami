@@ -10,28 +10,106 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
 ## Principles
 
 1. **Your prompt, verbatim.** Whatever you write in the system prompt is sent to the backend
-   **unmodified**. The 🔍 *Prompt Inspector* shows the exact payload that goes out — the only
-   thing Hanami ever adds (when memory is enabled) is the memory block, and it is shown to you.
+   **unmodified**. The only things Hanami ever appends are blocks you can read yourself — the
+   memory block, the compaction summary, the current-time block — and the 🔍 *Prompt inspector*
+   shows the exact payload of your next message, token estimate included.
 2. **Local-first.** Everything lives in plain, readable files under `data/`: characters, chats,
-   memory, settings. No database, no cloud. Your data never leaves your machine — the only
-   outbound requests Hanami makes go to the backend URL you configure yourself.
+   memory, settings, interface preferences. No database, no cloud. The only outbound requests
+   Hanami makes go to the URLs you configure yourself (the LLM backend, and the TTS server if you
+   turn it on).
 3. **One character = one folder.** `data/characters/<id>/` holds `character.json`,
    `system-prompt.md`, `memory/` and `chats/`. Copy it, share it, put it under version control.
+4. **The server remembers your screen.** Language, theme, visual-novel mode, panel sizes, camera
+   framing, last character and last conversation live in `data/ui.json` — so your setup follows you
+   from the desktop to the phone instead of staying in one browser.
 
 ## Features
 
-- 💬 Streaming chat with any **OpenAI-compatible** backend
-  (KoboldCpp, llama.cpp, TabbyAPI, LM Studio, Ollama, cloud APIs…)
+### Conversation
+
+- 💬 Streaming chat with any **OpenAI-compatible** backend (llama.cpp, KoboldCpp, Ollama,
+  TabbyAPI, LM Studio, cloud APIs…). *Test connection* lists the models the backend announces as
+  clickable chips that fill the *Model* field — no more copying an exact id by hand.
+- 📊 **Context gauge** next to the conversation title, coloured by tier. 100% means "compaction
+  point reached" — not the raw model window (the tooltip shows the real token counts). It is
+  there from the moment the conversation opens (the server estimates the next payload without
+  generating anything), then follows the backend's real usage.
+- 🗜️ **Automatic compaction**, in the spirit of Claude Code's `/compact`: when the gauge reaches
+  100%, durable facts are saved to memory, then the older messages are condensed into one
+  summary that replaces them in the payload. The summary stays visible and **editable** in the
+  inspector — emptying it undoes the compaction. *Compact now* accepts an optional instruction.
+  The thread on screen is never touched.
+- 🔍 **Prompt inspector**: system prompt, full payload, summary — with a copy button.
+- 🧠 **Model thoughts**: a model that reasons out loud gets a collapsible block above its reply
+  (optional). The reasoning is never sent back to the backend.
+- ♻️ **Regenerate**, **Continue** (the last reply is extended in place), edit any message,
+  **reply to one** (the quote is written at the top of what you send — nothing hidden),
+  **pin** one message per conversation (a ribbon, purely visual, never in the payload), and
+  **Remember this** to file a message into the character's memory (`moments.md`).
+- 🔎 **Search the conversation**: Ctrl+F, or the magnifier in the bar for touch — match count,
+  previous/next, Esc to close.
+- 🕰️ **Sense of time** (optional): the date, the hour and the time elapsed since your last
+  message, injected as plain facts — visible in the inspector like everything else.
+- 🖼️ **Images** for vision models: detection from the backend (Ollama), or forced, or off. The
+  paperclip only exists when the model can actually read an image; pictures are resized in the
+  browser before they leave it, shown as thumbnails, and open full screen on click.
+- 💬 **First message**: several written greetings (one picked at random), or the model opens the
+  conversation, or you are asked which one each time.
+- 🗣️ **Text-to-speech** (optional): each finished reply is read out loud through an
+  OpenAI-compatible TTS server. *Test* reports what the server announces and lists its voices as
+  clickable chips; *Listen again* replays a line. While the audio plays, it drives the lips.
+- 💌 **Spontaneous messages** (opt-in): while you are away, the character writes on their own —
+  after about 4 h, then 10 h, 24 h, 48 h, and finally one understanding note before going quiet
+  until you come back. Never outside the hour range you set.
+
+### The avatar and the screen
+
 - 🧍 **3D VRM avatar**: animated idle (breathing, blinking), expressions driven by the model
-  through `[happy]`-style tags, lipsync while it speaks — drop your `.vrm` files into `vrm/`
+  through `[happy]`-style tags, lipsync while it speaks — drop your `.vrm` files into `vrm/`.
+  Drag to pan, wheel or pinch to zoom, right-click to rotate; the framing is remembered per
+  character **and per display mode**.
+- 🎬 **Visual novel mode**: full-screen scene, a dialogue box with a namebox, the time of the line,
+  the conversation title and the context gauge in its lower band, a resizable box (grip in the
+  top-left corner, double-click to reset) and the menu icons in a column in the top-right corner.
+  Esc leaves the mode.
+- 🖥️ **Adjustable layout**: the chat column (desktop) and the visual-novel box are resized by
+  discreet grips; a double-click forgets the size. One single ⟲ button — *Reset the layout* —
+  re-frames the avatar of the current mode and gives the panels their default sizes back.
+- 🎨 **Themes**: five complete palettes (Sakura, Midnight, Matcha, Ember, Ink) plus **Custom** —
+  two colours, all the shading derived from them, and a shareable code (`#background #accent`) to
+  paste from one instance to another. A character can carry its own theme, which takes over the
+  whole interface while it is active.
+- 🌄 **Backgrounds**: picked from `backgrounds/`, and added straight from the interface (png, jpg,
+  webp) — no need to reach the server's file explorer.
+- 🖼️ **2D portrait**: a character imported from a SillyTavern card keeps the card's image, which
+  stands in as the avatar until you pick a `.vrm`.
+
+### Memory and tools
+
 - 🧠 **Persistent memory**: markdown files injected into the context, plus tools
   (`memory_save`, `memory_read`, `memory_update`, `memory_delete`) so the character can
-  remember on its own — with a built-in editing panel
+  remember on its own — with a built-in editing panel. `MEMORY.md` is the index.
+- 🔦 **`chat_search`**: the model can search **all** past conversations with you (full
+  transcripts, not just its distilled memory) and quote the exact passage with its date.
 - 🛠️ Optional **file tools** for the model (`list_files`, `read_file`, `write_file`,
-  `edit_file`, and `delete_file` behind its own dedicated toggle), sandboxed to a folder you pick
-- 📥 **SillyTavern import**: character cards (PNG V2/V3) and chat logs (`.jsonl`)
-- 📱 **Mobile / PWA**: responsive interface, installable on your home screen
-- 🔒 Optional password (recommended if you expose Hanami through a Cloudflare Tunnel)
+  `edit_file`, and `delete_file` behind its own dedicated toggle), sandboxed to a folder you pick.
+- 🐣 **Model mode**: *Full* exposes the tools; *Simple* exposes **none** — Hanami injects the
+  memory itself, extracts the durable facts server-side during compaction, and guesses the emotion
+  from the text. Made for small models, whose weak spot is tool calling.
+
+### Conversations, characters, data
+
+- 🏷️ **Conversation titles have two states**: automatic (re-rendered in the interface language) or
+  chosen by you (rename, forked branch) — a chosen title is never translated. Renaming happens
+  inline, from the pencil in the list.
+- 🌿 **Fork**: duplicate a conversation into an independent branch with the same past (compaction
+  summary included). The original is never touched.
+- 💗 **Our story**: a line at the bottom of the conversation list — days together, messages, days
+  of conversation.
+- 📥 **SillyTavern import**: character cards (PNG V2/V3, `alternate_greetings` becoming greeting
+  variants) and chat logs (`.jsonl`).
+- 📱 **Mobile / PWA**: responsive interface, installable on your home screen.
+- 🔒 Optional password (recommended if you expose Hanami through a Cloudflare Tunnel).
 
 ## Getting started
 
@@ -55,6 +133,18 @@ npm start
 
 The server listens on port `7788` by default; set the `PORT` environment variable to change it.
 
+## Settings
+
+Three tabs, one single form — switching tabs neither loses nor saves anything:
+
+- **Appearance** — interface language, theme (and the custom theme's two colours).
+- **Model** — backend URL, API key, model, images (vision), temperature, max tokens, history
+  length, model context size, model mode, automatic compaction.
+- **Features** — sense of time, thoughts, text-to-speech, spontaneous messages, memory, file
+  tools, sandbox folder, access password.
+
+Language and theme apply immediately; everything else takes effect when you save.
+
 ## Language / Langue
 
 - **Interface**: Hanami ships in English and French. Switch language in ⚙️ *Settings* — it only
@@ -65,28 +155,34 @@ The server listens on port `7788` by default; set the `PORT` environment variabl
 
 ## Remote & mobile access
 
-- From your local network: `http://<pc-ip>:7788` (the LAN address is printed on startup).
+- `npm run dev` listens on `127.0.0.1` only (the Vite tooling has no business on your network).
+  Use `HOST=0.0.0.0 npm run dev` to open it up, or `npm start`, which listens on the LAN and prints
+  the address on startup: `http://<pc-ip>:7788`.
 - From anywhere else: see [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md) (Cloudflare Tunnel, free HTTPS).
 - Installing it on a phone: see [docs/MOBILE.md](docs/MOBILE.md).
 
 ## Privacy
 
-- **`data/` is never committed** (see `.gitignore`). Your chats, memory files, edited prompts
-  and `config.json` — including the API key and password you may have set — stay on your disk only.
-- **VRM models and backgrounds are never committed either**: `vrm/` and `backgrounds/` are
-  git-ignored except for their `README.md`. Most VRoid Hub / Booth models forbid redistribution,
-  so each user brings their own.
+- **`data/` is never committed** (see `.gitignore`). Your chats, memory files, edited prompts,
+  interface preferences and `config.json` — including the API key and password you may have set —
+  stay on your disk only.
+- **VRM models, backgrounds and portraits are never committed either**: `vrm/`, `backgrounds/` and
+  `portraits/` are git-ignored except for their `README.md`. Most VRoid Hub / Booth models forbid
+  redistribution, so each user brings their own.
 - `presets/sakura/` is the only character shipped with the repository. On first launch, every
   folder in `presets/` is copied into `data/characters/` and never overwritten afterwards —
   so editing your character never touches the repo, and pulling never touches your character.
+- Setting a password protects every `/api/` route (bar the login itself); changing it revokes the
+  existing sessions. Mutating requests coming from another site are refused.
 
 ## Project layout
 
 ```
 data/                  # YOUR data (never committed)
   config.json          # settings
+  ui.json              # interface preferences (language, theme, layout, last conversation)
   characters/<id>/     # one folder per character
-    character.json     # name, 3D model, background, greeting
+    character.json     # name, 3D model, portrait, background, theme, greetings
     system-prompt.md   # THE prompt — edit it freely
     memory/            # MEMORY.md (index) + one fact per file
     chats/             # one .jsonl per conversation
@@ -97,6 +193,8 @@ portraits/             # 2D portraits from imported cards (avatar without a VRM)
 client/                # React front-end (Vite)
 server/                # Express server + API
 shared/                # types shared by client and server
+docs/                  # remote access and mobile guides
+scripts/               # mock-llm (fake OpenAI-compatible backend)
 ```
 
 ## License

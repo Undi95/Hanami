@@ -36,7 +36,7 @@ import {
 } from './prefs'
 import { chatPanelWidth, saveChatPanelWidth, saveVnBoxWidth, saveVnTextHeight } from './layout'
 import { I18nProvider, chatDisplayTitle, getLang, localeOf, useI18n } from './i18n'
-import TopBar, { CtxBadge, type DialogKind } from './components/TopBar'
+import TopBar, { AUTO_COMPACT_AT, CtxBadge, type DialogKind } from './components/TopBar'
 import { ChatPanelGrip } from './components/ResizeGrips'
 import MessageList, { VnBox, type FeedItem } from './components/MessageList'
 import Composer from './components/Composer'
@@ -53,8 +53,6 @@ import PromptInspector from './components/PromptInspector'
 // ces préférences vivent côté serveur (data/ui.json) via prefs.ts — l'utilisateur
 // retrouve son écran à l'identique en passant du PC au téléphone.
 
-// Seuil d'auto-compaction (% du contexte) — même esprit que Claude Code.
-const AUTO_COMPACT_AT = 80
 // Citation d'un message : longueur de l'aperçu (bandeau) et de l'extrait envoyé.
 const QUOTE_PREVIEW_MAX = 80
 const QUOTE_MAX = 200
