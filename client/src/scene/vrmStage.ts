@@ -608,9 +608,19 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     if (!action) return // aucun fichier pour cette émotion : le visage suffit
     action.reset()
     action.setLoop(LoopOnce, 1)
-    // Pas de clampWhenFinished : le geste ne se figera pas sur sa dernière image,
-    // c'est le fondu de retour au socle qui le termine.
-    action.clampWhenFinished = false
+    // clampWhenFinished est INDISPENSABLE, et le raisonnement inverse (« le fondu
+    // de retour termine le geste, donc pas besoin de le figer ») est un piège :
+    // sans lui, three exécute `enabled = false` PUIS dispatche 'finished' dans la
+    // même instruction (AnimationAction, étiquette handle_stop), et _update
+    // appelle _updateTime AVANT _updateWeight — qui rend 0 pour une action
+    // désactivée. Le geste pesait donc DÉJÀ 0 quand le gestionnaire lançait son
+    // fondu de retour : somme des poids nulle, et PropertyMixer.apply remélangeait
+    // à 100 % vers la pose d'origine du squelette. Le corps claquait sur une pose
+    // neutre en une image, puis remontait depuis là.
+    // Figé (`paused = true`) sur sa dernière image à poids 1, le geste participe
+    // au contraire à son propre fondu de sortie. Le `reset()` ci-dessus lève le
+    // `paused` au déclenchement suivant — rien d'autre à changer.
+    action.clampWhenFinished = true
     // Un geste pendant un geste enchaîne depuis l'action COURANTE, pas depuis le
     // socle — sinon la transition passerait par une pose que personne ne voit.
     fadeTo(action, GESTURE_FADE)
