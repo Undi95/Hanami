@@ -11,6 +11,7 @@ import type {
 import type { FrameMode, VrmStage } from './scene/types'
 import * as api from './api'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
+import { disposeNotify, playNotify } from './sound'
 import {
   applyTheme,
   normalizeTheme,
@@ -362,6 +363,7 @@ function AppInner() {
     return () => {
       cancelled = true
       stopTts()
+      disposeNotify()
       if (speakTimerRef.current !== null) window.clearTimeout(speakTimerRef.current)
       stageRef.current?.dispose()
       stageRef.current = null
@@ -852,10 +854,17 @@ function AppInner() {
                 compact(char.id, chat.id, '', true).catch((err) => console.warn('[compact]', err))
               }
             }
-            if (settings?.ttsEnabled) {
-              playTts(ev.message.content.slice(ttsFromIndex)).catch((e) => {
+            // Voix ou ding, jamais les deux : quand le TTS lit la réponse, la
+            // voix EST la notification. Le TTS se tait sur un texte sans mot
+            // (tags d'émotion seuls) — dans ce cas le ding reprend son rôle.
+            const toSpeak = ev.message.content.slice(ttsFromIndex)
+            const ttsWillSpeak = settings?.ttsEnabled === true && stripEmotionTags(toSpeak).trim().length > 0
+            if (ttsWillSpeak) {
+              playTts(toSpeak).catch((e) => {
                 setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }])
               })
+            } else if (settings?.notifySound) {
+              playNotify()
             }
           } else if (ev.type === 'error') {
             finished = true
@@ -1367,6 +1376,7 @@ function AppInner() {
           characterId={character.id}
           chatId={chatMeta.id}
           summary={chatMeta.summary ?? ''}
+          sceneNotes={chatMeta.sceneNotes ?? ''}
           compacting={compacting}
           streaming={streaming}
           onCompact={(instruction) => compact(character.id, chatMeta.id, instruction)}
@@ -1380,6 +1390,12 @@ function AppInner() {
                     summaryUpto: out.summary ? out.summaryUpto : undefined,
                   }
                 : m,
+            )
+          }}
+          onSaveSceneNotes={async (text) => {
+            const out = await api.updateChatSceneNotes(character.id, chatMeta.id, text)
+            setChatMeta((m) =>
+              m && m.id === chatMeta.id ? { ...m, sceneNotes: out.sceneNotes || undefined } : m,
             )
           }}
           onClose={() => setDialog(null)}

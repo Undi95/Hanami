@@ -27,6 +27,8 @@ export const DEFAULT_SETTINGS: Settings = {
   ttsUrl: '',
   ttsModel: '',
   ttsVoice: '',
+  // Opt-in : aucun son n'est joué tant que l'utilisateur ne le demande pas.
+  notifySound: false,
   // Opt-in : par défaut le personnage n'écrit JAMAIS de lui-même.
   spontaneousEnabled: false,
   spontaneousStartHour: 9,

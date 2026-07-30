@@ -50,6 +50,7 @@ interface FormState {
   spontaneousEndHour: string
   timeAwareness: boolean
   showThoughts: boolean
+  notifySound: boolean
   ttsEnabled: boolean
   ttsUrl: string
   ttsModel: string
@@ -79,6 +80,8 @@ function toForm(s: Settings): FormState {
     spontaneousEndHour: String(s.spontaneousEndHour),
     timeAwareness: s.timeAwareness,
     showThoughts: s.showThoughts,
+    // Réglage optionnel (config.json d'avant le réglage) : absent = éteint.
+    notifySound: s.notifySound === true,
     ttsEnabled: s.ttsEnabled,
     ttsUrl: s.ttsUrl,
     ttsModel: s.ttsModel,
@@ -112,6 +115,7 @@ function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassw
     spontaneousEndHour: Math.round(num(f.spontaneousEndHour, base.spontaneousEndHour)),
     timeAwareness: f.timeAwareness,
     showThoughts: f.showThoughts,
+    notifySound: f.notifySound,
     ttsEnabled: f.ttsEnabled,
     ttsUrl: f.ttsUrl.trim(),
     ttsModel: f.ttsModel.trim(),
@@ -632,6 +636,12 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
             sub={t('showThoughtsSub')}
             checked={form.showThoughts}
             onChange={(v) => set('showThoughts', v)}
+          />
+          <Toggle
+            label={t('notifySound')}
+            sub={t('notifySoundSub')}
+            checked={form.notifySound}
+            onChange={(v) => set('notifySound', v)}
           />
 
           <h3 className="section-title">{t('sectionTts')}</h3>
