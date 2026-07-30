@@ -156,6 +156,14 @@ select option {
   color: var(--text);
 }
 
+/* Le POPUP du <select> est rendu hors de la page : nos styles de scrollbar ne
+   l'atteignent jamais — sa barre suit le color-scheme de l'ÉLÉMENT. L'héritage
+   depuis :root doit suffire en théorie, mais certains Chrome/Windows consultent
+   la valeur posée sur le select lui-même : on la fixe explicitement. */
+select {
+  color-scheme: dark;
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

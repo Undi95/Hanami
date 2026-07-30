@@ -46,6 +46,17 @@ function basename(url: string): string {
   return url.split('/').pop() ?? url
 }
 
+/** Nom lisible d'un fichier servi par l'API : URL décodée (%20 → espace), sans extension. */
+function displayName(url: string): string {
+  let name = basename(url)
+  try {
+    name = decodeURIComponent(name)
+  } catch {
+    /* séquence % invalide : on garde le nom brut */
+  }
+  return name.replace(/\.[^.]+$/, '')
+}
+
 /** Teinte stable dérivée de l'id — pour la pastille du personnage. */
 export function pastilleHue(id: string): number {
   let h = 0
@@ -253,10 +264,10 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
               <label htmlFor="char-vrm">{t('vrmModel')}</label>
               <select id="char-vrm" value={form.vrm} onChange={(e) => set('vrm', e.target.value)}>
                 <option value="">{t('noModel')}</option>
-                {form.vrm && !vrms.includes(form.vrm) && <option value={form.vrm}>{basename(form.vrm)}</option>}
+                {form.vrm && !vrms.includes(form.vrm) && <option value={form.vrm}>{displayName(form.vrm)}</option>}
                 {vrms.map((v) => (
                   <option key={v} value={v}>
-                    {basename(v)}
+                    {displayName(v)}
                   </option>
                 ))}
               </select>
@@ -266,11 +277,11 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
               <select id="char-bg" value={form.background} onChange={(e) => set('background', e.target.value)}>
                 <option value="">{t('defaultGradient')}</option>
                 {form.background && !bgs.includes(form.background) && (
-                  <option value={form.background}>{basename(form.background)}</option>
+                  <option value={form.background}>{displayName(form.background)}</option>
                 )}
                 {bgs.map((b) => (
                   <option key={b} value={b}>
-                    {basename(b)}
+                    {displayName(b)}
                   </option>
                 ))}
               </select>
