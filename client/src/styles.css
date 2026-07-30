@@ -2239,6 +2239,22 @@ select {
   background: var(--accent-ink);
 }
 
+/* Interrupteur grisé : il reste LISIBLE (sa raison est écrite sous son nom, et
+   c'est le texte le plus utile de la ligne à ce moment-là), mais il ne répond
+   plus. Jamais caché — un réglage qui disparaît laisse croire qu'il n'existe pas. */
+.toggle.disabled {
+  cursor: default;
+}
+
+.toggle.disabled .toggle-label {
+  color: var(--text-dim);
+}
+
+.toggle.disabled input {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .toggle.danger .toggle-label {
   color: var(--danger);
 }

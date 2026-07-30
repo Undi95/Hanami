@@ -30,6 +30,13 @@ interface Props {
   onToggleEnv3d: (on: boolean) => void
   vrmaEnabled: boolean
   onToggleVrma: (on: boolean) => void
+  interactive: boolean
+  // Grisé (petit écran, ou animations coupées) et la raison à afficher à la
+  // place du sous-titre. C'est l'APPLICATION du réglage qui est conditionnée,
+  // pas la préférence : elle reste telle quelle dans data/ui.json.
+  interactiveDisabled: boolean
+  interactiveReason: string
+  onToggleInteractive: (on: boolean) => void
   onSaved: (s: Settings) => void
   onClose: () => void
 }
@@ -135,20 +142,34 @@ function Toggle({
   checked,
   onChange,
   danger,
+  disabled,
+  reason,
 }: {
   label: string
   sub?: string
   checked: boolean
   onChange: (v: boolean) => void
   danger?: boolean
+  // Grisé AVEC SA RAISON, jamais caché : un réglage qui disparaît laisse croire
+  // qu'il n'existe pas. La raison remplace le sous-titre — c'est elle qui compte
+  // à ce moment-là. La préférence, elle, n'est pas touchée.
+  disabled?: boolean
+  reason?: string
 }) {
   return (
-    <label className={`toggle${danger ? ' danger' : ''}`}>
+    <label className={`toggle${danger ? ' danger' : ''}${disabled ? ' disabled' : ''}`}>
       <span className="toggle-text">
         <span className="toggle-label">{label}</span>
-        {sub && <span className="toggle-sub">{sub}</span>}
+        {(disabled && reason ? reason : sub) && (
+          <span className="toggle-sub">{disabled && reason ? reason : sub}</span>
+        )}
       </span>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
     </label>
   )
 }
@@ -206,6 +227,10 @@ export default function SettingsDialog({
   onToggleEnv3d,
   vrmaEnabled,
   onToggleVrma,
+  interactive,
+  interactiveDisabled,
+  interactiveReason,
+  onToggleInteractive,
   onSaved,
   onClose,
 }: Props) {
@@ -531,6 +556,14 @@ export default function SettingsDialog({
             sub={t('vrmaOnSub')}
             checked={vrmaEnabled}
             onChange={onToggleVrma}
+          />
+          <Toggle
+            label={t('sceneLive')}
+            sub={t('sceneLiveSub')}
+            checked={interactive}
+            disabled={interactiveDisabled}
+            reason={interactiveReason}
+            onChange={onToggleInteractive}
           />
         </>
       )}

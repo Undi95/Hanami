@@ -159,6 +159,15 @@ export interface UiPrefs {
   // — un réglage de confort, pas une propriété du personnage. Éteint, la scène
   // décharge le mixer et retombe sur la respiration seule.
   vrmaEnabled?: boolean
+  // Scène vivante : le personnage occupe la pièce (il s'y déplace, s'y assoit,
+  // se tourne vers vous). OPT-IN STRICT — clé absente = éteint, contrairement à
+  // env3d et vrmaEnabled : c'est le seul réglage de scène qui change ce que le
+  // personnage FAIT, et pas seulement ce qu'on voit de lui.
+  // Même famille qu'eux pour le reste : un réglage de confort, pas une propriété
+  // du personnage. Son APPLICATION est en outre réservée au grand écran (le
+  // client la conditionne à la taille de l'écran) — la préférence, elle, suit
+  // l'utilisateur du PC au téléphone comme toutes les autres.
+  interactive?: boolean
   // Tailles réglées à la poignée (pixels). Clé ABSENTE = taille par défaut de
   // styles.css : l'utilisateur qui n'y touche pas n'a rien dans ui.json, et un
   // double-clic sur la poignée efface la clé (retour au défaut).

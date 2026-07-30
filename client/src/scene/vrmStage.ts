@@ -39,6 +39,8 @@ import type { FrameMode, StageView, VrmStage } from './types'
 import { IdleAnimator } from './idle'
 import type { PosedBone } from './idle'
 import { normalizeEmotion, resolveExpressions } from './emotionMap'
+import { createWander } from './wander'
+import type { Wander, WanderHost } from './wander'
 
 // Pose de repos (anti T-pose : les VRM chargent bras en croix) — rotation Z par os.
 const REST_POSE_Z: ReadonlyArray<readonly [VRMHumanBoneName, number]> = [
@@ -279,6 +281,13 @@ const BASE_FADE = 0.5
 const TALKING_STEM = 'idle-talking'
 /** Radicaux de posture : `pose-sit` (nom court) et les clips assis livrés tels quels. */
 const POSTURE_PREFIXES = ['pose-', 'sit-'] as const
+/**
+ * Domaine « monde 3D » : déplacement, pivots, postures de la scène vivante. Ces
+ * clips ne sont JAMAIS joués en face à face — le mode conversation n'a aucune
+ * raison de télécharger 2,4 Mo d'allures. Leur chargement est donc PARESSEUX
+ * (cf. worldUrlsNeeded) et conditionné à l'interrupteur.
+ */
+const WORLD_PREFIX = 'world-'
 
 /** Rôles reconnus dans vrma/, en URLs de fichiers. */
 interface VrmaCatalog {
@@ -286,6 +295,7 @@ interface VrmaCatalog {
   talking: string[] // socle en boucle pendant que le personnage parle
   gestures: Map<Emotion, string[]> // joué une fois, puis retour au socle
   postures: Map<string, string[]> // remplace le socle (setPosture)
+  world: Map<string, string[]> // domaine `world-`, clé = radical SANS le préfixe
 }
 
 function pushInto<K>(map: Map<K, string[]>, key: K, url: string): void {
@@ -300,7 +310,13 @@ function pushInto<K>(map: Map<K, string[]>, key: K, url: string): void {
  * la grammaire des salutations multiples d'un personnage.
  */
 function catalogFromUrls(urls: readonly string[]): VrmaCatalog {
-  const cat: VrmaCatalog = { idle: [], talking: [], gestures: new Map(), postures: new Map() }
+  const cat: VrmaCatalog = {
+    idle: [],
+    talking: [],
+    gestures: new Map(),
+    postures: new Map(),
+    world: new Map(),
+  }
   for (const url of urls) {
     const file = decodeURIComponent(url.split('/').pop() ?? '')
     const stem = file
@@ -310,14 +326,32 @@ function catalogFromUrls(urls: readonly string[]): VrmaCatalog {
     if (stem === 'idle') cat.idle.push(url)
     else if (stem === TALKING_STEM) cat.talking.push(url)
     else if ((EMOTIONS as readonly string[]).includes(stem)) pushInto(cat.gestures, stem as Emotion, url)
-    else {
-      // `pose-sit` donne la posture « sit » ; les clips assis livrés s'appellent
-      // `sit-idle`/`sit-enter`/`sit-exit` — leur nom complet EST la posture.
+    // Le domaine `world-` se teste AVANT les postures : `world-sit-idle`
+    // commence par `world-`, pas par `sit-`. C'est cet ordre manquant qui rendait
+    // POSTURE_PREFIXES aveugle aux clips renommés — cat.postures restait vide et
+    // setPosture ne faisait rien du tout.
+    else if (stem.startsWith(WORLD_PREFIX) && stem.length > WORLD_PREFIX.length) {
+      pushInto(cat.world, stem.slice(WORLD_PREFIX.length), url)
+    } else {
+      // `pose-sit` donne la posture « sit » ; un clip assis déposé à la main sous
+      // son nom d'origine (`sit-idle`) garde son nom complet comme posture.
       const prefix = POSTURE_PREFIXES.find((p) => stem.startsWith(p) && stem.length > p.length)
       if (prefix) pushInto(cat.postures, prefix === 'pose-' ? stem.slice(prefix.length) : stem, url)
     }
   }
   return cat
+}
+
+/**
+ * Clips du domaine `world-` à télécharger. Mode éteint : liste VIDE, donc la
+ * liste totale de buildAnimations est identique à l'octet près à celle d'avant
+ * la scène vivante. C'est la garantie du « éteint = comme aujourd'hui ».
+ */
+const WORLD_NEEDED: readonly string[] = ['turn-left', 'turn-right']
+
+function worldUrlsNeeded(cat: VrmaCatalog, on: boolean): string[] {
+  if (!on) return []
+  return WORLD_NEEDED.flatMap((name) => cat.world.get(name) ?? [])
 }
 
 // Loader SÉPARÉ de celui du VRM et de celui du décor : une .vrma n'est ni un
@@ -414,10 +448,22 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   container.appendChild(renderer.domElement)
 
   const scene = new Scene()
-  // Deux groupes FRÈRES. Règle d'or : l'avatar reste à l'origine du monde, c'est
-  // le DÉCOR qui se déplace pour amener son point d'accueil sous ses pieds. Les
-  // cadrages sauvegardés (coordonnées monde absolues, data/ui.json) restent donc
-  // valables quel que soit le décor, et frameCamera n'a rien à savoir de la pièce.
+  // Deux groupes FRÈRES.
+  //
+  // Le DÉCOR se place une fois pour toutes (fitEnvironment) pour amener son point
+  // d'accueil à l'origine du monde ; il ne bouge plus jamais ensuite.
+  //
+  // L'AVATAR est à l'origine tant que la scène vivante est éteinte — donc
+  // exactement comme avant, à l'octet près. Allumée, `avatarGroup.position` et
+  // `avatarGroup.rotation.y` DEVIENNENT la position et le cap du personnage dans
+  // la pièce.
+  //
+  // Les cadrages sauvegardés (data/ui.json, coordonnées monde absolues) survivent
+  // à ce renversement, et ce n'est pas un pari : `currentView()` n'est appelée que
+  // depuis l'écouteur 'end' d'OrbitControls et depuis resetView, c'est-à-dire
+  // uniquement sur un geste de l'utilisateur — et la scène vivante ne touche
+  // JAMAIS à la caméra. Ce qui est persisté reste ce que l'utilisateur a composé
+  // à la main. Seul frameCamera (le double-clic) apprend à suivre le personnage.
   const avatarGroup = new Group()
   const envGroup = new Group()
   scene.add(avatarGroup, envGroup)
@@ -476,6 +522,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   let idleAction: AnimationAction | null = null
   let talkingAction: AnimationAction | null = null
   let postureAction: AnimationAction | null = null
+  let gaitAction: AnimationAction | null = null // allure ou pivot du domaine `world-`
   let postureName: string | null = null
   let baseAction: AnimationAction | null = null // socle voulu (en boucle)
   let activeAction: AnimationAction | null = null // ce qui tient l'écran : socle ou geste
@@ -506,6 +553,19 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // mixer (cf. reframeAfterMixer). Le drapeau est consommé là et nulle part
   // ailleurs — sans mixer, il ne se passe rien.
   let reframePending = false
+
+  // ── Scène vivante ─────────────────────────────────────────────────────────
+  // Éteinte par défaut, et éteinte = comportement d'avant à l'octet près :
+  // `wander` reste null, `avatarGroup` reste à l'origine, aucun clip `world-`
+  // n'est téléchargé, et les deux lignes ajoutées à tick() sont des `?.` sur null.
+  let interactive = false
+  let wander: Wander | null = null
+  // Instant (ms) du dernier geste de caméra de l'utilisateur, et geste en cours.
+  // On ne déplace pas la scène sous sa main : le personnage attend qu'il ait
+  // lâché, plus une seconde de grâce.
+  let camGrabbed = false
+  let camReleasedAt = -Infinity
+  const USER_CAMERA_GRACE_MS = 2000
 
   // ── Décor ─────────────────────────────────────────────────────────────────
   let envRoot: Object3D | null = null
@@ -543,6 +603,8 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // Redondant avec 'start' dans le cas courant, mais pas toujours — un clic sur
     // un bouton non mappé fait un 'end' SANS 'start'.
     defaultFramed = false
+    camGrabbed = false
+    camReleasedAt = performance.now()
     viewChangeCb?.(currentView())
   })
   // 'start' est utilisateur lui aussi. Le cadrage cesse d'être « celui par
@@ -550,6 +612,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // milieu d'un glissement arracherait la caméra des mains de l'utilisateur.
   controls.addEventListener('start', () => {
     defaultFramed = false
+    camGrabbed = true
   })
 
   function resetView(): void {
@@ -698,8 +761,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     if (p >= 1) fade = null
   }
 
-  /** Socle voulu maintenant : une posture prime, sinon « parle », sinon l'idle. */
+  /**
+   * Socle voulu maintenant. Ordre : ce que font les JAMBES prime sur ce que
+   * disent les bras — marcher ou pivoter passe donc avant tout, puis une posture,
+   * puis « parle », puis l'idle.
+   */
   function desiredBase(): AnimationAction | null {
+    if (gaitAction) return gaitAction
     if (postureAction) return postureAction
     if (talking && talkingAction) return talkingAction
     return idleAction
@@ -717,9 +785,95 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     if (activeAction === prev) fadeTo(next, duration)
   }
 
+  // ── Domaine `world-` : ce que la scène vivante peut demander ──────────────
+
+  /** Action d'un clip `world-<name>` réellement chargé, ou null. */
+  function worldAction(name: string): AnimationAction | null {
+    return pickAction(catalog?.world.get(name))
+  }
+
+  /**
+   * Socle d'ALLURE (marche, pivot) : il remplace le socle courant tant qu'il est
+   * posé, et `desiredBase` le fait primer sur tout le reste. null = rendre les
+   * jambes au socle normal.
+   */
+  function setGait(name: string | null, fade: number): void {
+    const next = name ? asBase(worldAction(name)) : null
+    if (next === gaitAction) return
+    gaitAction = next
+    syncBase(fade)
+  }
+
+  /** Hauteur de hanches au repos du modèle (m) — l'unité de tout le mouvement. */
+  function hipsRest(): number {
+    const y = currentVrm?.humanoid.normalizedRestPose.hips?.position?.[1]
+    return typeof y === 'number' && y > 0.1 ? y : 1
+  }
+
+  /**
+   * Cap à prendre pour faire face à la caméra, vu du point (x, z) du sol.
+   * Purement horizontal : le personnage ne lève pas la tête vers une caméra en
+   * plongée, il se tourne. Caméra à la verticale (< 5 cm d'écart au sol) : on
+   * garde le cap courant plutôt que d'en inventer un.
+   */
+  function cameraYawFrom(x: number, z: number): number {
+    const dx = camera.position.x - x
+    const dz = camera.position.z - z
+    if (dx * dx + dz * dz < 0.0025) return avatarGroup.rotation.y
+    return Math.atan2(dx, dz)
+  }
+
+  /** Le contrat que la scène offre au comportement (cf. wander.ts). */
+  const wanderHost: WanderHost = {
+    hips: hipsRest,
+    place(x, y, z, yaw) {
+      avatarGroup.position.set(x, y, z)
+      avatarGroup.rotation.y = yaw
+    },
+    gait: setGait,
+    once(name, fadeIn, then, fadeThen) {
+      playOnce(name, fadeIn, then, fadeThen)
+    },
+    has: (name) => worldAction(name) !== null,
+    speaking: () => talking,
+    camYaw: cameraYawFrom,
+    userBusy: () => camGrabbed || performance.now() - camReleasedAt < USER_CAMERA_GRACE_MS,
+  }
+
+  /**
+   * Clip à cycle unique du domaine `world-` (une TRANSITION : départ, arrêt,
+   * s'asseoir), suivi de `then`. La file est à un seul cran — une transition ne
+   * se met jamais en attente d'une autre, elle est remplacée.
+   */
+  let onceThen: { name: string | null; fade: number } | null = null
+
+  function playOnce(name: string, fadeIn: number, then: string | null, fadeThen: number): void {
+    const action = worldAction(name)
+    if (!action) {
+      // Clip absent : on saute la transition et on va droit à sa suite, plutôt
+      // que de rester figé dans un état qui n'arrivera jamais.
+      onceThen = null
+      setGait(then, fadeIn)
+      return
+    }
+    action.reset()
+    action.setLoop(LoopOnce, 1)
+    action.clampWhenFinished = true
+    // L'allure courante cesse d'être le socle : c'est la transition qui tient
+    // l'écran, et `onceThen` dit ce qui la suit.
+    gaitAction = null
+    onceThen = { name: then, fade: fadeThen }
+    fadeTo(action, fadeIn)
+  }
+
   /** Geste d'émotion : joué UNE fois, variante tirée à chaque déclenchement. */
   function playGesture(emotion: Emotion): void {
     if (!mixer) return
+    // Un geste monte à poids 1 sur TOUT le squelette (three n'a ni couche ni
+    // masque d'os) : déclenché pendant un pivot ou une marche, il arrêterait les
+    // jambes net. Le VISAGE, lui, continue de s'appliquer — setEmotion écrit
+    // l'expression avant d'arriver ici, et c'est ce qui porte l'émotion.
+    if (gaitAction) return
     const action = pickAction(catalog?.gestures.get(emotion))
     if (!action) return // aucun fichier pour cette émotion : le visage suffit
     action.reset()
@@ -755,6 +909,8 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     idleAction = null
     talkingAction = null
     postureAction = null
+    gaitAction = null
+    onceThen = null
     baseAction = null
     activeAction = null
     // Le livre des poids ne survit pas aux actions qu'il décrit.
@@ -791,6 +947,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       ...cat.talking,
       ...[...cat.gestures.values()].flat(),
       ...[...cat.postures.values()].flat(),
+      ...worldUrlsNeeded(cat, interactive),
     ]
     const loaded = await Promise.all(urls.map(async (url) => [url, await loadVrmAnimation(url)] as const))
     if (!animationsEnabled || disposed || currentVrm !== vrm) return
@@ -802,9 +959,23 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     disposeAnimations()
     mixer = new AnimationMixer(vrm.scene)
     mixer.addEventListener('finished', (e) => {
-      // Seuls les gestes s'achèvent (les socles bouclent sans fin). Si un AUTRE
-      // geste a pris la main entre-temps, c'est à lui de rendre l'écran.
-      if (e.action === activeAction && baseAction) fadeTo(baseAction, GESTURE_RETURN)
+      // Seuls les clips à cycle unique s'achèvent (les socles bouclent sans fin).
+      // Si un AUTRE clip a pris la main entre-temps, c'est à lui de rendre l'écran.
+      if (e.action !== activeAction) return
+      // Une TRANSITION du domaine `world-` : sa suite est déjà décidée. On
+      // recalcule le socle À LA MAIN plutôt que par syncBase, qui ne fond que
+      // si l'écran est tenu par l'ancien socle — or il est tenu par la
+      // transition qui vient de s'achever.
+      if (onceThen) {
+        const step = onceThen
+        onceThen = null
+        gaitAction = step.name ? asBase(worldAction(step.name)) : null
+        baseAction = desiredBase()
+        if (baseAction) fadeTo(baseAction, step.fade)
+        return
+      }
+      // Un geste d'émotion rend l'écran au socle.
+      if (baseAction) fadeTo(baseAction, GESTURE_RETURN)
     })
     for (const [url, clip] of clips) actions.set(url, mixer.clipAction(clip))
     idleAction = asBase(actions.get(idleUrl) ?? null)
@@ -893,7 +1064,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     if (head) head.getWorldPosition(headPos)
     const distance = Math.min(2.5 * h, Math.max(0.375 * h, headPos.y * 1.4))
     controls.target.set(headPos.x, headPos.y - 0.12, headPos.z)
-    camera.position.set(headPos.x, controls.target.y, distance)
+    // Le `z` de la caméra est DEVANT la tête, pas à une abscisse absolue : sans
+    // ça, un double-clic ne retrouverait plus le personnage dès qu'il s'écarte du
+    // point d'accueil. Le ternaire est nécessaire et non cosmétique — `headPos.z`
+    // ne vaut pas exactement 0 (la stance d'idle.vrma avance la tête de quelques
+    // millimètres), et l'écrire sans garde changerait la distance de cadrage par
+    // défaut de TOUS les modèles, scène vivante éteinte comprise.
+    camera.position.set(headPos.x, controls.target.y, (interactive ? headPos.z : 0) + distance)
     controls.minDistance = 0.3 * h
     applyEnvLimits(h)
     applyViewOffset()
@@ -1089,6 +1266,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   function tick(): void {
     rafId = requestAnimationFrame(tick)
     const delta = Math.min(clock.getDelta(), 0.1)
+    // DÉCISION et PLACEMENT, avant le mixer : un changement d'état (pivot,
+    // départ, arrêt) doit peser sur les poids de CETTE image, pas de la suivante.
+    // Scène vivante éteinte : `wander` est null, la ligne ne fait rien.
+    wander?.update(delta)
     if (mixer) {
       // Arbitrage animation ↔ idle. IdleAnimator écrit `base + offset` sur ses
       // 9 os à chaque frame : tel quel, il écraserait l'animation. La base DEVIENT
@@ -1184,6 +1365,31 @@ export function createVrmStage(container: HTMLElement): VrmStage {
         currentVrm.humanoid.resetNormalizedPose()
         applyRestPose(currentVrm)
       }
+    },
+
+    setInteractive(on: boolean): void {
+      if (on === interactive) return
+      interactive = on
+      if (on) {
+        wander = createWander(wanderHost)
+        // Les clips `world-` n'étaient pas téléchargés : on reconstruit le
+        // mixer, ce qui les met en vol. Le socle en place ne bouge pas d'un
+        // millimètre entre-temps — buildAnimations ne remplace rien tant que les
+        // .vrma ne sont pas là.
+        if (currentVrm) void buildAnimations(currentVrm)
+        return
+      }
+      // Extinction : on remet LITTÉRALEMENT l'état d'avant — avatar à l'origine,
+      // cap nul, aucune allure — et on redemande un cadrage par défaut, que
+      // reframeAfterMixer n'appliquera que si l'utilisateur n'a pas composé le sien.
+      wander?.home()
+      wander = null
+      onceThen = null
+      gaitAction = null
+      avatarGroup.position.set(0, 0, 0)
+      avatarGroup.rotation.y = 0
+      syncBase(BASE_FADE)
+      reframePending = true
     },
 
     setPosture(name: string | null): void {

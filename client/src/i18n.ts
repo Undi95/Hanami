@@ -50,6 +50,12 @@ const FR = {
   vrmaOn: 'Animations gestuelles',
   vrmaOnSub:
     'Utilise les fichiers .vrma du dossier vrma/ : idle en boucle et gestes liés aux émotions. Éteint : respiration seule.',
+  sceneLive: 'Scène vivante',
+  sceneLiveSub:
+    'Le personnage occupe la pièce : il se tourne vers vous, s’y déplace, s’assoit sur ce qu’il y trouve. Éteint : il reste à sa place, comme avant.',
+  sceneLiveNoMobile:
+    'Réservé au grand écran : sur un écran étroit la scène n’est qu’un bandeau, l’avatar reste posé devant le décor.',
+  sceneLiveNoVrma: 'Demande les animations gestuelles : sans les fichiers .vrma, il n’y a aucun pas à jouer.',
 
   // ── Coquille de l’application ────────────────────────────────────────────
   collapseChat: 'Replier le chat pour voir l’avatar',
@@ -378,6 +384,12 @@ const EN: Record<Key, string> = {
   vrmaOn: 'Gesture animations',
   vrmaOnSub:
     'Uses the .vrma files from the vrma/ folder: looping idle and gestures tied to emotions. Off: breathing only.',
+  sceneLive: 'Living scene',
+  sceneLiveSub:
+    'The character inhabits the room: turns to face you, walks around, sits on whatever it finds. Off: it stays put, as before.',
+  sceneLiveNoMobile:
+    'Large screens only: on a narrow screen the scene is just a strip, and the avatar stays in front of the environment.',
+  sceneLiveNoVrma: 'Needs gesture animations: without the .vrma files there is no step to play.',
 
   // ── App shell ────────────────────────────────────────────────────────────
   collapseChat: 'Collapse the chat to see the avatar',

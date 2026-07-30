@@ -43,6 +43,19 @@ export interface VrmStage {
    */
   setAnimationsEnabled(on: boolean): void
   /**
+   * Scène vivante : l'avatar occupe la pièce — il a une position et un cap, se
+   * tourne vers vous, se déplace, s'assoit. Éteint (le défaut) = comportement
+   * IDENTIQUE À L'OCTET PRÈS à celui d'avant : avatar à l'origine du monde, cap
+   * nul, et pas un octet des clips du domaine `world-` n'est téléchargé.
+   *
+   * L'APPLICATION du réglage appartient à l'appelant : la préférence suit
+   * l'utilisateur d'un appareil à l'autre (data/ui.json) mais l'interaction 3D
+   * est réservée au grand écran — cf. App.tsx, qui passe `false` sur petit écran
+   * quelle que soit la préférence, et réagit au redimensionnement dans les deux
+   * sens.
+   */
+  setInteractive(on: boolean): void
+  /**
    * Posture en boucle qui REMPLACE le socle d'idle (`sit-idle`, `pose-sit`… —
    * le nom est celui du fichier .vrma, sans son préfixe `pose-`), null = retour
    * au socle. Les gestes d'émotion continuent de se superposer. Un nom inconnu

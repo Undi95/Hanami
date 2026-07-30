@@ -61,6 +61,11 @@ const QUOTE_MAX = 200
 // redémarre coupe la requête sans que rien ne soit cassé — inutile d'annoncer
 // une erreur au premier échec.
 const VRM_RETRY_DELAYS_MS: readonly number[] = [1000, 3000]
+// Seuil du « grand écran », repris à l'identique de styles.css (@media 900px) :
+// au-delà, le chat est une colonne à droite et la scène a de la place ; en
+// dessous, c'est une feuille basse et il ne reste qu'un bandeau. La scène vivante
+// (déplacement dans le décor) est réservée à ce cas-là — décision du propriétaire.
+const WIDE_SCREEN_QUERY = '(min-width: 900px)'
 
 /** Extrait d'un message à citer : une seule ligne, tags d'émotion retirés, tronquée. */
 function excerpt(text: string, max: number): string {
@@ -117,6 +122,13 @@ function AppInner() {
   const [env3d, setEnv3d] = useState(() => getPref('env3d') !== false)
   // Animations gestuelles (.vrma) : même grammaire que le décor.
   const [vrmaEnabled, setVrmaEnabled] = useState(() => getPref('vrmaEnabled') !== false)
+  // Scène vivante : OPT-IN STRICT (`=== true`), contrairement aux deux au-dessus.
+  const [interactive, setInteractive] = useState(() => getPref('interactive') === true)
+  // Grand écran ? C'est la MÊME borne que le CSS (styles.css, @media 900px), celle
+  // qui décide si le chat est une colonne ou une feuille basse. Décision du
+  // propriétaire : pas d'interaction 3D sur mobile — l'interrupteur reste visible
+  // mais grisé, et la préférence n'est pas touchée (elle suit l'utilisateur).
+  const [wideScreen, setWideScreen] = useState(() => window.matchMedia(WIDE_SCREEN_QUERY).matches)
   // Largeur de la colonne de chat (poignée de redimensionnement). L'affichage,
   // lui, ne passe pas par ici : layout.ts pose la variable CSS. Cet état ne sert
   // qu'à tenir la scène 3D au courant (cadrage 'left').
@@ -408,6 +420,24 @@ function AppInner() {
     stageRef.current?.setAnimationsEnabled(vrmaEnabled)
   }, [vrmaEnabled, stageReady])
 
+  // Taille d'écran : la scène vivante s'éteint et se rallume au redimensionnement
+  // DANS LES DEUX SENS, sans jamais toucher à la préférence — brancher un
+  // téléphone sur un écran ne doit pas effacer un réglage fait au bureau.
+  useEffect(() => {
+    const mq = window.matchMedia(WIDE_SCREEN_QUERY)
+    const onChange = () => setWideScreen(mq.matches)
+    mq.addEventListener('change', onChange)
+    onChange()
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  // Scène vivante : la préférence ET la place à l'écran. Les animations
+  // gestuelles en sont le socle (sans .vrma, aucun clip de marche) — les couper
+  // coupe donc aussi la scène vivante, sans rien effacer.
+  useEffect(() => {
+    stageRef.current?.setInteractive(interactive && wideScreen && vrmaEnabled)
+  }, [interactive, wideScreen, vrmaEnabled, stageReady])
+
   // Changement de personnage (ou scène prête) → charger son modèle VRM, puis
   // réappliquer le cadrage caméra choisi pour lui DANS LE MODE courant.
   // Un échec (serveur en train de redémarrer) est réessayé deux fois en silence
@@ -674,6 +704,7 @@ function AppInner() {
         // en contradiction avec data/ui.json, pendant toute la première ouverture.
         if (typeof prefs.env3d === 'boolean') setEnv3d(prefs.env3d)
         if (typeof prefs.vrmaEnabled === 'boolean') setVrmaEnabled(prefs.vrmaEnabled)
+        if (typeof prefs.interactive === 'boolean') setInteractive(prefs.interactive)
         setChatWidth(chatPanelWidth())
         if (prefs.theme !== undefined) setAppTheme(normalizeTheme(prefs.theme))
         const code = themeCode(savedCustom())
@@ -1424,6 +1455,13 @@ function AppInner() {
           onToggleVrma={(on) => {
             setVrmaEnabled(on)
             setPref({ vrmaEnabled: on })
+          }}
+          interactive={interactive}
+          interactiveDisabled={!wideScreen || !vrmaEnabled}
+          interactiveReason={!wideScreen ? t('sceneLiveNoMobile') : !vrmaEnabled ? t('sceneLiveNoVrma') : ''}
+          onToggleInteractive={(on) => {
+            setInteractive(on)
+            setPref({ interactive: on })
           }}
           onSaved={handleSettingsSaved}
           onClose={() => setDialog(null)}
