@@ -7,9 +7,11 @@ data/
 
 # Presets personnels : ce sont des données perso (mémoire, prompt system, résumés,
 # character.json d'un personnage de test) — JAMAIS committés, purgés de l'historique.
-# L'utilisateur final crée les siens ; le dossier reste en local (copié vers data/ au
-# 1er lancement s'il existe). Ne pas réintroduire de preset dans le dépôt.
-presets/
+# Vos propres presets restent en local (copiés vers data/ au 1er lancement).
+# SEULE exception : presets/hana/, le personnage d'exemple livré avec l'app, écrit
+# pour n'être personnel à personne. N'ajoutez rien d'autre à cette liste.
+presets/*
+!presets/hana/
 
 # Modèles VRM et fonds : fichiers perso / licences tierces — non committés.
 vrm/*

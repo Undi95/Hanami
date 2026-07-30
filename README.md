@@ -169,9 +169,11 @@ Language and theme apply immediately; everything else takes effect when you save
 - **VRM models, backgrounds and portraits are never committed either**: `vrm/`, `backgrounds/` and
   `portraits/` are git-ignored except for their `README.md`. Most VRoid Hub / Booth models forbid
   redistribution, so each user brings their own.
-- `presets/sakura/` is the only character shipped with the repository. On first launch, every
-  folder in `presets/` is copied into `data/characters/` and never overwritten afterwards —
-  so editing your character never touches the repo, and pulling never touches your character.
+- `presets/hana/` is the only character shipped with the repository — an example written to be
+  nobody's in particular, bilingual, without a 3D model so that you can give her yours. On first
+  launch, every folder in `presets/` is copied into `data/characters/` and never overwritten
+  afterwards — so editing your character never touches the repo, and pulling never touches your
+  character. Your own presets stay local: everything under `presets/` is git-ignored but `hana/`.
 - Setting a password protects every `/api/` route (bar the login itself); changing it revokes the
   existing sessions. Mutating requests coming from another site are refused.
 

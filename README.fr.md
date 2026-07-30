@@ -177,9 +177,11 @@ La langue et le thème s'appliquent immédiatement ; tout le reste prend effet �
 - **Les modèles VRM, les fonds et les portraits non plus** : `vrm/`, `backgrounds/` et
   `portraits/` sont ignorés par git, sauf leur `README.md`. La plupart des modèles VRoid Hub /
   Booth interdisent la redistribution : chacun apporte les siens.
-- `presets/sakura/` est le seul personnage livré avec le dépôt. Au premier lancement, chaque
-  dossier de `presets/` est copié dans `data/characters/` puis plus jamais écrasé — éditer ton
-  personnage ne touche donc pas au dépôt, et un `git pull` ne touche pas à ton personnage.
+- `presets/hana/` est le seul personnage livré avec le dépôt — un exemple écrit pour n'être
+  personnel à personne, bilingue, et sans modèle 3D pour que tu lui donnes le tien. Au premier
+  lancement, chaque dossier de `presets/` est copié dans `data/characters/` puis plus jamais
+  écrasé — éditer ton personnage ne touche donc pas au dépôt, et un `git pull` ne touche pas à ton
+  personnage. Tes propres presets restent locaux : tout `presets/` est ignoré par git sauf `hana/`.
 - Poser un mot de passe protège toutes les routes `/api/` (hors la connexion elle-même) ; le
   changer révoque les sessions existantes. Les requêtes mutantes venues d'un autre site sont
   refusées.
