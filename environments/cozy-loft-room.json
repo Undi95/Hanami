@@ -1,6 +1,6 @@
 {
   "scale": 0.031,
-  "rotationY": 0,
-  "spawn": [0.21, 0.078, -0.5],
+  "rotationY": 330,
+  "spawn": [0.287, 0.256, -0.296],
   "exposure": 0.75
 }
