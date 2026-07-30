@@ -70,6 +70,7 @@ charactersRouter.post('/api/characters', (req, res) => {
       name: body.name.trim(),
       vrm: typeof body.vrm === 'string' ? body.vrm : undefined,
       background: typeof body.background === 'string' ? body.background : undefined,
+      environment: typeof body.environment === 'string' ? body.environment : undefined,
       greeting: typeof body.greeting === 'string' ? body.greeting : undefined,
       greetings: greetingsOf(body.greetings),
       greetingMode: greetingModeOf(body.greetingMode),

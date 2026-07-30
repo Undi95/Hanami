@@ -60,6 +60,11 @@ export interface CharacterMeta {
   // Champ absent = repli sur `portrait`, puis sur l'initiale teintée.
   photo?: string // ex: /portraits/sakura-photo.png?v=1753900000000
   background: string // ex: /backgrounds/room.png ('' = dégradé par défaut)
+  // Décor 3D servi par /environments — la pièce dans laquelle l'avatar est posé,
+  // à la place du fond 2D. Champ absent = aucun décor (comportement historique).
+  // Sans modèle VRM, le décor n'est pas chargé : un portrait 2D flottant devant
+  // une pièce en 3D n'aurait aucun sens.
+  environment?: string // ex: /environments/chambre.glb
   greeting: string // premier message affiché dans un nouveau chat
   greetings?: string[] // variantes supplémentaires (tirage au hasard avec greeting)
   greetingMode?: GreetingMode // absent = 'written'

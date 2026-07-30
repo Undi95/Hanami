@@ -137,6 +137,7 @@ export interface CreateCharacterInput {
   name: string
   vrm?: string
   background?: string
+  environment?: string
   greeting?: string
   greetings?: string[]
   greetingMode?: GreetingMode
@@ -147,6 +148,11 @@ export interface CreateCharacterInput {
 /** Thème par personnage : clé écrite seulement quand elle porte une valeur. */
 function themeField(theme: unknown): Partial<CharacterMeta> {
   return typeof theme === 'string' && theme.trim() ? { theme: theme.trim() } : {}
+}
+
+/** Décor 3D : même règle que le thème — et c'est ainsi qu'un '' explicite le RETIRE. */
+function environmentField(environment: unknown): Partial<CharacterMeta> {
+  return typeof environment === 'string' && environment.trim() ? { environment: environment.trim() } : {}
 }
 
 /** Portrait 2D : même règle que le thème — pas de clé vide dans character.json. */
@@ -187,6 +193,7 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
     greeting: input.greeting ?? '',
     ...greetingFields(input.greetings, input.greetingMode),
     ...themeField(input.theme),
+    ...environmentField(input.environment),
     createdAt: new Date().toISOString(),
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
@@ -209,6 +216,10 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     ...greetingFields(patch.greetings ?? current.greetings, patch.greetingMode ?? current.greetingMode),
     // '' explicite dans le patch = retour au thème de l'app.
     ...themeField(patch.theme ?? current.theme),
+    // Décor 3D : '' explicite = retour au fond 2D. Comme pour le thème, ce champ
+    // DOIT être reconduit ici — meta est reconstruit clé par clé, un oubli
+    // effacerait le décor en silence à chaque édition du personnage.
+    ...environmentField(patch.environment ?? current.environment),
     // Portrait conservé d'office : le dialog Personnages ne l'envoie pas (il n'a
     // pas d'éditeur) et une édition ne doit jamais l'effacer en silence.
     ...portraitField(patch.portrait ?? current.portrait),
