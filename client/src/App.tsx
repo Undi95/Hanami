@@ -287,7 +287,12 @@ function AppInner() {
         return
       }
       if (silent) {
-        autoCompactFailedRef.current.add(chatId)
+        // 409 = « déjà en cours » (autre appareil, double déclenchement) :
+        // occupé n'est pas cassé — marquer le chat couperait l'auto-compaction
+        // pour toute la session sur une simple collision.
+        if (!(e instanceof api.ApiError && e.status === 409)) {
+          autoCompactFailedRef.current.add(chatId)
+        }
         console.warn('[compact]', e)
         return
       }
@@ -717,8 +722,24 @@ function AppInner() {
   }) {
     const char = opts.char ?? character
     const chat = opts.chat ?? chatMeta
-    if (!char || !chat || streaming) return
+    // abortRef, PAS l'état `streaming` : runGeneration est appelée depuis des
+    // chemins asynchrones (openChat après sélection) dont la closure peut dater
+    // d'un rendu où le streaming n'avait pas commencé — l'état mentirait et
+    // deux générations concurrentes écriraient dans le même fil.
+    if (!char || !chat || abortRef.current !== null) return
     const mode = opts.mode
+
+    // regenerate : le serveur ne RETIRE une réponse que si la dernière bulle
+    // sauvegardée en est une — sinon il ne fait qu'ajouter la sienne (le compte
+    // de messages doit suivre le même raisonnement, cf. `added` plus bas).
+    const lastSavedRole = (() => {
+      for (let i = feed.length - 1; i >= 0; i--) {
+        const it = feed[i]
+        if (it.kind === 'msg') return it.msg.role
+      }
+      return null
+    })()
+    const regenPopped = mode === 'regenerate' && lastSavedRole === 'assistant'
 
     // TTS d'une continuation : ne lire QUE la suite, pas tout le message fusionné.
     let ttsFromIndex = 0
@@ -828,8 +849,13 @@ function AppInner() {
             }
             setFeed((f) => f.map((it) => (it.kind === 'msg' && it.pending ? { kind: 'msg', msg: ev.message } : it)))
             // Messages ajoutés au fichier : envoi normal = question + réponse,
-            // open = la seule réponse, regenerate/continue = remplacement en place.
-            const added = !mode ? 2 : mode === 'open' ? 1 : 0
+            // open = la seule réponse, continue = fusion en place, regenerate =
+            // remplacement (0) SAUF si rien n'avait été retiré (dernière bulle
+            // user : le serveur a seulement ajouté, donc 1). Cas résiduel non
+            // suivi : une continuation dont le fil a bougé pendant le stream
+            // devient un ajout côté serveur — la liste des conversations relit
+            // le vrai fichier de toute façon.
+            const added = !mode ? 2 : mode === 'open' ? 1 : mode === 'regenerate' && !regenPopped ? 1 : 0
             setChatMeta((m) =>
               m
                 ? {

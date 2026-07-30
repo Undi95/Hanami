@@ -43,9 +43,22 @@ function normalizeHour(value: unknown, fallback: number): number {
   return Number.isFinite(n) && n >= 0 && n <= 23 ? n : fallback
 }
 
+// Vrai quand config.json EXISTE mais n'a pas pu être lu (JSON invalide, EACCES,
+// disque) : les réglages servis sont alors les DÉFAUTS — mot de passe compris.
+// L'authentification consulte ce drapeau pour FERMER au lieu d'ouvrir, et
+// saveSettings refuse d'écrire (sinon les défauts écraseraient le fichier abîmé
+// et la perte deviendrait irréversible).
+let unreadable = false
+
+/** L'état de la dernière lecture : config présent mais illisible. */
+export function configUnreadable(): boolean {
+  return unreadable
+}
+
 export function loadSettings(): Settings {
   try {
     const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) as Partial<Settings>
+    unreadable = false
     const merged = { ...DEFAULT_SETTINGS, ...raw }
     // toolsRoot absent, vide ou relatif → la sandbox retomberait sur le cwd : retour au défaut.
     if (typeof merged.toolsRoot !== 'string' || !merged.toolsRoot.trim() || !path.isAbsolute(merged.toolsRoot)) {
@@ -63,15 +76,44 @@ export function loadSettings(): Settings {
     merged.spontaneousStartHour = normalizeHour(merged.spontaneousStartHour, DEFAULT_SETTINGS.spontaneousStartHour)
     merged.spontaneousEndHour = normalizeHour(merged.spontaneousEndHour, DEFAULT_SETTINGS.spontaneousEndHour)
     return merged
-  } catch {
+  } catch (e) {
+    // ABSENT (premier lancement) : les défauts sont légitimes. ILLISIBLE (JSON
+    // cassé, permissions, disque) : les défauts sont un pis-aller DANGEREUX —
+    // le mot de passe des défauts est vide, l'authentification s'ouvrirait.
+    // Le drapeau `unreadable` permet à l'auth de fermer et à saveSettings de
+    // refuser d'écraser le fichier abîmé.
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+      unreadable = true
+      console.error('[config] config.json illisible — réglages par défaut servis, écriture bloquée :', e)
+    } else {
+      unreadable = false
+    }
     return { ...DEFAULT_SETTINGS }
   }
 }
 
 export function saveSettings(patch: Partial<Settings>): Settings {
   const next = { ...loadSettings(), ...patch }
+  if (unreadable) {
+    // Écrire maintenant persisterait les DÉFAUTS par-dessus le fichier abîmé :
+    // la perte deviendrait irréversible. L'utilisateur répare (ou supprime) le
+    // fichier d'abord — le message remonte tel quel dans les Réglages.
+    throw new Error('config.json est illisible : réparez ou supprimez le fichier avant de modifier les réglages')
+  }
   fs.mkdirSync(DATA_DIR, { recursive: true })
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(next, null, 2))
+  // Écriture ATOMIQUE (tmp + fsync + rename), même protocole que data/ui.json et
+  // les .jsonl : une coupure ne laisse jamais un config.json à moitié écrit —
+  // c'est LE fichier qui porte le mot de passe et la clé API.
+  const json = JSON.stringify(next, null, 2)
+  const tmp = CONFIG_FILE + '.tmp'
+  const fd = fs.openSync(tmp, 'w')
+  try {
+    fs.writeSync(fd, json)
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  fs.renameSync(tmp, CONFIG_FILE)
   return next
 }
 

@@ -203,7 +203,13 @@ function toAssistantMessage(text: string, thinking?: string): ChatMessage {
   return msg
 }
 
-/** Registre des outils : route l'appel vers mémoire ou fichiers. */
+/**
+ * Registre des outils : route l'appel vers mémoire, chat ou fichiers — et
+ * REVÉRIFIE les réglages. buildPayload filtre les définitions exposées, mais un
+ * modèle peut halluciner un nom d'outil jamais annoncé : sans ces gardes, un
+ * write_file s'exécutait même outils fichiers désactivés. Le throw est rendu au
+ * modèle comme résultat d'outil (« Erreur : … ») — transparent, jamais fatal.
+ */
 function executeTool(characterId: string, settings: Settings, name: string, rawArgs: string): string {
   let args: Record<string, unknown>
   try {
@@ -212,12 +218,15 @@ function executeTool(characterId: string, settings: Settings, name: string, rawA
     throw new Error(`arguments JSON invalides pour ${name}`)
   }
   if ((MEMORY_TOOL_NAMES as readonly string[]).includes(name)) {
+    if (!settings.memoryEnabled) throw new Error('outils mémoire désactivés dans les réglages')
     return executeMemoryTool(characterId, name, args)
   }
   if ((CHAT_TOOL_NAMES as readonly string[]).includes(name)) {
+    if (!settings.memoryEnabled) throw new Error('outils mémoire désactivés dans les réglages')
     return executeChatTool(characterId, name, args)
   }
   if ((FILE_TOOL_NAMES as readonly string[]).includes(name)) {
+    if (!settings.fileToolsEnabled) throw new Error('outils fichiers désactivés dans les réglages')
     return executeFileTool(settings, name, args)
   }
   throw new Error(`Outil inconnu : ${name}`)
@@ -274,11 +283,25 @@ function parseImages(raw: unknown): { images: string[] } | { error: string; stat
  * finishReason/promptTokens) appartient à l'appelant, via la fermeture de
  * `call` et le crochet `onTool`.
  */
+/** Noms des outils réellement annoncés dans un tableau de définitions OpenAI. */
+function toolNamesOf(tools: unknown[] | undefined): ReadonlySet<string> {
+  const names = new Set<string>()
+  for (const t of tools ?? []) {
+    const name = (t as { function?: { name?: unknown } }).function?.name
+    if (typeof name === 'string' && name) names.add(name)
+  }
+  return names
+}
+
 async function runToolLoop<R extends { content: string; toolCalls: StreamedToolCall[] }>(
   characterId: string,
   settings: Settings,
   messages: unknown[],
   maxIterations: number,
+  // Seuls les outils ANNONCÉS dans la requête sont exécutables : un nom
+  // halluciné (ou hors du périmètre de la compaction) devient une erreur
+  // d'outil rendue au modèle, jamais une exécution.
+  allowed: ReadonlySet<string>,
   call: (withTools: boolean) => Promise<R>,
   onTool?: (name: string, args: string, result: string) => void,
 ): Promise<{ last: R; exhausted: boolean }> {
@@ -297,10 +320,14 @@ async function runToolLoop<R extends { content: string; toolCalls: StreamedToolC
     })
     for (const tc of last.toolCalls) {
       let toolResult: string
-      try {
-        toolResult = executeTool(characterId, settings, tc.name, tc.arguments)
-      } catch (e) {
-        toolResult = `Erreur : ${e instanceof Error ? e.message : String(e)}`
+      if (!allowed.has(tc.name)) {
+        toolResult = `Erreur : outil non proposé dans cette requête : ${tc.name}`
+      } else {
+        try {
+          toolResult = executeTool(characterId, settings, tc.name, tc.arguments)
+        } catch (e) {
+          toolResult = `Erreur : ${e instanceof Error ? e.message : String(e)}`
+        }
       }
       onTool?.(tc.name, tc.arguments, toolResult)
       messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
@@ -463,22 +490,34 @@ async function handleChat(req: Request, res: Response): Promise<void> {
 
   // Sauvegarde de la sortie : continuation → fusionnée dans le dernier message
   // assistant (en place, timestamp d'origine conservé) ; sinon → message ajouté.
+  // La fusion vérifie l'IDENTITÉ du message visé (ts + contenu), pas seulement
+  // son rôle : le stream est la seule fenêtre asynchrone du fichier, et un
+  // message spontané (même processus) peut s'ajouter pendant qu'il coule —
+  // écraser le dernier venu perdrait SON texte. Fil bougé → la continuation
+  // est AJOUTÉE en message à part : rien d'écrasé, rien de perdu, et le `done`
+  // renvoie ce qui est réellement sur le disque.
   const persistAssistant = (): ChatMessage => {
     if (mode === 'continue' && continueBase) {
-      const joiner = continueBase.content.endsWith('\n') || assistantText.startsWith('\n') ? '' : ' '
-      const merged: ChatMessage = { ...continueBase, content: continueBase.content + joiner + assistantText }
+      const base = continueBase
+      const joiner = base.content.endsWith('\n') || assistantText.startsWith('\n') ? '' : ' '
+      const merged: ChatMessage = { ...base, content: base.content + joiner + assistantText }
       const m = EMOTION_RE.exec(merged.content)
       if (m) merged.emotion = m[1].toLowerCase()
       if (assistantThinking) {
-        merged.thinking = continueBase.thinking
-          ? continueBase.thinking + '\n\n' + assistantThinking
-          : assistantThinking
+        merged.thinking = base.thinking ? base.thinking + '\n\n' + assistantThinking : assistantThinking
       }
+      let saved: ChatMessage = merged
       rewriteChatMessages(characterId, chatId, (msgs) => {
-        if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') msgs[msgs.length - 1] = merged
+        const lastMsg = msgs[msgs.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.ts === base.ts && lastMsg.content === base.content) {
+          msgs[msgs.length - 1] = merged
+          return msgs
+        }
+        saved = toAssistantMessage(assistantText, assistantThinking)
+        msgs.push(saved)
         return msgs
       })
-      return merged
+      return saved
     }
     const message = toAssistantMessage(assistantText, assistantThinking)
     appendChatMessage(characterId, chatId, message)
@@ -498,6 +537,7 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       settings,
       messages,
       MAX_TOOL_ITERATIONS,
+      toolNamesOf(payload.tools),
       async (withTools) => {
         const result = await streamOnce(withTools)
         truncated = result.truncated
@@ -612,6 +652,9 @@ chatRouter.post('/api/chat', async (req, res) => {
 
 const COMPACT_MIN_MESSAGES = 6
 const COMPACT_MAX_ITERATIONS = 4
+// Garde-fou d'horloge d'une compaction : au-delà, l'appel backend est abandonné
+// et le verrou compactionsInFlight se libère (10 min — large, jamais infini).
+const COMPACT_TIMEOUT_MS = 10 * 60_000
 const COMPACT_KEEP_RECENT = 4 // messages récents laissés « vivants » après compaction
 const COMPACT_SUMMARY_MAX_CHARS = 20000 // un résumé est un résumé, pas une archive
 
@@ -740,6 +783,13 @@ async function runCompaction(
   const messages: unknown[] = [...baseMessages, { role: 'user', content: directive }]
   const tools = settings.memoryEnabled && !simple ? memoryToolDefs : []
   const abort = new AbortController()
+  // Garde-fou d'horloge : sans lui, un backend qui ne répond jamais laissait le
+  // verrou compactionsInFlight posé pour toute la vie du processus (l'appelant
+  // ne peut pas annuler — le résumé doit persister même si le client est parti,
+  // choix assumé). Large : une compaction est lente par nature. Pas de clear :
+  // aborter un stream déjà terminé est un no-op, et unref n'empêche pas l'arrêt.
+  const timer = setTimeout(() => abort.abort(), COMPACT_TIMEOUT_MS)
+  timer.unref()
   const compactSettings: Settings = { ...settings, maxTokens: completionBudget }
 
   let summary = ''
@@ -785,6 +835,7 @@ async function runCompaction(
       settings,
       messages,
       COMPACT_MAX_ITERATIONS,
+      toolNamesOf(tools),
       async (withTools) => {
         const result = await streamChatCompletion({
           settings: compactSettings,

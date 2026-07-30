@@ -89,6 +89,11 @@ async function generate(
   // temps écoulé n'aurait aucun sens, quel que soit le réglage timeAwareness.
   const { payload } = buildPayload(characterId, chatId, { ...settings, timeAwareness: true }, directive)
   const abort = new AbortController()
+  // Garde-fou d'horloge : un backend qui ne répond jamais laisserait le verrou
+  // `generating` posé à vie et tuerait le moteur en silence. Aborter un stream
+  // déjà terminé est un no-op — pas besoin de clear.
+  const timer = setTimeout(() => abort.abort(), 10 * 60_000)
+  timer.unref()
   const result = await streamChatCompletion({
     settings,
     messages: payload.messages,
