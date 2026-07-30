@@ -15,5 +15,11 @@ backgrounds/*
 portraits/*
 !portraits/README.md
 
+# À l'inverse, environments/, vrma/ et animations/ sont suivis VOLONTAIREMENT :
+# ce sont des assets sous licence libre (CC0/CC-BY, crédits dans CREDITS.md),
+# livrés avec l'app pour que tout le monde ait la même scène. Ne pas les ignorer,
+# et ne pas ajouter de règle par extension (*.vrma, *.glb…) qui les masquerait.
+
 *.log
 .env
+.env.*
