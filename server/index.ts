@@ -3,7 +3,16 @@ import express from 'express'
 import os from 'node:os'
 import path from 'node:path'
 import { IS_PROD, PORT } from './config'
-import { BACKGROUNDS_DIR, DATA_DIR, PORTRAITS_DIR, ROOT, VRM_DIR, ensureDataDirs } from './lib/storage'
+import {
+  BACKGROUNDS_DIR,
+  DATA_DIR,
+  ENVIRONMENTS_DIR,
+  PORTRAITS_DIR,
+  ROOT,
+  VRMA_DIR,
+  VRM_DIR,
+  ensureDataDirs,
+} from './lib/storage'
 import { authMiddleware, loginRouter } from './lib/auth'
 import { settingsRouter } from './api/settings'
 import { chatRouter } from './api/chat'
@@ -78,6 +87,10 @@ async function main(): Promise<void> {
   app.use('/backgrounds', express.static(BACKGROUNDS_DIR))
   // Portraits 2D des personnages sans modèle VRM (images des cards importées).
   app.use('/portraits', express.static(PORTRAITS_DIR))
+  // Décors 3D (.glb + sidecar .json de placement) et animations (.vrma) : gros
+  // fichiers, servis par express.static pour bénéficier de l'ETag et du Range.
+  app.use('/environments', express.static(ENVIRONMENTS_DIR))
+  app.use('/vrma', express.static(VRMA_DIR))
 
   if (IS_PROD) {
     const dist = path.join(ROOT, 'dist')

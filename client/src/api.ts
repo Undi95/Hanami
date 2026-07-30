@@ -387,6 +387,18 @@ export async function getBackgrounds(): Promise<string[]> {
   return r.backgrounds
 }
 
+/** Décors 3D disponibles (dossier environments/) — liste vide si le dossier est absent. */
+export async function getEnvironments(): Promise<string[]> {
+  const r = await req<{ environments: string[] }>('GET', '/api/environments')
+  return r.environments
+}
+
+/** Animations humanoïdes disponibles (dossier vrma/). */
+export async function getVrmAnimations(): Promise<string[]> {
+  const r = await req<{ animations: string[] }>('GET', '/api/vrm-animations')
+  return r.animations
+}
+
 /** Type MIME par extension : un fichier choisi n'annonce pas toujours le sien. */
 const IMAGE_MIME: Record<string, string> = {
   png: 'image/png',

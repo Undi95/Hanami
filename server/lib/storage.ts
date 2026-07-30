@@ -19,6 +19,11 @@ export const DATA_DIR = path.join(ROOT, 'data')
 export const PRESETS_DIR = path.join(ROOT, 'presets')
 export const VRM_DIR = path.join(ROOT, 'vrm')
 export const BACKGROUNDS_DIR = path.join(ROOT, 'backgrounds')
+// Décors 3D (.glb) et animations humanoïdes (.vrma) : assets livrés avec l'app,
+// servis en statique comme vrm/. Volontairement HORS ensureDataDirs — ce sont des
+// dossiers du dépôt, pas de l'état créé au premier lancement (même règle que vrm/).
+export const ENVIRONMENTS_DIR = path.join(ROOT, 'environments')
+export const VRMA_DIR = path.join(ROOT, 'vrma')
 // Portraits 2D (avatar de repli des personnages sans VRM) : dossier servi en
 // statique comme les fonds, alimenté par l'import des cards PNG.
 export const PORTRAITS_DIR = path.join(ROOT, 'portraits')

@@ -1,11 +1,13 @@
-// Router assets : listing des modèles VRM et des fonds d'écran, dépôt d'un fond.
-// Seul accès fs hors storage : listing des dossiers VRM_DIR / BACKGROUNDS_DIR
-// (storage n'expose pas de fonction de listing) et écriture dans BACKGROUNDS_DIR
-// — ces dossiers-là ne contiennent que des assets, jamais d'état de l'app.
+// Router assets : listing des modèles VRM, des fonds d'écran, des décors 3D et
+// des animations, dépôt d'un fond.
+// Seul accès fs hors storage : listing des dossiers VRM_DIR / BACKGROUNDS_DIR /
+// ENVIRONMENTS_DIR / VRMA_DIR (storage n'expose pas de fonction de listing) et
+// écriture dans BACKGROUNDS_DIR — ces dossiers-là ne contiennent que des assets,
+// jamais d'état de l'app.
 import fs from 'node:fs'
 import path from 'node:path'
 import express, { Router, type Response } from 'express'
-import { BACKGROUNDS_DIR, VRM_DIR } from '../lib/storage'
+import { BACKGROUNDS_DIR, ENVIRONMENTS_DIR, VRMA_DIR, VRM_DIR } from '../lib/storage'
 
 export const assetsRouter = Router()
 
@@ -28,6 +30,28 @@ assetsRouter.get('/api/vrm-models', (_req, res) => {
   try {
     // encodeURIComponent : un nom contenant # ou % casserait l'URL côté client.
     res.json({ models: listFiles(VRM_DIR, ['.vrm']).map((f) => `/vrm/${encodeURIComponent(f)}`) })
+  } catch (e) {
+    sendError(res, e)
+  }
+})
+
+// Décors 3D : même contrat que /api/vrm-models — le dossier absent renvoie une
+// liste vide, jamais une erreur (l'app marche sans décor).
+assetsRouter.get('/api/environments', (_req, res) => {
+  try {
+    res.json({
+      environments: listFiles(ENVIRONMENTS_DIR, ['.glb', '.gltf']).map(
+        (f) => `/environments/${encodeURIComponent(f)}`,
+      ),
+    })
+  } catch (e) {
+    sendError(res, e)
+  }
+})
+
+assetsRouter.get('/api/vrm-animations', (_req, res) => {
+  try {
+    res.json({ animations: listFiles(VRMA_DIR, ['.vrma']).map((f) => `/vrma/${encodeURIComponent(f)}`) })
   } catch (e) {
     sendError(res, e)
   }
