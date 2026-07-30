@@ -5,6 +5,7 @@ import * as api from '../api'
 import { useI18n } from '../i18n'
 import { THEMES, THEME_LABELS } from '../themes'
 import Dialog from './Dialog'
+import SelectMenu, { type SelectOption } from './SelectMenu'
 
 interface Props {
   characters: CharacterMeta[]
@@ -55,6 +56,18 @@ function displayName(url: string): string {
     /* séquence % invalide : on garde le nom brut */
   }
   return name.replace(/\.[^.]+$/, '')
+}
+
+/**
+ * Options d'une liste de fichiers servis par l'API : l'entrée « aucun » en tête
+ * (valeur vide), puis les fichiers — et la valeur courante si le serveur ne la
+ * propose plus (fichier renommé/déplacé), pour ne pas l'effacer en silence.
+ */
+function fileOptions(noneLabel: string, current: string, urls: string[]): SelectOption[] {
+  const opts: SelectOption[] = [{ value: '', label: noneLabel }]
+  if (current && !urls.includes(current)) opts.push({ value: current, label: displayName(current) })
+  for (const url of urls) opts.push({ value: url, label: displayName(url) })
+  return opts
 }
 
 /** Teinte stable dérivée de l'id — pour la pastille du personnage. */
@@ -262,29 +275,24 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
           <div className="grid-2">
             <div className="field">
               <label htmlFor="char-vrm">{t('vrmModel')}</label>
-              <select id="char-vrm" value={form.vrm} onChange={(e) => set('vrm', e.target.value)}>
-                <option value="">{t('noModel')}</option>
-                {form.vrm && !vrms.includes(form.vrm) && <option value={form.vrm}>{displayName(form.vrm)}</option>}
-                {vrms.map((v) => (
-                  <option key={v} value={v}>
-                    {displayName(v)}
-                  </option>
-                ))}
-              </select>
+              {/* Menu maison : ces deux listes dépassent vite la vingtaine
+                  d'entrées, et le popup natif d'un <select> garde une barre de
+                  défilement blanche (contrôle système). */}
+              <SelectMenu
+                id="char-vrm"
+                value={form.vrm}
+                options={fileOptions(t('noModel'), form.vrm, vrms)}
+                onChange={(v) => set('vrm', v)}
+              />
             </div>
             <div className="field">
               <label htmlFor="char-bg">{t('background')}</label>
-              <select id="char-bg" value={form.background} onChange={(e) => set('background', e.target.value)}>
-                <option value="">{t('defaultGradient')}</option>
-                {form.background && !bgs.includes(form.background) && (
-                  <option value={form.background}>{displayName(form.background)}</option>
-                )}
-                {bgs.map((b) => (
-                  <option key={b} value={b}>
-                    {displayName(b)}
-                  </option>
-                ))}
-              </select>
+              <SelectMenu
+                id="char-bg"
+                value={form.background}
+                options={fileOptions(t('defaultGradient'), form.background, bgs)}
+                onChange={(v) => set('background', v)}
+              />
             </div>
           </div>
           <div className="field">

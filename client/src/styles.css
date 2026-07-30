@@ -1437,6 +1437,7 @@ select {
 
 .field input,
 .field select,
+.field .select-menu-btn,
 .field textarea,
 .row input,
 .login-card input {
@@ -1449,7 +1450,8 @@ select {
   min-height: 44px;
 }
 
-.field select {
+.field select,
+.field .select-menu-btn {
   appearance: none;
   -webkit-appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
@@ -1475,6 +1477,7 @@ select {
 
 .field input:focus,
 .field select:focus,
+.field .select-menu-btn:focus,
 .field textarea:focus,
 .row input:focus,
 .login-card input:focus,
@@ -1560,6 +1563,71 @@ select {
   color: var(--danger);
   font-size: 13px;
   margin: 4px 0;
+}
+
+/* ── Menu déroulant maison (SelectMenu) ────────────────────────────────────
+   Réservé aux listes LONGUES : le popup natif d'un <select> est peint par le
+   système, sa barre de défilement reste blanche sur notre thème sombre. Le
+   bouton fermé reprend exactement le look des <select> (règles .field select
+   ci-dessus) ; seul le panneau ouvert est à nous — rendu en portail sur <body>,
+   d'où le position: fixed et le z-index au-dessus du dialog. */
+
+.select-menu-btn {
+  display: block;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Aucune option ne correspond : le placeholder reste discret. */
+.select-menu-btn.empty {
+  color: var(--text-dim);
+}
+
+.select-menu-btn[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.select-menu-panel {
+  position: fixed;
+  z-index: 60;
+  padding: 4px;
+  overflow-y: auto;
+  /* Arrivé en bout de liste, la molette ne doit pas emmener le dialog. */
+  overscroll-behavior: contain;
+  background: var(--panel-strong);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-radius: 10px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.45);
+}
+
+.select-menu-option {
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.select-menu-option:hover,
+.select-menu-option.active {
+  background: var(--accent-soft);
+}
+
+.select-menu-option[aria-selected='true'] {
+  color: var(--accent);
+}
+
+.select-menu-empty {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text-dim);
 }
 
 /* ── Sonde du serveur TTS ─────────────────────────────────────────────── */

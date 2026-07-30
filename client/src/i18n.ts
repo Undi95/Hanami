@@ -3,6 +3,7 @@
 // donc une clé manquante côté anglais casse `tsc`.
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
+import type { ChatMeta } from '../../shared/types'
 import { getPref, setPref } from './prefs'
 
 export type Lang = 'fr' | 'en'
@@ -22,6 +23,8 @@ const FR = {
   confirmDelete: 'Confirmer la suppression',
   confirmQuestion: 'Confirmer ?',
   unsavedConfirm: 'Modifications non enregistrées — fermer quand même ?',
+  selectMenuOptions: 'Choix disponibles',
+  selectMenuEmpty: 'Aucun choix',
 
   // ── Langue ───────────────────────────────────────────────────────────────
   language: 'Langue',
@@ -297,6 +300,8 @@ const EN: Record<Key, string> = {
   confirmDelete: 'Confirm deletion',
   confirmQuestion: 'Confirm?',
   unsavedConfirm: 'Unsaved changes — close anyway?',
+  selectMenuOptions: 'Available choices',
+  selectMenuEmpty: 'No choices',
 
   // ── Language ─────────────────────────────────────────────────────────────
   language: 'Language',
