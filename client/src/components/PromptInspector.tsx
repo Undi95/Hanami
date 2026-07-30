@@ -10,10 +10,12 @@ interface Props {
   characterId: string
   chatId: string
   summary: string // résumé de compaction courant ('' = pas encore compacté)
+  sceneNotes: string // notes de scène de la conversation ('' = aucun bloc injecté)
   compacting: boolean
   streaming: boolean // stream de chat en cours : compacter maintenant serait résumer une question sans sa réponse
   onCompact: (instruction: string) => Promise<void>
   onSaveSummary: (text: string) => Promise<void>
+  onSaveSceneNotes: (text: string) => Promise<void>
   onClose: () => void
 }
 
@@ -21,10 +23,12 @@ export default function PromptInspector({
   characterId,
   chatId,
   summary,
+  sceneNotes,
   compacting,
   streaming,
   onCompact,
   onSaveSummary,
+  onSaveSceneNotes,
   onClose,
 }: Props) {
   const { t } = useI18n()
@@ -35,7 +39,7 @@ export default function PromptInspector({
     contextSize: number
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'system' | 'payload' | 'summary'>('system')
+  const [tab, setTab] = useState<'system' | 'payload' | 'summary' | 'scene'>('system')
   const [copied, setCopied] = useState(false)
   const [instruction, setInstruction] = useState('')
   const [compactError, setCompactError] = useState<string | null>(null)
@@ -43,21 +47,31 @@ export default function PromptInspector({
   const [draftDirty, setDraftDirty] = useState(false)
   const [savingSummary, setSavingSummary] = useState(false)
   const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [sceneDraft, setSceneDraft] = useState(sceneNotes)
+  const [sceneDirty, setSceneDirty] = useState(false)
+  const [savingScene, setSavingScene] = useState(false)
+  const [sceneError, setSceneError] = useState<string | null>(null)
 
-  // Rechargé quand une compaction aboutit (le résumé change → payload différent).
+  // Rechargé quand une compaction aboutit (le résumé change → payload différent),
+  // et quand les notes de scène changent (leur bloc vit dans le prompt système).
   useEffect(() => {
     setData(null)
     api
       .getPromptPreview(characterId, chatId)
       .then(setData)
       .catch((e) => setError(api.errorMessage(e)))
-  }, [characterId, chatId, summary])
+  }, [characterId, chatId, summary, sceneNotes])
 
   // Le brouillon suit le résumé TANT QUE l'utilisateur n'y a pas touché
   // (une auto-compaction en arrière-plan ne doit pas écraser une édition en cours).
   useEffect(() => {
     if (!draftDirty) setSummaryDraft(summary)
   }, [summary, draftDirty])
+
+  // Même règle pour les notes de scène (changées depuis un autre appareil, par ex.).
+  useEffect(() => {
+    if (!sceneDirty) setSceneDraft(sceneNotes)
+  }, [sceneNotes, sceneDirty])
 
   // Résumé vidé (compaction annulée) : l'onglet Résumé disparaît — ne pas
   // rester sur un onglet fantôme.
@@ -90,19 +104,33 @@ export default function PromptInspector({
     }
   }
 
+  async function saveScene() {
+    setSavingScene(true)
+    setSceneError(null)
+    try {
+      await onSaveSceneNotes(sceneDraft)
+      setSceneDirty(false)
+    } catch (e) {
+      setSceneError(api.errorMessage(e))
+    } finally {
+      setSavingScene(false)
+    }
+  }
+
   function doCompact() {
     setCompactError(null)
     onCompact(instruction.trim()).catch((e) => setCompactError(api.errorMessage(e)))
   }
 
   const summaryDirty = draftDirty && summaryDraft !== summary
+  const sceneNotesDirty = sceneDirty && sceneDraft !== sceneNotes
 
   return (
     <Dialog
       title={t('promptInspectorTitle')}
       onClose={onClose}
       wide
-      guardClose={() => !summaryDirty || window.confirm(t('unsavedConfirm'))}
+      guardClose={() => (!summaryDirty && !sceneNotesDirty) || window.confirm(t('unsavedConfirm'))}
     >
       <p className="hint" style={{ marginTop: 0 }}>
         {t('promptInspectorNote')}
@@ -150,6 +178,10 @@ export default function PromptInspector({
                 {t('viewSummary')}
               </button>
             )}
+            {/* Toujours présent : c'est le SEUL endroit où l'on écrit les notes de scène. */}
+            <button className={`tab${tab === 'scene' ? ' active' : ''}`} role="tab" aria-selected={tab === 'scene'} onClick={() => setTab('scene')}>
+              {t('sceneTab')}
+            </button>
           </div>
 
           {tab === 'summary' && summary ? (
@@ -172,6 +204,30 @@ export default function PromptInspector({
                   onClick={() => saveSummary().catch((e) => console.error('[summary]', e))}
                 >
                   {savingSummary ? t('saving') : t('save')}
+                </button>
+              </div>
+            </>
+          ) : tab === 'scene' ? (
+            <>
+              <p className="hint">{t('sceneHint')}</p>
+              <textarea
+                value={sceneDraft}
+                rows={8}
+                placeholder={t('scenePlaceholder')}
+                style={{ width: '100%' }}
+                onChange={(e) => {
+                  setSceneDirty(true)
+                  setSceneDraft(e.target.value)
+                }}
+              />
+              <div className="row" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
+                {sceneError && <span className="msg-err">{sceneError}</span>}
+                <button
+                  className="btn small primary"
+                  disabled={savingScene || sceneDraft === sceneNotes}
+                  onClick={() => saveScene().catch((e) => console.error('[scene]', e))}
+                >
+                  {savingScene ? t('saving') : t('save')}
                 </button>
               </div>
             </>

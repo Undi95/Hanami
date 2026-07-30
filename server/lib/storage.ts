@@ -261,7 +261,7 @@ Ce fichier est injecté dans le contexte à chaque message (si la mémoire est a
 
 // ── Chats ──────────────────────────────────────────────────────────────────
 // Format .jsonl : ligne 1 = { id, title, titleCustom?, createdAt, summary?,
-// summaryUpto?, pinned? }, lignes suivantes = ChatMessage.
+// summaryUpto?, pinned?, sceneNotes? }, lignes suivantes = ChatMessage.
 
 interface ChatHeader {
   id: string
@@ -271,16 +271,20 @@ interface ChatHeader {
   summary?: string
   summaryUpto?: number
   pinned?: number // ordinal du message épinglé (gadget d'affichage, hors payload)
+  sceneNotes?: string // notes de scène de cette conversation (vide = rien d'injecté)
 }
 
 /**
  * En-tête lu sur le disque : data/ est éditable à la main, donc seul
  * `titleCustom === true` compte — toute autre valeur est effacée pour ne jamais
- * laisser un drapeau mal typé remonter jusqu'au client.
+ * laisser un drapeau mal typé remonter jusqu'au client. Idem pour les notes de
+ * scène : présentes = chaîne non vide, sinon la clé disparaît (l'injection se
+ * décide sur la seule présence du champ).
  */
 function normalizeHeader(raw: ChatHeader): ChatHeader {
   const header: ChatHeader = { ...raw }
   if (header.titleCustom !== true) delete header.titleCustom
+  if (typeof header.sceneNotes !== 'string' || !header.sceneNotes.trim()) delete header.sceneNotes
   return header
 }
 
@@ -358,6 +362,7 @@ export function listChats(charId: string): ChatMeta[] {
       messageCount: lineCount - 1,
       ...(header.summary ? { summary: header.summary, summaryUpto: header.summaryUpto ?? 0 } : {}),
       ...(typeof header.pinned === 'number' ? { pinned: header.pinned } : {}),
+      ...(header.sceneNotes ? { sceneNotes: header.sceneNotes } : {}),
     })
   }
   return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -411,7 +416,8 @@ export function deleteChat(charId: string, chatId: string): void {
 
 /**
  * Duplique une conversation en une branche indépendante : mêmes messages et
- * même en-tête (summary/summaryUpto inclus — la branche hérite du même passé),
+ * même en-tête (summary/summaryUpto et notes de scène inclus — la branche hérite
+ * du même passé et de la même scène),
  * nouvel identifiant. L'original n'est jamais touché ; le clone est écrit en
  * tmp + fsync + rename pour ne jamais laisser un .jsonl à moitié écrit.
  * Le titre composé (« titre (branche) ») est un titre CHOISI : la branche part
@@ -449,20 +455,24 @@ export function forkChat(charId: string, chatId: string, title?: string): ChatMe
     messageCount: lines.length - 1,
     ...(clone.summary ? { summary: clone.summary, summaryUpto: clone.summaryUpto ?? 0 } : {}),
     ...(typeof clone.pinned === 'number' ? { pinned: clone.pinned } : {}),
+    ...(clone.sceneNotes ? { sceneNotes: clone.sceneNotes } : {}),
   }
 }
 
 /**
- * Met à jour l'en-tête d'un chat (résumé de compaction, message épinglé…) en
- * réécrivant la première ligne du .jsonl. Écriture temp + rename : un crash au
- * milieu ne corrompt jamais le fichier d'origine. Un champ du patch à
+ * Met à jour l'en-tête d'un chat (résumé de compaction, message épinglé, notes de
+ * scène…) en réécrivant la première ligne du .jsonl. Écriture temp + rename : un
+ * crash au milieu ne corrompt jamais le fichier d'origine. Un champ du patch à
  * `undefined` disparaît de l'en-tête (JSON.stringify l'omet) — c'est ainsi
- * qu'on annule un résumé ou qu'on désépingle.
+ * qu'on annule un résumé ou qu'on désépingle. Les champs ABSENTS du patch, eux,
+ * sont conservés tels quels : une compaction ne touche donc pas aux notes de scène.
  */
 export function updateChatHeader(
   charId: string,
   chatId: string,
-  patch: Partial<Pick<ChatHeader, 'title' | 'titleCustom' | 'summary' | 'summaryUpto' | 'pinned'>>,
+  patch: Partial<
+    Pick<ChatHeader, 'title' | 'titleCustom' | 'summary' | 'summaryUpto' | 'pinned' | 'sceneNotes'>
+  >,
 ): void {
   const file = chatFile(charId, chatId)
   const lines = fs.readFileSync(file, 'utf8').split('\n')

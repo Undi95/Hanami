@@ -87,6 +87,9 @@ export interface ChatMeta {
   messageCount: number
   summary?: string // résumé de compaction (visible dans l'inspecteur, éditable)
   summaryUpto?: number // nombre de messages couverts par le résumé (slice de l'historique envoyé)
+  // Notes de scène propres à cette conversation (lieu, ambiance, contexte), écrites
+  // dans l'onglet Scène de l'Inspecteur. Champ vide/absent = AUCUNE injection.
+  sceneNotes?: string
   pinned?: number // ordinal du message épinglé — pur affichage, JAMAIS envoyé au backend
 }
 

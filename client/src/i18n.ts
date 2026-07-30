@@ -298,6 +298,10 @@ const FR = {
   promptInspectorNote: 'Ceci est exactement ce que Hanami envoie au backend — rien d’autre.',
   systemPromptTab: 'Prompt système',
   payloadTab: 'Payload complet',
+  sceneTab: 'Scène',
+  sceneHint:
+    'Notes propres à cette conversation, ajoutées telles quelles au prompt système. Vide = rien n’est envoyé.',
+  scenePlaceholder: 'Lieu, ambiance, contexte de la scène…',
 }
 
 export type Key = keyof typeof FR
@@ -587,6 +591,10 @@ const EN: Record<Key, string> = {
   promptInspectorNote: 'This is exactly what Hanami sends to the backend — nothing else.',
   systemPromptTab: 'System prompt',
   payloadTab: 'Full payload',
+  sceneTab: 'Scene',
+  sceneHint:
+    'Notes for this conversation only, added as-is to the system prompt. Empty = nothing is sent.',
+  scenePlaceholder: 'Place, mood, context of the scene…',
 }
 
 const DICT: Record<Lang, Record<Key, string>> = { fr: FR, en: EN }

@@ -460,6 +460,15 @@ export function updateChatSummary(
   return req('PUT', '/api/chat/summary', { characterId, chatId, summary })
 }
 
+/** Édite les notes de scène de la conversation ('' = retire le bloc du prompt). */
+export function updateChatSceneNotes(
+  characterId: string,
+  chatId: string,
+  sceneNotes: string,
+): Promise<{ sceneNotes: string }> {
+  return req('PUT', '/api/chat/scene', { characterId, chatId, sceneNotes })
+}
+
 // ── Chat streaming (SSE sur fetch) ─────────────────────────────────────────
 
 /** 'open' = le modèle écrit le premier message d'une conversation vide (refusé si elle ne l'est pas). */
