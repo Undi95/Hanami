@@ -395,6 +395,8 @@ export interface TtsVoice {
 export interface TtsProbe {
   reachable: boolean
   info?: string
+  /** Nom du modèle annoncé par le serveur (GET /models, sinon la racine). */
+  model?: string
   voices?: TtsVoice[]
 }
 

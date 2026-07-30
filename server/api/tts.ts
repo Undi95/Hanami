@@ -159,6 +159,34 @@ function parseVoices(text: string): ProbeVoice[] | undefined {
   return voices.length > 0 ? voices : undefined
 }
 
+/** Champ « model » de la racine JSON — souvent une version courte (« 1.7B »). */
+function rootModelOf(text: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(text)
+    if (!parsed || typeof parsed !== 'object') return undefined
+    const model = asText((parsed as Record<string, unknown>).model)
+    return model || undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Premier modèle annoncé par GET /models (format OpenAI {data:[{id}]}) — le nom EXACT. */
+function firstModelOf(text: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(text)
+    if (!parsed || typeof parsed !== 'object') return undefined
+    const data = (parsed as { data?: unknown }).data
+    if (!Array.isArray(data) || data.length === 0) return undefined
+    const first = data[0]
+    if (!first || typeof first !== 'object') return undefined
+    const id = asText((first as Record<string, unknown>).id)
+    return id || undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Origine seule (le /v1 et tout autre chemin sautent) — null si l'URL est invalide. */
 function originOf(url: string): string | null {
   try {
@@ -185,6 +213,7 @@ ttsRouter.get('/api/tts/probe', async (req, res) => {
   // beaucoup de serveurs n'exposent rien sur / ni sur /voices sans être morts.
   let reachable = false
   let info: string | undefined
+  let model: string | undefined
   let lastError = 'URL invalide'
 
   const origin = originOf(base)
@@ -193,9 +222,18 @@ ttsRouter.get('/api/tts/probe', async (req, res) => {
     if (root.ok) {
       reachable = true
       info = statusInfo(root.text)
+      model = rootModelOf(root.text) // repli si /models ne dit rien de mieux
     } else {
       lastError = root.error
     }
+  }
+
+  // Le nom EXACT du modèle, quand le serveur expose la route OpenAI standard —
+  // il prime sur le champ « model » de la racine, souvent une version courte.
+  const models = await probeGet(base + '/models')
+  if (models.ok) {
+    reachable = true
+    if (models.status === 200) model = firstModelOf(models.text) ?? model
   }
 
   let voices: ProbeVoice[] | undefined
@@ -213,11 +251,14 @@ ttsRouter.get('/api/tts/probe', async (req, res) => {
     if (voices) break
   }
 
-  const payload: { reachable: boolean; info?: string; voices?: ProbeVoice[] } = { reachable }
+  const payload: { reachable: boolean; info?: string; model?: string; voices?: ProbeVoice[] } = {
+    reachable,
+  }
   // Injoignable : l'info porte le motif de l'échec. Voix introuvables mais serveur
   // debout : `voices` reste absent, c'est un résultat valide.
   if (!reachable) info = lastError
   if (info) payload.info = info
+  if (model) payload.model = model
   if (voices) payload.voices = voices
   res.json(payload)
 })

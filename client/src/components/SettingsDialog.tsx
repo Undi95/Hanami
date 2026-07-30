@@ -313,6 +313,9 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
         text: parts.join(' — ') || t(r.reachable ? 'ttsProbeOk' : 'ttsProbeFail'),
         voices,
       })
+      // Le nom de modèle annoncé par le serveur remplit le champ : plus rien à
+      // recopier à la main (le champ reste éditable, certains serveurs l'ignorent).
+      if (r.model) set('ttsModel', r.model)
     } catch (e) {
       setTtsProbe({ ok: false, text: api.errorMessage(e), voices: [] })
     } finally {
@@ -469,18 +472,53 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
       {tab === 'model' && (
         <>
           <h3 className="section-title">{t('sectionBackend')}</h3>
+          {/* Même grammaire que la sonde TTS : le bouton Tester colle à l'URL,
+              la ligne ✓/✗ et les pastilles de modèles s'affichent juste dessous. */}
           <div className="field">
             <label htmlFor="set-url">{t('backendUrl')}</label>
-            <input
-              id="set-url"
-              type="url"
-              value={form.backendUrl}
-              placeholder="http://127.0.0.1:5001/v1"
-              onChange={(e) => {
-                setBackendProbe(null)
-                set('backendUrl', e.target.value)
-              }}
-            />
+            <div className="row">
+              <input
+                id="set-url"
+                type="url"
+                value={form.backendUrl}
+                placeholder="http://127.0.0.1:5001/v1"
+                style={{ flex: 1, minWidth: 0 }}
+                onChange={(e) => {
+                  setBackendProbe(null)
+                  set('backendUrl', e.target.value)
+                }}
+              />
+              <button
+                className="btn small"
+                type="button"
+                disabled={testing || !form.backendUrl.trim()}
+                onClick={() => test().catch((e) => console.error('[settings]', e))}
+              >
+                {testing ? t('probing') : t('probe')}
+              </button>
+            </div>
+            {backendProbe && (
+              <span className={`probe-line${backendProbe.ok ? '' : ' err'}`}>
+                <span className="probe-mark">{backendProbe.ok ? '✓' : '✗'}</span>
+                <span>{backendProbe.text}</span>
+              </span>
+            )}
+            {backendProbe && backendProbe.models.length > 0 && (
+              <div className="voice-chips" role="group" aria-label={t('chooseDetectedModel')}>
+                {backendProbe.models.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className="voice-chip"
+                    aria-pressed={form.model.trim() === m}
+                    title={m}
+                    onClick={() => set('model', m)}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="field">
             <label htmlFor="set-key">{t('apiKey')}</label>
@@ -513,41 +551,13 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
           </div>
           <div className="field">
             <label htmlFor="set-model">{t('model')}</label>
-            <div className="row">
-              <input
-                id="set-model"
-                type="text"
-                value={form.model}
-                placeholder={t('modelPlaceholder')}
-                style={{ flex: 1 }}
-                onChange={(e) => set('model', e.target.value)}
-              />
-              <button className="btn" onClick={() => test().catch((e) => console.error('[settings]', e))} disabled={testing}>
-                {testing ? t('testing') : t('testConnection')}
-              </button>
-            </div>
-            {backendProbe && (
-              <span className={`probe-line${backendProbe.ok ? '' : ' err'}`}>
-                <span className="probe-mark">{backendProbe.ok ? '✓' : '✗'}</span>
-                <span>{backendProbe.text}</span>
-              </span>
-            )}
-            {backendProbe && backendProbe.models.length > 0 && (
-              <div className="voice-chips" role="group" aria-label={t('chooseDetectedModel')}>
-                {backendProbe.models.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className="voice-chip"
-                    aria-pressed={form.model.trim() === m}
-                    title={m}
-                    onClick={() => set('model', m)}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            )}
+            <input
+              id="set-model"
+              type="text"
+              value={form.model}
+              placeholder={t('modelPlaceholder')}
+              onChange={(e) => set('model', e.target.value)}
+            />
           </div>
           <div className="field">
             <label>{t('visionMode')}</label>
@@ -651,7 +661,7 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
                 onClick={() => testTts().catch((e) => console.error('[settings]', e))}
                 disabled={ttsProbing || !form.ttsUrl.trim()}
               >
-                {ttsProbing ? t('ttsProbing') : t('ttsProbe')}
+                {ttsProbing ? t('probing') : t('probe')}
               </button>
             </div>
             {ttsProbe && (
