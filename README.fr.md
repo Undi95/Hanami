@@ -233,21 +233,25 @@ qu'aucune licence n'oblige à citer**, parce qu'un crédit caché n'honore perso
 
 ### Animations
 
-- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **24 des 44 clips**, et de
-  loin la source principale : les quatre animations de repos et le repos « en train de parler »
-  qui portent tout le mode face à face, six gestes de conversation (`happy`, `sad`, `neutral`,
-  `nod`, `shake`, `think`), et l'intégralité de la locomotion et des postures assises de la scène
-  3D — marche, marche lente et rapide, recul, pivots, départ, arrêt, maintien assis, parole assise.
-  Ce ne sont ni des captures brutes ni du Mixamo recyclé : elles ont été **faites à la main dans
-  Maya** par un animateur salarié de High Fidelity, et c'est ce soin d'animateur qui se voit — les
-  doigts sont animés, les poses se raccordent entre elles, et les boucles se referment.
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **30 des 35 clips**, et de
+  loin la source principale : **tout le mode face à face** — les quatre animations de repos, le
+  repos « en train de parler », et les douze gestes (`neutral`, `happy` ×3, `sad`, `angry` ×2,
+  `relaxed` ×2, `nod`, `shake`, `think`) — plus l'intégralité de la locomotion et des postures
+  assises de la scène 3D : marche, marche lente et rapide, recul, pivots, départ, arrêt, maintien
+  assis, parole assise. Ce ne sont ni des captures brutes ni du Mixamo recyclé : elles ont été
+  **faites à la main dans Maya** par un animateur salarié de High Fidelity, et c'est ce soin
+  d'animateur qui se voit — les doigts sont animés, les poses se raccordent entre elles, et les
+  boucles se referment.
   Copyright High Fidelity (2013-2019), contributeurs Vircadia (2019-2021), Overte e.V. (2022-2026).
 - **[Quaternius](https://quaternius.com)**, *Universal Animation Library* — *CC0 1.0*, domaine
   public, **aucune attribution requise** : on la donne quand même. Cinq clips, les deux familles
   qu'Overte n'a pas : s'asseoir, se lever, et les trois temps du saut.
 - **[CMU Graphics Lab Motion Capture Database](https://mocap.cs.cmu.edu)**, conversion BVH
-  « Daz-friendly » de **Bruce Hahne / cgspeed** (<https://www.cgspeed.com>). Quinze gestes
-  d'émotion. Remerciements exigés par les conditions d'usage de la base :
+  « Daz-friendly » de **Bruce Hahne / cgspeed** (<https://www.cgspeed.com>). Cette base a fourni
+  quinze gestes d'émotion à la première version de la bibliothèque ; **plus aucun fichier n'en
+  dérive** — mesurés, ils s'accrochaient tous au retour vers le repos, et six ont été remplacés par
+  des animations Overte, neuf retirés (voir [`vrma/NOTICE.md`](vrma/NOTICE.md)). Le crédit reste
+  ici parce que le travail a servi, et les remerciements que la base exige avec :
 
   > The data used in this project was obtained from mocap.cs.cmu.edu.
   > The database was created with funding from NSF EIA-0196217.

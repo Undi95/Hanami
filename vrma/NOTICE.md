@@ -14,11 +14,12 @@ redistribution.*
 
 ## 1. Overte — Apache License 2.0
 
-**Vingt-quatre fichiers sur quarante-quatre** dérivent des animations d'avatar du
-projet **Overte** (`overte-org/overte`, `interface/resources/avatar/animations/`,
-127 fichiers FBX) : les quatre animations de repos, qui sont le socle permanent de
-la scène, six gestes, et tout le domaine monde 3D sauf les transitions assises et
-le saut. C'est la source principale de la bibliothèque.
+**Trente fichiers sur trente-cinq** dérivent des animations d'avatar du projet
+**Overte** (`overte-org/overte`, `interface/resources/avatar/animations/`,
+127 fichiers FBX) : **tout le domaine face à face** — les quatre animations de
+repos, qui sont le socle permanent de la scène, et les douze gestes — ainsi que
+tout le domaine monde 3D sauf les transitions assises et le saut. C'est la source
+de la bibliothèque, à cinq fichiers près.
 
 Ces animations ont été produites en interne chez High Fidelity par un animateur,
 dans Maya — les métadonnées internes des FBX déclarent
@@ -27,11 +28,12 @@ dans Maya — les métadonnées internes des FBX déclarent
 Mixamo recyclé : la recherche de chaînes ne donne aucune occurrence de « mixamo »
 ou « adobe », et aucun os ne porte le préfixe `mixamorig:`.
 
-*Twenty-four files out of forty-four derive from the avatar animations of the
-**Overte** project (127 FBX files): all four idle animations, which are the
-permanent base of the scene, six gestures, and the whole 3D-world domain except
-the seated transitions and the jump. It is the library's primary source. These
-animations were hand-made in-house at High Fidelity by an animator, in Maya.*
+*Thirty files out of thirty-five derive from the avatar animations of the
+**Overte** project (127 FBX files): the whole face-to-face domain — all four idle
+animations, which are the permanent base of the scene, and the twelve gestures —
+plus the whole 3D-world domain except the seated transitions and the jump. It is
+the library's source, bar five files. These animations were hand-made in-house at
+High Fidelity by an animator, in Maya.*
 
 ```
 Copyright (c) 2013-2019, High Fidelity, Inc.
@@ -54,18 +56,52 @@ limitations under the License.
 SPDX-License-Identifier : `Apache-2.0`
 Dépôt / repository : <https://github.com/overte-org/overte>
 
+### Domaine face à face / face-to-face domain
+
 | Fichier dérivé | Animation source Overte | Segment repris |
 | --- | --- | --- |
 | `idle.vrma` | `idle.fbx` | intégralité (10,000 s) |
 | `idle-talking.vrma` | `talk_armsdown.fbx` | 0,033 → 7,133 s |
 | `idle-2.vrma` | `idle04.fbx` | 0,033 → 30,067 s |
 | `idle-3.vrma` | `idle03.fbx` | sous-boucle 4,833 → 18,167 s |
-| `happy.vrma` | `emote_clap01_all.fbx` | intégralité |
-| `sad.vrma` | `emote_disagree_drophead.fbx` | intégralité |
-| `neutral.vrma` | `idle_once_headtilt.fbx` | intégralité |
-| `nod.vrma` | `emote_agree_headnod.fbx` | intégralité |
-| `shake.vrma` | `emote_disagree_annoyedheadshake.fbx` | intégralité |
+| `neutral.vrma` | `idle_once_headtilt.fbx` | intégralité, 5,07 s |
+| `happy.vrma` | `emote_clap01_all.fbx` | intégralité, 5,30 s |
+| `happy-2.vrma` | `emote_clap02_all.fbx` | images 1 → 114, 3,77 s |
+| `happy-3.vrma` | `emote_clap03_all.fbx` | images 15 → 163, 4,93 s |
+| `sad.vrma` | `emote_disagree_drophead.fbx` | intégralité, 3,27 s |
+| `angry.vrma` | `emote_disagree_annoyedheadshake.fbx` | images 7 → 76, 2,30 s |
+| `angry-2.vrma` | `emote_disagree_thoughtfulheadshake.fbx` | intégralité, 2,73 s |
+| `relaxed.vrma` | `idle_once_neckstretch.fbx` | intégralité, 5,57 s |
+| `relaxed-2.vrma` | `idle_once_shiftheelpivot.fbx` | images 0 → 109, 3,63 s |
+| `nod.vrma` | `emote_agree_headnod.fbx` | intégralité, 1,77 s |
+| `shake.vrma` | `emote_disagree_annoyedheadshake.fbx` | intégralité, 2,30 s |
 | `think.vrma` | `idle_once_lookaround.fbx` | 1er tour de regard, 3,37 s |
+
+Modifications apportées aux gestes / changes made to the gestures : os Mixamo
+mappés vers les os humanoïdes VRM 1.0, géométrie et T-pose de bind recalées sur
+`emote_clap01_all.fbx`, échelle cm → m, ré-échantillonnage à 30 fps, rampes de bord
+neutralisées sur les os figés, reliquat de pose parasite rogné en tête (jusqu'à
+15 images sur `emote_clap03_all`), lacet moyen du bassin ramené sur l'avant VRM
+(+Z), translation horizontale du bassin ramenée dans un rayon de 1 cm, écrêtage
+des vitesses angulaires au-delà de 1000 °/s, export en `VRMC_vrm_animation` 1.0.
+Une seule clé de toute la bibliothèque est au plafond d'écrêtage : le poignet
+gauche de `happy-2` à l'instant où les mains se rencontrent (1081 °/s avant
+écrêtage, sur une rampe 318 → 776 → 1081 → 574 °/s, donc du mouvement et non du
+bruit ; 95ᵉ centile du clip : 311 °/s).
+
+Les clips trop longs pour un geste ont été recoupés sur une fenêtre de 6 s au plus
+dont les **deux bords** sont au plus près de la pose de repos du socle, condition
+mesurée en centimètres d'excursion du pire os majeur.
+
+`angry.vrma` et `shake.vrma` dérivent du **même** FBX : le premier est le geste
+joué quand le personnage exprime la colère, le second est la brique « non »
+réservée à un déclenchement par lecture du texte, que le lecteur ignore
+aujourd'hui (cf. `README.md`). Les deux fichiers ne sont pas identiques — ils
+sortent de deux passes de conversion successives — mais ils portent la même
+animation source.
+
+*`angry.vrma` and `shake.vrma` derive from the **same** FBX: the first is the
+gesture played for the anger emotion, the second the reserved "no" primitive.*
 
 ### Domaine monde 3D / 3D-world domain
 
@@ -124,61 +160,69 @@ buste, les bras, les mains et la tête.
 
 ---
 
-## 2. CMU Graphics Lab Motion Capture Database
+## 2. CMU Graphics Lab Motion Capture Database — SOURCE RETIRÉE
 
-Quinze fichiers dérivent de la base de capture de mouvement du **CMU Graphics
-Lab**, via la conversion BVH « Daz-friendly, hip-corrected » (v1.0, 2010) de
-**Bruce Hahne / cgspeed**. Tous appartiennent au domaine face à face.
+**Plus aucun fichier de ce dossier ne dérive de la base CMU.** Les quinze gestes
+d'émotion qui en venaient (via la conversion BVH « Daz-friendly, hip-corrected »
+de **Bruce Hahne / cgspeed**) ont tous été retirés : `angry`, `angry-2`, `happy-2`,
+`happy-3`, `laugh`, `laugh-2`, `relaxed`, `relaxed-2`, `sad-2`, `sad-3`, `shy`,
+`surprised`, `surprised-2`, `surprised-3`, `wave`. Six ont été remplacés par des
+animations Overte, neuf simplement supprimés.
 
-*Fifteen files derive from the **CMU Graphics Lab Motion Capture Database**, via
-the "Daz-friendly, hip-corrected" BVH conversion (v1.0, 2010) by **Bruce Hahne /
-cgspeed**.*
+Ni CMU ni Bruce Hahne n'imposaient de contrainte de redistribution autre que le
+remerciement d'usage : **ce retrait ne lève aucune obligation qui pesait sur ce
+dossier, et n'en crée aucune.** La mention est conservée ici parce qu'elle
+documente l'histoire des fichiers, pas parce qu'elle est encore exigée.
 
-### Remerciements exigés / required acknowledgement
+*No file in this folder derives from the CMU database any more.* Fifteen emotion
+gestures came from it; six were replaced by Overte animations, nine removed. CMU
+and Bruce Hahne imposed no redistribution constraint beyond the customary
+acknowledgement, so this removal lifts no obligation and creates none.
 
-> The data used in this project was obtained from mocap.cs.cmu.edu.
-> The database was created with funding from NSF EIA-0196217.
+### Pourquoi / why
 
-### Conditions d'usage / usage rights
+La règle d'acceptation du domaine face à face est que l'enchaînement
+socle → geste → socle ne doit pas s'accrocher. Chiffrée : l'écart de pose entre la
+**première** image d'un clip et la pose de repos du socle, et entre sa **dernière**
+image et cette même pose, doit rester sous **10 cm** d'excursion du pire os majeur
+— mesuré contre `idle.vrma` et contre `idle-talking.vrma`. Sous ce seuil, les
+fondus de 0,3 s (entrée) et 0,4 s (sortie) sont invisibles ; au-dessus, le corps
+est tiré et les pieds glissent sans pas.
 
-> Use this data! This data is free for use in research and commercial projects
-> worldwide.
+Les quinze clips CMU échouaient **tous**, aux deux bords, contre les deux socles :
+de 25,1 à 57 cm, médiane 29,7. Les dix clips Overte passaient tous, médiane
+4,4 cm. La cause n'est pas le geste mais la **station** : le sujet capturé se tient
+autrement (bassin de repos à 0,83 m contre 1,0167 m, jambes à 15° de la pose du
+socle) et les segments étaient découpés automatiquement dans une prise continue,
+donc ni le début ni la fin n'est une pose de repos. Verrouiller le bas du corps sur
+le socle ramenait `sad-2` sous le seuil (29,2 → 5,1 cm en entrée, 28,4 → 6,4 en
+sortie) mais il ne restait alors que 8,9° d'amplitude sur l'os le plus mobile,
+soit deux fois le bruit de respiration du socle lui-même (3,8°) : un clip
+invisible. Pour les autres, le verrouillage ne suffisait pas — l'entrée restait à
+11 cm (`relaxed-2`), 14,5 (`happy-3`), 15,8 (`relaxed`), 37 (`laugh`).
 
-CMU n'impose aucune restriction sur le jeu de données d'origine ; Bruce Hahne
-n'ajoute aucune restriction sur sa conversion BVH.
-
-*CMU places no restrictions on the original dataset; Bruce Hahne adds no further
-restrictions to his BVH conversion.*
+Trois clips portaient en plus un défaut d'origine : `angry-2` avait **40
+transitions collées au plafond d'écrêtage de 1000 °/s** sur les six os des deux
+bras (pointe réelle 2680 °/s, 95ᵉ centile du clip à 1000 °/s), `laugh-2` 20
+transitions sur cinq os (2914 °/s) et `wave` 13 sur le seul `rightHand`
+(1560 °/s) — du bruit de capture sur les mains et les avant-bras, la base CMU
+n'ayant aucun marqueur de main.
 
 - Base d'origine / original database : <https://mocap.cs.cmu.edu>
 - Conversion BVH / BVH conversion : <https://www.cgspeed.com> (section motion capture)
 
-| Fichier dérivé | Prise CMU | Description de l'index CMU |
-| --- | --- | --- |
-| `happy-2.vrma` | 142_09 | Joy |
-| `happy-3.vrma` | 142_08 | Happy |
-| `sad-2.vrma` | 142_15 | Sad |
-| `sad-3.vrma` | 79_72 | crying |
-| `angry.vrma` | 18_10 | quarrel — angry hand gestures (2 subjects — subject A) |
-| `angry-2.vrma` | 80_48 | arguing |
-| `surprised.vrma` | 142_16 | Scared |
-| `surprised-2.vrma` | 142_17 | Scared |
-| `surprised-3.vrma` | 79_73 | scared |
-| `relaxed.vrma` | 142_13 | Relaxed |
-| `relaxed-2.vrma` | 142_04 | Cool |
-| `wave.vrma` | 141_16 | Wave Hello |
-| `laugh.vrma` | 79_70 | laughing |
-| `laugh-2.vrma` | 80_44 | laughing |
-| `shy.vrma` | 142_19 | Shy |
+### Émotion restée sans geste / emotion left with no gesture
 
-Modifications apportées / changes made : os DAZ gen3/gen4 mappés vers les os
-humanoïdes VRM 1.0 (doigts non repris — le mocap CMU n'a pas de marqueurs de
-main), échelle cm → m, frames de bind pose parasites retirées, extraction
-automatique d'un segment de 2 à 5,5 s, ré-échantillonnage 120 → 30 fps avec
-moyennage, écrêtage des vitesses angulaires au-delà de 1000 °/s (joint flips du
-mocap non nettoyé), lacet global annulé pour que le personnage regarde l'avant
-VRM (+Z), translation horizontale des hanches supprimée, export en
-`VRMC_vrm_animation` 1.0.
+`surprised` n'a **plus aucun clip** : les 127 animations d'Overte ne comportent
+aucune émote de surprise ou de sursaut, et les trois clips CMU qui la portaient
+finissaient en pleine gesticulation, bras loin du repos (40,3 / 44 / 49,9 cm en
+sortie ; un verrouillage des jambes empirait même `surprised`, 49,8 → 53,8 cm). Le
+déclenchement ne trouve alors rien et l'avatar continue simplement de respirer,
+sans rien casser. Couvrir cette émotion demanderait une autre source, ou un clip
+écrit à la main.
+
+*`surprised` has no clip left: Overte's 127 animations contain no surprise or
+startle emote. The trigger finds nothing and the avatar simply keeps breathing.*
 
 ---
 
@@ -235,20 +279,27 @@ soit 73 puis 87° en une seule image à 30 images/s : des retournements
 d'articulation, jamais nettoyés parce que `convert-animations.mjs` n'a pas de
 limiteur de vitesse, contrairement à la chaîne Overte. Les 22 os fautifs de
 `world-jump-start` et les 5 de `world-jump-land` ont été écrêtés puis lissés sur
-trois images, plafond 900 °/s — aucun clip Overte de la bibliothèque ne dépasse
-517 °/s.
+trois images, plafond 900 °/s. Les clips Overte de la bibliothèque, eux, ne
+dépassent 517 °/s que dans les trois applaudissements (`happy` 670, `happy-3` 765,
+`happy-2` 1000 °/s au poignet gauche à l'impact des mains) : ce sont des pointes de
+mouvement authentiques, pas des retournements d'articulation.
 
 ---
 
 ## 4. Répartition / breakdown
 
-44 fichiers, 5,48 Mo au total :
+35 fichiers, 5,77 Mo au total :
 
 | Source | Licence | Fichiers | Domaine |
 | --- | --- | --- | --- |
-| Overte | Apache-2.0 | 24 | 10 face à face, 14 monde 3D |
-| CMU Graphics Lab / Bruce Hahne | libre, remerciements exigés | 15 | face à face |
+| Overte | Apache-2.0 | 30 | 16 face à face, 14 monde 3D |
 | Quaternius | CC0-1.0 | 5 | monde 3D |
+
+**Deux sources, et une seule licence à respecter** : Apache-2.0 pour Overte, le
+reste étant en domaine public. Le domaine face à face est intégralement Overte.
+
+*Two sources, and only one licence to comply with: Apache-2.0 for Overte, the rest
+being public domain. The face-to-face domain is entirely Overte.*
 
 Quinze clips Quaternius ont été retirés de ce dossier à la reconstruction de la
 bibliothèque : `hit-chest`, `hit-head`, `pickup`, `dance`, `swim`, `swim-idle`,
@@ -262,17 +313,25 @@ ne change aucune obligation.
 *Fifteen Quaternius clips were removed when the library was rebuilt; none of them
 carried an attribution requirement, so their removal changes no obligation.*
 
-## 5. Modifications supplémentaires de la passe v2 / additional v2 changes
+## 5. Historique des passes / history of the passes
 
-Mêmes sources, mêmes licences, mêmes remerciements exigés. Modifications ajoutées
-aux quinze gestes d'émotion par `optimise-emotes.mjs` :
-bas du corps verrouillé en orientation monde sur la pose de repos debout
-d'`idle.vrma` (15 clips), hauteur des hanches recalée sur la même référence
-avec ballant borné, lacet du bassin borné à ±12° image par image avec ancrage
-des bords (10 clips), inclinaison du bassin comprimée au-delà de 15° (2 clips),
-`think` recoupé de 10,77 s à 3,37 s, reliquats de bind pose rognés en tête de
-`happy` et `shake`. Détail et mesures : `rapport.md`.
+- **v1** : première conversion (Overte FBX + CMU BVH + Quaternius glTF).
+- **v2** : corrections géométriques des gestes d'émotion CMU — bas du corps
+  verrouillé en orientation monde sur la pose de repos debout de l'ancien
+  `idle.vrma`, hauteur des hanches recalée avec ballant borné, lacet du bassin
+  borné à ±12° image par image avec ancrage des bords, inclinaison du bassin
+  comprimée au-delà de 15°, `think` recoupé de 10,77 s à 3,37 s, reliquats de bind
+  pose rognés en tête de `happy` et `shake`.
+- **v3** : nouveau socle de repos (Overte `idle.fbx` en remplacement de la garde de
+  combat Quaternius), `idle-2` et `idle-3` ajoutés.
+- **v4, la passe courante** : application de la règle d'acceptation au domaine face
+  à face (§2). Les corrections de la passe v2 avaient été calées sur l'**ancien**
+  socle, donc sur une pose qui n'existe plus ; plutôt que de les refaire, la source
+  a été changée. Les six gestes remplacés sortent d'Overte sans aucune correction
+  géométrique — même studio, même station, les raccords tombent d'eux-mêmes entre
+  1,2 et 8,0 cm.
 
-*This folder is **v2** of the batch: same sources, same licences, same required
-acknowledgements. Changes added on top of the v1 conversion, per clip, are
-documented in `rapport.md`.*
+*v4, the current pass: the acceptance rule of §2 applied to the whole face-to-face
+domain. The v2 corrections had been fitted to the OLD idle pose, which no longer
+exists; rather than redo them, the source was changed. The six replacement
+gestures come from Overte with no geometric correction at all.*

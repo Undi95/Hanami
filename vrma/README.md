@@ -14,13 +14,42 @@ préfixe du nom suffit à les distinguer** :
 
 | Domaine | Nom | Contenu | Poids |
 | --- | --- | --- | --- |
-| **face à face** | pas de préfixe | l'avatar debout devant l'utilisateur qui discute : repos, repos en train de parler, gestes d'émotion | 25 fichiers, 2,94 Mo |
+| **face à face** | pas de préfixe | l'avatar debout devant l'utilisateur qui discute : repos, repos en train de parler, gestes d'émotion | 16 fichiers, 3,24 Mo |
 | **monde 3D** | préfixe `world-` | la scène interactive où le personnage marche, divague et s'assoit : allures, départ et arrêt, virages, postures assises, saut | 19 fichiers, 2,54 Mo |
 
 Le face à face est **sévère** : on n'y ajoute un geste que s'il est utile, agréable
 et crédible pour quelqu'un qui discute assis. On enrichit ce qui existe (une
 variante `-2`, `-3`) plutôt que d'inventer une catégorie : le vocabulaire de
 déclenchement doit rester court.
+
+### La règle d'acceptation, chiffrée
+
+Un geste n'entre dans ce domaine que si l'enchaînement **socle → geste → socle** ne
+s'accroche pas. Mesure : l'écart de pose entre la **première** image du clip et la
+pose de repos du socle, et entre sa **dernière** image et cette même pose, doit
+rester sous **10 cm** d'excursion du pire os majeur — contre `idle.vrma` *et*
+contre `idle-talking.vrma`, puisque c'est vers ce dernier que les gestes reviennent
+pendant qu'une réponse s'écrit. Sous ce seuil, les fondus de 0,3 s (entrée) et
+0,4 s (sortie) sont invisibles ; au-dessus, le corps est tiré et les pieds glissent
+sans pas.
+
+Les 16 clips actuels vont de **0,8 à 8,0 cm**, médiane 4,4. Un clip qui ne tient pas
+ce seuil est retiré, pas rafistolé — une émotion sans geste n'est pas un drame (le
+déclenchement ne trouve rien, l'avatar continue de respirer), un geste qui accroche
+l'œil en est un. C'est ce qui a coûté leur place aux quinze gestes issus du mocap
+CMU, et à l'émotion `surprised`, qui n'a plus aucun clip : voir
+[`NOTICE.md`](NOTICE.md) §2.
+
+### Ce que chaque émotion a aujourd'hui
+
+| Émotion | Clips | Source |
+| --- | --- | --- |
+| `neutral` | `neutral` | inclinaison de tête |
+| `happy` | `happy`, `happy-2`, `happy-3` | trois applaudissements |
+| `sad` | `sad` | tête qui tombe |
+| `angry` | `angry`, `angry-2` | dénégation agacée, dénégation posée |
+| `relaxed` | `relaxed`, `relaxed-2` | étirement de la nuque, report de poids |
+| `surprised` | **aucun** | Overte n'a pas d'émote de surprise |
 
 Le monde 3D est **généreux** : la scène a besoin de matière, et ces clips ne sont
 jamais joués en face à face.
@@ -39,8 +68,8 @@ Le nom du fichier fait office de configuration — il n'y a pas de fichier de ma
 | --- | --- |
 | `idle.vrma` | socle joué en boucle (sans lui, aucune animation n'est jouée) |
 | `idle-talking.vrma` | socle joué en boucle pendant qu'une réponse s'écrit |
-| `happy.vrma`, `sad.vrma`, `angry.vrma`, `surprised.vrma`, `relaxed.vrma`, `neutral.vrma` | geste joué une fois quand le personnage exprime cette émotion, puis retour à l'idle |
-| `nod.vrma`, `shake.vrma`, `think.vrma`, `laugh.vrma`, `wave.vrma`, `shy.vrma` | gestes de conversation, sans mot-clé dédié : à déclencher par lecture du texte de la réponse |
+| `happy.vrma`, `sad.vrma`, `angry.vrma`, `surprised.vrma`, `relaxed.vrma`, `neutral.vrma` | geste joué une fois quand le personnage exprime cette émotion, puis retour à l'idle. `surprised` est le seul rôle reconnu **sans fichier** : le déclenchement ne trouve rien et l'avatar continue de respirer |
+| `nod.vrma`, `shake.vrma`, `think.vrma` | briques de conversation, sans mot-clé dédié : réservées à un déclenchement par lecture du texte de la réponse, donc **ignorées par le lecteur d'aujourd'hui** |
 | suffixe `-2`, `-3`… (`idle-2.vrma`, `happy-2.vrma`) | variantes du même rôle, tirées au hasard |
 
 ### Monde 3D
@@ -82,17 +111,20 @@ l'échelle par `hanchesDuVRM / 1,0167`, sinon le personnage patine.
 
 ## Crédits
 
-Trois provenances, toutes libres de redistribution. Les crédits complets du projet
-sont réunis dans le [README](../README.fr.md#crédits) ; le détail fichier par
+Deux provenances, toutes deux libres de redistribution. Les crédits complets du
+projet sont réunis dans le [README](../README.fr.md#crédits) ; le détail fichier par
 fichier, les avis de licence et les mentions à conserver sont dans
 [`NOTICE.md`](NOTICE.md), à lire avant toute redistribution :
 
-- **Overte** — **Apache 2.0** : les quatre repos, six gestes, et tout le domaine
-  monde 3D sauf les transitions assises et le saut (14 clips).
+- **Overte** — **Apache 2.0** : **30 clips sur 35**, soit tout le domaine face à
+  face (quatre repos, douze gestes) et tout le domaine monde 3D sauf les transitions
+  assises et le saut (14 clips).
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, domaine public :
   les transitions assises et le saut (5 clips), les deux familles qu'Overte n'a pas.
-- **CMU Graphics Lab Motion Capture Database**, conversion BVH de Bruce Hahne —
-  libre d'usage, **remerciements exigés** : quinze gestes d'émotion.
+
+La **CMU Graphics Lab Motion Capture Database** (conversion BVH de Bruce Hahne) a
+fourni quinze gestes d'émotion à la première version de cette bibliothèque ; aucun
+n'a tenu la règle d'acceptation ci-dessus, et plus aucun fichier n'en dérive.
 
 ---
 
@@ -112,13 +144,40 @@ prefix alone tells them apart**:
 
 | Domain | Name | Contents | Weight |
 | --- | --- | --- | --- |
-| **face to face** | no prefix | the avatar standing in front of the user, talking: idles, talking idle, emotion gestures | 25 files, 2.94 MB |
+| **face to face** | no prefix | the avatar standing in front of the user, talking: idles, talking idle, emotion gestures | 16 files, 3.24 MB |
 | **3D world** | `world-` prefix | the interactive scene where the character walks, wanders and sits down: gaits, start and stop, turns, seated postures, jump | 19 files, 2.54 MB |
 
 Face to face is **strict**: a gesture only earns its place if it is useful,
 pleasant and believable for someone having a conversation. Enrich what exists (a
 `-2`, `-3` variant) rather than inventing a category — the trigger vocabulary must
 stay short.
+
+### The acceptance rule, in numbers
+
+A gesture enters this domain only if the **idle → gesture → idle** sequence does
+not snag. Measured: the pose gap between the clip's **first** frame and the idle
+rest pose, and between its **last** frame and that same pose, must stay under
+**10 cm** of world excursion of the worst major bone — against `idle.vrma` *and*
+against `idle-talking.vrma`, since that is what gestures return to while a reply is
+being written. Below that threshold the 0.3 s (in) and 0.4 s (out) fades are
+invisible; above it, the body is dragged and the feet slide without a step.
+
+The current 16 clips range from **0.8 to 8.0 cm**, median 4.4. A clip that misses
+the threshold is removed, not patched — an emotion with no gesture is no drama (the
+trigger finds nothing and the avatar keeps breathing), a gesture that catches the
+eye is. That is what cost the fifteen CMU-mocap gestures their place, and the
+`surprised` emotion all of its clips: see [`NOTICE.md`](NOTICE.md) §2.
+
+### What each emotion has today
+
+| Emotion | Clips | Source |
+| --- | --- | --- |
+| `neutral` | `neutral` | head tilt |
+| `happy` | `happy`, `happy-2`, `happy-3` | three claps |
+| `sad` | `sad` | head drop |
+| `angry` | `angry`, `angry-2` | annoyed head shake, measured head shake |
+| `relaxed` | `relaxed`, `relaxed-2` | neck stretch, weight shift |
+| `surprised` | **none** | Overte has no surprise emote |
 
 The 3D world is **generous**: the scene needs material, and these clips are never
 played face to face.
@@ -137,8 +196,8 @@ The file name IS the configuration — there is no mapping file.
 | --- | --- |
 | `idle.vrma` | looping base pose (without it, no animation is played at all) |
 | `idle-talking.vrma` | looping base pose played while a reply is being written |
-| `happy.vrma`, `sad.vrma`, `angry.vrma`, `surprised.vrma`, `relaxed.vrma`, `neutral.vrma` | one-shot gesture played when the character expresses that emotion, then back to idle |
-| `nod.vrma`, `shake.vrma`, `think.vrma`, `laugh.vrma`, `wave.vrma`, `shy.vrma` | conversation gestures, with no dedicated keyword: to be triggered by reading the reply text |
+| `happy.vrma`, `sad.vrma`, `angry.vrma`, `surprised.vrma`, `relaxed.vrma`, `neutral.vrma` | one-shot gesture played when the character expresses that emotion, then back to idle. `surprised` is the one recognised role **with no file**: the trigger finds nothing and the avatar keeps breathing |
+| `nod.vrma`, `shake.vrma`, `think.vrma` | conversation primitives, with no dedicated keyword: reserved for triggering by reading the reply text, hence **ignored by today's player** |
 | `-2`, `-3`… suffix (`idle-2.vrma`, `happy-2.vrma`) | variants of the same role, picked at random |
 
 ### 3D world
@@ -178,14 +237,17 @@ character skates.
 
 ## Credits
 
-Three origins, all free to redistribute. The project's full credits are gathered
+Two origins, both free to redistribute. The project's full credits are gathered
 in the [README](../README.md#credits); the file-by-file breakdown, the licence
 notices and the mentions to keep are in [`NOTICE.md`](NOTICE.md), which must be
 read before any redistribution:
 
-- **Overte** — **Apache 2.0**: all four idles, six gestures, and the whole 3D-world
-  domain except the seated transitions and the jump (14 clips).
+- **Overte** — **Apache 2.0**: **30 clips out of 35** — the whole face-to-face
+  domain (four idles, twelve gestures) and the whole 3D-world domain except the
+  seated transitions and the jump (14 clips).
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, public domain: the
   seated transitions and the jump (5 clips), the two families Overte does not have.
-- **CMU Graphics Lab Motion Capture Database**, BVH conversion by Bruce Hahne —
-  free to use, **acknowledgement required**: fifteen emotion gestures.
+
+The **CMU Graphics Lab Motion Capture Database** (BVH conversion by Bruce Hahne)
+supplied fifteen emotion gestures to the first version of this library; none of
+them held the acceptance rule above, and no file derives from it any more.

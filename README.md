@@ -223,21 +223,24 @@ no licence obliges us to name**, because a credit that is hidden honours nobody.
 
 ### Animations
 
-- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **24 of the 44 clips**, and by
-  far the primary source: the four idle animations and the "talking" idle that carry the whole
-  face-to-face mode, six conversation gestures (`happy`, `sad`, `neutral`, `nod`, `shake`, `think`),
-  and all of the 3D scene's locomotion and seated postures — walking, slow and fast walking, walking
-  backwards, turns, start, stop, seated hold, seated talking. These are neither raw capture nor
-  recycled Mixamo: they were **hand-made in Maya** by an animator on staff at High Fidelity, and
-  that animator's care is what shows — the fingers are animated, the poses join up with each other,
-  and the loops close. Copyright High Fidelity (2013-2019), Vircadia contributors (2019-2021),
-  Overte e.V. (2022-2026).
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **30 of the 35 clips**, and by
+  far the primary source: **the whole face-to-face mode** — the four idle animations, the "talking"
+  idle, and the twelve gestures (`neutral`, `happy` ×3, `sad`, `angry` ×2, `relaxed` ×2, `nod`,
+  `shake`, `think`) — plus all of the 3D scene's locomotion and seated postures: walking, slow and
+  fast walking, walking backwards, turns, start, stop, seated hold, seated talking. These are
+  neither raw capture nor recycled Mixamo: they were **hand-made in Maya** by an animator on staff
+  at High Fidelity, and that animator's care is what shows — the fingers are animated, the poses
+  join up with each other, and the loops close. Copyright High Fidelity (2013-2019), Vircadia
+  contributors (2019-2021), Overte e.V. (2022-2026).
 - **[Quaternius](https://quaternius.com)**, *Universal Animation Library* — *CC0 1.0*, public
   domain, **no attribution required**: we give it anyway. Five clips, the two families Overte does
   not have: sitting down, standing up, and the three beats of a jump.
 - **[CMU Graphics Lab Motion Capture Database](https://mocap.cs.cmu.edu)**, "Daz-friendly" BVH
-  conversion by **Bruce Hahne / cgspeed** (<https://www.cgspeed.com>). Fifteen emotion gestures.
-  Acknowledgement required by the database's usage terms:
+  conversion by **Bruce Hahne / cgspeed** (<https://www.cgspeed.com>). This database supplied
+  fifteen emotion gestures to the library's first version; **no file derives from it any more** —
+  measured, every one of them snagged on the way back to the idle, so six were replaced by Overte
+  animations and nine removed (see [`vrma/NOTICE.md`](vrma/NOTICE.md)). The credit stays here
+  because the work served, and so does the acknowledgement the database requires:
 
   > The data used in this project was obtained from mocap.cs.cmu.edu.
   > The database was created with funding from NSF EIA-0196217.
