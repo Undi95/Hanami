@@ -1479,6 +1479,63 @@ select {
   margin: 4px 0;
 }
 
+/* ── Sonde du serveur TTS ─────────────────────────────────────────────── */
+/* Une ligne de résultat, puis les voix annoncées par le serveur en pastilles :
+   cliquer une pastille remplit le champ « Voix » avec son identifiant exact. */
+
+.probe-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+/* Seule la marque porte la couleur : le texte reste sobre, même en erreur. */
+.probe-mark {
+  flex: none;
+  font-weight: 700;
+  color: var(--ok);
+}
+
+.probe-line.err .probe-mark {
+  color: var(--danger);
+}
+
+.voice-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.voice-chip {
+  max-width: 100%;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  line-height: 1.1;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.voice-chip:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text);
+}
+
+/* Voix actuellement dans le champ */
+.voice-chip[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
 /* ── Sélecteur segmenté (langue) ──────────────────────────────────────── */
 
 .seg {

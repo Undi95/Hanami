@@ -224,6 +224,10 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // Sonde TTS : une ligne de résultat + les voix annoncées par le serveur. Le
+  // résultat ne vaut que pour l'URL testée, donc il s'efface dès qu'elle change.
+  const [ttsProbe, setTtsProbe] = useState<{ ok: boolean; text: string; voices: api.TtsVoice[] } | null>(null)
+  const [ttsProbing, setTtsProbing] = useState(false)
 
   // Indicateurs de présence des secrets — la réponse serveur les porte (type local api.SettingsView),
   // shared/types.ts reste intact, d'où la lecture défensive.
@@ -267,6 +271,32 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
       setTestMsg({ ok: false, text: api.errorMessage(e) })
     } finally {
       setTesting(false)
+    }
+  }
+
+  /**
+   * Teste l'URL COURANTE du champ (même non enregistrée) et récupère les voix :
+   * l'identifiant exact d'une voix (du genre « clone:Sakurav1 ») est introuvable
+   * à la main, une pastille cliquable le recopie dans le champ.
+   */
+  async function testTts() {
+    setTtsProbing(true)
+    setTtsProbe(null)
+    try {
+      const r = await api.probeTts(form.ttsUrl.trim())
+      const voices = r.voices ?? []
+      const parts: string[] = []
+      if (r.info) parts.push(r.info)
+      if (r.reachable && voices.length === 0) parts.push(t('ttsProbeNoVoices'))
+      setTtsProbe({
+        ok: r.reachable,
+        text: parts.join(' — ') || t(r.reachable ? 'ttsProbeOk' : 'ttsProbeFail'),
+        voices,
+      })
+    } catch (e) {
+      setTtsProbe({ ok: false, text: api.errorMessage(e), voices: [] })
+    } finally {
+      setTtsProbing(false)
     }
   }
 
@@ -546,13 +576,49 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
       />
       <div className="field">
         <label htmlFor="set-tts-url">{t('ttsUrl')}</label>
-        <input
-          id="set-tts-url"
-          type="url"
-          value={form.ttsUrl}
-          placeholder="http://127.0.0.1:8880/v1"
-          onChange={(e) => set('ttsUrl', e.target.value)}
-        />
+        <div className="row">
+          <input
+            id="set-tts-url"
+            type="url"
+            value={form.ttsUrl}
+            placeholder="http://127.0.0.1:8880/v1"
+            style={{ flex: 1, minWidth: 0 }}
+            onChange={(e) => {
+              setTtsProbe(null)
+              set('ttsUrl', e.target.value)
+            }}
+          />
+          <button
+            className="btn small"
+            type="button"
+            onClick={() => testTts().catch((e) => console.error('[settings]', e))}
+            disabled={ttsProbing || !form.ttsUrl.trim()}
+          >
+            {ttsProbing ? t('ttsProbing') : t('ttsProbe')}
+          </button>
+        </div>
+        {ttsProbe && (
+          <span className={`probe-line${ttsProbe.ok ? '' : ' err'}`}>
+            <span className="probe-mark">{ttsProbe.ok ? '✓' : '✗'}</span>
+            <span>{ttsProbe.text}</span>
+          </span>
+        )}
+        {ttsProbe && ttsProbe.voices.length > 0 && (
+          <div className="voice-chips" role="group" aria-label={t('ttsProbeVoices')}>
+            {ttsProbe.voices.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                className="voice-chip"
+                aria-pressed={form.ttsVoice.trim() === v.id}
+                title={v.id}
+                onClick={() => set('ttsVoice', v.id)}
+              >
+                {v.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="grid-2">
         <div className="field">

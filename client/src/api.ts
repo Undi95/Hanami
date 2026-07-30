@@ -313,6 +313,27 @@ export async function tts(text: string): Promise<Blob> {
   return res.blob()
 }
 
+// Miroir de la réponse de GET /api/tts/probe — types locaux, shared/types.ts intact.
+export interface TtsVoice {
+  id: string
+  name: string
+}
+
+export interface TtsProbe {
+  reachable: boolean
+  info?: string
+  voices?: TtsVoice[]
+}
+
+/**
+ * Sonde le serveur TTS : joignable ? quelles voix propose-t-il ? L'URL passée est
+ * celle du champ de réglages, éventuellement pas encore enregistrée — elle prime
+ * côté serveur sur la configuration.
+ */
+export function probeTts(url: string): Promise<TtsProbe> {
+  return req('GET', `/api/tts/probe?url=${encodeURIComponent(url)}`)
+}
+
 // ── Inspecteur de prompt ───────────────────────────────────────────────────
 
 export function getPromptPreview(
