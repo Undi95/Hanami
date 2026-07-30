@@ -23,9 +23,17 @@ nom du tableau (marche, saut, danse…) sont là comme matière première pour l
 
 ## Crédits
 
-Clips issus de l'**Universal Animation Library** de **Quaternius**
-(<https://quaternius.com>), **CC0 1.0** (domaine public), convertis en `.vrma`
-par `scripts/convert-animations.mjs`.
+Trois provenances, toutes libres de redistribution — le détail fichier par
+fichier, les avis de licence complets et les mentions à conserver sont dans
+[`NOTICE.md`](NOTICE.md), à lire avant toute redistribution :
+
+- **Quaternius**, *Universal Animation Library* — **CC0 1.0**, domaine public
+  (idle, marche, assis, saut, nage, danse…).
+- **Overte** — **Apache 2.0** (`happy`, `sad`, `neutral`, `nod`, `shake`, `think`).
+- **CMU Graphics Lab Motion Capture Database**, conversion BVH de Bruce Hahne —
+  libre d'usage, remerciements exigés (les autres gestes d'émotion).
+
+Conversion en `.vrma` par `scripts/convert-animations.mjs`.
 
 ---
 
@@ -54,6 +62,14 @@ row above (walk, jump, dance…) are raw material for what comes next.
 
 ## Credits
 
-Clips from the **Universal Animation Library** by **Quaternius**
-(<https://quaternius.com>), **CC0 1.0** (public domain), converted to `.vrma`
-with `scripts/convert-animations.mjs`.
+Three origins, all free to redistribute — the file-by-file breakdown, the full
+licence notices and the mentions to keep are in [`NOTICE.md`](NOTICE.md), which
+must be read before any redistribution:
+
+- **Quaternius**, *Universal Animation Library* — **CC0 1.0**, public domain
+  (idle, walk, sit, jump, swim, dance…).
+- **Overte** — **Apache 2.0** (`happy`, `sad`, `neutral`, `nod`, `shake`, `think`).
+- **CMU Graphics Lab Motion Capture Database**, BVH conversion by Bruce Hahne —
+  free to use, acknowledgement required (the other emotion gestures).
+
+Converted to `.vrma` with `scripts/convert-animations.mjs`.
