@@ -41,6 +41,10 @@ import type { PosedBone } from './idle'
 import { normalizeEmotion, resolveExpressions } from './emotionMap'
 import { createWander } from './wander'
 import type { Wander, WanderHost } from './wander'
+import { createLegIk } from './legIk'
+import type { FootMode, LegIk } from './legIk'
+import { fetchSceneMap } from './sceneMap'
+import type { SceneMap } from './sceneMap'
 
 // Pose de repos (anti T-pose : les VRM chargent bras en croix) — rotation Z par os.
 const REST_POSE_Z: ReadonlyArray<readonly [VRMHumanBoneName, number]> = [
@@ -560,6 +564,15 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // n'est téléchargé, et les deux lignes ajoutées à tick() sont des `?.` sur null.
   let interactive = false
   let wander: Wander | null = null
+  // Cinématique inverse des jambes, reconstruite à chaque modèle (elle mesure
+  // ses segments sur le squelette en place). null = modèle sans os de jambes
+  // complets : la scène marche, sans correction d'assiette.
+  let legIk: LegIk | null = null
+  // Carte du décor en place (`<décor>.scene.json`). null = pas d'analyse : le
+  // décor reste un fond, exactement comme aujourd'hui.
+  let sceneMap: SceneMap | null = null
+  // Ce que les pieds doivent faire à cette image (cf. legIk.FootMode).
+  let footMode: FootMode = 'planted'
   // Instant (ms) du dernier geste de caméra de l'utilisateur, et geste en cours.
   // On ne déplace pas la scène sous sa main : le personnage attend qu'il ait
   // lâché, plus une seconde de grâce.
@@ -647,6 +660,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     VRMUtils.deepDispose(currentVrm.scene)
     currentVrm = null
     lastFrame = null
+    legIk = null // ses os appartiennent au modèle qu'on vient de jeter
     posedBones.clear()
     idle.setExpressionTable(new Map()) // plus de modèle : aucune expression pilotable
   }
@@ -823,12 +837,26 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     return Math.atan2(dx, dz)
   }
 
+  /**
+   * Altitude du sol sous un point du MONDE. La carte du décor fait foi ; hors de
+   * sa grille — ou sans analyse du tout — c'est le sol sous le personnage qui
+   * répond, pas zéro : une cheville qui sort de la grille d'un centimètre ne doit
+   * pas faire sauter la correction d'un coup.
+   */
+  function groundAt(x: number, z: number): number {
+    return sceneMap?.floorAt(x, z) ?? bodyGround
+  }
+
+  /** Altitude du sol sous le personnage, tenue à jour par le comportement. */
+  let bodyGround = 0
+
   /** Le contrat que la scène offre au comportement (cf. wander.ts). */
   const wanderHost: WanderHost = {
     hips: hipsRest,
-    place(x, y, z, yaw) {
+    place(x, y, z, yaw, ground) {
       avatarGroup.position.set(x, y, z)
       avatarGroup.rotation.y = yaw
+      bodyGround = ground
     },
     gait: setGait,
     once(name, fadeIn, then, fadeThen) {
@@ -1134,6 +1162,11 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       envRoot = null
     }
     envMetrics = null
+    sceneMap = null
+    // Le personnage rentre chez lui : la pièce où il s'était déplacé n'existe
+    // plus, et le laisser à ses coordonnées d'avant le poserait au hasard dans
+    // la suivante — ou dans le vide s'il n'y en a pas.
+    wander?.home()
     envGroup.position.set(0, 0, 0)
     envGroup.rotation.set(0, 0, 0)
     envGroup.scale.setScalar(1)
@@ -1188,8 +1221,15 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     }
     try {
       // Le sidecar part en même temps que le .glb : il est minuscule, et son
-      // absence (le cas normal) ne coûte rien de plus qu'un 404.
-      const [gltf, placement] = await Promise.all([envLoader.loadAsync(url), fetchPlacement(url)])
+      // absence (le cas normal) ne coûte rien de plus qu'un 404. La CARTE
+      // (`<décor>.scene.json`) part avec eux : elle n'est pas encore là quand
+      // l'analyse tourne, et ce n'est pas une panne — le décor est simplement un
+      // fond en attendant qu'elle arrive.
+      const [gltf, placement, map] = await Promise.all([
+        envLoader.loadAsync(url),
+        fetchPlacement(url),
+        fetchSceneMap(url),
+      ])
       if (generation !== envGeneration || disposed) {
         // Un loadEnvironment plus récent (ou dispose) est passé entre-temps.
         VRMUtils.deepDispose(gltf.scene)
@@ -1202,6 +1242,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       applyEnvExposure(envRoot, placement.exposure ?? 1)
       envGroup.add(envRoot)
       fitEnvironment(envRoot, placement)
+      // APRÈS unloadEnvironment, qui remet la carte à null et ramène le
+      // personnage chez lui : sinon la carte du nouveau décor serait effacée
+      // aussitôt posée.
+      sceneMap = map
       applyLightRegime()
       applyEnvLimits()
     } catch (e) {
@@ -1247,6 +1291,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       idle.reset()
       idle.setExpressionTable(resolveExpressions(vrm.expressionManager))
       const height = normalizeScale(vrm)
+      // L'IK se mesure ICI : le modèle est en place, à son échelle finale, et
+      // encore dans sa pose de repos — donc pieds au sol par convention VRM,
+      // ce dont dépend tout le calcul du point « semelle ».
+      legIk = createLegIk(vrm)
       lastFrame = { vrm, h: height }
       frameCamera(vrm, height)
       // Les .vrma partent APRÈS le cadrage, sans être attendues : l'avatar est
@@ -1278,11 +1326,23 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // re-capture les prendrait pour de la pose animée sur les os que le clip
       // courant ne touche pas — et les cumulerait à l'infini.
       for (const { node, base } of posedBones.values()) node.rotation.copy(base)
+      // Les JAMBES suivent exactement le même protocole, pour exactement la même
+      // raison : la correction d'assiette de l'image précédente est défaite ici,
+      // sans quoi elle se cumulerait sur les os qu'un clip n'anime pas.
+      if (interactive) legIk?.beforeMixer()
       // Les poids du fondu en cours sont posés AVANT l'évaluation : le mixer lit
       // ceux de CETTE image, et leur somme vaut 1 quand il accumule.
       advanceFade(delta)
       mixer.update(delta)
       for (const bone of posedBones.values()) bone.base.copy(bone.node.rotation)
+      // Cinématique inverse : le clip a donné l'allure, on corrige l'assiette.
+      // APRÈS le mixer (elle lit la pose qu'il vient d'écrire) et AVANT l'idle,
+      // qui ne touche que le tronc, les bras et le visage — les deux ne se
+      // rencontrent sur aucun os.
+      if (interactive && legIk) {
+        legIk.afterMixer()
+        legIk.apply(footMode, groundAt)
+      }
       // Le squelette porte maintenant la pose du socle, et RIEN d'autre : c'est
       // l'instant juste pour recadrer, avant que l'idle n'ajoute sa respiration
       // (ses offsets oscillent — les inclure figerait une phase au hasard dans le

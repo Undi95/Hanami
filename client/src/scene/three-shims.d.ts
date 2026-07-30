@@ -22,6 +22,18 @@ declare module 'three' {
     negate(): this
     length(): number
     applyAxisAngle(axis: Vector3, angle: number): this
+    // Ajouts de la cinématique inverse (scene/legIk.ts). Toutes ces méthodes
+    // écrivent DANS l'objet et le rendent : l'IK tourne à chaque image et
+    // n'alloue rien.
+    lengthSq(): number
+    normalize(): this
+    dot(v: Vector3): number
+    distanceTo(v: Vector3): number
+    subVectors(a: Vector3, b: Vector3): this
+    addVectors(a: Vector3, b: Vector3): this
+    crossVectors(a: Vector3, b: Vector3): this
+    addScaledVector(v: Vector3, s: number): this
+    applyQuaternion(q: Quaternion): this
   }
 
   export class Box3 {
@@ -54,6 +66,15 @@ declare module 'three' {
     copy(q: Quaternion): this
     clone(): Quaternion
     setFromEuler(euler: Euler, update?: boolean): this
+    // Ajouts de la cinématique inverse. `multiply` compose à DROITE (this × q),
+    // `premultiply` à gauche (q × this) : c'est la distinction qui sépare
+    // « tourner dans son repère local » de « tourner dans le monde ».
+    identity(): this
+    invert(): this
+    multiply(q: Quaternion): this
+    premultiply(q: Quaternion): this
+    setFromAxisAngle(axis: Vector3, angle: number): this
+    setFromUnitVectors(from: Vector3, to: Vector3): this
   }
 
   export class Object3D {
@@ -72,7 +93,19 @@ declare module 'three' {
     remove(...objects: Object3D[]): this
     traverse(callback: (object: Object3D) => void): void
     getWorldPosition(target: Vector3): Vector3
+    getWorldQuaternion(target: Quaternion): Quaternion
     updateMatrixWorld(force?: boolean): void
+    /**
+     * Recompose la matrice monde de CE nœud, et de ses parents si demandé, sans
+     * descendre dans ses enfants. C'est ce dont la cinématique inverse a besoin :
+     * elle lit et écrit une chaîne de trois os, pas un squelette entier — et
+     * contrairement à updateMatrixWorld, cet appel ne baisse pas le drapeau
+     * `matrixWorldNeedsUpdate`, donc la passe de rendu fait son travail comme
+     * d'habitude ensuite.
+     */
+    updateWorldMatrix(updateParents: boolean, updateChildren: boolean): void
+    localToWorld(vector: Vector3): Vector3
+    worldToLocal(vector: Vector3): Vector3
   }
 
   export class Group extends Object3D {}

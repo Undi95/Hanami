@@ -59,8 +59,13 @@ function clamp(v: number, min: number, max: number): number {
 export interface WanderHost {
   /** Hauteur de hanches au repos du modèle chargé (m). L'unité de tout le reste. */
   hips(): number
-  /** Pose le corps : position au sol (m) et cap (rad, 0 = regarde +Z). */
-  place(x: number, y: number, z: number, yaw: number): void
+  /**
+   * Pose le corps. `y` est l'altitude du GROUPE (les pieds, sauf assis où le
+   * bassin est remonté) ; `ground` est celle du SOL sous lui — les deux
+   * diffèrent dès qu'on est assis, et c'est `ground` que la cinématique inverse
+   * vise pour poser les pieds. `yaw` en radians, 0 = regarde +Z.
+   */
+  place(x: number, y: number, z: number, yaw: number, ground: number): void
   /** Socle d'allure en boucle (clé du domaine `world-`), null = retour au socle normal. */
   gait(name: string | null, fade: number): void
   /** Clip à cycle unique, puis `then` (null = socle voulu). */
@@ -78,9 +83,12 @@ export interface WanderHost {
 /** Où se tient le personnage. Écrit par le comportement, lu par la scène. */
 export interface Pose {
   x: number
+  /** Altitude du groupe (pieds au sol debout, bassin remonté assis). */
   y: number
   z: number
   yaw: number
+  /** Altitude du SOL sous le personnage — la cible de l'IK des pieds. */
+  ground: number
 }
 
 type State = 'rest' | 'pivot'
@@ -95,7 +103,7 @@ export interface Wander {
 }
 
 export function createWander(host: WanderHost): Wander {
-  const p: Pose = { x: 0, y: 0, z: 0, yaw: 0 }
+  const p: Pose = { x: 0, y: 0, z: 0, yaw: 0, ground: 0 }
   let state: State = 'rest'
   // Cap visé pendant un pivot, et sens du clip en cours (+1 = gauche).
   let yawTarget = 0
@@ -154,7 +162,7 @@ export function createWander(host: WanderHost): Wander {
         break
       }
     }
-    host.place(p.x, p.y, p.z, p.yaw)
+    host.place(p.x, p.y, p.z, p.yaw, p.ground)
   }
 
   return {
@@ -168,8 +176,9 @@ export function createWander(host: WanderHost): Wander {
       p.y = 0
       p.z = 0
       p.yaw = 0
+      p.ground = 0
       state = 'rest'
-      host.place(0, 0, 0, 0)
+      host.place(0, 0, 0, 0, 0)
     },
   }
 }
