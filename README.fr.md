@@ -75,11 +75,12 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
 - 💃 **Animations gestuelles (`.vrma`)** : un idle en boucle, un geste joué une fois quand le
   personnage exprime une émotion, et un idle « qui parle » pendant qu'une réponse s'écrit. Le nom du
   fichier dans `vrma/` est toute la configuration — `idle`, les six noms d'émotion (`happy`, `sad`,
-  `angry`, `surprised`, `relaxed`, `neutral`), les préfixes `pose-`/`sit-` pour les postures, un
-  suffixe `-2`/`-3` pour des variantes tirées au hasard ; tout autre nom est ignoré. La respiration
+  `angry`, `surprised`, `relaxed`, `neutral`), un suffixe `-2`/`-3` pour des variantes tirées au
+  hasard, et un préfixe `world-` pour les clips réservés à la scène 3D (allures, postures assises,
+  saut), qui ne sont donc même pas téléchargés ici ; tout autre nom est ignoré. La respiration
   et le sway de la tête continuent **par-dessus** l'animation, et le visage reste l'affaire du
-  modèle. Les clips livrés avec l'app sont tous librement redistribuables et crédités dans
-  `vrma/README.md`. Interrupteur dans *Réglages > Apparence > Scène*.
+  modèle. Les clips livrés avec l'app sont tous librement redistribuables — voir les
+  [crédits](#crédits). Interrupteur dans *Réglages > Apparence > Scène*.
 - 🏠 **Décor 3D** : une pièce `.glb` de `environments/`, posée autour de l'avatar à la place du fond
   2D — choisie par personnage, avec un sidecar `.json` optionnel pour l'échelle, la rotation, le
   point d'accueil et l'exposition. Interrupteur dans *Réglages > Apparence > Scène*.
@@ -189,9 +190,9 @@ La langue et le thème s'appliquent immédiatement ; tout le reste prend effet �
   `portraits/` sont ignorés par git, sauf leur `README.md`. La plupart des modèles VRoid Hub /
   Booth interdisent la redistribution : chacun apporte les siens.
 - **`environments/` et `vrma/` sont suivis VOLONTAIREMENT** : tout le monde doit avoir la même
-  scène, donc seuls des assets librement redistribuables y vont — les animations sont créditées dans
-  `vrma/README.md` (avis de licence complets dans `vrma/NOTICE.md`), les décors dans
-  `environments/CREDITS.md`.
+  scène, donc seuls des assets librement redistribuables y vont. Animations et décors sont crédités
+  dans les [crédits](#crédits) ; le détail juridique fichier par fichier est dans `vrma/NOTICE.md`
+  et `environments/CREDITS.md`.
 - `presets/hana/` est le seul personnage livré avec le dépôt — un exemple écrit pour n'être
   personnel à personne, bilingue, et sans modèle 3D pour que tu lui donnes le tien. Au premier
   lancement, chaque dossier de `presets/` est copié dans `data/characters/` puis plus jamais
@@ -225,8 +226,74 @@ docs/                  # guides d'accès distant et mobile
 scripts/               # mock-llm (faux backend compatible OpenAI)
 ```
 
+## Crédits
+
+Hanami ne serait pas là sans le travail d'autres gens. Tout est réuni ici — **y compris ce
+qu'aucune licence n'oblige à citer**, parce qu'un crédit caché n'honore personne.
+
+### Animations
+
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **24 des 44 clips**, et de
+  loin la source principale : les quatre animations de repos et le repos « en train de parler »
+  qui portent tout le mode face à face, six gestes de conversation (`happy`, `sad`, `neutral`,
+  `nod`, `shake`, `think`), et l'intégralité de la locomotion et des postures assises de la scène
+  3D — marche, marche lente et rapide, recul, pivots, départ, arrêt, maintien assis, parole assise.
+  Ce ne sont ni des captures brutes ni du Mixamo recyclé : elles ont été **faites à la main dans
+  Maya** par un animateur salarié de High Fidelity, et c'est ce soin d'animateur qui se voit — les
+  doigts sont animés, les poses se raccordent entre elles, et les boucles se referment.
+  Copyright High Fidelity (2013-2019), contributeurs Vircadia (2019-2021), Overte e.V. (2022-2026).
+- **[Quaternius](https://quaternius.com)**, *Universal Animation Library* — *CC0 1.0*, domaine
+  public, **aucune attribution requise** : on la donne quand même. Cinq clips, les deux familles
+  qu'Overte n'a pas : s'asseoir, se lever, et les trois temps du saut.
+- **[CMU Graphics Lab Motion Capture Database](https://mocap.cs.cmu.edu)**, conversion BVH
+  « Daz-friendly » de **Bruce Hahne / cgspeed** (<https://www.cgspeed.com>). Quinze gestes
+  d'émotion. Remerciements exigés par les conditions d'usage de la base :
+
+  > The data used in this project was obtained from mocap.cs.cmu.edu.
+  > The database was created with funding from NSF EIA-0196217.
+
+### Décors 3D
+
+Trois pièces d'intérieur, toutes en **CC BY 4.0** — la seule licence de ce projet qui *impose*
+l'attribution. Via [Sketchfab](https://sketchfab.com) :
+
+- « **Anime Class Room** » par **AnixMoonLight** ([profil](https://sketchfab.com/ani111)) — la salle
+  de classe.
+- « **Cute Isometric Room ✿** » par **JaDe.Dfr** ([profil](https://sketchfab.com/JaDe.Dfr)) — le
+  loft cosy.
+- « **Rustic Bedroom** » par **Bársh** ([profil](https://sketchfab.com/borsh_and)) — la chambre
+  rustique.
+
+### Police
+
+- **[Mulish](https://github.com/googlefonts/mulish)**, par The Mulish Project Authors — *SIL Open
+  Font License 1.1* (texte intégral : `client/public/fonts/OFL-Mulish.txt`). Toute la typographie
+  de l'interface. L'OFL n'exige pas d'attribution dans la documentation : on la donne quand même.
+
+### Code
+
+Rien de ce qui suit n'exige d'être cité. Tout y est quand même.
+
+- **[vrm-c/bvh2vrma](https://github.com/vrm-c/bvh2vrma)** — *MIT*, VRM Consortium. Ses convertisseurs
+  ont servi de référence pour écrire les nôtres : c'est de là que vient notre compréhension de
+  l'écriture de l'extension `VRMC_vrm_animation` et du traitement de la translation du bassin.
+- **[three.js](https://threejs.org)** (*MIT*, mrdoob et ses contributeurs) — tout le rendu 3D.
+- **[@pixiv/three-vrm](https://github.com/pixiv/three-vrm)** et **@pixiv/three-vrm-animation**
+  (*MIT*, pixiv) — le chargement des modèles VRM, le rig humanoïde normalisé et la lecture des
+  `.vrma`. Sans eux il n'y a pas d'avatar.
+- **[React](https://react.dev)** (*MIT*) — l'interface. **[Express](https://expressjs.com)** (*MIT*,
+  TJ Holowaychuk) — le serveur. **[Vite](https://vite.dev)** (*MIT*, Evan You) — le build et le
+  serveur de développement. **[TypeScript](https://www.typescriptlang.org)** (*Apache-2.0*,
+  Microsoft) et **[tsx](https://github.com/privatenumber/tsx)** (*MIT*, Hiroki Osame) — le langage
+  et son exécution directe côté serveur.
+
+Le détail juridique — correspondance fichier par fichier, avis de licence intégraux, mentions à
+conserver en cas de redistribution — est dans [`vrma/NOTICE.md`](vrma/NOTICE.md) pour les animations
+et [`environments/CREDITS.md`](environments/CREDITS.md) pour les décors. Cette section donne le
+crédit ; ces deux fichiers le documentent.
+
 ## Licence
 
 AGPL-3.0. Les modèles VRM et les images ne sont pas inclus — respecte la licence de chaque
 modèle que tu utilises. Les animations `.vrma` de `vrma/` et les décors de `environments/` portent
-leurs propres licences et crédits (`vrma/README.md`, `vrma/NOTICE.md`, `environments/CREDITS.md`).
+leurs propres licences : voir les [crédits](#crédits) ci-dessus.

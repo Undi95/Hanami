@@ -71,10 +71,11 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
 - 💃 **Gesture animations (`.vrma`)**: a looping idle, a one-shot gesture when the character
   expresses an emotion, and a talking idle while a reply is being written. The file name in `vrma/`
   is the whole configuration — `idle`, the six emotion names (`happy`, `sad`, `angry`, `surprised`,
-  `relaxed`, `neutral`), the `pose-`/`sit-` prefixes for postures, a `-2`/`-3` suffix for variants
-  picked at random; any other name is ignored. Breathing and head sway keep playing **on top** of
+  `relaxed`, `neutral`), a `-2`/`-3` suffix for variants picked at random, and a `world-` prefix for
+  the clips that belong to the 3D scene only (gaits, seated postures, jump) and are therefore never
+  even downloaded here; any other name is ignored. Breathing and head sway keep playing **on top** of
   the animation, and the face stays the model's business. The clips shipped with the app are all
-  freely redistributable and credited in `vrma/README.md`. Switch in *Settings > Appearance > Scene*.
+  freely redistributable — see the [credits](#credits). Switch in *Settings > Appearance > Scene*.
 - 🏠 **3D environment**: a `.glb` room from `environments/`, placed around the avatar instead of the
   2D background — chosen per character, with an optional `.json` sidecar for scale, rotation, spawn
   point and exposure. Switch in *Settings > Appearance > Scene*.
@@ -180,8 +181,8 @@ Language and theme apply immediately; everything else takes effect when you save
   `portraits/` are git-ignored except for their `README.md`. Most VRoid Hub / Booth models forbid
   redistribution, so each user brings their own.
 - **`environments/` and `vrma/` are tracked on purpose**: everybody should get the same scene, so
-  only freely redistributable assets go there — the animations are credited in `vrma/README.md`
-  (with the full licence notices in `vrma/NOTICE.md`), the environments in
+  only freely redistributable assets go there. Animations and environments are credited in the
+  [credits](#credits); the file-by-file legal detail is in `vrma/NOTICE.md` and
   `environments/CREDITS.md`.
 - `presets/hana/` is the only character shipped with the repository — an example written to be
   nobody's in particular, bilingual, without a 3D model so that you can give her yours. On first
@@ -215,8 +216,74 @@ docs/                  # remote access and mobile guides
 scripts/               # mock-llm (fake OpenAI-compatible backend)
 ```
 
+## Credits
+
+Hanami would not exist without other people's work. Everything is gathered here — **including what
+no licence obliges us to name**, because a credit that is hidden honours nobody.
+
+### Animations
+
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **24 of the 44 clips**, and by
+  far the primary source: the four idle animations and the "talking" idle that carry the whole
+  face-to-face mode, six conversation gestures (`happy`, `sad`, `neutral`, `nod`, `shake`, `think`),
+  and all of the 3D scene's locomotion and seated postures — walking, slow and fast walking, walking
+  backwards, turns, start, stop, seated hold, seated talking. These are neither raw capture nor
+  recycled Mixamo: they were **hand-made in Maya** by an animator on staff at High Fidelity, and
+  that animator's care is what shows — the fingers are animated, the poses join up with each other,
+  and the loops close. Copyright High Fidelity (2013-2019), Vircadia contributors (2019-2021),
+  Overte e.V. (2022-2026).
+- **[Quaternius](https://quaternius.com)**, *Universal Animation Library* — *CC0 1.0*, public
+  domain, **no attribution required**: we give it anyway. Five clips, the two families Overte does
+  not have: sitting down, standing up, and the three beats of a jump.
+- **[CMU Graphics Lab Motion Capture Database](https://mocap.cs.cmu.edu)**, "Daz-friendly" BVH
+  conversion by **Bruce Hahne / cgspeed** (<https://www.cgspeed.com>). Fifteen emotion gestures.
+  Acknowledgement required by the database's usage terms:
+
+  > The data used in this project was obtained from mocap.cs.cmu.edu.
+  > The database was created with funding from NSF EIA-0196217.
+
+### 3D environments
+
+Three interior rooms, all under **CC BY 4.0** — the only licence in this project that *requires*
+attribution. Via [Sketchfab](https://sketchfab.com):
+
+- "**Anime Class Room**" by **AnixMoonLight** ([profile](https://sketchfab.com/ani111)) — the
+  classroom.
+- "**Cute Isometric Room ✿**" by **JaDe.Dfr** ([profile](https://sketchfab.com/JaDe.Dfr)) — the cosy
+  loft.
+- "**Rustic Bedroom**" by **Bársh** ([profile](https://sketchfab.com/borsh_and)) — the rustic
+  bedroom.
+
+### Typeface
+
+- **[Mulish](https://github.com/googlefonts/mulish)**, by The Mulish Project Authors — *SIL Open
+  Font License 1.1* (full text: `client/public/fonts/OFL-Mulish.txt`). Every piece of type in the
+  interface. The OFL does not require attribution in documentation: we give it anyway.
+
+### Code
+
+None of the following requires being named. All of it is named anyway.
+
+- **[vrm-c/bvh2vrma](https://github.com/vrm-c/bvh2vrma)** — *MIT*, VRM Consortium. Its converters
+  were the reference we wrote ours against: our understanding of how to write the
+  `VRMC_vrm_animation` extension and how to handle hip translation comes from there.
+- **[three.js](https://threejs.org)** (*MIT*, mrdoob and contributors) — all of the 3D rendering.
+- **[@pixiv/three-vrm](https://github.com/pixiv/three-vrm)** and **@pixiv/three-vrm-animation**
+  (*MIT*, pixiv) — VRM model loading, the normalised humanoid rig and `.vrma` playback. Without them
+  there is no avatar.
+- **[React](https://react.dev)** (*MIT*) — the interface. **[Express](https://expressjs.com)**
+  (*MIT*, TJ Holowaychuk) — the server. **[Vite](https://vite.dev)** (*MIT*, Evan You) — the build
+  and the dev server. **[TypeScript](https://www.typescriptlang.org)** (*Apache-2.0*, Microsoft) and
+  **[tsx](https://github.com/privatenumber/tsx)** (*MIT*, Hiroki Osame) — the language and running
+  it directly on the server.
+
+The legal detail — file-by-file mapping, full licence notices, mentions to preserve when
+redistributing — lives in [`vrma/NOTICE.md`](vrma/NOTICE.md) for the animations and
+[`environments/CREDITS.md`](environments/CREDITS.md) for the environments. This section gives the
+credit; those two files document it.
+
 ## License
 
 AGPL-3.0. VRM models and images are not included — respect the license of every model you use. The
-`.vrma` animations of `vrma/` and the environments of `environments/` come with their own licences
-and credits (`vrma/README.md`, `vrma/NOTICE.md`, `environments/CREDITS.md`).
+`.vrma` animations of `vrma/` and the environments of `environments/` come with their own licences:
+see the [credits](#credits) above.
