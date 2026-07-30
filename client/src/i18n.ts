@@ -205,8 +205,10 @@ const FR = {
   ttsUrl: 'URL du serveur TTS (compatible OpenAI)',
   ttsModel: 'Modèle TTS',
   ttsVoice: 'Voix',
-  ttsHint: 'Serveur exposant POST /audio/speech au format OpenAI. Champs modèle/voix selon le serveur.',
+  ttsHint:
+    'Serveur exposant POST /audio/speech au format OpenAI — l’URL se termine souvent par /v1 (ex. http://127.0.0.1:8880/v1). Champs modèle/voix selon le serveur.',
   ttsError: 'Synthèse vocale : {message}',
+  replayTts: 'Réécouter',
   sectionSpontaneous: 'Messages spontanés',
   spontaneousEnabled: 'Le personnage peut écrire de lui-même',
   spontaneousEnabledSub:
@@ -467,8 +469,10 @@ const EN: Record<Key, string> = {
   ttsUrl: 'TTS server URL (OpenAI-compatible)',
   ttsModel: 'TTS model',
   ttsVoice: 'Voice',
-  ttsHint: 'Server exposing POST /audio/speech in the OpenAI format. Model/voice fields depend on the server.',
+  ttsHint:
+    'Server exposing POST /audio/speech in the OpenAI format — the URL usually ends with /v1 (e.g. http://127.0.0.1:8880/v1). Model/voice fields depend on the server.',
   ttsError: 'Text-to-speech: {message}',
+  replayTts: 'Replay',
   sectionSpontaneous: 'Spontaneous messages',
   spontaneousEnabled: 'The character can write on their own',
   spontaneousEnabledSub:

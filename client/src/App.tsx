@@ -987,6 +987,15 @@ function AppInner() {
                   else setFeed((f) => [...f, { kind: 'error', text: api.errorMessage(e) }])
                 })
             }}
+            onReplay={
+              settings?.ttsEnabled
+                ? (msg) => {
+                    playTts(msg.content).catch((e) =>
+                      setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }]),
+                    )
+                  }
+                : null
+            }
           />
         )}
 
@@ -1004,6 +1013,20 @@ function AppInner() {
                 onClick={() => runGeneration({ mode: 'continue' }).catch((e) => console.error('[continue]', e))}
               >
                 {t('continueReply')}
+              </button>
+            )}
+            {/* En VN les bulles sont hors d'atteinte : le rejeu vit ici. En
+                desktop, l'icône haut-parleur de la bulle s'en charge déjà. */}
+            {vnMode && canContinue && settings?.ttsEnabled && lastFeedMsg && (
+              <button
+                className="btn small"
+                onClick={() => {
+                  playTts(lastFeedMsg.msg.content).catch((e) =>
+                    setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }]),
+                  )
+                }}
+              >
+                {t('replayTts')}
               </button>
             )}
           </div>

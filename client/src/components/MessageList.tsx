@@ -33,6 +33,8 @@ interface Props {
   onReply: (msg: ChatMessage) => void
   /** Épingle un message (remplace l'épingle précédente) ou la retire (null). */
   onPin: (ordinal: number | null) => void
+  /** Rejoue la réplique à voix haute — null quand la synthèse vocale est coupée. */
+  onReplay: ((msg: ChatMessage) => void) | null
 }
 
 // ── Recherche dans le fil ──────────────────────────────────────────────────
@@ -172,6 +174,7 @@ export default function MessageList({
   onRemember,
   onReply,
   onPin,
+  onReplay,
 }: Props) {
   const { lang, t } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -373,6 +376,20 @@ export default function MessageList({
                         <path d="M12 12v8" />
                       </svg>
                     </button>
+                    {onReplay && item.msg.role === 'assistant' && (
+                      <button
+                        className="msg-edit"
+                        title={t('replayTts')}
+                        aria-label={t('replayTts')}
+                        onClick={() => onReplay(item.msg)}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10.5 5.5L6.5 9H4v6h2.5l4 3.5z" />
+                          <path d="M14.5 9.5a3.5 3.5 0 010 5" />
+                          <path d="M17 7a7 7 0 010 10" />
+                        </svg>
+                      </button>
+                    )}
                   </>
                 )}
               </div>
