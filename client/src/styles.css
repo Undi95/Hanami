@@ -508,6 +508,7 @@ select {
 .topbar-main {
   display: flex;
   align-items: center;
+  justify-content: flex-end; /* les icônes gardent leur place à droite */
   gap: 6px;
   min-height: 46px;
 }
@@ -518,24 +519,27 @@ select {
   }
 }
 
+/* Le nom vit en tête de la ligne 2 : il ne cède JAMAIS sa place au titre
+   (flex none) mais s'arrête à la moitié de la ligne pour les noms fleuves. */
 .topbar-name {
-  flex: 1;
-  min-width: 0;
+  flex: none;
+  max-width: 50%;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 12.5px;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Ligne 2 : titre du chat, la jauge de contexte accolée juste après */
+/* Ligne 2 : nom du personnage, titre du chat, jauge de contexte accolée */
 .topbar-sub {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 11.5px;
   color: var(--text-dim);
-  padding: 0 6px 2px 0;
+  padding: 0 6px 4px 0;
 }
 
 /* `flex: 0 1 auto` : le titre ne s'étire pas (la jauge reste collée à lui) mais

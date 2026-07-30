@@ -29,8 +29,15 @@ const COMMANDS: readonly { name: CommandName; hint: Key }[] = [
 // « /comp » pendant la frappe (menu ouvert) ; l'espace ferme le menu, l'argument
 // éventuel appartient à la commande. Multiligne exclu : une commande tient sur
 // sa ligne, un message qui COMMENCE par « / » mais continue ailleurs part au modèle.
+// /clear : synonyme muet de /clean (le réflexe des habitués de CLI) — accepté à
+// l'exécution, jamais affiché dans le menu.
 const TYPING_RE = /^\/([a-z]*)$/
-const COMMAND_RE = /^\/(compact|clean)(?:\s+([\s\S]*))?$/
+const COMMAND_RE = /^\/(compact|clean|clear)(?:\s+([\s\S]*))?$/
+
+/** Nom canonique d'une commande capturée par COMMAND_RE (résout les synonymes). */
+function canonical(name: string): CommandName {
+  return name === 'clear' ? 'clean' : (name as CommandName)
+}
 
 // Plafonds côté client — le serveur les revalide (4 images, ~2 Mo chacune).
 const MAX_IMAGES = 4
@@ -102,11 +109,23 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
   const cmdOpen = !cmdClosed && cmdMatches.length > 0
   const cmdActive = Math.min(cmdIndex, cmdMatches.length - 1)
 
-  /** Reprend le nom complet dans le champ — l'utilisateur valide ou argumente. */
+  /** Reprend le nom complet dans le champ (Tab) — pour argumenter /compact. */
   function pickCommand(name: CommandName) {
-    setText(`/${name}`)
+    setText(`/${name} `)
     setCmdIndex(0)
     taRef.current?.focus()
+  }
+
+  /** Exécute la commande surlignée, sans argument — « / » puis Entrée suffit. */
+  function runCommand(name: CommandName) {
+    if (disabled || streaming) return
+    onCommand(name, '')
+    setText('')
+    setCmdIndex(0)
+    requestAnimationFrame(() => {
+      const el = taRef.current
+      if (el) el.style.height = 'auto'
+    })
   }
 
   function autosize() {
@@ -138,7 +157,7 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
     // Commande complète → interceptée, jamais envoyée au modèle. Un « /xyz »
     // inconnu part comme du texte normal : seules NOS commandes sont happées.
     const cmd = COMMAND_RE.exec(value)
-    if (cmd) onCommand(cmd[1] as CommandName, (cmd[2] ?? '').trim())
+    if (cmd) onCommand(canonical(cmd[1]), (cmd[2] ?? '').trim())
     else onSend(value, shots)
     setText('')
     setShots([])
@@ -213,8 +232,9 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
           autosize()
         }}
         onKeyDown={(e) => {
-          // Menu des commandes ouvert : les flèches naviguent, Tab/Entrée
-          // reprennent le nom complet, Échap ferme sans toucher au texte.
+          // Menu des commandes ouvert : les flèches naviguent, ENTRÉE EXÉCUTE la
+          // commande surlignée (« / » puis Entrée suffit, comme un vrai CLI),
+          // Tab complète le nom pour argumenter, Échap ferme sans toucher au texte.
           if (cmdOpen) {
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
               e.preventDefault()
@@ -222,13 +242,14 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
               setCmdIndex((cmdActive + delta + cmdMatches.length) % cmdMatches.length)
               return
             }
-            if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+            if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
-              const chosen = cmdMatches[cmdActive]
-              // Nom déjà tapé en entier : Entrée exécute (submit l'intercepte) —
-              // sinon elle complète, et une seconde Entrée exécutera.
-              if (e.key === 'Enter' && typing !== null && typing[1] === chosen.name) submit()
-              else pickCommand(chosen.name)
+              runCommand(cmdMatches[cmdActive].name)
+              return
+            }
+            if (e.key === 'Tab') {
+              e.preventDefault()
+              pickCommand(cmdMatches[cmdActive].name)
               return
             }
             if (e.key === 'Escape') {
@@ -253,10 +274,11 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
               role="option"
               aria-selected={i === cmdActive}
               className={`cmd-item${i === cmdActive ? ' active' : ''}`}
-              // onMouseDown : un clic ne doit pas d'abord voler le focus du textarea.
+              // onMouseDown : un clic ne doit pas d'abord voler le focus du
+              // textarea — et il EXÉCUTE, comme Entrée (Tab argumente).
               onMouseDown={(e) => {
                 e.preventDefault()
-                pickCommand(c.name)
+                runCommand(c.name)
               }}
             >
               <span className="cmd-name">/{c.name}</span>

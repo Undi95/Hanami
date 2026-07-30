@@ -125,10 +125,10 @@ export default function TopBar({
 
   return (
     <header className="topbar">
-      {/* Ligne 1 : nom + icônes. Ligne 2 : titre du chat suivi de la jauge —
-          plus jamais tronqué par la rangée d'icônes. */}
+      {/* Ligne 1 : les icônes SEULES — huit boutons ne laissaient que des
+          miettes au nom du personnage. Ligne 2 : nom, titre du chat, jauge ;
+          c'est le titre qui se tronque en premier, le nom garde sa place. */}
       <div className="topbar-main">
-        <div className="topbar-name">{characterName}</div>
         <nav aria-label={t('menus')}>
           {/* Bascule d'affichage (pas un dialog) : boîte de dialogue VN par-dessus la scène. */}
           <button
@@ -171,12 +171,11 @@ export default function TopBar({
           ))}
         </nav>
       </div>
-      {chatTitle && (
-        <div className="topbar-sub">
-          <span className="topbar-title">{chatTitle}</span>
-          {contextPercent !== null && <CtxBadge percent={contextPercent} title={contextTitle} />}
-        </div>
-      )}
+      <div className="topbar-sub">
+        <span className="topbar-name">{characterName}</span>
+        {chatTitle && <span className="topbar-title">{chatTitle}</span>}
+        {contextPercent !== null && <CtxBadge percent={contextPercent} title={contextTitle} />}
+      </div>
     </header>
   )
 }
