@@ -1,11 +1,14 @@
 // Scène 3D de l'avatar VRM — implémente le contrat VrmStage (./types).
 // three + @pixiv/three-vrm ; l'UI importe createVrmStage dynamiquement.
 import {
+  AnimationMixer,
   Box3,
   Clock,
   DirectionalLight,
   Group,
   HemisphereLight,
+  LoopOnce,
+  LoopRepeat,
   MOUSE,
   Object3D,
   PerspectiveCamera,
@@ -15,10 +18,20 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three'
+import type { AnimationAction, AnimationClip } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
 import type { VRM, VRMHumanBoneName } from '@pixiv/three-vrm'
+import {
+  VRMAnimationLoaderPlugin,
+  VRMLookAtQuaternionProxy,
+  createVRMAnimationClip,
+} from '@pixiv/three-vrm-animation'
+import type { VRMAnimation } from '@pixiv/three-vrm-animation'
+import { EMOTIONS } from '../../../shared/types'
+import type { Emotion } from '../../../shared/types'
+import { getVrmAnimations } from '../api'
 import type { FrameMode, StageView, VrmStage } from './types'
 import { IdleAnimator } from './idle'
 import type { PosedBone } from './idle'
@@ -156,6 +169,108 @@ const TRACKED_BONES: readonly VRMHumanBoneName[] = [
   'rightLowerArm',
 ]
 
+// ── Animations .vrma ────────────────────────────────────────────────────────
+// Le NOM DE FICHIER est toute la configuration : ni mapping, ni liste en dur, ni
+// écran de réglages. Un nom qui ne correspond à aucun rôle est ignoré EN SILENCE
+// — le dossier vrma/ contient aussi de la matière première pour la suite (marche,
+// nage, saut…), qui ne doit surtout pas se déclencher toute seule.
+
+/** Fondus (secondes) : entrée d'un geste, retour au socle, changement de socle. */
+const GESTURE_FADE = 0.3
+const GESTURE_RETURN = 0.4
+const BASE_FADE = 0.5
+
+/** Socle de remplacement pendant qu'une réponse s'écrit. */
+const TALKING_STEM = 'idle-talking'
+/** Radicaux de posture : `pose-sit` (nom court) et les clips assis livrés tels quels. */
+const POSTURE_PREFIXES = ['pose-', 'sit-'] as const
+
+/** Rôles reconnus dans vrma/, en URLs de fichiers. */
+interface VrmaCatalog {
+  idle: string[] // socle en boucle — SANS LUI, aucune animation n'est jouée
+  talking: string[] // socle en boucle pendant que le personnage parle
+  gestures: Map<Emotion, string[]> // joué une fois, puis retour au socle
+  postures: Map<string, string[]> // remplace le socle (setPosture)
+}
+
+function pushInto<K>(map: Map<K, string[]>, key: K, url: string): void {
+  const list = map.get(key)
+  if (list) list.push(url)
+  else map.set(key, [url])
+}
+
+/**
+ * URLs → rôles. Le radical est mis en minuscules et son suffixe de variante
+ * (`-2`, `-3`…) retiré : `happy-2.vrma` est une variante de `happy`, exactement
+ * la grammaire des salutations multiples d'un personnage.
+ */
+function catalogFromUrls(urls: readonly string[]): VrmaCatalog {
+  const cat: VrmaCatalog = { idle: [], talking: [], gestures: new Map(), postures: new Map() }
+  for (const url of urls) {
+    const file = decodeURIComponent(url.split('/').pop() ?? '')
+    const stem = file
+      .replace(/\.vrma$/i, '')
+      .toLowerCase()
+      .replace(/-\d+$/, '')
+    if (stem === 'idle') cat.idle.push(url)
+    else if (stem === TALKING_STEM) cat.talking.push(url)
+    else if ((EMOTIONS as readonly string[]).includes(stem)) pushInto(cat.gestures, stem as Emotion, url)
+    else {
+      // `pose-sit` donne la posture « sit » ; les clips assis livrés s'appellent
+      // `sit-idle`/`sit-enter`/`sit-exit` — leur nom complet EST la posture.
+      const prefix = POSTURE_PREFIXES.find((p) => stem.startsWith(p) && stem.length > p.length)
+      if (prefix) pushInto(cat.postures, prefix === 'pose-' ? stem.slice(prefix.length) : stem, url)
+    }
+  }
+  return cat
+}
+
+// Loader SÉPARÉ de celui du VRM et de celui du décor : une .vrma n'est ni un
+// personnage ni une pièce, elle n'a qu'une extension d'animation à lire.
+const vrmaLoader = new GLTFLoader()
+vrmaLoader.register((parser) => new VRMAnimationLoaderPlugin(parser))
+
+// Un VRMAnimation ne contient que des pistes nommées par os humanoïde : il est
+// INDÉPENDANT du modèle et survit donc aux changements de personnage. Le CLIP,
+// lui, est lié à l'instance de VRM (cf. buildAnimations).
+const vrmaCache = new Map<string, Promise<VRMAnimation | null>>()
+
+/** Charge une .vrma, une seule fois par session ; illisible ou vide → null, sans bruit. */
+function loadVrmAnimation(url: string): Promise<VRMAnimation | null> {
+  let pending = vrmaCache.get(url)
+  if (!pending) {
+    pending = vrmaLoader
+      .loadAsync(url)
+      .then((gltf) => (gltf.userData.vrmAnimations as VRMAnimation[] | undefined)?.[0] ?? null)
+      .catch((e) => {
+        console.warn('[vrma]', url, e)
+        return null
+      })
+    vrmaCache.set(url, pending)
+  }
+  return pending
+}
+
+// Catalogue résolu UNE FOIS pour la session : le contenu du dossier ne change pas
+// pendant qu'on s'en sert. Liste injoignable → catalogue vide → aucun mixer, donc
+// exactement le comportement d'avant les animations.
+let catalogPending: Promise<VrmaCatalog> | null = null
+
+function loadCatalog(): Promise<VrmaCatalog> {
+  catalogPending ??= getVrmAnimations()
+    .then(catalogFromUrls)
+    .catch((e) => {
+      console.warn('[vrma]', e)
+      return catalogFromUrls([])
+    })
+  return catalogPending
+}
+
+/** Un élément au hasard (liste jamais vide à l'appel). */
+function pickOne<T>(list: readonly T[]): T {
+  return list[Math.floor(Math.random() * list.length)]
+}
+
 export function createVrmStage(container: HTMLElement): VrmStage {
   // ── Renderer : fond transparent (le fond visuel est géré par l'UI en CSS) ──
   const renderer = new WebGLRenderer({ alpha: true, antialias: true })
@@ -212,6 +327,25 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   let currentVrm: VRM | null = null
   let loadGeneration = 0
   let disposed = false
+
+  // ── Animations .vrma ──────────────────────────────────────────────────────
+  // RÈGLE FONDATRICE : le socle en boucle tient le poids 1 EN PERMANENCE et tous
+  // les fondus vont d'un clip À UN AUTRE, jamais d'un clip vers rien. Une action
+  // à poids partiel se fond en effet vers la pose d'origine du squelette (bras en
+  // croix), pas vers notre pose de repos. Corollaire assumé : sans socle d'idle
+  // utilisable, AUCUN mixer n'est créé et l'avatar retombe à l'octet près sur le
+  // comportement d'avant les animations.
+  let animationsEnabled = true
+  let catalog: VrmaCatalog | null = null
+  let mixer: AnimationMixer | null = null
+  const actions = new Map<string, AnimationAction>() // une action par URL de .vrma
+  let idleAction: AnimationAction | null = null
+  let talkingAction: AnimationAction | null = null
+  let postureAction: AnimationAction | null = null
+  let postureName: string | null = null
+  let baseAction: AnimationAction | null = null // socle voulu (en boucle)
+  let activeAction: AnimationAction | null = null // ce qui tient l'écran : socle ou geste
+  let talking = false
 
   // ── Décor ─────────────────────────────────────────────────────────────────
   let envRoot: Object3D | null = null
@@ -273,6 +407,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
   function unloadCurrent(): void {
     if (!currentVrm) return
+    disposeAnimations() // AVANT le retrait : uncacheRoot a besoin de la scène du modèle
     avatarGroup.remove(currentVrm.scene)
     VRMUtils.deepDispose(currentVrm.scene)
     currentVrm = null
@@ -293,6 +428,142 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       const node = vrm.humanoid.getNormalizedBoneNode(name)
       if (node) posedBones.set(name, { node, base: node.rotation.clone() })
     }
+  }
+
+  /**
+   * Proxy de regard. createVRMAnimationClip avertit en console s'il n'en trouve
+   * pas dans la scène du modèle (et en fabrique un lui-même). Objet INERTE ici :
+   * rien ne l'animera tant qu'une .vrma ne portera pas de piste de regard — il
+   * supprime le bruit et ouvre la porte au regard piloté.
+   */
+  function addLookAtProxy(vrm: VRM): void {
+    if (!vrm.lookAt) return
+    const proxy = new VRMLookAtQuaternionProxy(vrm.lookAt)
+    proxy.name = 'VRMLookAtQuaternionProxy' // sans nom, l'avertissement revient
+    vrm.scene.add(proxy)
+  }
+
+  /** Une action de socle boucle sans fin — elle n'émettra donc jamais 'finished'. */
+  function asBase(action: AnimationAction | null): AnimationAction | null {
+    action?.setLoop(LoopRepeat, Infinity)
+    return action
+  }
+
+  /** Une variante au hasard parmi celles réellement chargées. */
+  function pickAction(urls: readonly string[] | undefined): AnimationAction | null {
+    const ready = (urls ?? [])
+      .map((url) => actions.get(url))
+      .filter((a): a is AnimationAction => a !== undefined)
+    return ready.length > 0 ? pickOne(ready) : null
+  }
+
+  /**
+   * Amène `next` au poids 1 en fondu DEPUIS l'action en place. Jamais depuis rien :
+   * c'est la règle qui empêche la somme des poids de passer sous 1, donc le fondu
+   * vers la pose d'origine du squelette.
+   */
+  function fadeTo(next: AnimationAction, duration: number): void {
+    const prev = activeAction
+    if (prev === next) return
+    next.enabled = true
+    next.setEffectiveWeight(1)
+    next.play()
+    if (prev) next.crossFadeFrom(prev, duration, false)
+    activeAction = next
+  }
+
+  /** Socle voulu maintenant : une posture prime, sinon « parle », sinon l'idle. */
+  function desiredBase(): AnimationAction | null {
+    if (postureAction) return postureAction
+    if (talking && talkingAction) return talkingAction
+    return idleAction
+  }
+
+  /**
+   * Réaligne le socle. Pendant un geste, le changement se fait EN COULISSE : le
+   * geste garde l'écran, et son fondu de sortie ira sur le nouveau socle.
+   */
+  function syncBase(duration: number): void {
+    const next = desiredBase()
+    if (!next || next === baseAction) return
+    const prev = baseAction
+    baseAction = next
+    if (activeAction === prev) fadeTo(next, duration)
+  }
+
+  /** Geste d'émotion : joué UNE fois, variante tirée à chaque déclenchement. */
+  function playGesture(emotion: Emotion): void {
+    if (!mixer) return
+    const action = pickAction(catalog?.gestures.get(emotion))
+    if (!action) return // aucun fichier pour cette émotion : le visage suffit
+    action.reset()
+    action.setLoop(LoopOnce, 1)
+    // Pas de clampWhenFinished : le geste ne se figera pas sur sa dernière image,
+    // c'est le fondu de retour au socle qui le termine.
+    action.clampWhenFinished = false
+    // Un geste pendant un geste enchaîne depuis l'action COURANTE, pas depuis le
+    // socle — sinon la transition passerait par une pose que personne ne voit.
+    fadeTo(action, GESTURE_FADE)
+  }
+
+  /** Jette mixer et actions : les clips sont liés à CETTE instance de VRM. */
+  function disposeAnimations(): void {
+    if (mixer) {
+      mixer.stopAllAction()
+      // uncacheRoot rend à chaque os la valeur qu'il avait à l'activation de la
+      // première action, c'est-à-dire notre pose de repos.
+      if (currentVrm) mixer.uncacheRoot(currentVrm.scene)
+    }
+    mixer = null
+    actions.clear()
+    idleAction = null
+    talkingAction = null
+    postureAction = null
+    baseAction = null
+    activeAction = null
+  }
+
+  /**
+   * Construit le mixer et les actions du modèle qui vient d'être chargé. Le
+   * VRMAnimation est mutualisé (cache module) mais le clip, lui, est reconstruit
+   * pour ce VRM précis — et jeté avec lui.
+   * `generation` : changer de personnage pendant le téléchargement des .vrma ne
+   * doit rien poser sur le nouveau modèle.
+   */
+  async function buildAnimations(vrm: VRM, generation: number): Promise<void> {
+    if (!animationsEnabled) return
+    const cat = await loadCatalog()
+    if (generation !== loadGeneration || disposed || currentVrm !== vrm) return
+    catalog = cat
+    if (cat.idle.length === 0) return // pas de socle : pas de mixer du tout
+    // Le socle est tiré au hasard UNE FOIS par chargement de modèle ; les gestes
+    // le sont à chaque déclenchement, donc toutes leurs variantes sont chargées.
+    const idleUrl = pickOne(cat.idle)
+    const urls = [
+      idleUrl,
+      ...cat.talking,
+      ...[...cat.gestures.values()].flat(),
+      ...[...cat.postures.values()].flat(),
+    ]
+    const loaded = await Promise.all(urls.map(async (url) => [url, await loadVrmAnimation(url)] as const))
+    if (generation !== loadGeneration || disposed || currentVrm !== vrm) return
+    const clips = new Map<string, AnimationClip>()
+    for (const [url, animation] of loaded) {
+      if (animation) clips.set(url, createVRMAnimationClip(animation, vrm))
+    }
+    if (!clips.has(idleUrl)) return // socle illisible : repli complet, comme s'il manquait
+    disposeAnimations()
+    mixer = new AnimationMixer(vrm.scene)
+    mixer.addEventListener('finished', (e) => {
+      // Seuls les gestes s'achèvent (les socles bouclent sans fin). Si un AUTRE
+      // geste a pris la main entre-temps, c'est à lui de rendre l'écran.
+      if (e.action === activeAction && baseAction) fadeTo(baseAction, GESTURE_RETURN)
+    })
+    for (const [url, clip] of clips) actions.set(url, mixer.clipAction(clip))
+    idleAction = asBase(actions.get(idleUrl) ?? null)
+    talkingAction = asBase(pickAction(cat.talking))
+    postureAction = asBase(postureName ? pickAction(cat.postures.get(postureName)) : null)
+    syncBase(0)
   }
 
   // Normalisation d'échelle : un VRM exporté en centimètres (ou en unités
@@ -485,6 +756,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       VRMUtils.rotateVRM0(vrm) // modèles VRM 0.x : regardent +Z, on les retourne
       unloadCurrent()
       applyRestPose(vrm)
+      addLookAtProxy(vrm)
       avatarGroup.add(vrm.scene)
       currentVrm = vrm
       idle.reset()
@@ -492,19 +764,37 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       const height = normalizeScale(vrm)
       lastFrame = { vrm, h: height }
       frameCamera(vrm, height)
+      // Les .vrma partent APRÈS le cadrage, sans être attendues : l'avatar est
+      // déjà à l'écran et à sa place, les animations s'y posent quand elles
+      // arrivent (elles sont en cache dès le deuxième chargement).
+      void buildAnimations(vrm, generation)
     } catch (e) {
       console.error('[vrm]', e)
       throw e // l'UI affiche l'erreur
     }
   }
 
-  // ── Boucle : idle → vrm.update (expressions + springbones) → controls → render ──
+  // ── Boucle : mixer → idle → vrm.update (expressions + springbones) → controls → render ──
   const clock = new Clock()
   let rafId = 0
 
   function tick(): void {
     rafId = requestAnimationFrame(tick)
     const delta = Math.min(clock.getDelta(), 0.1)
+    if (mixer) {
+      // Arbitrage animation ↔ idle. IdleAnimator écrit `base + offset` sur ses
+      // 9 os à chaque frame : tel quel, il écraserait l'animation. La base DEVIENT
+      // donc le résultat du mixer, et respiration et sway se posent PAR-DESSUS.
+      // Les offsets de la frame précédente sont retirés AVANT le mixer, sinon la
+      // re-capture les prendrait pour de la pose animée sur les os que le clip
+      // courant ne touche pas — et les cumulerait à l'infini.
+      for (const { node, base } of posedBones.values()) node.rotation.copy(base)
+      mixer.update(delta)
+      for (const bone of posedBones.values()) bone.base.copy(bone.node.rotation)
+    }
+    // Les EXPRESSIONS restent maîtresses : l'idle les écrit après le mixer, donc
+    // une .vrma qui porterait des pistes de visage est surchargée sur ces canaux.
+    // Arbitrage voulu — le visage appartient au LLM, le corps à l'animation.
     idle.update(delta, currentVrm, posedBones)
     if (currentVrm) currentVrm.update(delta)
     controls.update()
@@ -546,12 +836,46 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       }
     },
 
-    setEmotion(emotion: string): void {
-      idle.setEmotion(normalizeEmotion(emotion))
+    setEmotion(emotion: string, live = false): void {
+      const value = normalizeEmotion(emotion)
+      // Le VISAGE s'applique toujours, restaurations comprises. Le CORPS ne mime
+      // que ce qui vient de se produire : un geste au retour sur une vieille
+      // conversation, ou au rechargement du modèle, serait absurde.
+      idle.setEmotion(value)
+      if (live) playGesture(value)
     },
 
     setSpeaking(speaking: boolean): void {
       idle.setSpeaking(speaking)
+      if (speaking === talking) return
+      talking = speaking
+      // Socle « parle » le temps de la réponse (idle-talking.vrma), s'il existe.
+      syncBase(BASE_FADE)
+    },
+
+    setAnimationsEnabled(on: boolean): void {
+      if (on === animationsEnabled) return
+      animationsEnabled = on
+      if (on) {
+        if (currentVrm) void buildAnimations(currentVrm, loadGeneration)
+        return
+      }
+      disposeAnimations()
+      // Déchargé, pas mis en pause : le squelette est resté là où l'animation
+      // l'avait laissé (et la base de l'idle avec lui), on le remet à la pose de
+      // repos pour retrouver EXACTEMENT le comportement d'avant les .vrma.
+      if (currentVrm) {
+        currentVrm.humanoid.resetNormalizedPose()
+        applyRestPose(currentVrm)
+      }
+    },
+
+    setPosture(name: string | null): void {
+      postureName = name ? name.trim().toLowerCase() : null
+      // Nom inconnu = aucune posture (retour au socle) : la phase interactive
+      // pourra nommer ses postures sans jamais risquer de figer l'avatar.
+      postureAction = asBase(postureName ? pickAction(catalog?.postures.get(postureName)) : null)
+      syncBase(BASE_FADE)
     },
 
     setView(view: StageView): void {

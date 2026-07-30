@@ -23,10 +23,33 @@ export interface VrmStage {
    * sauvegardés ne périment donc jamais.
    */
   loadEnvironment(url: string): Promise<void>
-  /** Applique une émotion ([happy] etc.) avec transition douce. */
-  setEmotion(emotion: string): void
-  /** true pendant le streaming d'une réponse → anime la bouche (lipsync simple). */
+  /**
+   * Applique une émotion ([happy] etc.) avec transition douce.
+   * `live` : l'émotion vient DE SE PRODUIRE (tag reçu dans le flux, réponse
+   * terminée, message d'accueil affiché) — un geste .vrma peut alors
+   * l'accompagner. Une RESTAURATION (vieille conversation ouverte, retour
+   * d'onglet, rechargement du modèle) laisse `live` à faux : le visage suit,
+   * le corps ne mime rien.
+   */
+  setEmotion(emotion: string, live?: boolean): void
+  /**
+   * true pendant le streaming d'une réponse → anime la bouche (lipsync simple),
+   * et joue le socle « parle » s'il existe dans vrma/.
+   */
   setSpeaking(speaking: boolean): void
+  /**
+   * Animations .vrma allumées ou éteintes (préférence UiPrefs.vrmaEnabled).
+   * Éteint = mixer DÉCHARGÉ et retour à la pose de repos, pas une mise en pause.
+   */
+  setAnimationsEnabled(on: boolean): void
+  /**
+   * Posture en boucle qui REMPLACE le socle d'idle (`sit-idle`, `pose-sit`… —
+   * le nom est celui du fichier .vrma, sans son préfixe `pose-`), null = retour
+   * au socle. Les gestes d'émotion continuent de se superposer. Un nom inconnu
+   * ne fait rien d'autre que retirer la posture en place.
+   * Crochet de la phase interactive : personne ne l'appelle encore.
+   */
+  setPosture(name: string | null): void
   /** Applique un cadrage sauvegardé (après loadModel). */
   setView(view: StageView): void
   /**

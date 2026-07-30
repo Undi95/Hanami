@@ -183,9 +183,16 @@ function AppInner() {
     return msg.role === 'user' ? t('vnYou') : (character?.name ?? 'Hanami')
   }
 
-  function applyEmotion(emotion: string) {
+  /**
+   * Émotion appliquée à l'avatar. `live` : elle vient DE SE PRODUIRE (tag reçu
+   * dans le flux, réponse terminée, message d'accueil affiché) — la scène peut
+   * alors jouer un geste. Toutes les autres applications sont des RESTAURATIONS
+   * (conversation ouverte, retour d'onglet, modèle rechargé) : le visage suit,
+   * le corps ne mime rien.
+   */
+  function applyEmotion(emotion: string, live = false) {
     lastEmotionRef.current = emotion
-    stageRef.current?.setEmotion(emotion)
+    stageRef.current?.setEmotion(emotion, live)
   }
 
   function probeBackend() {
@@ -514,7 +521,7 @@ function AppInner() {
     if (pool.length === 0) return
     const text = pickGreeting(pool)
     setFeed([{ kind: 'greeting', text }])
-    applyEmotion(extractEmotion(text) ?? 'neutral')
+    applyEmotion(extractEmotion(text) ?? 'neutral', true)
   }
 
   function chooseGeneratedGreeting(ask: { char: CharacterFull; chat: ChatMeta }) {
@@ -558,7 +565,9 @@ function AppInner() {
         const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
         if (lastAssistant) emotion = lastAssistant.emotion ?? extractEmotion(lastAssistant.content)
       }
-      applyEmotion(emotion ?? 'neutral')
+      // `live` uniquement si une salutation vient d'être AFFICHÉE : rouvrir une
+      // conversation existante restaure une émotion, elle ne la produit pas.
+      applyEmotion(emotion ?? 'neutral', opening !== null)
       if (ask) {
         setGreetingAsk({ char, chat: meta })
         return
@@ -852,7 +861,7 @@ function AppInner() {
               const em = extractEmotion(acc)
               if (em) {
                 emotionFound = true
-                applyEmotion(em)
+                applyEmotion(em, true)
               }
             }
             const text = acc
@@ -879,9 +888,9 @@ function AppInner() {
               // Réponse terminée sans aucun tag : en mode simple, le visage suit
               // une heuristique de texte plutôt que de rester figé (les petits
               // modèles oublient le tag). En mode complet, rien ne change.
-              if (em) applyEmotion(em)
+              if (em) applyEmotion(em, true)
               else if (settings?.modelMode === 'simple') {
-                applyEmotion(detectEmotionFallback(ev.message.content))
+                applyEmotion(detectEmotionFallback(ev.message.content), true)
               }
             }
             setFeed((f) => f.map((it) => (it.kind === 'msg' && it.pending ? { kind: 'msg', msg: ev.message } : it)))
