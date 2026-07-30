@@ -20,6 +20,9 @@ export default defineConfig({
       'react/jsx-dev-runtime',
       'three',
       '@pixiv/three-vrm',
+      // Chargé au PREMIER .vrma, longtemps après le boot : sans cette ligne, la
+      // re-optimisation tombe en pleine session (cf. commentaire ci-dessus).
+      '@pixiv/three-vrm-animation',
       'three/examples/jsm/loaders/GLTFLoader.js',
       'three/examples/jsm/controls/OrbitControls.js',
     ],

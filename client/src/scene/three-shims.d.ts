@@ -44,10 +44,26 @@ declare module 'three' {
     clone(): Euler
   }
 
+  export class Quaternion {
+    x: number
+    y: number
+    z: number
+    w: number
+    constructor(x?: number, y?: number, z?: number, w?: number)
+    set(x: number, y: number, z: number, w: number): this
+    copy(q: Quaternion): this
+    clone(): Quaternion
+    setFromEuler(euler: Euler, update?: boolean): this
+  }
+
   export class Object3D {
     name: string
     position: Vector3
     rotation: Euler
+    // Rotation et quaternion sont liés (écrire l'un met l'autre à jour) : c'est
+    // ce qui permet à l'idle d'ajouter ses offsets en Euler par-dessus une
+    // animation .vrma, qui écrit elle des quaternions.
+    quaternion: Quaternion
     scale: Vector3
     visible: boolean
     parent: Object3D | null
@@ -99,6 +115,63 @@ declare module 'three' {
   }
   export class Mesh extends Object3D {}
   export class SkinnedMesh extends Mesh {}
+
+  // ── Animation (.vrma) ──────────────────────────────────────────────────────
+  // Les pistes ne sont JAMAIS construites ici : elles arrivent des .vrma via
+  // createVRMAnimationClip. Elles doivent exister quand même, car les .d.ts de
+  // @pixiv/three-vrm-animation les nomment — sans elles, skipLibCheck les
+  // remplace en silence par `any` et le clip perd tout typage.
+  export class KeyframeTrack {
+    name: string
+  }
+  export class QuaternionKeyframeTrack extends KeyframeTrack {}
+  export class VectorKeyframeTrack extends KeyframeTrack {}
+  export class NumberKeyframeTrack extends KeyframeTrack {}
+
+  export class AnimationClip {
+    constructor(name?: string, duration?: number, tracks?: KeyframeTrack[])
+    name: string
+    duration: number
+    tracks: KeyframeTrack[]
+  }
+
+  // Modes de bouclage (AnimationAction.setLoop) : une fois, ou en boucle.
+  export const LoopOnce: number
+  export const LoopRepeat: number
+
+  export class AnimationAction {
+    enabled: boolean
+    weight: number
+    time: number
+    clampWhenFinished: boolean
+    getClip(): AnimationClip
+    reset(): this
+    play(): this
+    stop(): this
+    setLoop(mode: number, repetitions: number): this
+    setEffectiveWeight(weight: number): this
+    fadeIn(duration: number): this
+    fadeOut(duration: number): this
+    crossFadeFrom(fadeOutAction: AnimationAction, duration: number, warp?: boolean): this
+    crossFadeTo(fadeInAction: AnimationAction, duration: number, warp?: boolean): this
+  }
+
+  /** Événement 'finished' du mixer : l'action à cycle unique qui vient de s'achever. */
+  export interface AnimationFinishedEvent {
+    type: 'finished'
+    action: AnimationAction
+    direction: number
+  }
+
+  export class AnimationMixer {
+    constructor(root: Object3D)
+    update(delta: number): this
+    clipAction(clip: AnimationClip, root?: Object3D): AnimationAction
+    stopAllAction(): this
+    uncacheRoot(root: Object3D): void
+    addEventListener(type: 'finished', listener: (event: AnimationFinishedEvent) => void): void
+    removeEventListener(type: 'finished', listener: (event: AnimationFinishedEvent) => void): void
+  }
 
   export const SRGBColorSpace: 'srgb'
 
