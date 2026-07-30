@@ -68,6 +68,16 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
   through `[happy]`-style tags, lipsync while it speaks — drop your `.vrm` files into `vrm/`.
   Drag to pan, wheel or pinch to zoom, right-click to rotate; the framing is remembered per
   character **and per display mode**.
+- 💃 **Gesture animations (`.vrma`)**: a looping idle, a one-shot gesture when the character
+  expresses an emotion, and a talking idle while a reply is being written. The file name in `vrma/`
+  is the whole configuration — `idle`, the six emotion names (`happy`, `sad`, `angry`, `surprised`,
+  `relaxed`, `neutral`), the `pose-`/`sit-` prefixes for postures, a `-2`/`-3` suffix for variants
+  picked at random; any other name is ignored. Breathing and head sway keep playing **on top** of
+  the animation, and the face stays the model's business. The clips shipped with the app are all
+  freely redistributable and credited in `vrma/README.md`. Switch in *Settings > Appearance > Scene*.
+- 🏠 **3D environment**: a `.glb` room from `environments/`, placed around the avatar instead of the
+  2D background — chosen per character, with an optional `.json` sidecar for scale, rotation, spawn
+  point and exposure. Switch in *Settings > Appearance > Scene*.
 - 🎬 **Visual novel mode**: full-screen scene, a dialogue box with a namebox, the time of the line,
   the conversation title and the context gauge in its lower band, a resizable box (grip in the
   top-left corner, double-click to reset) and the menu icons in a column in the top-right corner.
@@ -169,6 +179,10 @@ Language and theme apply immediately; everything else takes effect when you save
 - **VRM models, backgrounds and portraits are never committed either**: `vrm/`, `backgrounds/` and
   `portraits/` are git-ignored except for their `README.md`. Most VRoid Hub / Booth models forbid
   redistribution, so each user brings their own.
+- **`environments/` and `vrma/` are tracked on purpose**: everybody should get the same scene, so
+  only freely redistributable assets go there — the animations are credited in `vrma/README.md`
+  (with the full licence notices in `vrma/NOTICE.md`), the environments in
+  `environments/CREDITS.md`.
 - `presets/hana/` is the only character shipped with the repository — an example written to be
   nobody's in particular, bilingual, without a 3D model so that you can give her yours. On first
   launch, every folder in `presets/` is copied into `data/characters/` and never overwritten
@@ -184,7 +198,7 @@ data/                  # YOUR data (never committed)
   config.json          # settings
   ui.json              # interface preferences (language, theme, layout, last conversation)
   characters/<id>/     # one folder per character
-    character.json     # name, 3D model, portrait, background, theme, greetings
+    character.json     # name, 3D model, portrait, background, environment, theme, greetings
     system-prompt.md   # THE prompt — edit it freely
     memory/            # MEMORY.md (index) + one fact per file
     chats/             # one .jsonl per conversation
@@ -192,6 +206,8 @@ presets/               # characters shipped with the app (copied into data/ on f
 vrm/                   # your .vrm models
 backgrounds/           # your background images
 portraits/             # 2D portraits from imported cards (avatar without a VRM)
+environments/          # 3D rooms (.glb) and their optional placement sidecars
+vrma/                  # humanoid animations (.vrma) — freely licensed, shipped with the app
 client/                # React front-end (Vite)
 server/                # Express server + API
 shared/                # types shared by client and server
@@ -201,4 +217,6 @@ scripts/               # mock-llm (fake OpenAI-compatible backend)
 
 ## License
 
-AGPL-3.0. VRM models and images are not included — respect the license of every model you use.
+AGPL-3.0. VRM models and images are not included — respect the license of every model you use. The
+`.vrma` animations of `vrma/` and the environments of `environments/` come with their own licences
+and credits (`vrma/README.md`, `vrma/NOTICE.md`, `environments/CREDITS.md`).

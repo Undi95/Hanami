@@ -287,7 +287,8 @@ const FR = {
   sectionData: 'Données',
   backupDownload: 'Télécharger une sauvegarde',
   backupDownloading: 'Préparation…',
-  backupHint: 'Un zip de data/ et des portraits — modèles 3D et fonds non inclus.',
+  backupHint:
+    'Un zip de data/ et des portraits — modèles 3D, fonds, décors et animations non inclus.',
 
   // ── Import SillyTavern ───────────────────────────────────────────────────
   importFromSt: 'Importer depuis SillyTavern',
@@ -608,7 +609,8 @@ const EN: Record<Key, string> = {
   sectionData: 'Data',
   backupDownload: 'Download a backup',
   backupDownloading: 'Preparing…',
-  backupHint: 'A zip of data/ and the portraits — 3D models and backgrounds not included.',
+  backupHint:
+    'A zip of data/ and the portraits — 3D models, backgrounds, environments and animations not included.',
 
   // ── SillyTavern import ───────────────────────────────────────────────────
   importFromSt: 'Import from SillyTavern',

@@ -14,8 +14,9 @@ Le nom du fichier fait office de configuration — il n'y a pas de fichier de ma
 | Nom | Rôle |
 | --- | --- |
 | `idle.vrma` | socle joué en boucle (sans lui, aucune animation n'est jouée) |
+| `idle-talking.vrma` | socle joué en boucle pendant qu'une réponse s'écrit |
 | `happy.vrma`, `sad.vrma`, `angry.vrma`, `surprised.vrma`, `relaxed.vrma`, `neutral.vrma` | geste joué une fois quand le personnage exprime cette émotion, puis retour à l'idle |
-| `pose-sit.vrma`, `pose-stand.vrma`… | postures en boucle qui REMPLACENT l'idle |
+| `pose-sit.vrma`, `sit-idle.vrma`… (préfixes `pose-` et `sit-`) | postures en boucle qui REMPLACENT l'idle — jamais déclenchées seules, elles attendent la phase interactive |
 | suffixe `-2`, `-3`… (`idle-2.vrma`, `happy-2.vrma`) | variantes du même rôle, tirées au hasard |
 
 Tout autre nom est simplement ignoré : les clips livrés ici qui ne portent pas un
@@ -53,8 +54,9 @@ The file name IS the configuration — there is no mapping file.
 | Name | Role |
 | --- | --- |
 | `idle.vrma` | looping base pose (without it, no animation is played at all) |
+| `idle-talking.vrma` | looping base pose played while a reply is being written |
 | `happy.vrma`, `sad.vrma`, `angry.vrma`, `surprised.vrma`, `relaxed.vrma`, `neutral.vrma` | one-shot gesture played when the character expresses that emotion, then back to idle |
-| `pose-sit.vrma`, `pose-stand.vrma`… | looping postures that REPLACE the idle |
+| `pose-sit.vrma`, `sit-idle.vrma`… (`pose-` and `sit-` prefixes) | looping postures that REPLACE the idle — never triggered on their own, they are waiting for the interactive phase |
 | `-2`, `-3`… suffix (`idle-2.vrma`, `happy-2.vrma`) | variants of the same role, picked at random |
 
 Any other name is silently ignored: the clips shipped here that do not match a

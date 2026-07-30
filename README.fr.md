@@ -72,6 +72,17 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
   via des tags `[happy]`…, lipsync pendant la réponse — dépose tes `.vrm` dans `vrm/`. Glisser pour
   déplacer, molette ou pincement pour zoomer, clic droit pour tourner ; le cadrage est mémorisé par
   personnage **et par mode d'affichage**.
+- 💃 **Animations gestuelles (`.vrma`)** : un idle en boucle, un geste joué une fois quand le
+  personnage exprime une émotion, et un idle « qui parle » pendant qu'une réponse s'écrit. Le nom du
+  fichier dans `vrma/` est toute la configuration — `idle`, les six noms d'émotion (`happy`, `sad`,
+  `angry`, `surprised`, `relaxed`, `neutral`), les préfixes `pose-`/`sit-` pour les postures, un
+  suffixe `-2`/`-3` pour des variantes tirées au hasard ; tout autre nom est ignoré. La respiration
+  et le sway de la tête continuent **par-dessus** l'animation, et le visage reste l'affaire du
+  modèle. Les clips livrés avec l'app sont tous librement redistribuables et crédités dans
+  `vrma/README.md`. Interrupteur dans *Réglages > Apparence > Scène*.
+- 🏠 **Décor 3D** : une pièce `.glb` de `environments/`, posée autour de l'avatar à la place du fond
+  2D — choisie par personnage, avec un sidecar `.json` optionnel pour l'échelle, la rotation, le
+  point d'accueil et l'exposition. Interrupteur dans *Réglages > Apparence > Scène*.
 - 🎬 **Mode visual novel** : scène en plein écran, boîte de dialogue avec étiquette de nom, heure de
   la réplique, titre de la conversation et jauge de contexte dans sa bande basse, boîte
   redimensionnable (poignée dans le coin haut-gauche, double-clic pour réinitialiser) et icônes des
@@ -177,6 +188,10 @@ La langue et le thème s'appliquent immédiatement ; tout le reste prend effet �
 - **Les modèles VRM, les fonds et les portraits non plus** : `vrm/`, `backgrounds/` et
   `portraits/` sont ignorés par git, sauf leur `README.md`. La plupart des modèles VRoid Hub /
   Booth interdisent la redistribution : chacun apporte les siens.
+- **`environments/` et `vrma/` sont suivis VOLONTAIREMENT** : tout le monde doit avoir la même
+  scène, donc seuls des assets librement redistribuables y vont — les animations sont créditées dans
+  `vrma/README.md` (avis de licence complets dans `vrma/NOTICE.md`), les décors dans
+  `environments/CREDITS.md`.
 - `presets/hana/` est le seul personnage livré avec le dépôt — un exemple écrit pour n'être
   personnel à personne, bilingue, et sans modèle 3D pour que tu lui donnes le tien. Au premier
   lancement, chaque dossier de `presets/` est copié dans `data/characters/` puis plus jamais
@@ -193,7 +208,7 @@ data/                  # TES données (jamais committées)
   config.json          # réglages
   ui.json              # préférences d'interface (langue, thème, affichage, dernière conversation)
   characters/<id>/     # un dossier par personnage
-    character.json     # nom, modèle 3D, portrait, fond, thème, messages d'accueil
+    character.json     # nom, modèle 3D, portrait, fond, décor, thème, messages d'accueil
     system-prompt.md   # LE prompt — édite-le librement
     memory/            # MEMORY.md (index) + un fait par fichier
     chats/             # un .jsonl par conversation
@@ -201,6 +216,8 @@ presets/               # personnages livrés avec l'app (copiés dans data/ au 1
 vrm/                   # tes modèles .vrm
 backgrounds/           # tes fonds d'écran
 portraits/             # portraits 2D des cards importées (avatar sans VRM)
+environments/          # pièces 3D (.glb) et leurs sidecars de placement optionnels
+vrma/                  # animations humanoïdes (.vrma) — libres, livrées avec l'app
 client/                # front React (Vite)
 server/                # serveur Express + API
 shared/                # types partagés client/serveur
@@ -211,4 +228,5 @@ scripts/               # mock-llm (faux backend compatible OpenAI)
 ## Licence
 
 AGPL-3.0. Les modèles VRM et les images ne sont pas inclus — respecte la licence de chaque
-modèle que tu utilises.
+modèle que tu utilises. Les animations `.vrma` de `vrma/` et les décors de `environments/` portent
+leurs propres licences et crédits (`vrma/README.md`, `vrma/NOTICE.md`, `environments/CREDITS.md`).
