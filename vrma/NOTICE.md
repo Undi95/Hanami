@@ -14,10 +14,12 @@ redistribution.*
 
 ## 1. Overte — Apache License 2.0
 
-Six fichiers dérivent des animations d'avatar du projet **Overte**
-(`overte-org/overte`, `interface/resources/avatar/animations/`).
+Dix fichiers dérivent des animations d'avatar du projet **Overte**
+(`overte-org/overte`, `interface/resources/avatar/animations/`) — dont les quatre
+animations de repos, qui sont le socle permanent de la scène.
 
-*Six files derive from the avatar animations of the **Overte** project.*
+*Ten files derive from the avatar animations of the **Overte** project — including
+all four idle animations, which are the permanent base of the scene.*
 
 ```
 Copyright (c) 2013-2019, High Fidelity, Inc.
@@ -40,14 +42,18 @@ limitations under the License.
 SPDX-License-Identifier : `Apache-2.0`
 Dépôt / repository : <https://github.com/overte-org/overte>
 
-| Fichier dérivé | Animation source Overte |
-| --- | --- |
-| `happy.vrma` | `emote_clap01_all.fbx` |
-| `sad.vrma` | `emote_disagree_drophead.fbx` |
-| `neutral.vrma` | `idle_once_headtilt.fbx` |
-| `nod.vrma` | `emote_agree_headnod.fbx` |
-| `shake.vrma` | `emote_disagree_annoyedheadshake.fbx` |
-| `think.vrma` | `idle_once_lookaround.fbx` |
+| Fichier dérivé | Animation source Overte | Segment repris |
+| --- | --- | --- |
+| `idle.vrma` | `idle.fbx` | intégralité (10,000 s) |
+| `idle-talking.vrma` | `talk_armsdown.fbx` | 0,033 → 7,133 s |
+| `idle-2.vrma` | `idle04.fbx` | 0,033 → 30,067 s |
+| `idle-3.vrma` | `idle03.fbx` | sous-boucle 4,833 → 18,167 s |
+| `happy.vrma` | `emote_clap01_all.fbx` | intégralité |
+| `sad.vrma` | `emote_disagree_drophead.fbx` | intégralité |
+| `neutral.vrma` | `idle_once_headtilt.fbx` | intégralité |
+| `nod.vrma` | `emote_agree_headnod.fbx` | intégralité |
+| `shake.vrma` | `emote_disagree_annoyedheadshake.fbx` | intégralité |
+| `think.vrma` | `idle_once_lookaround.fbx` | 1er tour de regard, 3,37 s |
 
 Modifications apportées / changes made : os Mixamo mappés vers les os humanoïdes
 VRM 1.0, frame de bind pose parasite retirée, échelle cm → m, ré-échantillonnage
@@ -116,14 +122,19 @@ VRM (+Z), translation horizontale des hanches supprimée, export en
 
 ## 3. Quaternius — CC0 1.0 Universal
 
-Les vingt-deux autres fichiers de ce dossier (`idle`, `idle-talking`, `walk`,
-`sit-*`, `swim`, `jump-*`, `dance`…) dérivent de l'**Universal Animation
-Library** de **Quaternius**, publiée sous **CC0 1.0 Universal** — domaine
-public, aucune attribution requise, mais elle reste appréciée.
+Les vingt autres fichiers de ce dossier (`walk`, `sit-*`, `swim`, `jump-*`,
+`dance`, `crouch-*`…) dérivent de l'**Universal Animation Library** de
+**Quaternius**, publiée sous **CC0 1.0 Universal** — domaine public, aucune
+attribution requise, mais elle reste appréciée. Les animations de repos venaient
+elles aussi de ce pack ; elles ont été remplacées par celles d'Overte, la
+bibliothèque de Quaternius étant destinée aux jeux d'action (sa pose de repos est
+une garde de combat, poings fermés, une jambe devant l'autre).
 
-*The other twenty-two files in this folder derive from **Quaternius**'s
-**Universal Animation Library**, released under **CC0 1.0 Universal** — public
-domain, no attribution required, though appreciated.*
+*The other twenty files in this folder derive from **Quaternius**'s **Universal
+Animation Library**, released under **CC0 1.0 Universal** — public domain, no
+attribution required, though appreciated. The idle animations came from that pack
+too; they were replaced by Overte's, since Quaternius's library targets action
+games (its rest pose is a combat stance, fists closed, one leg forward).*
 
 <https://quaternius.com>
 

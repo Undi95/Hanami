@@ -28,9 +28,11 @@ Trois provenances, toutes libres de redistribution — le détail fichier par
 fichier, les avis de licence complets et les mentions à conserver sont dans
 [`NOTICE.md`](NOTICE.md), à lire avant toute redistribution :
 
+- **Overte** — **Apache 2.0** : les quatre animations de repos (`idle`,
+  `idle-talking`, `idle-2`, `idle-3`) et six gestes (`happy`, `sad`, `neutral`,
+  `nod`, `shake`, `think`).
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, domaine public
-  (idle, marche, assis, saut, nage, danse…).
-- **Overte** — **Apache 2.0** (`happy`, `sad`, `neutral`, `nod`, `shake`, `think`).
+  (marche, assis, saut, nage, danse…).
 - **CMU Graphics Lab Motion Capture Database**, conversion BVH de Bruce Hahne —
   libre d'usage, remerciements exigés (les autres gestes d'émotion).
 
@@ -68,9 +70,11 @@ Three origins, all free to redistribute — the file-by-file breakdown, the full
 licence notices and the mentions to keep are in [`NOTICE.md`](NOTICE.md), which
 must be read before any redistribution:
 
+- **Overte** — **Apache 2.0**: all four idle animations (`idle`, `idle-talking`,
+  `idle-2`, `idle-3`) and six gestures (`happy`, `sad`, `neutral`, `nod`, `shake`,
+  `think`).
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, public domain
-  (idle, walk, sit, jump, swim, dance…).
-- **Overte** — **Apache 2.0** (`happy`, `sad`, `neutral`, `nod`, `shake`, `think`).
+  (walk, sit, jump, swim, dance…).
 - **CMU Graphics Lab Motion Capture Database**, BVH conversion by Bruce Hahne —
   free to use, acknowledgement required (the other emotion gestures).
 
