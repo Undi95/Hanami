@@ -554,9 +554,25 @@ select {
   text-overflow: ellipsis;
 }
 
+/* Huit icônes en ligne (loupe comprise), SEULES sur la ligne 1 : la rangée prend
+   toute la largeur disponible et les boutons se la PARTAGENT — au plus 44 px
+   chacun (au-delà ce ne serait que du vide, et le groupe reste centré), jamais un
+   pixel de débordement. Aucun palier de largeur ne pouvait tenir cette promesse :
+   8 × 44 = 352 px passe tout juste à 375 px, plus du tout à 360 — ni dans la
+   colonne de droite réduite à sa largeur minimale (320 px), que la largeur de la
+   FENÊTRE ne raconte pas. La hauteur de touche, elle, reste à 44 px partout. */
 .topbar nav {
   display: flex;
   gap: 0;
+  flex: 1;
+  justify-content: center; /* place restante partagée de part et d'autre */
+}
+
+.topbar nav .icon-btn {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 44px;
 }
 
 .icon-btn {
@@ -584,21 +600,6 @@ select {
 .icon-btn[aria-pressed='true'] {
   background: var(--accent-soft);
   color: var(--accent);
-}
-
-/* Huit icônes en ligne (loupe comprise) : on resserre leur largeur sur les écrans
-   étroits pour laisser respirer le nom du personnage — la hauteur de touche, elle,
-   reste à 44 px. Deuxième palier pour les téléphones les plus étroits. */
-@media (max-width: 430px) {
-  .icon-btn {
-    width: 35px;
-  }
-}
-
-@media (max-width: 380px) {
-  .icon-btn {
-    width: 31px;
-  }
 }
 
 .icon-btn:disabled {
@@ -1342,6 +1343,40 @@ select {
 .shot-remove svg {
   width: 10px;
   height: 10px;
+}
+
+/* ── Cibles tactiles des petits boutons ───────────────────────────────────
+   Toutes ces croix et flèches sont dessinées pour la souris (18 à 30 px). Au
+   doigt elles sont chiches : on les élargit d'un cran, sans jamais toucher au
+   dessin. Placé APRÈS les règles concernées — à spécificité égale, c'est
+   l'ordre qui tranche, et un @media n'y change rien. */
+@media (pointer: coarse) {
+  /* Recherche : deux flèches + la croix de fermeture. La barre grandit de 40 à
+     44 px, donc le ruban épinglé qui se range dessous suit (8 + 44 + 8). */
+  .search-nav {
+    width: 36px;
+    height: 36px;
+  }
+  .search-bar input {
+    min-height: 36px;
+  }
+  .pin-ribbon.under-search {
+    margin-top: 60px;
+  }
+  .pin-ribbon-close,
+  .reply-quote-close {
+    width: 32px;
+    height: 32px;
+  }
+  /* Croix d'une vignette en attente : 18 px, c'était un point de mire. */
+  .shot-remove {
+    width: 24px;
+    height: 24px;
+  }
+  .shot-remove svg {
+    width: 12px;
+    height: 12px;
+  }
 }
 
 /* Vignettes DANS une bulle (et dans la boîte VN) — clic = image en grand. */
@@ -2355,10 +2390,12 @@ select {
   }
 }
 
-/* Tactile : en demi-teinte (aucun survol pour le révéler), zone de toucher élargie. */
+/* Tactile : en demi-teinte (aucun survol pour le révéler), zone de toucher élargie.
+   34 × 32 autour d'un crayon de 14 px — la rangée, elle, ne grandit pas (son
+   bouton principal fait déjà 44 px de haut). */
 @media (pointer: coarse) {
   .item-edit {
-    padding: 8px 7px;
+    padding: 9px 10px;
   }
 }
 
@@ -2514,6 +2551,19 @@ select {
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   color: var(--text);
+}
+
+/* Téléphone : les quatre onglets de l'inspecteur (Prompt système / Payload
+   complet / Résumé / Scène) n'ont que 80 px chacun sur 339 px utiles — chaque
+   libellé partait sur deux lignes. Deux par ligne : libellés d'un seul tenant et
+   cibles franches. Trois onglets (sans résumé) : deux puis un, pleine largeur. */
+@media (max-width: 480px) {
+  .tabs {
+    flex-wrap: wrap;
+  }
+  .tab {
+    flex: 1 1 calc(50% - 3px);
+  }
 }
 
 .code-block {
@@ -2710,6 +2760,22 @@ select {
   color: var(--accent);
 }
 
+/* Téléphone : la bande basse ne tient plus sur UNE ligne. À 375 px la boîte fait
+   347 px (soit 319 px utiles) et trois libellés en capitales — RÉGÉNÉRER,
+   CONTINUER, RÉÉCOUTER quand la voix est active — en mangent près de 300 : la
+   jauge se faisait rogner par l'overflow de .vn-info. Les infos passent donc sur
+   leur propre ligne (titre enfin lisible, jauge entière) et les actions restent
+   groupées à droite, juste dessous. Au-delà, tout tient de front : rien ne bouge. */
+@media (max-width: 520px) {
+  .chat-panel.vn .reply-actions {
+    flex-wrap: wrap;
+    gap: 2px 14px;
+  }
+  .chat-panel.vn .vn-info {
+    flex-basis: 100%;
+  }
+}
+
 .chat-panel.vn .sheet-handle,
 .chat-panel.vn .topbar-name,
 .chat-panel.vn .topbar-sub {
@@ -2734,6 +2800,15 @@ select {
   backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   padding: 2px;
+}
+
+/* En colonne la largeur de l'écran ne compte plus : les boutons reprennent leur
+   gabarit plein (la règle « téléphone » de la rangée les rétrécissait pour rien,
+   et un doigt mérite 44 px). Sept icônes : 7 × 44 + 6 = 314 px, ça tient. */
+.chat-panel.vn .topbar nav .icon-btn {
+  flex: none;
+  width: 44px;
+  max-width: none;
 }
 
 /* Saisie : section médiane de la boîte — même largeur, mêmes bords, ton
@@ -2767,11 +2842,14 @@ select {
   margin: 6px auto 0;
 }
 
-/* Namebox : petite étiquette posée à cheval sur la bordure, en haut à gauche. */
+/* Namebox : petite étiquette posée à cheval sur la bordure, en haut à gauche.
+   Le nom vient du personnage : on le borne à la boîte (moins son retrait gauche)
+   pour qu'un nom fleuve s'ellipse au lieu de partir hors écran sur téléphone. */
 .vn-name {
   position: absolute;
   top: -13px;
   left: 16px;
+  max-width: calc(100% - 32px);
   padding: 2px 14px;
   font-size: 12.5px;
   font-weight: 600;
@@ -2780,6 +2858,9 @@ select {
   background: var(--panel-strong);
   border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   border-radius: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Le texte occupe une hauteur de boîte VN constante et défile au-delà.
