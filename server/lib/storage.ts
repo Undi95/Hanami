@@ -149,6 +149,11 @@ function portraitField(portrait: unknown): Partial<CharacterMeta> {
   return typeof portrait === 'string' && portrait.trim() ? { portrait: portrait.trim() } : {}
 }
 
+/** Photo (vignette) : même règle — et c'est ainsi qu'un '' explicite la RETIRE. */
+function photoField(photo: unknown): Partial<CharacterMeta> {
+  return typeof photo === 'string' && photo.trim() ? { photo: photo.trim() } : {}
+}
+
 /**
  * Champs d'accueil optionnels tels qu'ils sont écrits dans character.json :
  * variantes vides retirées, et mode omis quand il vaut le défaut ('written').
@@ -202,6 +207,9 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     // Portrait conservé d'office : le dialog Personnages ne l'envoie pas (il n'a
     // pas d'éditeur) et une édition ne doit jamais l'effacer en silence.
     ...portraitField(patch.portrait ?? current.portrait),
+    // Photo : même conservation d'office (elle se pose et se retire par ses
+    // propres routes, jamais par le formulaire). Un '' explicite la retire.
+    ...photoField(patch.photo ?? current.photo),
     createdAt: current.createdAt,
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
@@ -219,11 +227,17 @@ export function deleteCharacter(id: string): void {
   // Le portrait vit hors du dossier du personnage : il part avec lui, sinon un
   // homonyme créé plus tard hériterait de l'image de son prédécesseur.
   fs.rmSync(portraitFile(id), { force: true })
+  fs.rmSync(photoFile(id), { force: true })
 }
 
 /** Fichier du portrait 2D d'un personnage (une image par personnage, écrasée). */
 function portraitFile(id: string): string {
   return path.join(PORTRAITS_DIR, `${sanitizeFileName(id)}.png`)
+}
+
+/** Fichier de la photo (vignette) — même dossier que les portraits, suffixe -photo. */
+function photoFile(id: string): string {
+  return path.join(PORTRAITS_DIR, `${sanitizeFileName(id)}-photo.png`)
 }
 
 /**
@@ -237,6 +251,26 @@ export function savePortrait(id: string, png: Buffer): string {
   fs.writeFileSync(path.join(PORTRAITS_DIR, name), png)
   // encodeURIComponent : un id est déjà slugifié, mais l'URL reste explicite.
   return `/portraits/${encodeURIComponent(name)}`
+}
+
+/**
+ * Écrit la photo (vignette) d'un personnage et renvoie son URL publique. Le
+ * fichier porte TOUJOURS le même nom : le client envoie un PNG carré déjà
+ * réduit, il n'y a donc rien à retraiter ni de variante à gérer.
+ * Le `?v=` n'est pas décoratif : l'URL étant stable, sans lui le navigateur
+ * garderait l'ancienne image en cache après un remplacement (express.static
+ * ignore la chaîne de requête, le fichier est servi normalement).
+ */
+export function savePhoto(id: string, png: Buffer): string {
+  fs.mkdirSync(PORTRAITS_DIR, { recursive: true })
+  const name = `${sanitizeFileName(id)}-photo.png`
+  fs.writeFileSync(path.join(PORTRAITS_DIR, name), png)
+  return `/portraits/${encodeURIComponent(name)}?v=${Date.now()}`
+}
+
+/** Supprime le fichier de la photo (la clé du character.json se retire à part). */
+export function deletePhoto(id: string): void {
+  fs.rmSync(photoFile(id), { force: true })
 }
 
 /** Prompt par défaut d'un personnage créé via l'UI — volontairement minimal et visible. */

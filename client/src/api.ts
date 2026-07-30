@@ -222,6 +222,34 @@ export function deleteCharacter(id: string): Promise<{ ok: true }> {
   return req('DELETE', `/api/characters/${encodeURIComponent(id)}`)
 }
 
+/**
+ * Pose la photo (vignette) d'un personnage : corps brut, comme le dépôt d'un
+ * fond. Le PNG carré est fabriqué côté client — le serveur ne retaille rien.
+ * L'URL renvoyée fait foi (elle porte un `?v=` anti-cache).
+ */
+export async function uploadCharacterPhoto(id: string, png: Blob): Promise<string> {
+  let res: Response
+  try {
+    res = await fetch(`/api/characters/${encodeURIComponent(id)}/photo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/png', ...authHeaders() },
+      body: png,
+    })
+  } catch {
+    throw new ApiError(t('serverUnreachable'), 0)
+  }
+  // 413 : le corps de la réponse vient d'Express, pas de nous — message clair.
+  if (res.status === 413) throw new ApiError(t('photoTooLarge'), 413)
+  if (!res.ok) return throwFromResponse(res)
+  const { photo } = (await res.json()) as { photo: string }
+  return photo
+}
+
+/** Retire la photo d'un personnage (fichier supprimé, clé retirée). */
+export function deleteCharacterPhoto(id: string): Promise<{ ok: true }> {
+  return req('DELETE', `/api/characters/${encodeURIComponent(id)}/photo`)
+}
+
 // ── Chats ──────────────────────────────────────────────────────────────────
 
 export function listChats(charId: string): Promise<ChatMeta[]> {

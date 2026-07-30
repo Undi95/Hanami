@@ -336,6 +336,16 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       viewChangeCb = cb
     },
 
+    snapshot(): string | null {
+      if (!currentVrm) return null
+      // Rendu PUIS lecture dans le MÊME tick : le renderer n'est pas créé avec
+      // preserveDrawingBuffer (coûteux à chaque frame), donc le backbuffer est
+      // vidé dès que le navigateur a présenté l'image. Rendre juste avant est le
+      // seul moyen fiable d'avoir des pixels à lire.
+      renderer.render(scene, camera)
+      return renderer.domElement.toDataURL('image/png')
+    },
+
     dispose(): void {
       disposed = true
       loadGeneration++ // invalide tout chargement encore en vol

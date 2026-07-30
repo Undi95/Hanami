@@ -1344,6 +1344,14 @@ function AppInner() {
           onDeleted={(id) => {
             handleCharacterDeleted(id).catch((e) => console.error('[characters]', e))
           }}
+          // Photo par capture : proposée seulement quand un avatar 3D est bien à
+          // l'écran (scène prête, sans erreur, personnage doté d'un VRM). Le
+          // dialog restreint en plus au personnage actif — le seul qui soit affiché.
+          snapshotAvatar={
+            stageReady && !vrmError && !!character?.vrm
+              ? () => stageRef.current?.snapshot() ?? null
+              : null
+          }
           onClose={() => setDialog(null)}
         />
       )}

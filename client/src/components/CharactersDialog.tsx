@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CharacterFull, CharacterMeta, GreetingMode } from '../../../shared/types'
 import * as api from '../api'
-import { useI18n } from '../i18n'
+import { translate, useI18n } from '../i18n'
 import { THEMES, THEME_LABELS } from '../themes'
 import Dialog from './Dialog'
 import SelectMenu, { type SelectOption } from './SelectMenu'
@@ -15,6 +15,13 @@ interface Props {
   onUpdated: (c: CharacterFull) => void
   onDeleted: (id: string) => void
   onClose: () => void
+  /**
+   * Photo de la scène 3D en data URL PNG (contrat VrmStage.snapshot), branchée
+   * par l'App. null/absent = aucun avatar 3D à l'écran : le bouton « Capturer le
+   * modèle 3D » n'existe alors pas. Il n'apparaît de toute façon que pour le
+   * personnage ACTIF — c'est le seul dont le modèle est affiché.
+   */
+  snapshotAvatar?: (() => string | null) | null
 }
 
 type View = { kind: 'list' } | { kind: 'create' } | { kind: 'edit'; id: string }
@@ -77,7 +84,79 @@ export function pastilleHue(id: string): number {
   return h
 }
 
-export default function CharactersDialog({ characters, activeId, onSelect, onCreated, onUpdated, onDeleted, onClose }: Props) {
+/**
+ * Vignette d'un personnage : l'image si elle existe (photo, sinon portrait de la
+ * card — la cascade est décidée par l'appelant), sinon l'initiale teintée.
+ */
+function Thumb({ id, name, src }: { id: string; name: string; src: string }) {
+  if (src) return <img className="pastille-image" src={src} alt="" aria-hidden="true" />
+  return (
+    <span className="pastille" style={{ background: `hsl(${pastilleHue(id)} 55% 74%)` }} aria-hidden="true">
+      {name.slice(0, 1).toUpperCase()}
+    </span>
+  )
+}
+
+// ── Photo : fabrication du carré côté client ───────────────────────────────
+// La photo est une VIGNETTE : 512 px suffisent, au-delà on stockerait des pixels
+// que personne ne verra jamais.
+const PHOTO_SIZE = 512
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error(translate('photoUnreadable')))
+    img.src = src
+  })
+}
+
+/**
+ * Recadre une image en CARRÉ CENTRAL (côté = min(largeur, hauteur)) et la réduit
+ * à 512 px au plus, en PNG. Jamais d'agrandissement, jamais de déformation : la
+ * photo est « ce qu'on voit », simplement rognée sur ses bords longs.
+ */
+async function toSquarePng(src: string): Promise<Blob> {
+  const img = await loadImage(src)
+  const side = Math.min(img.naturalWidth, img.naturalHeight)
+  if (side < 1) throw new Error(translate('photoUnreadable'))
+  const size = Math.min(PHOTO_SIZE, side)
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error(translate('photoUnreadable'))
+  const x = (img.naturalWidth - side) / 2
+  const y = (img.naturalHeight - side) / 2
+  ctx.drawImage(img, x, y, side, side, 0, 0, size, size)
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error(translate('photoUnreadable')))),
+      'image/png',
+    )
+  })
+}
+
+/** Même recadrage, depuis un fichier choisi : l'original ne quitte pas le navigateur. */
+async function fileToSquarePng(file: File): Promise<Blob> {
+  const url = URL.createObjectURL(file)
+  try {
+    return await toSquarePng(url)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+export default function CharactersDialog({
+  characters,
+  activeId,
+  onSelect,
+  onCreated,
+  onUpdated,
+  onDeleted,
+  onClose,
+  snapshotAvatar,
+}: Props) {
   const { t } = useI18n()
   const [view, setView] = useState<View>({ kind: 'list' })
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
@@ -89,12 +168,18 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
   // ici (l'import de la card le pose, le serveur le conserve d'une édition à
   // l'autre) — il se montre seulement, tant qu'aucun modèle 3D ne le remplace.
   const [portrait, setPortrait] = useState('')
+  // Photo du personnage édité : HORS du formulaire elle aussi — elle se pose et
+  // se retire par ses propres routes, immédiatement, comme le dépôt d'un fond.
+  const [photo, setPhoto] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [armed, setArmed] = useState(false)
   // Dépôt d'un fond : état à part de `busy` (qui, lui, affiche « Enregistrement… »).
   const bgFileRef = useRef<HTMLInputElement>(null)
   const [bgBusy, setBgBusy] = useState(false)
+  // Idem pour les actions photo : elles ne bloquent pas le bouton Enregistrer.
+  const photoFileRef = useRef<HTMLInputElement>(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
 
   useEffect(() => {
     if (view.kind === 'list') return
@@ -111,6 +196,7 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
     setForm(EMPTY_FORM)
     setInitialForm(EMPTY_FORM)
     setPortrait('')
+    setPhoto('')
     setError(null)
     setArmed(false)
   }
@@ -133,6 +219,7 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
       setForm(f)
       setInitialForm(f)
       setPortrait(c.portrait ?? '')
+      setPhoto(c.photo ?? '')
       setView({ kind: 'edit', id })
     } catch (e) {
       setError(api.errorMessage(e))
@@ -160,6 +247,49 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
     } finally {
       setBgBusy(false)
     }
+  }
+
+  // ── Photo du personnage ────────────────────────────────────────────────────
+  // Les trois actions s'appliquent TOUT DE SUITE côté serveur (la photo n'est pas
+  // un champ du formulaire) : `work` renvoie la nouvelle URL — '' quand on retire.
+  // L'état local suit, et onUpdated fait remonter le personnage rafraîchi à l'App,
+  // qui recharge la liste (donc les vignettes de la grille).
+
+  async function runPhoto(work: (id: string) => Promise<string>) {
+    if (view.kind !== 'edit') return
+    const id = view.id
+    setPhotoBusy(true)
+    setError(null)
+    try {
+      setPhoto(await work(id))
+      onUpdated(await api.getCharacter(id))
+    } catch (e) {
+      setError(api.errorMessage(e))
+    } finally {
+      setPhotoBusy(false)
+    }
+  }
+
+  /** Capture le modèle 3D tel qu'il est cadré à l'écran, recadré en carré. */
+  function capturePhoto() {
+    return runPhoto(async (id) => {
+      const shot = snapshotAvatar?.() ?? null
+      // Le modèle a pu être déchargé entre l'ouverture du dialog et le clic.
+      if (!shot) throw new Error(t('photoNoModel'))
+      return api.uploadCharacterPhoto(id, await toSquarePng(shot))
+    })
+  }
+
+  /** Image envoyée par l'utilisateur — recadrée en carré 512 avant l'envoi. */
+  function uploadPhoto(file: File) {
+    return runPhoto(async (id) => api.uploadCharacterPhoto(id, await fileToSquarePng(file)))
+  }
+
+  function removePhoto() {
+    return runPhoto(async (id) => {
+      await api.deleteCharacterPhoto(id)
+      return ''
+    })
   }
 
   // ── Variantes du message d'accueil ─────────────────────────────────────────
@@ -274,9 +404,8 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
           <div className="char-grid">
             {characters.map((c) => (
               <div key={c.id} className={`char-card${c.id === activeId ? ' active' : ''}`} onClick={() => { onSelect(c.id); onClose() }}>
-                <span className="pastille" style={{ background: `hsl(${pastilleHue(c.id)} 55% 74%)` }} aria-hidden="true">
-                  {c.name.slice(0, 1).toUpperCase()}
-                </span>
+                {/* Cascade : photo → portrait de la card → initiale teintée. */}
+                <Thumb id={c.id} name={c.name} src={c.photo || c.portrait || ''} />
                 <span className="char-name">{c.name}</span>
                 <button
                   className="btn small"
@@ -359,6 +488,63 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
                 <img src={portrait} alt="" />
                 <span className="hint">{t('portraitHint')}</span>
               </div>
+            </div>
+          )}
+          {/* Photo : la vignette du personnage dans la grille. Deux sources — une
+              capture du modèle 3D tel qu'il est cadré à l'écran, ou une image
+              envoyée. Réservé à l'édition : les routes ont besoin d'un id, et un
+              personnage en cours de création n'en a pas encore. */}
+          {view.kind === 'edit' && (
+            <div className="field">
+              <label>{t('photo')}</label>
+              <div className="photo-block">
+                <Thumb id={view.id} name={form.name} src={photo || portrait} />
+                <div className="photo-actions">
+                  {/* Capture proposée pour le seul personnage ACTIF, et seulement
+                      quand l'App confirme qu'un avatar 3D est bien à l'écran. */}
+                  {view.id === activeId && snapshotAvatar != null && (
+                    <button
+                      className="btn small"
+                      type="button"
+                      disabled={photoBusy}
+                      title={t('photoCaptureHint')}
+                      onClick={() => capturePhoto().catch((e) => console.error('[characters]', e))}
+                    >
+                      {t('photoCapture')}
+                    </button>
+                  )}
+                  <input
+                    ref={photoFileRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    hidden
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      e.target.value = '' // rechoisir le même fichier doit rester possible
+                      if (f) uploadPhoto(f).catch((err) => console.error('[characters]', err))
+                    }}
+                  />
+                  <button
+                    className="btn small"
+                    type="button"
+                    disabled={photoBusy}
+                    onClick={() => photoFileRef.current?.click()}
+                  >
+                    {t('photoUpload')}
+                  </button>
+                  {photo !== '' && (
+                    <button
+                      className="btn small"
+                      type="button"
+                      disabled={photoBusy}
+                      onClick={() => removePhoto().catch((e) => console.error('[characters]', e))}
+                    >
+                      {t('photoRemove')}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <span className="hint">{t('photoHint')}</span>
             </div>
           )}
           <div className="field">

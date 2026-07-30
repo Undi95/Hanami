@@ -47,6 +47,13 @@ export interface VrmStage {
    * réinitialisé (double-clic, resetView) → null. Sert à persister la préférence.
    */
   onViewChange(cb: (view: StageView | null) => void): void
+  /**
+   * Photo de la scène TELLE QU'ELLE EST À L'ÉCRAN, en data URL PNG (mêmes
+   * dimensions que le canvas). null si aucun modèle n'est chargé : il n'y aurait
+   * rien à capturer. Le recadrage carré et la réduction sont l'affaire de
+   * l'appelant — la scène ne fait que rendre son image.
+   */
+  snapshot(): string | null
   /** Libère renderer, modèle et listeners. */
   dispose(): void
 }

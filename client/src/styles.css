@@ -1822,6 +1822,21 @@ select {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
+/* Photo du personnage : l'aperçu (même rond que la grille) et ses actions, qui
+   passent à la ligne plutôt que de s'écraser sur écran étroit. */
+.photo-block {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* Variantes du message d'accueil : une ligne = un texte + son bouton retirer. */
 
 .variant-list {
@@ -2286,16 +2301,31 @@ select {
   white-space: nowrap;
 }
 
-.pastille {
+/* Gabarit commun de la vignette d'un personnage : rond, taille unique — que ce
+   soit l'initiale teintée ou sa photo. */
+.pastille,
+.pastille-image {
+  flex: none;
   width: 46px;
   height: 46px;
   border-radius: 50%;
+}
+
+.pastille {
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
   font-size: 18px;
   color: var(--accent-ink);
+}
+
+/* Photo du personnage (capture 3D ou image envoyée) : recadrée dans le rond,
+   jamais déformée — le carré est déjà fait côté client, cover est une ceinture. */
+.pastille-image {
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 /* ── Listes (chats, résultats d'import) ───────────────────────────────── */

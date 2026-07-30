@@ -6,14 +6,18 @@ import {
   createChat,
   deleteCharacter,
   deleteChat,
+  deletePhoto,
   forkChat,
   getCharacter,
   listCharacters,
   listChats,
   readChat,
+  savePhoto,
   updateChatHeader,
   updateCharacter,
 } from '../lib/storage'
+// Même reconnaissance d'image que le dépôt d'un fond : un seul sniff dans l'app.
+import { sniffFamily } from './assets'
 
 export const charactersRouter = Router()
 charactersRouter.use(express.json({ limit: '5mb' }))
@@ -117,6 +121,58 @@ charactersRouter.delete('/api/characters/:id', (req, res) => {
       return
     }
     deleteCharacter(req.params.id)
+    res.json({ ok: true })
+  } catch (e) {
+    sendError(res, 500, e)
+  }
+})
+
+// ── Photo (vignette du personnage) ─────────────────────────────────────────
+// Corps BRUT, sans multipart (donc sans dépendance), exactement comme le dépôt
+// d'un fond dans api/assets.ts. Le raw n'est branché QUE sur cette route : le
+// reste du routeur reste en JSON. Type image/* explicite — un type quelconque
+// ouvrirait la route aux requêtes cross-site « simples ».
+// Le client envoie déjà un PNG carré de 512 px au plus : 8 Mo est large.
+
+charactersRouter.post(
+  '/api/characters/:id/photo',
+  express.raw({ type: 'image/*', limit: '8mb' }),
+  (req, res) => {
+    try {
+      if (!findCharacter(req.params.id)) {
+        res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+        return
+      }
+      const buf = req.body as unknown
+      if (!Buffer.isBuffer(buf) || buf.length === 0) {
+        res.status(400).json({ error: 'Corps de requête image requis' })
+        return
+      }
+      // Les octets font foi : un Content-Type complaisant ne prouve rien.
+      if (!sniffFamily(buf)) {
+        res.status(400).json({ error: 'Ce fichier n’est pas une image PNG, JPEG ou WebP' })
+        return
+      }
+      const photo = savePhoto(req.params.id, buf)
+      updateCharacter(req.params.id, { photo })
+      res.json({ photo })
+    } catch (e) {
+      sendError(res, 500, e)
+    }
+  },
+)
+
+charactersRouter.delete('/api/characters/:id/photo', (req, res) => {
+  try {
+    if (!findCharacter(req.params.id)) {
+      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      return
+    }
+    // La clé d'abord : si l'effacement du fichier échouait après coup, il ne
+    // resterait qu'un fichier orphelin — jamais une vignette pointant dans le vide.
+    // '' explicite = la clé `photo` disparaît de character.json (photoField).
+    updateCharacter(req.params.id, { photo: '' })
+    deletePhoto(req.params.id)
     res.json({ ok: true })
   } catch (e) {
     sendError(res, 500, e)

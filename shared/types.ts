@@ -54,6 +54,11 @@ export interface CharacterMeta {
   // TANT QUE `vrm` est vide. Posé par l'import d'une card SillyTavern (le PNG de
   // la card EST l'image). Champ absent = aucune représentation visuelle.
   portrait?: string // ex: /portraits/sakura.png
+  // Photo du personnage servie par /portraits — VIGNETTE d'identité (liste des
+  // personnages), sans rôle dans la scène : capture du modèle 3D tel qu'il est
+  // cadré à l'écran, ou image envoyée par l'utilisateur. Toujours un carré.
+  // Champ absent = repli sur `portrait`, puis sur l'initiale teintée.
+  photo?: string // ex: /portraits/sakura-photo.png?v=1753900000000
   background: string // ex: /backgrounds/room.png ('' = dégradé par défaut)
   greeting: string // premier message affiché dans un nouveau chat
   greetings?: string[] // variantes supplémentaires (tirage au hasard avec greeting)
