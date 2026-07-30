@@ -9,6 +9,10 @@
 // Le token d'accès (hanami_token, cf. api.ts) n'est PAS une préférence : c'est
 // une clé par appareil, il reste local et n'entre jamais ici.
 import type { StageView, UiPrefs, UiPrefsPatch } from '../../shared/types'
+// La validation vit dans shared/uiPrefs.ts, PARTAGÉE avec le serveur (api/ui.ts) :
+// même table de règles des deux côtés, un cache local abîmé subit le même tri
+// qu'un PUT douteux.
+import { UI_PREF_KEYS, normalizeUiPrefs } from '../../shared/uiPrefs'
 import * as api from './api'
 
 const CACHE_KEY = 'hanami_prefs'
@@ -28,93 +32,8 @@ const LEGACY = {
   viewPrefix: 'hanami_view_',
 } as const
 
-const UI_KEYS = [
-  'lang',
-  'theme',
-  'customTheme',
-  'vnMode',
-  'chatPanelWidth',
-  'vnBoxWidth',
-  'vnBoxHeight',
-  'activeCharacter',
-  'activeChat',
-  'views',
-] as const satisfies readonly (keyof UiPrefs)[]
-
-// ── Validation défensive (cache corrompu, vieilles clés éditées à la main) ──
-
-const HEX_RE = /^#[0-9a-fA-F]{6}$/
-
-function isTriple(value: unknown): value is [number, number, number] {
-  return (
-    Array.isArray(value) &&
-    value.length === 3 &&
-    value.every((n) => typeof n === 'number' && Number.isFinite(n))
-  )
-}
-
-function asView(value: unknown): StageView | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const o = value as { pos?: unknown; target?: unknown }
-  return isTriple(o.pos) && isTriple(o.target) ? { pos: o.pos, target: o.target } : undefined
-}
-
-/** Taille de panneau en pixels — mêmes bornes larges que le serveur (cf. api/ui.ts). */
-function asPixels(min: number, max: number): (value: unknown) => number | undefined {
-  return (value) => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
-    const px = Math.round(value)
-    return px >= min && px <= max ? px : undefined
-  }
-}
-
-function asId(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 && value.length <= 128 ? value : undefined
-}
-
-function asRecord<T>(value: unknown, item: (raw: unknown) => T | undefined): Record<string, T> | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const out: Record<string, T> = {}
-  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (!key || key === '__proto__') continue
-    const val = item(raw)
-    if (val !== undefined) out[key] = val
-  }
-  return out
-}
-
-// Un validateur par clé : le serveur applique les mêmes règles, le client se
-// protège en plus d'un cache local abîmé.
-const VALIDATORS: { [K in keyof Required<UiPrefs>]: (value: unknown) => UiPrefs[K] | undefined } = {
-  lang: (v) => (v === 'fr' || v === 'en' ? v : undefined),
-  theme: (v) => (typeof v === 'string' && v.length > 0 && v.length <= 32 ? v : undefined),
-  customTheme: (v) => {
-    if (!v || typeof v !== 'object') return undefined
-    const o = v as { bg?: unknown; accent?: unknown }
-    if (typeof o.bg !== 'string' || !HEX_RE.test(o.bg)) return undefined
-    if (typeof o.accent !== 'string' || !HEX_RE.test(o.accent)) return undefined
-    return { bg: o.bg, accent: o.accent }
-  },
-  vnMode: (v) => (typeof v === 'boolean' ? v : undefined),
-  chatPanelWidth: asPixels(280, 4000),
-  vnBoxWidth: asPixels(400, 8000),
-  vnBoxHeight: asPixels(60, 4000),
-  activeCharacter: asId,
-  activeChat: (v) => asRecord(v, asId),
-  views: (v) => asRecord(v, asView),
-}
-
-function normalize(raw: unknown): UiPrefs {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
-  const source = raw as Record<string, unknown>
-  const out: Record<string, unknown> = {}
-  for (const key of UI_KEYS) {
-    if (!Object.prototype.hasOwnProperty.call(source, key)) continue
-    const value = (VALIDATORS[key] as (v: unknown) => unknown)(source[key])
-    if (value !== undefined) out[key] = value
-  }
-  return out as UiPrefs
-}
+// (La liste des clés et la validation défensive — cache corrompu, vieilles clés
+// éditées à la main — sont importées de shared/uiPrefs.ts, cf. l'import en tête.)
 
 function isEmpty(prefs: UiPrefs): boolean {
   return Object.keys(prefs).length === 0
@@ -171,7 +90,7 @@ function readLegacy(): UiPrefs {
   } catch {
     /* localStorage indisponible (mode privé strict) */
   }
-  return normalize(out)
+  return normalizeUiPrefs(out)
 }
 
 function clearLegacy(): void {
@@ -190,7 +109,7 @@ function clearLegacy(): void {
 function readCache(): UiPrefs {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
-    if (raw) return normalize(JSON.parse(raw))
+    if (raw) return normalizeUiPrefs(JSON.parse(raw))
   } catch {
     /* cache absent ou illisible */
   }
@@ -291,7 +210,7 @@ document.addEventListener('visibilitychange', () => {
 export function setPref(patch: UiPrefsPatch): void {
   const next = { ...cache } as Record<string, unknown>
   const changed: Record<string, unknown> = {}
-  for (const key of UI_KEYS) {
+  for (const key of UI_PREF_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(patch, key)) continue
     const value = (patch as Record<string, unknown>)[key]
     if (value === undefined) continue // absent du patch : rien à faire
@@ -306,7 +225,7 @@ export function setPref(patch: UiPrefsPatch): void {
     changed[key] = value
   }
   if (Object.keys(changed).length === 0) return
-  cache = normalize(next)
+  cache = normalizeUiPrefs(next)
   writeCache()
   notify()
   if (fromServer) return // valeur venue du serveur : ne pas la lui renvoyer
@@ -337,7 +256,7 @@ function applyFromServer(next: UiPrefs): void {
 export async function loadServerPrefs(): Promise<void> {
   let server: UiPrefs
   try {
-    server = normalize(await api.getUiPrefs())
+    server = normalizeUiPrefs(await api.getUiPrefs())
   } catch (e) {
     if (!(e instanceof api.AuthRequiredError)) console.warn('[prefs]', api.errorMessage(e))
     return
@@ -347,7 +266,7 @@ export async function loadServerPrefs(): Promise<void> {
     if (!isEmpty(legacy)) {
       try {
         // PUT d'abord, effacement ensuite : un échec réseau ne perd rien.
-        const saved = normalize(await api.putUiPrefs(legacy))
+        const saved = normalizeUiPrefs(await api.putUiPrefs(legacy))
         clearLegacy()
         applyFromServer(saved)
       } catch (e) {

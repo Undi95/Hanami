@@ -7,109 +7,16 @@ import { Router } from 'express'
 import fs from 'node:fs'
 import path from 'node:path'
 import { DATA_DIR } from '../lib/storage'
-import type { StageView, UiCustomTheme, UiPrefs } from '../../shared/types'
+import type { UiPrefs } from '../../shared/types'
+// La validation vit dans shared/uiPrefs.ts, PARTAGÉE avec le client (prefs.ts) :
+// une seule table de règles, plus de divergence possible entre les deux bouts.
+import { UI_PREF_KEYS, UI_PREF_VALIDATORS, normalizeUiPrefs } from '../../shared/uiPrefs'
 
 export const uiRouter = Router()
 
 const UI_FILE = path.join(DATA_DIR, 'ui.json')
-// ui.json est une préférence, pas un stockage : plafonds volontairement bas.
+// ui.json est une préférence, pas un stockage : plafond volontairement bas.
 const MAX_BYTES = 64 * 1024
-const MAX_STRING = 200
-const MAX_ENTRIES = 200
-
-const HEX_RE = /^#[0-9a-fA-F]{6}$/
-// Clés des dictionnaires (identifiants de personnage/conversation, parfois
-// suffixés du mode d'affichage : « <charId>::vn » pour les cadrages caméra) :
-// jeu de caractères restreint, et jamais un nom qui toucherait au prototype.
-// La longueur laisse la place à un id de 64 caractères plus son suffixe.
-const KEY_RE = /^[A-Za-z0-9._:-]{1,80}$/
-const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
-
-// ── Validateurs (tout ce qui n'est pas reconnu est IGNORÉ) ─────────────────
-
-function asString(value: unknown, max = MAX_STRING): string | undefined {
-  return typeof value === 'string' && value.length > 0 && value.length <= max ? value : undefined
-}
-
-function asCustomTheme(value: unknown): UiCustomTheme | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const o = value as { bg?: unknown; accent?: unknown }
-  if (typeof o.bg !== 'string' || !HEX_RE.test(o.bg)) return undefined
-  if (typeof o.accent !== 'string' || !HEX_RE.test(o.accent)) return undefined
-  return { bg: o.bg, accent: o.accent }
-}
-
-/**
- * Taille de panneau en pixels : entier dans des bornes LARGES. Le bornage fin
- * (60 % de la fenêtre, marges de la boîte VN) appartient au client, qui seul
- * connaît l'écran ; ici on ne refuse que l'absurde.
- */
-function asPixels(min: number, max: number): (value: unknown) => number | undefined {
-  return (value) => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
-    const px = Math.round(value)
-    return px >= min && px <= max ? px : undefined
-  }
-}
-
-function asTriple(value: unknown): [number, number, number] | undefined {
-  if (!Array.isArray(value) || value.length !== 3) return undefined
-  if (!value.every((n) => typeof n === 'number' && Number.isFinite(n))) return undefined
-  return [value[0] as number, value[1] as number, value[2] as number]
-}
-
-function asView(value: unknown): StageView | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const o = value as { pos?: unknown; target?: unknown }
-  const pos = asTriple(o.pos)
-  const target = asTriple(o.target)
-  return pos && target ? { pos, target } : undefined
-}
-
-/** Dictionnaire clé → valeur validée ; entrées invalides ou clés douteuses écartées. */
-function asRecord<T>(value: unknown, item: (raw: unknown) => T | undefined): Record<string, T> | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const out: Record<string, T> = {}
-  let n = 0
-  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (n >= MAX_ENTRIES) break
-    if (!KEY_RE.test(key) || FORBIDDEN_KEYS.has(key)) continue
-    const val = item(raw)
-    if (val === undefined) continue
-    out[key] = val
-    n++
-  }
-  return out
-}
-
-// Un validateur par clé de UiPrefs — le type mappé garantit qu'aucune n'est oubliée.
-const VALIDATORS: { [K in keyof Required<UiPrefs>]: (value: unknown) => UiPrefs[K] | undefined } = {
-  lang: (v) => (v === 'fr' || v === 'en' ? v : undefined),
-  theme: (v) => asString(v, 32),
-  customTheme: asCustomTheme,
-  vnMode: (v) => (typeof v === 'boolean' ? v : undefined),
-  chatPanelWidth: asPixels(280, 4000),
-  vnBoxWidth: asPixels(400, 8000),
-  vnBoxHeight: asPixels(60, 4000),
-  activeCharacter: (v) => asString(v, 128),
-  activeChat: (v) => asRecord(v, (raw) => asString(raw, 128)),
-  views: (v) => asRecord(v, asView),
-}
-
-const UI_KEYS = Object.keys(VALIDATORS) as (keyof UiPrefs)[]
-
-/** Objet quelconque → UiPrefs propre : clés inconnues jetées, valeurs invalides omises. */
-function normalize(raw: unknown): UiPrefs {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
-  const source = raw as Record<string, unknown>
-  const out: Record<string, unknown> = {}
-  for (const key of UI_KEYS) {
-    if (!Object.prototype.hasOwnProperty.call(source, key)) continue
-    const value = (VALIDATORS[key] as (v: unknown) => unknown)(source[key])
-    if (value !== undefined) out[key] = value
-  }
-  return out as UiPrefs
-}
 
 // ── Fichier ────────────────────────────────────────────────────────────────
 
@@ -120,7 +27,7 @@ function normalize(raw: unknown): UiPrefs {
  */
 export function readUiPrefs(): UiPrefs {
   try {
-    return normalize(JSON.parse(fs.readFileSync(UI_FILE, 'utf8')))
+    return normalizeUiPrefs(JSON.parse(fs.readFileSync(UI_FILE, 'utf8')))
   } catch {
     return {}
   }
@@ -161,14 +68,14 @@ uiRouter.put('/api/ui', (req, res) => {
   }
   const patch = body as Record<string, unknown>
   const next = readUiPrefs() as Record<string, unknown>
-  for (const key of UI_KEYS) {
+  for (const key of UI_PREF_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(patch, key)) continue
     const raw = patch[key]
     if (raw === null) {
       delete next[key]
       continue
     }
-    const value = (VALIDATORS[key] as (v: unknown) => unknown)(raw)
+    const value = (UI_PREF_VALIDATORS[key] as (v: unknown) => unknown)(raw)
     if (value !== undefined) next[key] = value
   }
   const json = JSON.stringify(next, null, 2)

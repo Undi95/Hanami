@@ -15,7 +15,7 @@ import {
   updateChatHeader,
   writeMemoryFile,
 } from '../lib/storage'
-import { streamChatCompletion } from '../llm/openai'
+import { streamChatCompletion, type StreamedToolCall } from '../llm/openai'
 import { MEMORY_TOOL_NAMES, executeMemoryTool, memoryToolDefs } from '../tools/memoryTools'
 import { FILE_TOOL_NAMES, executeFileTool, fileToolDefs } from '../tools/fileTools'
 import { CHAT_TOOL_NAMES, chatToolDefs, executeChatTool } from '../tools/chatTools'
@@ -263,6 +263,56 @@ function parseImages(raw: unknown): { images: string[] } | { error: string; stat
   return { images }
 }
 
+/**
+ * Boucle agentique PARTAGÉE entre le chat (streaming SSE) et la compaction
+ * (silencieuse) — avant cette factorisation, les deux copies vivaient chacune
+ * leur vie. Elle fait UNIQUEMENT la mécanique commune : appeler le modèle,
+ * tracer fidèlement l'aller-retour d'outils dans `messages` (assistant avec
+ * tool_calls, puis un message tool par exécution), et — budget épuisé alors
+ * que le modèle en redemande — un dernier appel SANS outils pour obtenir la
+ * réponse finale. Tout le reste (streaming, événements SSE, agrégation de
+ * finishReason/promptTokens) appartient à l'appelant, via la fermeture de
+ * `call` et le crochet `onTool`.
+ */
+async function runToolLoop<R extends { content: string; toolCalls: StreamedToolCall[] }>(
+  characterId: string,
+  settings: Settings,
+  messages: unknown[],
+  maxIterations: number,
+  call: (withTools: boolean) => Promise<R>,
+  onTool?: (name: string, args: string, result: string) => void,
+): Promise<{ last: R; exhausted: boolean }> {
+  let last = await call(true)
+  for (let iteration = 1; ; iteration++) {
+    if (last.toolCalls.length === 0) return { last, exhausted: false }
+    // Trace fidèle de l'aller-retour outil dans le contexte de la boucle.
+    messages.push({
+      role: 'assistant',
+      content: last.content || null,
+      tool_calls: last.toolCalls.map((tc) => ({
+        id: tc.id,
+        type: 'function',
+        function: { name: tc.name, arguments: tc.arguments },
+      })),
+    })
+    for (const tc of last.toolCalls) {
+      let toolResult: string
+      try {
+        toolResult = executeTool(characterId, settings, tc.name, tc.arguments)
+      } catch (e) {
+        toolResult = `Erreur : ${e instanceof Error ? e.message : String(e)}`
+      }
+      onTool?.(tc.name, tc.arguments, toolResult)
+      messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
+    }
+    if (iteration >= maxIterations) {
+      // Budget épuisé, le modèle veut encore des outils : réponse finale sans eux.
+      return { last: await call(false), exhausted: true }
+    }
+    last = await call(true)
+  }
+}
+
 async function handleChat(req: Request, res: Response): Promise<void> {
   const body = (req.body ?? {}) as {
     characterId?: unknown
@@ -438,55 +488,33 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   try {
     let truncated = false
     let finishReason = ''
-    let pendingTools = false
     let promptTokens = 0
 
-    for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
-      const result = await streamOnce(true)
-      truncated = result.truncated
-      finishReason = result.finishReason
-      if (result.promptTokens > 0) promptTokens = result.promptTokens
-      if (result.toolCalls.length === 0) {
-        pendingTools = false
-        break
-      }
-      pendingTools = true
+    // Les agrégations (truncated, finishReason, promptTokens — le dernier usage
+    // NON NUL fait foi) restent ici, par fermeture : la boucle partagée ne
+    // s'occupe que de la mécanique d'outils.
+    const { exhausted } = await runToolLoop(
+      characterId,
+      settings,
+      messages,
+      MAX_TOOL_ITERATIONS,
+      async (withTools) => {
+        const result = await streamOnce(withTools)
+        truncated = result.truncated
+        finishReason = result.finishReason
+        if (result.promptTokens > 0) promptTokens = result.promptTokens
+        return result
+      },
+      (name, args, toolResult) => {
+        writeEvent(res, { type: 'tool', name, args, result: toolResult })
+      },
+    )
 
-      // Trace fidèle de l'aller-retour outil dans le contexte de la boucle.
-      messages.push({
-        role: 'assistant',
-        content: result.content || null,
-        tool_calls: result.toolCalls.map((tc) => ({
-          id: tc.id,
-          type: 'function',
-          function: { name: tc.name, arguments: tc.arguments },
-        })),
-      })
-      for (const tc of result.toolCalls) {
-        let toolResult: string
-        try {
-          toolResult = executeTool(characterId, settings, tc.name, tc.arguments)
-        } catch (e) {
-          toolResult = `Erreur : ${e instanceof Error ? e.message : String(e)}`
-        }
-        writeEvent(res, { type: 'tool', name: tc.name, args: tc.arguments, result: toolResult })
-        messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
-      }
-    }
-
-    if (pendingTools) {
-      // Budget d'itérations épuisé alors que le modèle demande encore des outils :
-      // un dernier appel SANS outils pour obtenir la réponse finale.
-      const result = await streamOnce(false)
-      truncated = result.truncated
-      finishReason = result.finishReason
-      if (result.promptTokens > 0) promptTokens = result.promptTokens
-      if (assistantText.length === 0) {
-        // Rien à sauvegarder : pas de message vide, pas de done.
-        writeEvent(res, { type: 'error', message: "Budget d'outils épuisé sans réponse du modèle" })
-        res.end()
-        return
-      }
+    if (exhausted && assistantText.length === 0) {
+      // Rien à sauvegarder : pas de message vide, pas de done.
+      writeEvent(res, { type: 'error', message: "Budget d'outils épuisé sans réponse du modèle" })
+      res.end()
+      return
     }
 
     // Contenu INTÉGRAL, tel que généré (le tag d'émotion reste dans le texte).
@@ -749,54 +777,27 @@ async function runCompaction(
     lastFinish = result.finishReason
     summary = result.content.trim()
   } else {
-    // Boucle agentique silencieuse : le résumé = le texte du DERNIER appel
-    // (les textes intermédiaires accompagnant des appels d'outils sont ignorés).
-    let pendingTools = false
-    for (let iteration = 0; iteration < COMPACT_MAX_ITERATIONS; iteration++) {
-      const result = await streamChatCompletion({
-        settings: compactSettings,
-        messages,
-        tools: tools.length > 0 ? tools : undefined,
-        signal: abort.signal,
-        onDelta: () => {},
-      })
-      lastFinish = result.finishReason
-      if (result.toolCalls.length === 0) {
-        summary = result.content.trim()
-        pendingTools = false
-        break
-      }
-      pendingTools = true
-      messages.push({
-        role: 'assistant',
-        content: result.content || null,
-        tool_calls: result.toolCalls.map((tc) => ({
-          id: tc.id,
-          type: 'function',
-          function: { name: tc.name, arguments: tc.arguments },
-        })),
-      })
-      for (const tc of result.toolCalls) {
-        let toolResult: string
-        try {
-          toolResult = executeTool(characterId, settings, tc.name, tc.arguments)
-        } catch (e) {
-          toolResult = `Erreur : ${e instanceof Error ? e.message : String(e)}`
-        }
-        messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
-      }
-    }
-    if (pendingTools) {
-      // Budget épuisé : un dernier appel sans outils pour obtenir le résumé.
-      const result = await streamChatCompletion({
-        settings: compactSettings,
-        messages,
-        signal: abort.signal,
-        onDelta: () => {},
-      })
-      lastFinish = result.finishReason
-      summary = result.content.trim()
-    }
+    // Boucle agentique silencieuse (partagée avec le chat, cf. runToolLoop) :
+    // le résumé = le texte du DERNIER appel — celui sans appels d'outils, ou le
+    // dernier forcé sans outils quand le budget est épuisé.
+    const { last } = await runToolLoop(
+      characterId,
+      settings,
+      messages,
+      COMPACT_MAX_ITERATIONS,
+      async (withTools) => {
+        const result = await streamChatCompletion({
+          settings: compactSettings,
+          messages,
+          tools: withTools && tools.length > 0 ? tools : undefined,
+          signal: abort.signal,
+          onDelta: () => {},
+        })
+        lastFinish = result.finishReason
+        return result
+      },
+    )
+    summary = last.content.trim()
   }
   if (!summary) {
     throw new Error(
