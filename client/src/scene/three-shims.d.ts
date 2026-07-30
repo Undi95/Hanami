@@ -17,6 +17,11 @@ declare module 'three' {
     multiplyScalar(scalar: number): this
     copy(v: Vector3): this
     clone(): Vector3
+    add(v: Vector3): this
+    sub(v: Vector3): this
+    negate(): this
+    length(): number
+    applyAxisAngle(axis: Vector3, angle: number): this
   }
 
   export class Box3 {
@@ -24,6 +29,8 @@ declare module 'three' {
     max: Vector3
     constructor(min?: Vector3, max?: Vector3)
     setFromObject(object: Object3D, precise?: boolean): this
+    getSize(target: Vector3): Vector3
+    getCenter(target: Vector3): Vector3
   }
 
   export class Euler {

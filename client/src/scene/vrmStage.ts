@@ -4,8 +4,10 @@ import {
   Box3,
   Clock,
   DirectionalLight,
+  Group,
   HemisphereLight,
   MOUSE,
+  Object3D,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
@@ -38,6 +40,36 @@ const REST_POSE_Z: ReadonlyArray<readonly [VRMHumanBoneName, number]> = [
 // la scène occupe toute la largeur, aucun décalage n'aurait de sens.
 const CHAT_PANEL_DEFAULT_W = 420
 const CHAT_PANEL_MIN_W = 900
+
+// Décor : bornes de plausibilité de la hauteur d'une pièce, et hauteur visée
+// quand elle est absurde (même doctrine que normalizeScale — on ne corrige que
+// l'absurde, jamais le goût de l'auteur).
+const ENV_MIN_HEIGHT = 1.5
+const ENV_MAX_HEIGHT = 12
+const ENV_TARGET_HEIGHT = 2.6
+
+// Éclairage : deux régimes. Sans décor, les valeurs historiques (l'avatar est
+// seul dans le vide, il lui faut beaucoup de lumière). Avec décor, on baisse —
+// une pièce renvoie déjà de la lumière, et un avatar surexposé « décollerait »
+// du fond. La key light reste : MToon a besoin d'une direction.
+const KEY_LIGHT_SOLO = 2.2
+const FILL_LIGHT_SOLO = 0.6
+const KEY_LIGHT_ENV = 1.1
+const FILL_LIGHT_ENV = 0.35
+
+/**
+ * GLTFLoader LÈVE quand un .glb réclame un décodeur qui n'est pas branché
+ * (Draco, meshopt, KTX2 : des fichiers à servir, pas des dépendances npm). Son
+ * message brut ne dit rien à personne — on le remplace par la marche à suivre.
+ * Retourne null si l'erreur n'a rien à voir avec une compression.
+ */
+function compressionError(e: unknown): Error | null {
+  const msg = e instanceof Error ? e.message : String(e)
+  if (!/draco|meshopt|ktx2|basis/i.test(msg)) return null
+  return new Error(
+    'Décor compressé (Draco, meshopt ou KTX2) — non pris en charge : réexporte le .glb sans compression.',
+  )
+}
 
 // three est consommé SANS @types/three (types inférés du build JS) et
 // l'inférence ne voit pas le décentrement d'objectif : déclaration locale,
@@ -72,14 +104,22 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   container.appendChild(renderer.domElement)
 
   const scene = new Scene()
+  // Deux groupes FRÈRES. Règle d'or : l'avatar reste à l'origine du monde, c'est
+  // le DÉCOR qui se déplace pour amener son point d'accueil sous ses pieds. Les
+  // cadrages sauvegardés (coordonnées monde absolues, data/ui.json) restent donc
+  // valables quel que soit le décor, et frameCamera n'a rien à savoir de la pièce.
+  const avatarGroup = new Group()
+  const envGroup = new Group()
+  scene.add(avatarGroup, envGroup)
+
   const camera = new PerspectiveCamera(30, 1, 0.1, 20)
   camera.position.set(0, 1.35, 1.8)
 
   // Lumière principale de face/haut + appoint doux (ne pas écraser le toon).
-  const keyLight = new DirectionalLight(0xffffff, 2.2)
+  const keyLight = new DirectionalLight(0xffffff, KEY_LIGHT_SOLO)
   keyLight.position.set(0.3, 1.6, 1.2)
   scene.add(keyLight)
-  const fillLight = new HemisphereLight(0xffffff, 0x8890a0, 0.6)
+  const fillLight = new HemisphereLight(0xffffff, 0x8890a0, FILL_LIGHT_SOLO)
   scene.add(fillLight)
 
   const controls = new OrbitControls(camera, renderer.domElement)
@@ -100,12 +140,22 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
   const loader = new GLTFLoader()
   loader.register((parser) => new VRMLoaderPlugin(parser))
+  // Décors : loader NU, sans le moindre plugin — un .glb de pièce n'a ni
+  // humanoïde, ni expressions, ni spring bones à interpréter.
+  const envLoader = new GLTFLoader()
 
   const idle = new IdleAnimator()
   const posedBones = new Map<VRMHumanBoneName, PosedBone>()
   let currentVrm: VRM | null = null
   let loadGeneration = 0
   let disposed = false
+
+  // ── Décor ─────────────────────────────────────────────────────────────────
+  let envRoot: Object3D | null = null
+  // Dimensions du décor en place (mètres) : elles pilotent le plan lointain de la
+  // caméra et la distance de recul maximale. null = pas de décor.
+  let envMetrics: { radius: number; height: number } | null = null
+  let envGeneration = 0
 
   // ── Cadrage utilisateur (pan/zoom/rotation) : persistance + reset ─────────
   let lastFrame: { vrm: VRM; h: number } | null = null // cadrage par défaut re-calculable
@@ -157,7 +207,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
   function unloadCurrent(): void {
     if (!currentVrm) return
-    scene.remove(currentVrm.scene)
+    avatarGroup.remove(currentVrm.scene)
     VRMUtils.deepDispose(currentVrm.scene)
     currentVrm = null
     lastFrame = null
@@ -231,11 +281,108 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     controls.target.set(headPos.x, headPos.y - 0.12, headPos.z)
     camera.position.set(headPos.x, controls.target.y, distance)
     controls.minDistance = 0.3 * h
-    controls.maxDistance = 3 * h
-    camera.far = 15 * h
+    applyEnvLimits(h)
     applyViewOffset()
     camera.updateProjectionMatrix()
     controls.update()
+  }
+
+  /**
+   * Plan lointain et recul maximum. SANS décor : exactement les valeurs
+   * historiques (15 h et 3 h) — zéro régression. AVEC décor : de quoi voir la
+   * pièce entière sans la clipper, et de quoi s'en éloigner un peu, sans jamais
+   * réduire ce que l'avatar seul permettait.
+   * Appelée des DEUX côtés (frameCamera et loadEnvironment) : le modèle et le
+   * décor sont chargés par deux effets React indépendants, l'ordre n'est pas
+   * garanti — sinon un décor arrivé après le modèle serait tronqué à l'écran.
+   */
+  function applyEnvLimits(h = lastFrame?.h ?? 1.6): void {
+    if (envMetrics) {
+      camera.far = Math.max(15 * h, 4 * envMetrics.radius)
+      controls.maxDistance = Math.min(8 * h, Math.max(3 * h, envMetrics.radius))
+    } else {
+      camera.far = 15 * h
+      controls.maxDistance = 3 * h
+    }
+    camera.updateProjectionMatrix()
+  }
+
+  /** Régime d'éclairage : l'avatar seul dans le vide, ou posé dans une pièce. */
+  function applyLightRegime(): void {
+    const lit = envRoot !== null
+    keyLight.intensity = lit ? KEY_LIGHT_ENV : KEY_LIGHT_SOLO
+    fillLight.intensity = lit ? FILL_LIGHT_ENV : FILL_LIGHT_SOLO
+  }
+
+  function unloadEnvironment(): void {
+    if (envRoot) {
+      envGroup.remove(envRoot)
+      // deepDispose est générique (géométries, matériaux, textures) : il vaut
+      // pour un décor comme pour un VRM. Sans lui, changer de décor deux fois
+      // laisse deux pièces en VRAM.
+      VRMUtils.deepDispose(envRoot)
+      envRoot = null
+    }
+    envMetrics = null
+    envGroup.position.set(0, 0, 0)
+    envGroup.rotation.set(0, 0, 0)
+    envGroup.scale.setScalar(1)
+    applyLightRegime()
+    applyEnvLimits()
+  }
+
+  /**
+   * Mise à l'échelle et calage au sol du décor, calqués sur normalizeScale : une
+   * hauteur plausible est laissée intacte, une hauteur absurde (décor exporté en
+   * centimètres) est ramenée à ~2,6 m. Le plancher vient à y = 0, là où l'avatar
+   * a les pieds.
+   */
+  function fitEnvironment(root: Object3D): void {
+    envGroup.position.set(0, 0, 0)
+    envGroup.updateMatrixWorld(true)
+    let box = new Box3().setFromObject(root)
+    const rawHeight = Math.max(box.getSize(new Vector3()).y, 1e-6)
+    if (rawHeight < ENV_MIN_HEIGHT || rawHeight > ENV_MAX_HEIGHT) {
+      console.warn(
+        `[env] environment height ${rawHeight.toFixed(3)} m is out of the ` +
+          `[${ENV_MIN_HEIGHT}, ${ENV_MAX_HEIGHT}] range — rescaling by ` +
+          `${(ENV_TARGET_HEIGHT / rawHeight).toFixed(5)} to a ${ENV_TARGET_HEIGHT} m height`,
+      )
+      envGroup.scale.multiplyScalar(ENV_TARGET_HEIGHT / rawHeight)
+      envGroup.updateMatrixWorld(true)
+      box = new Box3().setFromObject(root)
+    }
+    const size = box.getSize(new Vector3())
+    // Plancher aux pieds de l'avatar. Un décor « skybox » dont la boîte
+    // englobante ment (sol infini, min.y à −500) se rattrape par le sidecar.
+    envGroup.position.set(0, -box.min.y, 0)
+    envMetrics = { radius: Math.max(size.length() / 2, 0.5), height: Math.max(size.y, 0.5) }
+  }
+
+  /** Charge un décor .glb dans envGroup (url '' = décharge le décor courant). */
+  async function loadEnvironment(url: string): Promise<void> {
+    const generation = ++envGeneration
+    if (!url) {
+      unloadEnvironment()
+      return
+    }
+    try {
+      const gltf = await envLoader.loadAsync(url)
+      if (generation !== envGeneration || disposed) {
+        // Un loadEnvironment plus récent (ou dispose) est passé entre-temps.
+        VRMUtils.deepDispose(gltf.scene)
+        return
+      }
+      unloadEnvironment()
+      envRoot = gltf.scene
+      envGroup.add(envRoot)
+      fitEnvironment(envRoot)
+      applyLightRegime()
+      applyEnvLimits()
+    } catch (e) {
+      console.error('[env]', e)
+      throw compressionError(e) ?? e // l'UI affiche l'erreur
+    }
   }
 
   async function loadModel(url: string): Promise<void> {
@@ -258,7 +405,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       VRMUtils.rotateVRM0(vrm) // modèles VRM 0.x : regardent +Z, on les retourne
       unloadCurrent()
       applyRestPose(vrm)
-      scene.add(vrm.scene)
+      avatarGroup.add(vrm.scene)
       currentVrm = vrm
       idle.reset()
       idle.setExpressionTable(resolveExpressions(vrm.expressionManager))
@@ -299,6 +446,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
   return {
     loadModel,
+    loadEnvironment,
     resetView,
 
     setFrameMode(mode: FrameMode): void {
@@ -349,6 +497,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     dispose(): void {
       disposed = true
       loadGeneration++ // invalide tout chargement encore en vol
+      envGeneration++
       cancelAnimationFrame(rafId)
       rafId = 0
       document.removeEventListener('visibilitychange', onVisibilityChange)
@@ -357,6 +506,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       renderer.domElement.removeEventListener('dblclick', onDblClick)
       controls.dispose()
       unloadCurrent()
+      // Le décor part AVANT le renderer : c'est lui qui porte le contexte WebGL
+      // sur lequel les textures de la pièce sont libérées.
+      unloadEnvironment()
       renderer.dispose()
       renderer.domElement.remove()
     },

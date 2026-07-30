@@ -119,6 +119,11 @@ function AppInner() {
   const [chatWidth, setChatWidth] = useState(chatPanelWidth)
   const [stageReady, setStageReady] = useState(false)
   const [vrmError, setVrmError] = useState<string | null>(null)
+  // Décor 3D : erreur de chargement et pastille d'attente. Un décor pèse
+  // plusieurs mégaoctets — son état est SÉPARÉ de celui du modèle, un décor
+  // introuvable ne doit pas faire croire à un avatar cassé.
+  const [envError, setEnvError] = useState<string | null>(null)
+  const [envLoading, setEnvLoading] = useState(false)
   // Thème de l'app (préférence serveur, comme la langue) — le thème propre au
   // personnage actif, s'il existe, prend le dessus.
   const [appTheme, setAppTheme] = useState<AppTheme>(savedTheme)
@@ -429,6 +434,36 @@ function AppInner() {
       if (retryTimer !== null) window.clearTimeout(retryTimer)
     }
   }, [stageReady, character?.vrm, character?.id, applyViewFor])
+
+  // Décor 3D du personnage → chargé dans la scène, autour de l'avatar. Effet
+  // SÉPARÉ de celui du modèle : un décor de plusieurs mégaoctets n'a aucune raison
+  // d'être rechargé parce que le modèle change, et l'inverse non plus.
+  // Rien n'est chargé sans modèle VRM (`character.vrm` vide) : un portrait 2D
+  // flottant devant une pièce en 3D n'aurait aucun sens.
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!stage || !stageReady) return
+    const url = character?.vrm ? (character.environment ?? '') : ''
+    setEnvError(null)
+    setEnvLoading(url !== '')
+    let cancelled = false
+    stage
+      .loadEnvironment(url)
+      .then(() => {
+        if (!cancelled) setEnvLoading(false)
+      })
+      .catch((e) => {
+        // Personnage changé (ou effet rejoué) entre-temps : ce chargement ne
+        // concerne plus personne.
+        if (cancelled) return
+        console.error('[env]', e)
+        setEnvLoading(false)
+        setEnvError(api.errorMessage(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [stageReady, character?.environment, character?.vrm])
 
   // Bascule desktop ↔ VN : la place laissée à la scène change du tout au tout, le
   // cadrage du nouveau mode s'applique donc immédiatement (sa vue sauvegardée,
@@ -1115,6 +1150,29 @@ function AppInner() {
         </div>
       )}
 
+      {/* Décor introuvable ou illisible : l'avatar, lui, est là — d'où une
+          bannière à part, sous celle du modèle quand les deux tombent. */}
+      {envError && (
+        <div
+          className="banner"
+          role="alert"
+          style={{
+            position: 'fixed',
+            top: vrmError ? 78 : 10,
+            left: 10,
+            zIndex: 5,
+            margin: 0,
+            maxWidth: 320,
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            gap: 2,
+          }}
+        >
+          <span>{t('environmentLoadError')}</span>
+          <span style={{ fontSize: 11, opacity: 0.75 }}>{envError}</span>
+        </div>
+      )}
+
       {/* En mode VN, le panneau s'efface (CSS) : « collapsed » n'a plus de sens. */}
       <div className={`chat-panel${vnMode ? ' vn' : collapsed ? ' collapsed' : ''}`}>
         {/* Poignée de largeur du bord gauche : le CSS la réserve à la colonne de
@@ -1158,6 +1216,13 @@ function AppInner() {
         {compacting && (
           <div className="compact-pill" role="status">
             {t('compacting')}
+          </div>
+        )}
+
+        {/* Décor en cours de chargement : plusieurs mégaoctets, l'attente se voit. */}
+        {envLoading && (
+          <div className="compact-pill" role="status">
+            {t('environmentLoading')}
           </div>
         )}
 

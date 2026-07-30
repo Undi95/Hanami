@@ -16,6 +16,13 @@ export type FrameMode = 'centered' | 'left'
 export interface VrmStage {
   /** Charge un modèle .vrm (url '' = décharge le modèle courant). */
   loadModel(url: string): Promise<void>
+  /**
+   * Charge un décor .glb autour de l'avatar (url '' = décharge le décor courant,
+   * retour au fond 2D). Indépendant de loadModel : l'avatar reste à l'origine du
+   * monde, c'est le décor qui se place autour de lui — les cadrages caméra
+   * sauvegardés ne périment donc jamais.
+   */
+  loadEnvironment(url: string): Promise<void>
   /** Applique une émotion ([happy] etc.) avec transition douce. */
   setEmotion(emotion: string): void
   /** true pendant le streaming d'une réponse → anime la bouche (lipsync simple). */
