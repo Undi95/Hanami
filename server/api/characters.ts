@@ -11,11 +11,15 @@ import {
   listCharacters,
   listChats,
   readChat,
+  updateChatHeader,
   updateCharacter,
 } from '../lib/storage'
 
 export const charactersRouter = Router()
 charactersRouter.use(express.json({ limit: '5mb' }))
+
+// Garde-fou du renommage : un titre est une ligne d'interface, pas un roman.
+const CHAT_TITLE_MAX_CHARS = 200
 
 function sendError(res: Response, status: number, e: unknown): void {
   res.status(status).json({ error: e instanceof Error ? e.message : String(e) })
@@ -154,6 +158,26 @@ charactersRouter.get('/api/characters/:id/chats/:chatId', (req, res) => {
     // Fichier absent ou id invalide → 404.
     res.status(404).json({ error: `Chat introuvable : ${req.params.chatId}` })
   }
+})
+
+// Renommage : le titre devient celui VOULU par l'utilisateur (titleCustom) — il
+// ne sera donc plus jamais re-rendu dans la langue de l'interface. Aucun retour
+// au titre automatique n'est exposé : le drapeau ne se retire pas.
+charactersRouter.put('/api/characters/:id/chats/:chatId', (req, res) => {
+  const body = (req.body ?? {}) as { title?: unknown }
+  const title = (typeof body.title === 'string' ? body.title.trim() : '').slice(0, CHAT_TITLE_MAX_CHARS).trim()
+  if (!title) {
+    res.status(400).json({ error: 'Le champ "title" est requis' })
+    return
+  }
+  try {
+    updateChatHeader(req.params.id, req.params.chatId, { title, titleCustom: true })
+  } catch {
+    // Fichier absent, id invalide ou en-tête illisible → 404.
+    res.status(404).json({ error: `Chat introuvable : ${req.params.chatId}` })
+    return
+  }
+  res.json({ id: req.params.chatId, title, titleCustom: true })
 })
 
 // Fork : la branche part du même passé que l'original, qui reste intact.

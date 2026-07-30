@@ -71,6 +71,10 @@ export interface ChatMessage {
 export interface ChatMeta {
   id: string
   title: string
+  // Titre à DEUX ÉTATS : absent/false = titre automatique (re-rendu dans la langue
+  // de l'interface à partir de createdAt), true = titre voulu par l'utilisateur
+  // (renommage, branche de fork) — affiché tel quel, jamais traduit.
+  titleCustom?: boolean
   createdAt: string
   updatedAt: string
   messageCount: number

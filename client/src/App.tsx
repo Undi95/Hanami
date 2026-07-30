@@ -34,7 +34,7 @@ import {
   subscribePrefs,
   type ViewMode,
 } from './prefs'
-import { I18nProvider, getLang, localeOf, localizeChatTitle, useI18n } from './i18n'
+import { I18nProvider, chatDisplayTitle, getLang, localeOf, useI18n } from './i18n'
 import TopBar, { CtxBadge, type DialogKind } from './components/TopBar'
 import MessageList, { VnBox, type FeedItem } from './components/MessageList'
 import Composer from './components/Composer'
@@ -948,12 +948,13 @@ function AppInner() {
   // Jauge de contexte : calculée une fois, partagée par la TopBar et le mode VN.
   const ctxPercent = context && context.limit > 0 ? context.percent : null
   const ctxTooltip = context ? t('contextBadgeTitle', { tokens: context.tokens, limit: context.limit }) : ''
+  // Titre affiché de la conversation active (auto localisé, ou voulu tel quel).
+  const chatTitle = chatDisplayTitle(chatMeta, lang, t)
   // En mode VN le CSS masque la TopBar : titre du chat et jauge migrent dans la
   // bande basse de la boîte. null = rien à y montrer (pas de titre, pas de jauge).
-  const vnChatTitle = localizeChatTitle(chatMeta?.title ?? '', t)
   const vnInfo =
-    vnMode && (vnChatTitle !== '' || ctxPercent !== null)
-      ? { title: vnChatTitle, percent: ctxPercent, tooltip: ctxTooltip }
+    vnMode && (chatTitle !== '' || ctxPercent !== null)
+      ? { title: chatTitle, percent: ctxPercent, tooltip: ctxTooltip }
       : null
 
   // ── Rendu ────────────────────────────────────────────────────────────────
@@ -1024,7 +1025,7 @@ function AppInner() {
 
         <TopBar
           characterName={character?.name ?? 'Hanami'}
-          chatTitle={localizeChatTitle(chatMeta?.title ?? '', t)}
+          chatTitle={chatTitle}
           contextPercent={ctxPercent}
           contextTitle={ctxTooltip}
           hasCharacter={!!character}
@@ -1216,6 +1217,10 @@ function AppInner() {
           }}
           onDeleted={(chatId) => {
             handleChatDeleted(chatId).catch((e) => console.error('[chats]', e))
+          }}
+          onRenamed={(chatId, title) => {
+            // Renommer le chat ACTIF : la barre du haut (et la bande VN) suivent.
+            setChatMeta((m) => (m && m.id === chatId ? { ...m, title, titleCustom: true } : m))
           }}
           onClose={() => setDialog(null)}
         />

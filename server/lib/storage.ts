@@ -227,16 +227,28 @@ Ce fichier est injecté dans le contexte à chaque message (si la mémoire est a
 }
 
 // ── Chats ──────────────────────────────────────────────────────────────────
-// Format .jsonl : ligne 1 = { id, title, createdAt, summary?, summaryUpto?, pinned? },
-// lignes suivantes = ChatMessage.
+// Format .jsonl : ligne 1 = { id, title, titleCustom?, createdAt, summary?,
+// summaryUpto?, pinned? }, lignes suivantes = ChatMessage.
 
 interface ChatHeader {
   id: string
   title: string
+  titleCustom?: boolean // true = titre voulu par l'utilisateur (jamais retraduit à l'affichage)
   createdAt: string
   summary?: string
   summaryUpto?: number
   pinned?: number // ordinal du message épinglé (gadget d'affichage, hors payload)
+}
+
+/**
+ * En-tête lu sur le disque : data/ est éditable à la main, donc seul
+ * `titleCustom === true` compte — toute autre valeur est effacée pour ne jamais
+ * laisser un drapeau mal typé remonter jusqu'au client.
+ */
+function normalizeHeader(raw: ChatHeader): ChatHeader {
+  const header: ChatHeader = { ...raw }
+  if (header.titleCustom !== true) delete header.titleCustom
+  return header
 }
 
 function chatFile(charId: string, chatId: string): string {
@@ -293,11 +305,12 @@ export function listChats(charId: string): ChatMeta[] {
     if (!f.endsWith('.jsonl')) continue
     const file = path.join(dir, f)
     const { firstLine, lineCount } = scanJsonl(file)
-    const header = firstLine ? (JSON.parse(firstLine) as ChatHeader) : null
+    const header = firstLine ? normalizeHeader(JSON.parse(firstLine) as ChatHeader) : null
     if (!header) continue
     out.push({
       id: header.id,
       title: header.title,
+      ...(header.titleCustom ? { titleCustom: true } : {}),
       createdAt: header.createdAt,
       updatedAt: fs.statSync(file).mtime.toISOString(),
       messageCount: lineCount - 1,
@@ -331,7 +344,7 @@ export function createChat(charId: string, title?: string): ChatMeta {
 export function readChat(charId: string, chatId: string): { meta: ChatMeta; messages: ChatMessage[] } {
   const file = chatFile(charId, chatId)
   const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)
-  const header = JSON.parse(lines[0]) as ChatHeader
+  const header = normalizeHeader(JSON.parse(lines[0]) as ChatHeader)
   const messages = lines.slice(1).map((l) => JSON.parse(l) as ChatMessage)
   return {
     meta: {
@@ -359,17 +372,20 @@ export function deleteChat(charId: string, chatId: string): void {
  * même en-tête (summary/summaryUpto inclus — la branche hérite du même passé),
  * nouvel identifiant. L'original n'est jamais touché ; le clone est écrit en
  * tmp + fsync + rename pour ne jamais laisser un .jsonl à moitié écrit.
+ * Le titre composé (« titre (branche) ») est un titre CHOISI : la branche part
+ * donc avec titleCustom, et son nom ne bougera plus avec la langue de l'UI.
  */
 export function forkChat(charId: string, chatId: string, title?: string): ChatMeta {
   const lines = fs.readFileSync(chatFile(charId, chatId), 'utf8').split('\n').filter(Boolean)
   if (lines.length === 0) throw new Error(`Chat corrompu : ${chatId}`)
-  const header = JSON.parse(lines[0]) as ChatHeader
+  const header = normalizeHeader(JSON.parse(lines[0]) as ChatHeader)
   const id = newChatId(charId)
   const clone: ChatHeader = {
     ...header,
     id,
     // Titre localisé fourni par le client ; repli neutre pour les appels API bruts.
     title: title?.trim() || `${header.title} (branch)`,
+    titleCustom: true,
     createdAt: new Date().toISOString(),
   }
   const file = chatFile(charId, id)
@@ -385,6 +401,7 @@ export function forkChat(charId: string, chatId: string, title?: string): ChatMe
   return {
     id,
     title: clone.title,
+    titleCustom: true,
     createdAt: clone.createdAt,
     updatedAt: fs.statSync(file).mtime.toISOString(),
     messageCount: lines.length - 1,
@@ -403,7 +420,7 @@ export function forkChat(charId: string, chatId: string, title?: string): ChatMe
 export function updateChatHeader(
   charId: string,
   chatId: string,
-  patch: Partial<Pick<ChatHeader, 'title' | 'summary' | 'summaryUpto' | 'pinned'>>,
+  patch: Partial<Pick<ChatHeader, 'title' | 'titleCustom' | 'summary' | 'summaryUpto' | 'pinned'>>,
 ): void {
   const file = chatFile(charId, chatId)
   const lines = fs.readFileSync(file, 'utf8').split('\n')

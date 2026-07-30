@@ -215,6 +215,23 @@ export function getChat(charId: string, chatId: string): Promise<{ meta: ChatMet
   return req('GET', `/api/characters/${encodeURIComponent(charId)}/chats/${encodeURIComponent(chatId)}`)
 }
 
+/**
+ * Renomme une conversation. Le titre devient celui VOULU par l'utilisateur
+ * (titleCustom) : il n'est plus jamais re-rendu dans la langue de l'interface.
+ * Un titre vide est refusé par le serveur (400).
+ */
+export function renameChat(
+  charId: string,
+  chatId: string,
+  title: string,
+): Promise<{ id: string; title: string; titleCustom: true }> {
+  return req(
+    'PUT',
+    `/api/characters/${encodeURIComponent(charId)}/chats/${encodeURIComponent(chatId)}`,
+    { title },
+  )
+}
+
 /** Duplique une conversation en une branche indépendante (même passé, nouvel id). */
 export function forkChat(charId: string, chatId: string, title?: string): Promise<ChatMeta> {
   return req(

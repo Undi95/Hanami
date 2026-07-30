@@ -108,6 +108,8 @@ const FR = {
   newChat: 'Nouvelle conversation',
   noChats: 'Aucune conversation pour l’instant.',
   defaultChatTitle: 'Conversation du {date}',
+  renameChat: 'Renommer la conversation',
+  renameChatHint: 'Entrée pour enregistrer, Échap pour annuler.',
   deleteChat: 'Supprimer',
   forkChat: 'Dupliquer',
   forkSuffix: 'branche',
@@ -381,6 +383,8 @@ const EN: Record<Key, string> = {
   newChat: 'New conversation',
   noChats: 'No conversations yet.',
   defaultChatTitle: 'Conversation from {date}',
+  renameChat: 'Rename conversation',
+  renameChatHint: 'Enter to save, Esc to cancel.',
   deleteChat: 'Delete',
   forkChat: 'Duplicate',
   forkSuffix: 'branch',
@@ -590,15 +594,58 @@ export function localeOf(lang: Lang): string {
   return lang === 'fr' ? 'fr-FR' : 'en-US'
 }
 
-// Les titres de conversation par défaut sont STOCKÉS dans la langue de leur
-// création (« Conversation du 29/07/2026 ») : changer la langue de l'interface
-// ne les retraduisait pas. À l'affichage, un titre reconnu comme titre par
-// défaut est re-rendu dans la langue courante — la date (et un éventuel suffixe
-// de fork) est reprise telle quelle ; un titre personnalisé passe intact.
-const DEFAULT_TITLE_RE = /^Conversation (?:du|from) (.+)$/
-export function localizeChatTitle(title: string, t: (key: 'defaultChatTitle', vars: Vars) => string): string {
+// ── Titre affiché d'une conversation ───────────────────────────────────────
+// Deux états, et deux seulement :
+//  1. titre AUTOMATIQUE (titleCustom absent) → re-rendu dans la langue courante ;
+//  2. titre VOULU par l'utilisateur (titleCustom) → affiché tel quel, jamais traduit.
+// Les titres stockés le sont dans la langue de leur création (« Conversation du
+// 29/07/2026 ») : c'est la DATE DE CRÉATION, reformatée dans la locale courante,
+// qui fait foi pour l'état 1.
+
+/** Ce que l'affichage du titre a besoin de connaître d'une conversation. */
+export type ChatTitleSource = Pick<ChatMeta, 'id' | 'title' | 'createdAt' | 'titleCustom'>
+
+// Motif d'un titre par défaut (les deux langues) : sert de REPLI pour les
+// conversations d'avant titleCustom, qui n'ont aucun drapeau. La date doit être
+// SEULE (chiffres et séparateurs) — un titre composé comme « Conversation du
+// 29/07/2026 (branche) » ne matche pas, et passe donc intact.
+const DEFAULT_TITLE_RE = /^Conversation (?:du|from) ([\d/.-]+)$/
+
+/** Repli sans date de création exploitable : la date capturée dans le titre est reprise telle quelle. */
+function localizeChatTitle(title: string, t: (key: 'defaultChatTitle', vars: Vars) => string): string {
   const m = DEFAULT_TITLE_RE.exec(title)
   return m ? t('defaultChatTitle', { date: m[1] }) : title
+}
+
+/** Date de création : `createdAt`, sinon le préfixe AAAA-MM-JJ de l'identifiant. */
+function chatCreatedAt(chat: ChatTitleSource): Date | null {
+  const created = new Date(chat.createdAt)
+  if (!Number.isNaN(created.getTime())) return created
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(chat.id)
+  if (!m) return null
+  const fromId = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return Number.isNaN(fromId.getTime()) ? null : fromId
+}
+
+/**
+ * Titre à afficher pour une conversation (null = aucune → chaîne vide).
+ * UNE seule source de vérité, partagée par la barre du haut, la bande VN et la
+ * liste des conversations.
+ */
+export function chatDisplayTitle(
+  chat: ChatTitleSource | null,
+  lang: Lang,
+  t: (key: Key, vars?: Vars) => string,
+): string {
+  if (!chat) return ''
+  // Titre voulu par l'utilisateur : intouchable.
+  if (chat.titleCustom) return chat.title
+  // Sans drapeau : titre automatique SEULEMENT s'il suit le motif par défaut —
+  // un chat importé ou une vieille branche de fork garde son nom intact.
+  if (!DEFAULT_TITLE_RE.test(chat.title)) return chat.title
+  const created = chatCreatedAt(chat)
+  if (!created) return localizeChatTitle(chat.title, t)
+  return t('defaultChatTitle', { date: created.toLocaleDateString(localeOf(lang)) })
 }
 
 /** Accord du pluriel : le français ne pluralise qu’au-delà de 1, l’anglais dès 0. */

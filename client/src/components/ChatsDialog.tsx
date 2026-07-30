@@ -1,8 +1,8 @@
-// Liste des conversations du personnage actif : basculer, créer, supprimer.
-import { useCallback, useEffect, useState } from 'react'
+// Liste des conversations du personnage actif : basculer, créer, renommer, supprimer.
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatMeta } from '../../../shared/types'
 import * as api from '../api'
-import { isPlural, localeOf, localizeChatTitle, useI18n, type Lang } from '../i18n'
+import { chatDisplayTitle, isPlural, localeOf, useI18n, type Lang } from '../i18n'
 import Dialog from './Dialog'
 
 interface Props {
@@ -10,8 +10,13 @@ interface Props {
   activeChatId: string | null
   onSelect: (chatId: string) => void
   onDeleted: (chatId: string) => void
+  // Conversation renommée : si c'est la conversation active, la barre du haut doit suivre.
+  onRenamed: (chatId: string, title: string) => void
   onClose: () => void
 }
+
+// Même plafond que le serveur (CHAT_TITLE_MAX_CHARS) : un titre tient sur une ligne.
+const TITLE_MAX = 200
 
 function fmtDate(iso: string, lang: Lang): string {
   const d = new Date(iso)
@@ -24,12 +29,25 @@ function fmtDate(iso: string, lang: Lang): string {
   )
 }
 
-export default function ChatsDialog({ characterId, activeChatId, onSelect, onDeleted, onClose }: Props) {
+export default function ChatsDialog({
+  characterId,
+  activeChatId,
+  onSelect,
+  onDeleted,
+  onRenamed,
+  onClose,
+}: Props) {
   const { lang, t } = useI18n()
   const [chats, setChats] = useState<ChatMeta[] | null>(null)
   const [armed, setArmed] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<api.CharacterStats | null>(null)
+  // Renommage inline : identifiant du chat en cours d'édition + brouillon.
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  // Échap ferme l'édition ; si un blur suit tout de même (navigateur qui l'émet
+  // au retrait du champ), ce drapeau empêche d'enregistrer la valeur abandonnée.
+  const abandonRef = useRef(false)
 
   const load = useCallback(() => {
     api
@@ -81,11 +99,44 @@ export default function ChatsDialog({ characterId, activeChatId, onSelect, onDel
 
   // Duplique la conversation ; la branche apparaît dans la liste, sans y basculer.
   // Le titre localisé vient d'ici : le serveur ne connaît pas la langue de l'UI.
+  // Il part du titre AFFICHÉ, et devient un titre voulu côté serveur (titleCustom).
   async function fork(chat: ChatMeta) {
     try {
-      await api.forkChat(characterId, chat.id, `${chat.title} (${t('forkSuffix')})`)
+      await api.forkChat(characterId, chat.id, `${chatDisplayTitle(chat, lang, t)} (${t('forkSuffix')})`)
       load()
       loadStats()
+    } catch (e) {
+      setError(api.errorMessage(e))
+    }
+  }
+
+  // ── Renommage inline ─────────────────────────────────────────────────────
+  // Le brouillon part du titre AFFICHÉ : renommer un titre automatique le figera
+  // tel qu'il est lu à l'écran, dans la langue du moment.
+  function startRename(chat: ChatMeta) {
+    abandonRef.current = false
+    setDraft(chatDisplayTitle(chat, lang, t))
+    setRenaming(chat.id)
+  }
+
+  function cancelRename() {
+    abandonRef.current = true
+    setRenaming(null)
+  }
+
+  async function commitRename(chat: ChatMeta) {
+    if (abandonRef.current) {
+      abandonRef.current = false
+      return
+    }
+    const title = draft.trim()
+    setRenaming(null)
+    // Vidé ou inchangé : rien à écrire — un titre automatique le reste.
+    if (!title || title === chatDisplayTitle(chat, lang, t)) return
+    try {
+      await api.renameChat(characterId, chat.id, title)
+      load()
+      onRenamed(chat.id, title)
     } catch (e) {
       setError(api.errorMessage(e))
     }
@@ -134,19 +185,58 @@ export default function ChatsDialog({ characterId, activeChatId, onSelect, onDel
         <div className="item-list">
           {chats.map((c) => (
             <div key={c.id} className={`item-row${c.id === activeChatId ? ' active' : ''}`}>
-              <button
-                className="item-main"
-                onClick={() => {
-                  onSelect(c.id)
-                  onClose()
-                }}
-              >
-                <span className="item-title">{localizeChatTitle(c.title, t)}</span>
-                <span className="item-sub">
-                  {fmtDate(c.updatedAt, lang)} ·{' '}
-                  {t(isPlural(lang, c.messageCount) ? 'messagesMany' : 'messagesOne', { n: c.messageCount })}
-                </span>
-              </button>
+              {renaming === c.id ? (
+                <input
+                  className="item-rename"
+                  type="text"
+                  autoFocus
+                  value={draft}
+                  maxLength={TITLE_MAX}
+                  aria-label={t('renameChat')}
+                  title={t('renameChatHint')}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      commitRename(c).catch((err) => console.error('[chats]', err))
+                    } else if (e.key === 'Escape') {
+                      // stopPropagation : Dialog écoute Échap sur window — sans ça,
+                      // annuler l'édition fermerait aussi le dialog.
+                      e.preventDefault()
+                      e.stopPropagation()
+                      cancelRename()
+                    }
+                  }}
+                  onBlur={() => commitRename(c).catch((e) => console.error('[chats]', e))}
+                />
+              ) : (
+                <>
+                  <button
+                    className="item-main"
+                    onClick={() => {
+                      onSelect(c.id)
+                      onClose()
+                    }}
+                  >
+                    <span className="item-title">{chatDisplayTitle(c, lang, t)}</span>
+                    <span className="item-sub">
+                      {fmtDate(c.updatedAt, lang)} ·{' '}
+                      {t(isPlural(lang, c.messageCount) ? 'messagesMany' : 'messagesOne', { n: c.messageCount })}
+                    </span>
+                  </button>
+                  {/* Crayon discret (même esprit que .msg-edit) : révélé au survol de la rangée. */}
+                  <button
+                    className="item-edit"
+                    title={t('renameChat')}
+                    aria-label={t('renameChat')}
+                    onClick={() => startRename(c)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17z" />
+                    </svg>
+                  </button>
+                </>
+              )}
               <button className="btn small" onClick={() => fork(c).catch((e) => console.error('[chats]', e))}>
                 {t('forkChat')}
               </button>
