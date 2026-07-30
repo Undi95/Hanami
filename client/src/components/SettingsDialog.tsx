@@ -24,6 +24,10 @@ interface Props {
   settings: Settings
   theme: AppTheme
   onPickTheme: (theme: AppTheme) => void
+  // Décor 3D : préférence d'interface (data/ui.json), pas un réglage du backend —
+  // elle vit donc HORS du formulaire, comme le thème, et s'applique au clic.
+  env3d: boolean
+  onToggleEnv3d: (on: boolean) => void
   onSaved: (s: Settings) => void
   onClose: () => void
 }
@@ -192,7 +196,15 @@ const TAB_LABELS: Record<Tab, Key> = {
   features: 'tabFeatures',
 }
 
-export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, onClose }: Props) {
+export default function SettingsDialog({
+  settings,
+  theme,
+  onPickTheme,
+  env3d,
+  onToggleEnv3d,
+  onSaved,
+  onClose,
+}: Props) {
   // Thème perso : deux couleurs, persistées à chaque changement et appliquées
   // en direct quand le thème « Perso » est actif. Le code texte permet de
   // partager/importer un thème d'un copier-coller.
@@ -500,6 +512,16 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
               </div>
             </div>
           )}
+
+          <h3 className="section-title">{t('sectionScene')}</h3>
+          {/* Hors formulaire, appliqué au clic comme le thème et la langue : c'est
+              une préférence d'interface, pas un réglage du modèle. */}
+          <Toggle
+            label={t('env3d')}
+            sub={t('env3dSub')}
+            checked={env3d}
+            onChange={onToggleEnv3d}
+          />
         </>
       )}
 

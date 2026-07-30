@@ -148,6 +148,13 @@ export interface UiPrefs {
   theme?: string // identifiant de thème préfait, ou 'custom'
   customTheme?: UiCustomTheme
   vnMode?: boolean // mode visual novel
+  // Décor 3D allumé/éteint (défaut : allumé). Éteint = fond 2D ou dégradé, comme
+  // avant les décors. Vit ici et non dans le personnage : c'est un réglage
+  // d'APPAREIL au sens du confort (une pièce en 3D coûte cher sur un téléphone),
+  // pas une propriété du personnage. Limite assumée du contrat ui.json : il suit
+  // l'utilisateur d'un appareil à l'autre, couper le décor sur mobile le coupe
+  // aussi sur PC.
+  env3d?: boolean
   // Tailles réglées à la poignée (pixels). Clé ABSENTE = taille par défaut de
   // styles.css : l'utilisateur qui n'y touche pas n'a rien dans ui.json, et un
   // double-clic sur la poignée efface la clé (retour au défaut).

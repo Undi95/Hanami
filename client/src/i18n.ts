@@ -43,6 +43,10 @@ const FR = {
   customThemeBg: 'Fond',
   customThemeAccent: 'Accent',
   themeCode: 'Code du thème (partageable — collez-en un ici)',
+  sectionScene: 'Scène',
+  env3d: 'Décor 3D',
+  env3dSub:
+    'Affiche le décor du personnage autour de l’avatar. Éteint : fond 2D ou dégradé, comme avant.',
 
   // ── Coquille de l’application ────────────────────────────────────────────
   collapseChat: 'Replier le chat pour voir l’avatar',
@@ -362,6 +366,10 @@ const EN: Record<Key, string> = {
   customThemeBg: 'Background',
   customThemeAccent: 'Accent',
   themeCode: 'Theme code (shareable — paste one here)',
+  sectionScene: 'Scene',
+  env3d: '3D environment',
+  env3dSub:
+    'Shows the character’s environment around the avatar. Off: 2D background or gradient, as before.',
 
   // ── App shell ────────────────────────────────────────────────────────────
   collapseChat: 'Collapse the chat to see the avatar',

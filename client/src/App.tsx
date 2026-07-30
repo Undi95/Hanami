@@ -113,6 +113,8 @@ function AppInner() {
   const [compacting, setCompacting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [vnMode, setVnMode] = useState(() => getPref('vnMode') === true)
+  // Décor 3D : allumé par défaut (clé absente = allumé), éteint explicitement.
+  const [env3d, setEnv3d] = useState(() => getPref('env3d') !== false)
   // Largeur de la colonne de chat (poignée de redimensionnement). L'affichage,
   // lui, ne passe pas par ici : layout.ts pose la variable CSS. Cet état ne sert
   // qu'à tenir la scène 3D au courant (cadrage 'left').
@@ -443,7 +445,7 @@ function AppInner() {
   useEffect(() => {
     const stage = stageRef.current
     if (!stage || !stageReady) return
-    const url = character?.vrm ? (character.environment ?? '') : ''
+    const url = env3d && character?.vrm ? (character.environment ?? '') : ''
     setEnvError(null)
     setEnvLoading(url !== '')
     let cancelled = false
@@ -463,7 +465,7 @@ function AppInner() {
     return () => {
       cancelled = true
     }
-  }, [stageReady, character?.environment, character?.vrm])
+  }, [stageReady, character?.environment, character?.vrm, env3d])
 
   // Bascule desktop ↔ VN : la place laissée à la scène change du tout au tout, le
   // cadrage du nouveau mode s'applique donc immédiatement (sa vue sauvegardée,
@@ -1387,6 +1389,11 @@ function AppInner() {
           onPickTheme={(t) => {
             setAppTheme(t)
             saveTheme(t)
+          }}
+          env3d={env3d}
+          onToggleEnv3d={(on) => {
+            setEnv3d(on)
+            setPref({ env3d: on })
           }}
           onSaved={handleSettingsSaved}
           onClose={() => setDialog(null)}
