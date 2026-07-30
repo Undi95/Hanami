@@ -480,9 +480,11 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     // Contenu INTÉGRAL, tel que généré (le tag d'émotion reste dans le texte).
     const message = persistAssistant()
     // Jauge de contexte : usage réel du backend quand il le fournit, sinon
-    // estimation sur le payload final (qui inclut les allers-retours d'outils).
+    // estimation sur le payload final (qui inclut les allers-retours d'outils
+    // ET les définitions d'outils, comptées par l'usage réel elles aussi).
     const tokens =
-      (promptTokens > 0 ? promptTokens : estimateTokens(messages)) + estimateTokens(assistantText)
+      (promptTokens > 0 ? promptTokens : estimateTokens(messages) + estimateTokens(payload.tools ?? [])) +
+      estimateTokens(assistantText)
     const context: ContextInfo = {
       tokens,
       limit: settings.contextSize,
@@ -934,7 +936,9 @@ chatRouter.get('/api/prompt-preview', (req, res) => {
       systemText,
       payload,
       // Jauge de contexte : estimation du prochain envoi + limite configurée.
-      tokens: estimateTokens(payload.messages),
+      // Les définitions d'outils partent aussi dans le payload (et l'usage réel
+      // du backend les compte) : sans elles, la jauge sautait au premier message.
+      tokens: estimateTokens(payload.messages) + estimateTokens(payload.tools ?? []),
       contextSize: settings.contextSize,
     })
   } catch (e) {

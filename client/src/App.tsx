@@ -134,6 +134,10 @@ function AppInner() {
   // Chat réellement affiché (les setFeed d'une compaction lente ne doivent pas
   // atterrir dans un autre chat ouvert entre-temps).
   const chatIdRef = useRef<string | null>(null)
+  // Couple perso/chat dont l'estimation de contexte a déjà été demandée : UN seul
+  // appel par activation de chat (jamais de polling, même si l'app re-rend).
+  // Remis à null par openChat, en même temps que la jauge.
+  const ctxEstimatedRef = useRef<string | null>(null)
   // Chats dont l'auto-compaction a échoué : pas de nouvel essai automatique
   // (sinon un backend strict serait re-sollicité à chaque message).
   const autoCompactFailedRef = useRef<Set<string>>(new Set())
@@ -179,6 +183,30 @@ function AppInner() {
       .then(setVisionEnabled)
       .catch(() => setVisionEnabled(false))
   }
+
+  /**
+   * Jauge de contexte posée depuis l'ESTIMATION du serveur : /api/prompt-preview
+   * assemble le payload du PROCHAIN envoi (même buildPayload que /api/chat) et en
+   * renvoie le volume estimé — sans rien générer.
+   * `soft` : l'estimation ne s'écrit que si la jauge est encore vide, car un usage
+   * RÉEL arrivé pendant l'appel (fin de stream) est plus juste et doit rester.
+   * Échec silencieux : la jauge se resynchronisera au prochain message.
+   * Le chat a pu changer pendant l'appel → chatIdRef arbitre, comme ailleurs.
+   */
+  const estimateContext = useCallback(async (charId: string, chatId: string, soft = false) => {
+    try {
+      const p = await api.getPromptPreview(charId, chatId)
+      if (chatIdRef.current !== chatId || p.contextSize <= 0) return
+      const info: ContextInfo = {
+        tokens: p.tokens,
+        limit: p.contextSize,
+        percent: Math.min(100, Math.round((p.tokens / p.contextSize) * 100)),
+      }
+      setContext((c) => (soft && c ? c : info))
+    } catch {
+      /* la jauge se resynchronisera au prochain message */
+    }
+  }, [])
 
   // ── Lèvres & voix ────────────────────────────────────────────────────────
 
@@ -238,18 +266,8 @@ function AppInner() {
       }
       // Rafraîchit la jauge — sinon le badge resterait au rouge (≥ 80 %)
       // jusqu'au prochain message alors que le contexte vient d'être libéré.
-      try {
-        const p = await api.getPromptPreview(charId, chatId)
-        if (chatIdRef.current === chatId && p.contextSize > 0) {
-          setContext({
-            tokens: p.tokens,
-            limit: p.contextSize,
-            percent: Math.min(100, Math.round((p.tokens / p.contextSize) * 100)),
-          })
-        }
-      } catch {
-        /* la jauge se resynchronisera au prochain message */
-      }
+      // Pas `soft` ici : c'est justement la valeur en place qui est périmée.
+      await estimateContext(charId, chatId)
     } catch (e) {
       if (e instanceof api.AuthRequiredError) {
         setNeedLogin(true)
@@ -428,7 +446,10 @@ function AppInner() {
       setChatMeta(meta)
       chatIdRef.current = meta.id
       setReplyTo(null) // la cible d'une réponse n'existe plus dans ce fil
-      setContext(null) // la jauge repart avec le prochain échange de ce chat
+      // La jauge de ce chat repart d'une estimation, demandée par l'effet dédié
+      // (et écrasée plus tard par l'usage réel de fin de stream).
+      setContext(null)
+      ctxEstimatedRef.current = null
       setActiveChat(char.id, meta.id)
       const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
       // Premier message d'un chat VIDE (jamais sur un chat importé — il n'est pas
@@ -509,6 +530,26 @@ function AppInner() {
   useEffect(() => {
     boot().catch((e) => console.error('[boot]', e))
   }, [boot])
+
+  // ── Jauge de contexte à l'ouverture ──────────────────────────────────────
+  // Un chat vient de devenir actif (boot, changement de conversation ou de
+  // personnage) : openChat a remis `context` à null, le badge % n'existerait donc
+  // qu'après le premier échange. On demande l'estimation du prochain payload — un
+  // appel, à l'activation, et rien de plus. L'usage RÉEL de fin de stream l'écrase
+  // ensuite (il est plus juste), et c'est lui SEUL qui peut déclencher
+  // l'auto-compaction : le seuil est testé sur l'événement `done`, jamais sur
+  // l'état `context` — une estimation ne compacte donc rien.
+  // La jauge vide (context === null) est la condition, pas seulement le changement
+  // d'identifiants : ré-ouvrir LE MÊME chat la vide aussi, et doit la remplir.
+  useEffect(() => {
+    const charId = character?.id
+    const chatId = chatMeta?.id
+    if (!charId || !chatId || context !== null) return
+    const key = `${charId}/${chatId}`
+    if (ctxEstimatedRef.current === key) return // estimation déjà demandée pour ce chat
+    ctxEstimatedRef.current = key
+    void estimateContext(charId, chatId, true)
+  }, [character?.id, chatMeta?.id, context, estimateContext])
 
   // ── Préférences venues du serveur ────────────────────────────────────────
   // Un seul abonnement, monté une fois : l'état serveur arrivé au boot (ou une
