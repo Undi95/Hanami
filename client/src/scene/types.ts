@@ -29,6 +29,14 @@ export interface VrmStage {
    */
   setFrameMode(mode: FrameMode): void
   /**
+   * Largeur (px) de la colonne de chat en mode desktop, réglable à la poignée :
+   * c'est d'elle que dépend le décalage du cadrage 'left'. Posée par l'UI au boot
+   * puis à chaque changement de largeur. Comme setFrameMode, n'agit PAS sur
+   * l'image en cours : seul le prochain cadrage par défaut (bascule de mode,
+   * resetView, chargement de modèle) en tient compte.
+   */
+  setPanelWidth(px: number): void
+  /**
    * Recadre au défaut du mode courant (ce que fait le double-clic) et notifie
    * onViewChange(null) — donc oublie la vue sauvegardée. Sans effet si aucun
    * modèle n'est chargé.

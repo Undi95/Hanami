@@ -12,6 +12,8 @@ interface Props {
   hasChat: boolean
   vnMode: boolean // mode visual novel actif (bascule d'affichage, pas un dialog)
   onToggleVn: () => void
+  /** Bascule la recherche du fil (Ctrl+F rendu visible, et atteignable au doigt). */
+  onToggleSearch: () => void
   onOpen: (d: DialogKind) => void
 }
 
@@ -49,6 +51,7 @@ export default function TopBar({
   hasChat,
   vnMode,
   onToggleVn,
+  onToggleSearch,
   onOpen,
 }: Props) {
   const { t } = useI18n()
@@ -132,6 +135,20 @@ export default function TopBar({
               extra={<path d="M6.8 13h10.4M6.8 16h6.6" />}
             />
           </button>
+          {/* Loupe : Ctrl+F reste, mais il lui fallait un accès visible — surtout
+              au doigt, où le raccourci n'existe pas. Absente en mode VN : la boîte
+              n'affiche qu'une réplique, il n'y a rien à y chercher. */}
+          {!vnMode && (
+            <button
+              className="icon-btn"
+              title={t('searchInChat')}
+              aria-label={t('searchInChat')}
+              disabled={!hasCharacter}
+              onClick={onToggleSearch}
+            >
+              <Icon d="M15.7 15.7l4.8 4.8" extra={<circle cx="10.5" cy="10.5" r="6.6" />} />
+            </button>
+          )}
           {buttons.map((b) => (
             <button
               key={b.kind}

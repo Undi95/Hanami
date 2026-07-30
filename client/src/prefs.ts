@@ -33,6 +33,9 @@ const UI_KEYS = [
   'theme',
   'customTheme',
   'vnMode',
+  'chatPanelWidth',
+  'vnBoxWidth',
+  'vnBoxHeight',
   'activeCharacter',
   'activeChat',
   'views',
@@ -54,6 +57,15 @@ function asView(value: unknown): StageView | undefined {
   if (!value || typeof value !== 'object') return undefined
   const o = value as { pos?: unknown; target?: unknown }
   return isTriple(o.pos) && isTriple(o.target) ? { pos: o.pos, target: o.target } : undefined
+}
+
+/** Taille de panneau en pixels — mêmes bornes larges que le serveur (cf. api/ui.ts). */
+function asPixels(min: number, max: number): (value: unknown) => number | undefined {
+  return (value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+    const px = Math.round(value)
+    return px >= min && px <= max ? px : undefined
+  }
 }
 
 function asId(value: unknown): string | undefined {
@@ -84,6 +96,9 @@ const VALIDATORS: { [K in keyof Required<UiPrefs>]: (value: unknown) => UiPrefs[
     return { bg: o.bg, accent: o.accent }
   },
   vnMode: (v) => (typeof v === 'boolean' ? v : undefined),
+  chatPanelWidth: asPixels(280, 4000),
+  vnBoxWidth: asPixels(400, 8000),
+  vnBoxHeight: asPixels(60, 4000),
   activeCharacter: asId,
   activeChat: (v) => asRecord(v, asId),
   views: (v) => asRecord(v, asView),

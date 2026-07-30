@@ -11,6 +11,9 @@ vrm/*
 !vrm/README.md
 backgrounds/*
 !backgrounds/README.md
+# Portraits 2D : images des cards importées (posées par l'app, pas à la main).
+portraits/*
+!portraits/README.md
 
 *.log
 .env

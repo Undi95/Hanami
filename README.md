@@ -93,6 +93,7 @@ data/                  # YOUR data (never committed)
 presets/               # characters shipped with the app (copied into data/ on first launch)
 vrm/                   # your .vrm models
 backgrounds/           # your background images
+portraits/             # 2D portraits from imported cards (avatar without a VRM)
 client/                # React front-end (Vite)
 server/                # Express server + API
 shared/                # types shared by client and server

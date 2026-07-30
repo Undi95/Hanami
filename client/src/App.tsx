@@ -34,8 +34,10 @@ import {
   subscribePrefs,
   type ViewMode,
 } from './prefs'
+import { chatPanelWidth } from './layout'
 import { I18nProvider, chatDisplayTitle, getLang, localeOf, useI18n } from './i18n'
 import TopBar, { CtxBadge, type DialogKind } from './components/TopBar'
+import { ChatPanelGrip } from './components/ResizeGrips'
 import MessageList, { VnBox, type FeedItem } from './components/MessageList'
 import Composer from './components/Composer'
 import LoginGate from './components/LoginGate'
@@ -96,6 +98,10 @@ function AppInner() {
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [dialog, setDialog] = useState<DialogKind | null>(null)
+  // Loupe de la TopBar : un compteur, incrémenté à chaque clic, que MessageList
+  // observe pour ouvrir (ou refermer) sa barre de recherche. Le Ctrl+F, lui, reste
+  // entièrement géré dans MessageList.
+  const [searchSignal, setSearchSignal] = useState(0)
   const [backendDown, setBackendDown] = useState(false)
   // Le modèle configuré lit-il les images ? (réglage « Images (vision) » : forcé,
   // jamais, ou détecté auprès du backend). Faux = le composer ne propose rien.
@@ -104,6 +110,10 @@ function AppInner() {
   const [compacting, setCompacting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [vnMode, setVnMode] = useState(() => getPref('vnMode') === true)
+  // Largeur de la colonne de chat (poignée de redimensionnement). L'affichage,
+  // lui, ne passe pas par ici : layout.ts pose la variable CSS. Cet état ne sert
+  // qu'à tenir la scène 3D au courant (cadrage 'left').
+  const [chatWidth, setChatWidth] = useState(chatPanelWidth)
   const [stageReady, setStageReady] = useState(false)
   const [vrmError, setVrmError] = useState<string | null>(null)
   // Thème de l'app (préférence serveur, comme la langue) — le thème propre au
@@ -357,6 +367,15 @@ function AppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // La largeur de la colonne de chat pilote le décalage du cadrage 'left' : la
+  // scène doit la connaître. Déclaré AVANT l'effet de chargement du modèle, pour
+  // que le tout premier cadrage la connaisse déjà. Rien ne bouge à l'écran ici —
+  // le recadrage attend le prochain reset ou la prochaine bascule de mode
+  // (comme pour un redimensionnement de fenêtre, qui ne recadre pas non plus).
+  useEffect(() => {
+    stageRef.current?.setPanelWidth(chatWidth)
+  }, [chatWidth, stageReady])
+
   // Changement de personnage (ou scène prête) → charger son modèle VRM, puis
   // réappliquer le cadrage caméra choisi pour lui DANS LE MODE courant.
   useEffect(() => {
@@ -562,6 +581,7 @@ function AppInner() {
         const prefs = getPrefs()
         if ((prefs.lang === 'fr' || prefs.lang === 'en') && prefs.lang !== getLang()) setLang(prefs.lang)
         if (typeof prefs.vnMode === 'boolean') setVnMode(prefs.vnMode)
+        setChatWidth(chatPanelWidth())
         if (prefs.theme !== undefined) setAppTheme(normalizeTheme(prefs.theme))
         const code = themeCode(savedCustom())
         if (code !== customCodeRef.current) {
@@ -957,6 +977,10 @@ function AppInner() {
       ? { title: chatTitle, percent: ctxPercent, tooltip: ctxTooltip }
       : null
 
+  // Portrait 2D : un personnage SANS modèle 3D montre l'image de sa card (posée à
+  // l'import). Avec un VRM, l'avatar 3D reprend toute la place. '' = rien à montrer.
+  const portrait = character && !character.vrm ? (character.portrait ?? '') : ''
+
   // ── Rendu ────────────────────────────────────────────────────────────────
   // NB : la div .scene reste montée en permanence (le stage 3D y est attaché via
   // un effet à deps []) — l'écran de connexion se rend en OVERLAY, jamais à la
@@ -970,6 +994,20 @@ function AppInner() {
         aria-hidden="true"
         style={character?.background ? { backgroundImage: `url("${character.background}")` } : undefined}
       />
+
+      {/* Avatar 2D : l'image de la card tient lieu d'avatar quand le personnage
+          n'a pas de modèle 3D. Rendu FRÈRE de .scene et non dedans — le canvas du
+          stage y est ajouté impérativement, React ne doit pas partager cet enfant.
+          Placement en CSS pur (classe `vn`), et rien à brancher : une image ne
+          bouge ni les lèvres ni les émotions. */}
+      {portrait !== '' && (
+        <img
+          className={`scene-portrait${vnMode ? ' vn' : ''}`}
+          src={portrait}
+          alt=""
+          aria-hidden="true"
+        />
+      )}
 
       {/* Recadrage de l'avatar. Le double-clic dans la scène fait la même chose,
           mais rien ne le laisse deviner : ce bouton l'expose dans les deux modes.
@@ -1015,6 +1053,11 @@ function AppInner() {
 
       {/* En mode VN, le panneau s'efface (CSS) : « collapsed » n'a plus de sens. */}
       <div className={`chat-panel${vnMode ? ' vn' : collapsed ? ' collapsed' : ''}`}>
+        {/* Poignée de largeur du bord gauche : le CSS la réserve à la colonne de
+            droite (desktop, hors mode VN) — ailleurs le panneau n'a pas de
+            largeur à régler. */}
+        <ChatPanelGrip />
+
         <button
           className="sheet-handle"
           onClick={() => setCollapsed((c) => !c)}
@@ -1035,6 +1078,7 @@ function AppInner() {
             changeVnMode(!vnMode)
             setCollapsed(false) // on ne revient jamais du mode VN sur un panneau replié
           }}
+          onToggleSearch={() => setSearchSignal((n) => n + 1)}
           onOpen={setDialog}
         />
 
@@ -1085,6 +1129,7 @@ function AppInner() {
             editable={!streaming && !compacting}
             // Ctrl+F appartient au dialog ouvert (ou à l'écran de connexion).
             searchable={!dialog && !greetingAsk && !needLogin}
+            searchSignal={searchSignal}
             pinned={chatMeta?.pinned ?? null}
             onSaveEdit={handleEditMessage}
             onReply={setReplyTo}

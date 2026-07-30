@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import type { ModelMode, Settings, VisionMode } from '../../../shared/types'
 import * as api from '../api'
-import { isPlural, useI18n, type Lang } from '../i18n'
+import { isPlural, useI18n, type Key, type Lang } from '../i18n'
 import {
   THEMES,
   THEME_DOTS,
@@ -178,6 +178,16 @@ const LANG_OPTIONS: readonly Lang[] = ['fr', 'en']
 const MODEL_MODE_OPTIONS: readonly ModelMode[] = ['full', 'simple']
 const VISION_MODE_OPTIONS: readonly VisionMode[] = ['auto', 'on', 'off']
 
+// Trois onglets pour ne pas dérouler un formulaire à rallonge. Le découpage est
+// thématique : ce qu'on voit, le modèle qui parle, ce que Hanami sait faire.
+type Tab = 'appearance' | 'model' | 'features'
+const TAB_OPTIONS: readonly Tab[] = ['appearance', 'model', 'features']
+const TAB_LABELS: Record<Tab, Key> = {
+  appearance: 'tabAppearance',
+  model: 'tabModel',
+  features: 'tabFeatures',
+}
+
 export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, onClose }: Props) {
   // Thème perso : deux couleurs, persistées à chaque changement et appliquées
   // en direct quand le thème « Perso » est actif. Le code texte permet de
@@ -214,6 +224,10 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
   }
 
   const { lang, setLang, t } = useI18n()
+  // Onglet affiché : simple état local, jamais persisté — on revient toujours
+  // sur « Apparence » à l'ouverture. Le formulaire ci-dessous reste UNIQUE :
+  // changer d'onglet ne perd rien et n'enregistre rien.
+  const [tab, setTab] = useState<Tab>('appearance')
   const [form, setForm] = useState<FormState>(() => toForm(settings))
   const [initialForm] = useState<FormState>(() => toForm(settings))
   // Demandes d'effacement des secrets (envoient la sentinelle au PUT).
@@ -352,394 +366,425 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
         </>
       }
     >
-      <h3 className="section-title">{t('language')}</h3>
-      <Seg
-        value={lang}
-        options={LANG_OPTIONS}
-        labels={{ fr: t('langFr'), en: t('langEn') }}
-        onPick={setLang}
-        ariaLabel={t('language')}
-      />
-
-      <h3 className="section-title">{t('theme')}</h3>
-      {/* Appliqué immédiatement, comme la langue — pas lié au bouton Enregistrer. */}
-      <div className="seg" role="group" aria-label={t('theme')}>
-        {THEMES.map((id) => (
+      {/* Barre d'onglets : un simple filtre d'affichage devant un formulaire
+          unique — rien n'est perdu ni enregistré en passant d'un onglet à l'autre. */}
+      <div className="seg seg-tabs" role="tablist" aria-label={t('settings')}>
+        {TAB_OPTIONS.map((id) => (
           <button
             key={id}
             type="button"
-            className="seg-btn theme-btn"
-            aria-pressed={theme === id}
-            onClick={() => onPickTheme(id)}
+            role="tab"
+            className="seg-btn"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
           >
-            <span
-              className="theme-dot"
-              style={{ background: THEME_DOTS[id][1], borderColor: THEME_DOTS[id][0] }}
-            >
-              <span style={{ background: THEME_DOTS[id][0] }} />
-            </span>
-            {t(THEME_LABELS[id])}
+            {t(TAB_LABELS[id])}
           </button>
         ))}
-        <button
-          type="button"
-          className="seg-btn theme-btn"
-          aria-pressed={theme === 'custom'}
-          onClick={() => onPickTheme('custom')}
-        >
-          <span
-            className="theme-dot"
-            style={{ background: custom.bg, borderColor: custom.accent }}
-          >
-            <span style={{ background: custom.accent }} />
-          </span>
-          {t('themeCustom')}
-        </button>
       </div>
-      {theme === 'custom' && (
-        <div className="custom-theme">
-          {/* Deux couleurs suffisent : tout le shading est dérivé en CSS. */}
-          <label className="custom-color">
-            {t('customThemeBg')}
-            <input type="color" value={custom.bg} onChange={(e) => setCustomColor('bg', e.target.value)} />
-          </label>
-          <label className="custom-color">
-            {t('customThemeAccent')}
-            <input
-              type="color"
-              value={custom.accent}
-              onChange={(e) => setCustomColor('accent', e.target.value)}
-            />
-          </label>
-          <div className="row" style={{ flex: 1, minWidth: 160 }}>
-            <input
-              type="text"
-              value={codeDraft}
-              aria-label={t('themeCode')}
-              title={t('themeCode')}
-              style={{ flex: 1, minWidth: 0, fontFamily: 'var(--mono)', fontSize: 12 }}
-              onChange={(e) => setCodeDraft(e.target.value)}
-              onBlur={applyCode}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') applyCode()
-              }}
-            />
-            <button className="btn small" type="button" onClick={copyCode}>
-              {codeCopied ? t('copied') : t('copy')}
+
+      {tab === 'appearance' && (
+        <>
+          <h3 className="section-title">{t('language')}</h3>
+          <Seg
+            value={lang}
+            options={LANG_OPTIONS}
+            labels={{ fr: t('langFr'), en: t('langEn') }}
+            onPick={setLang}
+            ariaLabel={t('language')}
+          />
+
+          <h3 className="section-title">{t('theme')}</h3>
+          {/* Appliqué immédiatement, comme la langue — pas lié au bouton Enregistrer. */}
+          <div className="seg" role="group" aria-label={t('theme')}>
+            {THEMES.map((id) => (
+              <button
+                key={id}
+                type="button"
+                className="seg-btn theme-btn"
+                aria-pressed={theme === id}
+                onClick={() => onPickTheme(id)}
+              >
+                <span
+                  className="theme-dot"
+                  style={{ background: THEME_DOTS[id][1], borderColor: THEME_DOTS[id][0] }}
+                >
+                  <span style={{ background: THEME_DOTS[id][0] }} />
+                </span>
+                {t(THEME_LABELS[id])}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="seg-btn theme-btn"
+              aria-pressed={theme === 'custom'}
+              onClick={() => onPickTheme('custom')}
+            >
+              <span
+                className="theme-dot"
+                style={{ background: custom.bg, borderColor: custom.accent }}
+              >
+                <span style={{ background: custom.accent }} />
+              </span>
+              {t('themeCustom')}
             </button>
           </div>
-        </div>
+          {theme === 'custom' && (
+            <div className="custom-theme">
+              {/* Deux couleurs suffisent : tout le shading est dérivé en CSS. */}
+              <label className="custom-color">
+                {t('customThemeBg')}
+                <input type="color" value={custom.bg} onChange={(e) => setCustomColor('bg', e.target.value)} />
+              </label>
+              <label className="custom-color">
+                {t('customThemeAccent')}
+                <input
+                  type="color"
+                  value={custom.accent}
+                  onChange={(e) => setCustomColor('accent', e.target.value)}
+                />
+              </label>
+              <div className="row" style={{ flex: 1, minWidth: 160 }}>
+                <input
+                  type="text"
+                  value={codeDraft}
+                  aria-label={t('themeCode')}
+                  title={t('themeCode')}
+                  style={{ flex: 1, minWidth: 0, fontFamily: 'var(--mono)', fontSize: 12 }}
+                  onChange={(e) => setCodeDraft(e.target.value)}
+                  onBlur={applyCode}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') applyCode()
+                  }}
+                />
+                <button className="btn small" type="button" onClick={copyCode}>
+                  {codeCopied ? t('copied') : t('copy')}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      <h3 className="section-title">{t('sectionBackend')}</h3>
-      <div className="field">
-        <label htmlFor="set-url">{t('backendUrl')}</label>
-        <input
-          id="set-url"
-          type="url"
-          value={form.backendUrl}
-          placeholder="http://127.0.0.1:5001/v1"
-          onChange={(e) => {
-            setBackendProbe(null)
-            set('backendUrl', e.target.value)
-          }}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="set-key">{t('apiKey')}</label>
-        <div className="row">
-          <input
-            id="set-key"
-            type="password"
-            value={form.apiKey}
-            placeholder={secretPlaceholder(apiKeySet, clearApiKey)}
-            autoComplete="off"
-            style={{ flex: 1, minWidth: 0 }}
-            onChange={(e) => {
-              setClearApiKey(false)
-              set('apiKey', e.target.value)
-            }}
-          />
-          {apiKeySet && !clearApiKey && (
-            <button
-              className="btn small"
-              type="button"
-              onClick={() => {
-                setClearApiKey(true)
-                set('apiKey', '')
-              }}
-            >
-              {t('removeSecret')}
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="field">
-        <label htmlFor="set-model">{t('model')}</label>
-        <div className="row">
-          <input
-            id="set-model"
-            type="text"
-            value={form.model}
-            placeholder={t('modelPlaceholder')}
-            style={{ flex: 1 }}
-            onChange={(e) => set('model', e.target.value)}
-          />
-          <button className="btn" onClick={() => test().catch((e) => console.error('[settings]', e))} disabled={testing}>
-            {testing ? t('testing') : t('testConnection')}
-          </button>
-        </div>
-        {backendProbe && (
-          <span className={`probe-line${backendProbe.ok ? '' : ' err'}`}>
-            <span className="probe-mark">{backendProbe.ok ? '✓' : '✗'}</span>
-            <span>{backendProbe.text}</span>
-          </span>
-        )}
-        {backendProbe && backendProbe.models.length > 0 && (
-          <div className="voice-chips" role="group" aria-label={t('chooseDetectedModel')}>
-            {backendProbe.models.map((m) => (
-              <button
-                key={m}
-                type="button"
-                className="voice-chip"
-                aria-pressed={form.model.trim() === m}
-                title={m}
-                onClick={() => set('model', m)}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="field">
-        <label>{t('visionMode')}</label>
-        {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
-        <div>
-          <Seg
-            value={form.visionMode}
-            options={VISION_MODE_OPTIONS}
-            labels={{ auto: t('visionModeAuto'), on: t('visionModeOn'), off: t('visionModeOff') }}
-            onPick={(v) => set('visionMode', v)}
-            ariaLabel={t('visionMode')}
-          />
-        </div>
-        <span className="hint">{t('visionModeSub')}</span>
-      </div>
-
-      <h3 className="section-title">{t('sectionGeneration')}</h3>
-      <div className="grid-2">
-        <div className="field">
-          <label htmlFor="set-temp">{t('temperature')}</label>
-          <input id="set-temp" type="number" step="0.1" min="0" max="2" value={form.temperature} onChange={(e) => set('temperature', e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="set-max">{t('maxTokens')}</label>
-          <input id="set-max" type="number" step="1" min="1" value={form.maxTokens} onChange={(e) => set('maxTokens', e.target.value)} />
-        </div>
-      </div>
-      <div className="grid-2">
-        <div className="field">
-          <label htmlFor="set-hist">{t('maxHistory')}</label>
-          <input id="set-hist" type="number" step="1" min="0" value={form.maxHistoryMessages} onChange={(e) => set('maxHistoryMessages', e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="set-ctx">{t('contextSize')}</label>
-          <input id="set-ctx" type="number" step="1" min="0" value={form.contextSize} onChange={(e) => set('contextSize', e.target.value)} />
-        </div>
-      </div>
-      <div className="field">
-        <label>{t('modelMode')}</label>
-        {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
-        <div>
-          <Seg
-            value={form.modelMode}
-            options={MODEL_MODE_OPTIONS}
-            labels={{ full: t('modelModeFull'), simple: t('modelModeSimple') }}
-            onPick={(v) => set('modelMode', v)}
-            ariaLabel={t('modelMode')}
-          />
-        </div>
-        <span className="hint">{t('modelModeSub')}</span>
-      </div>
-      <Toggle
-        label={t('autoCompact')}
-        sub={t('autoCompactSub')}
-        checked={form.autoCompact}
-        onChange={(v) => set('autoCompact', v)}
-      />
-      <Toggle
-        label={t('timeAwareness')}
-        sub={t('timeAwarenessSub')}
-        checked={form.timeAwareness}
-        onChange={(v) => set('timeAwareness', v)}
-      />
-      <Toggle
-        label={t('showThoughts')}
-        sub={t('showThoughtsSub')}
-        checked={form.showThoughts}
-        onChange={(v) => set('showThoughts', v)}
-      />
-
-      <h3 className="section-title">{t('sectionTts')}</h3>
-      <Toggle
-        label={t('ttsEnabled')}
-        sub={t('ttsEnabledSub')}
-        checked={form.ttsEnabled}
-        onChange={(v) => set('ttsEnabled', v)}
-      />
-      <div className="field">
-        <label htmlFor="set-tts-url">{t('ttsUrl')}</label>
-        <div className="row">
-          <input
-            id="set-tts-url"
-            type="url"
-            value={form.ttsUrl}
-            placeholder="http://127.0.0.1:8880/v1"
-            style={{ flex: 1, minWidth: 0 }}
-            onChange={(e) => {
-              setTtsProbe(null)
-              set('ttsUrl', e.target.value)
-            }}
-          />
-          <button
-            className="btn small"
-            type="button"
-            onClick={() => testTts().catch((e) => console.error('[settings]', e))}
-            disabled={ttsProbing || !form.ttsUrl.trim()}
-          >
-            {ttsProbing ? t('ttsProbing') : t('ttsProbe')}
-          </button>
-        </div>
-        {ttsProbe && (
-          <span className={`probe-line${ttsProbe.ok ? '' : ' err'}`}>
-            <span className="probe-mark">{ttsProbe.ok ? '✓' : '✗'}</span>
-            <span>{ttsProbe.text}</span>
-          </span>
-        )}
-        {ttsProbe && ttsProbe.voices.length > 0 && (
-          <div className="voice-chips" role="group" aria-label={t('ttsProbeVoices')}>
-            {ttsProbe.voices.map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                className="voice-chip"
-                aria-pressed={form.ttsVoice.trim() === v.id}
-                title={v.id}
-                onClick={() => set('ttsVoice', v.id)}
-              >
-                {v.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="grid-2">
-        <div className="field">
-          <label htmlFor="set-tts-model">{t('ttsModel')}</label>
-          <input id="set-tts-model" type="text" value={form.ttsModel} onChange={(e) => set('ttsModel', e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="set-tts-voice">{t('ttsVoice')}</label>
-          <input id="set-tts-voice" type="text" value={form.ttsVoice} onChange={(e) => set('ttsVoice', e.target.value)} />
-        </div>
-      </div>
-      <span className="hint">{t('ttsHint')}</span>
-
-      <h3 className="section-title">{t('sectionSpontaneous')}</h3>
-      <Toggle
-        label={t('spontaneousEnabled')}
-        sub={t('spontaneousEnabledSub')}
-        checked={form.spontaneousEnabled}
-        onChange={(v) => set('spontaneousEnabled', v)}
-      />
-      {form.spontaneousEnabled && (
-        <div className="grid-2">
+      {tab === 'model' && (
+        <>
+          <h3 className="section-title">{t('sectionBackend')}</h3>
           <div className="field">
-            <label htmlFor="set-sp-start">{t('spontaneousStart')}</label>
+            <label htmlFor="set-url">{t('backendUrl')}</label>
             <input
-              id="set-sp-start"
-              type="number"
-              step="1"
-              min="0"
-              max="23"
-              value={form.spontaneousStartHour}
-              onChange={(e) => set('spontaneousStartHour', e.target.value)}
+              id="set-url"
+              type="url"
+              value={form.backendUrl}
+              placeholder="http://127.0.0.1:5001/v1"
+              onChange={(e) => {
+                setBackendProbe(null)
+                set('backendUrl', e.target.value)
+              }}
             />
           </div>
           <div className="field">
-            <label htmlFor="set-sp-end">{t('spontaneousEnd')}</label>
-            <input
-              id="set-sp-end"
-              type="number"
-              step="1"
-              min="0"
-              max="23"
-              value={form.spontaneousEndHour}
-              onChange={(e) => set('spontaneousEndHour', e.target.value)}
-            />
+            <label htmlFor="set-key">{t('apiKey')}</label>
+            <div className="row">
+              <input
+                id="set-key"
+                type="password"
+                value={form.apiKey}
+                placeholder={secretPlaceholder(apiKeySet, clearApiKey)}
+                autoComplete="off"
+                style={{ flex: 1, minWidth: 0 }}
+                onChange={(e) => {
+                  setClearApiKey(false)
+                  set('apiKey', e.target.value)
+                }}
+              />
+              {apiKeySet && !clearApiKey && (
+                <button
+                  className="btn small"
+                  type="button"
+                  onClick={() => {
+                    setClearApiKey(true)
+                    set('apiKey', '')
+                  }}
+                >
+                  {t('removeSecret')}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+          <div className="field">
+            <label htmlFor="set-model">{t('model')}</label>
+            <div className="row">
+              <input
+                id="set-model"
+                type="text"
+                value={form.model}
+                placeholder={t('modelPlaceholder')}
+                style={{ flex: 1 }}
+                onChange={(e) => set('model', e.target.value)}
+              />
+              <button className="btn" onClick={() => test().catch((e) => console.error('[settings]', e))} disabled={testing}>
+                {testing ? t('testing') : t('testConnection')}
+              </button>
+            </div>
+            {backendProbe && (
+              <span className={`probe-line${backendProbe.ok ? '' : ' err'}`}>
+                <span className="probe-mark">{backendProbe.ok ? '✓' : '✗'}</span>
+                <span>{backendProbe.text}</span>
+              </span>
+            )}
+            {backendProbe && backendProbe.models.length > 0 && (
+              <div className="voice-chips" role="group" aria-label={t('chooseDetectedModel')}>
+                {backendProbe.models.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className="voice-chip"
+                    aria-pressed={form.model.trim() === m}
+                    title={m}
+                    onClick={() => set('model', m)}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="field">
+            <label>{t('visionMode')}</label>
+            {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+            <div>
+              <Seg
+                value={form.visionMode}
+                options={VISION_MODE_OPTIONS}
+                labels={{ auto: t('visionModeAuto'), on: t('visionModeOn'), off: t('visionModeOff') }}
+                onPick={(v) => set('visionMode', v)}
+                ariaLabel={t('visionMode')}
+              />
+            </div>
+            <span className="hint">{t('visionModeSub')}</span>
+          </div>
+
+          <h3 className="section-title">{t('sectionGeneration')}</h3>
+          <div className="grid-2">
+            <div className="field">
+              <label htmlFor="set-temp">{t('temperature')}</label>
+              <input id="set-temp" type="number" step="0.1" min="0" max="2" value={form.temperature} onChange={(e) => set('temperature', e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="set-max">{t('maxTokens')}</label>
+              <input id="set-max" type="number" step="1" min="1" value={form.maxTokens} onChange={(e) => set('maxTokens', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="field">
+              <label htmlFor="set-hist">{t('maxHistory')}</label>
+              <input id="set-hist" type="number" step="1" min="0" value={form.maxHistoryMessages} onChange={(e) => set('maxHistoryMessages', e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="set-ctx">{t('contextSize')}</label>
+              <input id="set-ctx" type="number" step="1" min="0" value={form.contextSize} onChange={(e) => set('contextSize', e.target.value)} />
+            </div>
+          </div>
+          <div className="field">
+            <label>{t('modelMode')}</label>
+            {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+            <div>
+              <Seg
+                value={form.modelMode}
+                options={MODEL_MODE_OPTIONS}
+                labels={{ full: t('modelModeFull'), simple: t('modelModeSimple') }}
+                onPick={(v) => set('modelMode', v)}
+                ariaLabel={t('modelMode')}
+              />
+            </div>
+            <span className="hint">{t('modelModeSub')}</span>
+          </div>
+          <Toggle
+            label={t('autoCompact')}
+            sub={t('autoCompactSub')}
+            checked={form.autoCompact}
+            onChange={(v) => set('autoCompact', v)}
+          />
+        </>
       )}
 
-      <h3 className="section-title">{t('sectionMemoryTools')}</h3>
-      <Toggle
-        label={t('memoryToggle')}
-        sub={t('memoryToggleSub')}
-        checked={form.memoryEnabled}
-        onChange={(v) => set('memoryEnabled', v)}
-      />
-      <Toggle
-        label={t('fileTools')}
-        sub={t('fileToolsSub')}
-        checked={form.fileToolsEnabled}
-        onChange={(v) => set('fileToolsEnabled', v)}
-      />
-      <Toggle
-        label={t('allowDelete')}
-        sub={t('allowDeleteSub')}
-        checked={form.allowDelete}
-        onChange={(v) => set('allowDelete', v)}
-        danger
-      />
-      <div className="field">
-        <label htmlFor="set-root">{t('sandboxDir')}</label>
-        <input id="set-root" type="text" value={form.toolsRoot} onChange={(e) => set('toolsRoot', e.target.value)} />
-      </div>
-
-      <h3 className="section-title">{t('sectionAccess')}</h3>
-      <div className="field">
-        <label htmlFor="set-pw">{t('accessPassword')}</label>
-        <div className="row">
-          <input
-            id="set-pw"
-            type="password"
-            value={form.password}
-            placeholder={secretPlaceholder(passwordSet, clearPassword)}
-            autoComplete="new-password"
-            style={{ flex: 1, minWidth: 0 }}
-            onChange={(e) => {
-              setClearPassword(false)
-              set('password', e.target.value)
-            }}
+      {tab === 'features' && (
+        <>
+          <h3 className="section-title">{t('sectionConversation')}</h3>
+          <Toggle
+            label={t('timeAwareness')}
+            sub={t('timeAwarenessSub')}
+            checked={form.timeAwareness}
+            onChange={(v) => set('timeAwareness', v)}
           />
-          {passwordSet && !clearPassword && (
-            <button
-              className="btn small"
-              type="button"
-              onClick={() => {
-                if (window.confirm(t('removePasswordConfirm'))) {
-                  setClearPassword(true)
-                  set('password', '')
-                }
-              }}
-            >
-              {t('removeSecret')}
-            </button>
+          <Toggle
+            label={t('showThoughts')}
+            sub={t('showThoughtsSub')}
+            checked={form.showThoughts}
+            onChange={(v) => set('showThoughts', v)}
+          />
+
+          <h3 className="section-title">{t('sectionTts')}</h3>
+          <Toggle
+            label={t('ttsEnabled')}
+            sub={t('ttsEnabledSub')}
+            checked={form.ttsEnabled}
+            onChange={(v) => set('ttsEnabled', v)}
+          />
+          <div className="field">
+            <label htmlFor="set-tts-url">{t('ttsUrl')}</label>
+            <div className="row">
+              <input
+                id="set-tts-url"
+                type="url"
+                value={form.ttsUrl}
+                placeholder="http://127.0.0.1:8880/v1"
+                style={{ flex: 1, minWidth: 0 }}
+                onChange={(e) => {
+                  setTtsProbe(null)
+                  set('ttsUrl', e.target.value)
+                }}
+              />
+              <button
+                className="btn small"
+                type="button"
+                onClick={() => testTts().catch((e) => console.error('[settings]', e))}
+                disabled={ttsProbing || !form.ttsUrl.trim()}
+              >
+                {ttsProbing ? t('ttsProbing') : t('ttsProbe')}
+              </button>
+            </div>
+            {ttsProbe && (
+              <span className={`probe-line${ttsProbe.ok ? '' : ' err'}`}>
+                <span className="probe-mark">{ttsProbe.ok ? '✓' : '✗'}</span>
+                <span>{ttsProbe.text}</span>
+              </span>
+            )}
+            {ttsProbe && ttsProbe.voices.length > 0 && (
+              <div className="voice-chips" role="group" aria-label={t('ttsProbeVoices')}>
+                {ttsProbe.voices.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    className="voice-chip"
+                    aria-pressed={form.ttsVoice.trim() === v.id}
+                    title={v.id}
+                    onClick={() => set('ttsVoice', v.id)}
+                  >
+                    {v.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="grid-2">
+            <div className="field">
+              <label htmlFor="set-tts-model">{t('ttsModel')}</label>
+              <input id="set-tts-model" type="text" value={form.ttsModel} onChange={(e) => set('ttsModel', e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="set-tts-voice">{t('ttsVoice')}</label>
+              <input id="set-tts-voice" type="text" value={form.ttsVoice} onChange={(e) => set('ttsVoice', e.target.value)} />
+            </div>
+          </div>
+          <span className="hint">{t('ttsHint')}</span>
+
+          <h3 className="section-title">{t('sectionSpontaneous')}</h3>
+          <Toggle
+            label={t('spontaneousEnabled')}
+            sub={t('spontaneousEnabledSub')}
+            checked={form.spontaneousEnabled}
+            onChange={(v) => set('spontaneousEnabled', v)}
+          />
+          {form.spontaneousEnabled && (
+            <div className="grid-2">
+              <div className="field">
+                <label htmlFor="set-sp-start">{t('spontaneousStart')}</label>
+                <input
+                  id="set-sp-start"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="23"
+                  value={form.spontaneousStartHour}
+                  onChange={(e) => set('spontaneousStartHour', e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="set-sp-end">{t('spontaneousEnd')}</label>
+                <input
+                  id="set-sp-end"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="23"
+                  value={form.spontaneousEndHour}
+                  onChange={(e) => set('spontaneousEndHour', e.target.value)}
+                />
+              </div>
+            </div>
           )}
-        </div>
-        <span className="hint">{t('accessPasswordHint')}</span>
-      </div>
+
+          <h3 className="section-title">{t('sectionMemoryTools')}</h3>
+          <Toggle
+            label={t('memoryToggle')}
+            sub={t('memoryToggleSub')}
+            checked={form.memoryEnabled}
+            onChange={(v) => set('memoryEnabled', v)}
+          />
+          <Toggle
+            label={t('fileTools')}
+            sub={t('fileToolsSub')}
+            checked={form.fileToolsEnabled}
+            onChange={(v) => set('fileToolsEnabled', v)}
+          />
+          <Toggle
+            label={t('allowDelete')}
+            sub={t('allowDeleteSub')}
+            checked={form.allowDelete}
+            onChange={(v) => set('allowDelete', v)}
+            danger
+          />
+          <div className="field">
+            <label htmlFor="set-root">{t('sandboxDir')}</label>
+            <input id="set-root" type="text" value={form.toolsRoot} onChange={(e) => set('toolsRoot', e.target.value)} />
+          </div>
+
+          <h3 className="section-title">{t('sectionAccess')}</h3>
+          <div className="field">
+            <label htmlFor="set-pw">{t('accessPassword')}</label>
+            <div className="row">
+              <input
+                id="set-pw"
+                type="password"
+                value={form.password}
+                placeholder={secretPlaceholder(passwordSet, clearPassword)}
+                autoComplete="new-password"
+                style={{ flex: 1, minWidth: 0 }}
+                onChange={(e) => {
+                  setClearPassword(false)
+                  set('password', e.target.value)
+                }}
+              />
+              {passwordSet && !clearPassword && (
+                <button
+                  className="btn small"
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(t('removePasswordConfirm'))) {
+                      setClearPassword(true)
+                      set('password', '')
+                    }
+                  }}
+                >
+                  {t('removeSecret')}
+                </button>
+              )}
+            </div>
+            <span className="hint">{t('accessPasswordHint')}</span>
+          </div>
+        </>
+      )}
     </Dialog>
   )
 }

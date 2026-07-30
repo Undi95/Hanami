@@ -19,11 +19,15 @@ export const DATA_DIR = path.join(ROOT, 'data')
 export const PRESETS_DIR = path.join(ROOT, 'presets')
 export const VRM_DIR = path.join(ROOT, 'vrm')
 export const BACKGROUNDS_DIR = path.join(ROOT, 'backgrounds')
+// Portraits 2D (avatar de repli des personnages sans VRM) : dossier servi en
+// statique comme les fonds, alimenté par l'import des cards PNG.
+export const PORTRAITS_DIR = path.join(ROOT, 'portraits')
 const CHARACTERS_DIR = path.join(DATA_DIR, 'characters')
 
 export function ensureDataDirs(): void {
   fs.mkdirSync(CHARACTERS_DIR, { recursive: true })
   fs.mkdirSync(BACKGROUNDS_DIR, { recursive: true })
+  fs.mkdirSync(PORTRAITS_DIR, { recursive: true })
   // Premier lancement : copie des presets livrés avec l'app (jamais écrasés ensuite).
   if (fs.existsSync(PRESETS_DIR)) {
     for (const preset of fs.readdirSync(PRESETS_DIR)) {
@@ -140,6 +144,11 @@ function themeField(theme: unknown): Partial<CharacterMeta> {
   return typeof theme === 'string' && theme.trim() ? { theme: theme.trim() } : {}
 }
 
+/** Portrait 2D : même règle que le thème — pas de clé vide dans character.json. */
+function portraitField(portrait: unknown): Partial<CharacterMeta> {
+  return typeof portrait === 'string' && portrait.trim() ? { portrait: portrait.trim() } : {}
+}
+
 /**
  * Champs d'accueil optionnels tels qu'ils sont écrits dans character.json :
  * variantes vides retirées, et mode omis quand il vaut le défaut ('written').
@@ -190,6 +199,9 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     ...greetingFields(patch.greetings ?? current.greetings, patch.greetingMode ?? current.greetingMode),
     // '' explicite dans le patch = retour au thème de l'app.
     ...themeField(patch.theme ?? current.theme),
+    // Portrait conservé d'office : le dialog Personnages ne l'envoie pas (il n'a
+    // pas d'éditeur) et une édition ne doit jamais l'effacer en silence.
+    ...portraitField(patch.portrait ?? current.portrait),
     createdAt: current.createdAt,
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
@@ -204,6 +216,27 @@ export function deleteCharacter(id: string): void {
   // Ceinture : ne jamais supprimer le dossier characters/ lui-même.
   if (path.resolve(dir) === path.resolve(CHARACTERS_DIR)) throw new Error(`Identifiant invalide : ${id}`)
   fs.rmSync(dir, { recursive: true, force: true })
+  // Le portrait vit hors du dossier du personnage : il part avec lui, sinon un
+  // homonyme créé plus tard hériterait de l'image de son prédécesseur.
+  fs.rmSync(portraitFile(id), { force: true })
+}
+
+/** Fichier du portrait 2D d'un personnage (une image par personnage, écrasée). */
+function portraitFile(id: string): string {
+  return path.join(PORTRAITS_DIR, `${sanitizeFileName(id)}.png`)
+}
+
+/**
+ * Écrit le PNG d'une card importée comme portrait du personnage et renvoie son
+ * URL publique (servie par /portraits). Le buffer est celui de la card telle
+ * qu'elle a été envoyée : aucun retraitement d'image, l'app n'en a pas les moyens.
+ */
+export function savePortrait(id: string, png: Buffer): string {
+  fs.mkdirSync(PORTRAITS_DIR, { recursive: true })
+  const name = `${sanitizeFileName(id)}.png`
+  fs.writeFileSync(path.join(PORTRAITS_DIR, name), png)
+  // encodeURIComponent : un id est déjà slugifié, mais l'URL reste explicite.
+  return `/portraits/${encodeURIComponent(name)}`
 }
 
 /** Prompt par défaut d'un personnage créé via l'UI — volontairement minimal et visible. */

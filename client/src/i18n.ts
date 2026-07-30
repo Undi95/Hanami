@@ -57,6 +57,8 @@ const FR = {
   responseInterrupted: 'Réponse interrompue par le serveur.',
   vrmLoadError: 'Le modèle 3D n’a pas pu être chargé.',
   resetView: 'Recentrer l’avatar',
+  resizeChatPanel: 'Largeur du chat — glissez, double-clic pour réinitialiser',
+  resizeVnBox: 'Taille de la boîte de dialogue — glissez, double-clic pour réinitialiser',
 
   // ── Erreurs côté client (celles du serveur sont affichées telles quelles) ─
   authRequired: 'Authentification requise',
@@ -100,7 +102,8 @@ const FR = {
   viewImage: 'Voir l’image en grand',
   closeImage: 'Fermer l’image',
 
-  // ── Recherche dans la conversation (Ctrl+F, aucun bouton permanent) ───────
+  // ── Recherche dans la conversation (Ctrl+F, ou la loupe de la barre) ──────
+  searchInChat: 'Rechercher dans la conversation',
   searchPlaceholder: 'Rechercher dans la conversation…',
   searchCount: '{n}/{m}',
   searchPrev: 'Correspondance précédente',
@@ -134,8 +137,13 @@ const FR = {
   name: 'Nom',
   vrmModel: 'Modèle 3D (VRM)',
   noModel: 'Aucun modèle',
+  portrait: 'Portrait',
+  portraitHint: 'Image de la carte importée — tient lieu d’avatar tant qu’aucun modèle 3D n’est choisi.',
   background: 'Fond',
   defaultGradient: 'Dégradé par défaut',
+  addBackground: 'Ajouter une image de fond',
+  backgroundFormat: 'Format non pris en charge (png, jpg, webp).',
+  backgroundTooLarge: 'Image trop lourde (15 Mo maximum).',
   greeting: 'Message d’accueil',
   greetingPlaceholder: '[happy] Bonjour ! …',
   greetingHint: 'Affiché en première bulle d’un nouveau chat — jamais envoyé au backend.',
@@ -158,6 +166,11 @@ const FR = {
   deleteCharacter: 'Supprimer le personnage',
 
   // ── Réglages ─────────────────────────────────────────────────────────────
+  // Onglets du dialog : trois groupes, un seul formulaire.
+  tabAppearance: 'Apparence',
+  tabModel: 'Modèle',
+  tabFeatures: 'Fonctions',
+  sectionConversation: 'Conversation',
   sectionBackend: 'Backend LLM',
   backendUrl: 'URL du backend (compatible OpenAI)',
   apiKey: 'Clé API',
@@ -334,6 +347,8 @@ const EN: Record<Key, string> = {
   responseInterrupted: 'The server cut the response short.',
   vrmLoadError: 'The 3D model could not be loaded.',
   resetView: 'Recenter the avatar',
+  resizeChatPanel: 'Chat width — drag, double-click to reset',
+  resizeVnBox: 'Dialogue box size — drag, double-click to reset',
 
   // ── Client-side errors (server errors are shown verbatim) ────────────────
   authRequired: 'Authentication required',
@@ -377,7 +392,8 @@ const EN: Record<Key, string> = {
   viewImage: 'View the image larger',
   closeImage: 'Close the image',
 
-  // ── In-conversation search (Ctrl+F, no permanent button) ─────────────────
+  // ── In-conversation search (Ctrl+F, or the magnifier in the bar) ─────────
+  searchInChat: 'Search in conversation',
   searchPlaceholder: 'Search this conversation…',
   searchCount: '{n}/{m}',
   searchPrev: 'Previous match',
@@ -409,8 +425,13 @@ const EN: Record<Key, string> = {
   name: 'Name',
   vrmModel: '3D model (VRM)',
   noModel: 'No model',
+  portrait: 'Portrait',
+  portraitHint: 'Image from the imported card — stands in as the avatar until a 3D model is chosen.',
   background: 'Background',
   defaultGradient: 'Default gradient',
+  addBackground: 'Add a background image',
+  backgroundFormat: 'Unsupported format (png, jpg, webp).',
+  backgroundTooLarge: 'Image too large (15 MB maximum).',
   greeting: 'Greeting',
   greetingPlaceholder: '[happy] Hi there! …',
   greetingHint: 'Shown as the first bubble of a new chat — never sent to the backend.',
@@ -432,6 +453,10 @@ const EN: Record<Key, string> = {
   deleteCharacter: 'Delete character',
 
   // ── Settings ─────────────────────────────────────────────────────────────
+  tabAppearance: 'Appearance',
+  tabModel: 'Model',
+  tabFeatures: 'Features',
+  sectionConversation: 'Conversation',
   sectionBackend: 'LLM backend',
   backendUrl: 'Backend URL (OpenAI-compatible)',
   apiKey: 'API key',

@@ -312,6 +312,41 @@ export async function getBackgrounds(): Promise<string[]> {
   return r.backgrounds
 }
 
+/** Type MIME par extension : un fichier choisi n'annonce pas toujours le sien. */
+const IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+}
+
+/**
+ * Dépose une image dans backgrounds/ et renvoie son URL servie. Corps brut +
+ * nom d'origine en en-tête (encodé URI) : le serveur nettoie le nom et gère les
+ * collisions, l'URL renvoyée est donc la seule vérité.
+ */
+export async function uploadBackground(file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  // Le nom prime : un « .webp » annoncé application/octet-stream doit passer.
+  const type = IMAGE_MIME[ext] ?? (Object.values(IMAGE_MIME).includes(file.type) ? file.type : '')
+  if (!type) throw new ApiError(t('backgroundFormat'), 0)
+  let res: Response
+  try {
+    res = await fetch('/api/backgrounds', {
+      method: 'POST',
+      headers: { 'Content-Type': type, 'X-Filename': encodeURIComponent(file.name), ...authHeaders() },
+      body: file,
+    })
+  } catch {
+    throw new ApiError(t('serverUnreachable'), 0)
+  }
+  // 413 : le corps de la réponse vient d'Express, pas de nous — message clair.
+  if (res.status === 413) throw new ApiError(t('backgroundTooLarge'), 413)
+  if (!res.ok) return throwFromResponse(res)
+  const { url } = (await res.json()) as { url: string }
+  return url
+}
+
 // ── Synthèse vocale ────────────────────────────────────────────────────────
 
 /** Renvoie l'audio de la réponse (le serveur proxifie le serveur TTS configuré). */

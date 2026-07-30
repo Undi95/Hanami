@@ -1,5 +1,5 @@
 // Personnages : grille de sélection, création, édition (prompt système inclus), suppression.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CharacterFull, CharacterMeta, GreetingMode } from '../../../shared/types'
 import * as api from '../api'
 import { useI18n } from '../i18n'
@@ -85,9 +85,16 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
   const [initialForm, setInitialForm] = useState<FormState>(EMPTY_FORM)
   const [vrms, setVrms] = useState<string[]>([])
   const [bgs, setBgs] = useState<string[]>([])
+  // Portrait 2D du personnage édité : HORS du formulaire, car il ne s'édite pas
+  // ici (l'import de la card le pose, le serveur le conserve d'une édition à
+  // l'autre) — il se montre seulement, tant qu'aucun modèle 3D ne le remplace.
+  const [portrait, setPortrait] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [armed, setArmed] = useState(false)
+  // Dépôt d'un fond : état à part de `busy` (qui, lui, affiche « Enregistrement… »).
+  const bgFileRef = useRef<HTMLInputElement>(null)
+  const [bgBusy, setBgBusy] = useState(false)
 
   useEffect(() => {
     if (view.kind === 'list') return
@@ -103,6 +110,7 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
     setView({ kind: 'list' })
     setForm(EMPTY_FORM)
     setInitialForm(EMPTY_FORM)
+    setPortrait('')
     setError(null)
     setArmed(false)
   }
@@ -124,6 +132,7 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
       }
       setForm(f)
       setInitialForm(f)
+      setPortrait(c.portrait ?? '')
       setView({ kind: 'edit', id })
     } catch (e) {
       setError(api.errorMessage(e))
@@ -134,6 +143,24 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
   // des variantes n'est recréé qu'à la modification : comparer les références suffit.
   const dirty =
     view.kind !== 'list' && (Object.keys(form) as (keyof FormState)[]).some((k) => form[k] !== initialForm[k])
+
+  // ── Fond d'écran déposé depuis l'UI ────────────────────────────────────────
+
+  /** Envoie l'image, recharge la liste des fonds et sélectionne le nouveau. */
+  async function addBackground(file: File) {
+    setBgBusy(true)
+    setError(null)
+    try {
+      // Le serveur nettoie le nom et gère les collisions : l'URL renvoyée fait foi.
+      const url = await api.uploadBackground(file)
+      set('background', url)
+      setBgs(await api.getBackgrounds())
+    } catch (e) {
+      setError(api.errorMessage(e))
+    } finally {
+      setBgBusy(false)
+    }
+  }
 
   // ── Variantes du message d'accueil ─────────────────────────────────────────
 
@@ -287,14 +314,53 @@ export default function CharactersDialog({ characters, activeId, onSelect, onCre
             </div>
             <div className="field">
               <label htmlFor="char-bg">{t('background')}</label>
-              <SelectMenu
-                id="char-bg"
-                value={form.background}
-                options={fileOptions(t('defaultGradient'), form.background, bgs)}
-                onChange={(v) => set('background', v)}
-              />
+              {/* Le « + » dépose une image dans backgrounds/ : plus besoin
+                  d'ouvrir l'explorateur de fichiers de la machine serveur. */}
+              <div className="pick-row">
+                <SelectMenu
+                  id="char-bg"
+                  value={form.background}
+                  options={fileOptions(t('defaultGradient'), form.background, bgs)}
+                  onChange={(v) => set('background', v)}
+                />
+                <input
+                  ref={bgFileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    e.target.value = '' // rechoisir le même fichier doit rester possible
+                    if (f) addBackground(f).catch((err) => console.error('[characters]', err))
+                  }}
+                />
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={bgBusy}
+                  title={t('addBackground')}
+                  aria-label={t('addBackground')}
+                  onClick={() => bgFileRef.current?.click()}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
+          {/* Portrait 2D : montré seulement quand il sert, c'est-à-dire sans
+              modèle 3D. Choisir un VRM dans la liste au-dessus fait disparaître
+              la vignette — l'avatar reprend la scène. */}
+          {portrait !== '' && form.vrm === '' && (
+            <div className="field">
+              <label>{t('portrait')}</label>
+              <div className="portrait-thumb">
+                <img src={portrait} alt="" />
+                <span className="hint">{t('portraitHint')}</span>
+              </div>
+            </div>
+          )}
           <div className="field">
             <label htmlFor="char-theme">{t('theme')}</label>
             {/* Toute l'app prend les couleurs de ce personnage tant qu'il est actif. */}

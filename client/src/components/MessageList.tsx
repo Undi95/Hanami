@@ -9,6 +9,7 @@ import type { ChatMessage } from '../../../shared/types'
 import { stripEmotionTags } from '../emotions'
 import { localeOf, useI18n, type Lang } from '../i18n'
 import { renderMarkdown } from '../markdown'
+import { VnBoxGrip } from './ResizeGrips'
 
 export type FeedItem =
   | { kind: 'msg'; msg: ChatMessage; pending?: boolean }
@@ -23,6 +24,12 @@ interface Props {
   editable: boolean
   /** Ctrl+F actif : coupé quand un dialog ou l'écran de connexion tient le clavier. */
   searchable: boolean
+  /**
+   * Compteur bumpé par le parent (loupe de la TopBar) : chaque incrément bascule
+   * la barre de recherche. Un simple nombre suffit — le Ctrl+F reste autonome et
+   * la valeur initiale n'ouvre rien.
+   */
+  searchSignal: number
   /** Ordinal du message épinglé — null = aucun. Pur affichage, hors payload LLM. */
   pinned: number | null
   /** Sauvegarde une édition — ordinal = position parmi les messages sauvegardés. */
@@ -169,6 +176,7 @@ export default function MessageList({
   showThoughts,
   editable,
   searchable,
+  searchSignal,
   pinned,
   onSaveEdit,
   onRemember,
@@ -241,6 +249,17 @@ export default function MessageList({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [searchable])
+
+  // Loupe de la TopBar : le parent bumpe searchSignal, on bascule. La valeur vue
+  // au montage sert de référence, donc le premier rendu n'ouvre rien (le fil est
+  // remonté à chaque changement de chat : la référence se réaligne d'elle-même).
+  const seenSignalRef = useRef(searchSignal)
+  useEffect(() => {
+    if (seenSignalRef.current === searchSignal) return
+    seenSignalRef.current = searchSignal
+    if (searchOpen) closeSearch()
+    else setSearchOpen(true) // le focus suit (effet ci-dessous)
+  }, [searchSignal, searchOpen])
 
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus()
@@ -607,6 +626,9 @@ export function VnBox({ items, characterName }: { items: FeedItem[]; characterNa
     // novel) : la boîte ne défile pas elle-même — c'est .vn-text qui scrolle,
     // sinon l'étiquette en position négative serait rognée par l'overflow.
     <div className="vn-box">
+      {/* Coin haut-gauche : largeur de la boîte et hauteur du texte en un geste
+          (la saisie et la bande basse suivent la largeur, cf. --vn-w). */}
+      <VnBoxGrip />
       {last !== null && <div className="vn-name">{isUser ? t('vnYou') : characterName}</div>}
       {last !== null && (
         <div className="vn-text" ref={boxRef}>

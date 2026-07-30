@@ -2,7 +2,7 @@
 import express, { Router, type Response } from 'express'
 import { parseCharacterCard, type ParsedCard } from '../lib/pngCard'
 import { convertStChat } from '../lib/stChat'
-import { createCharacter, getCharacter, writeImportedChat } from '../lib/storage'
+import { createCharacter, getCharacter, savePortrait, updateCharacter, writeImportedChat } from '../lib/storage'
 
 export const importRouter = Router()
 
@@ -54,7 +54,16 @@ importRouter.post(
         greetings: card.alternateGreetings,
         systemPrompt: composeSystemPrompt(card),
       })
-      res.json({ character })
+      // La card EST une image : on la garde comme portrait du personnage, seule
+      // représentation visuelle possible tant qu'aucun VRM n'est choisi. L'échec
+      // d'écriture ne fait pas rater l'import (le personnage, lui, est créé).
+      let saved = character
+      try {
+        saved = updateCharacter(character.id, { portrait: savePortrait(character.id, buf) })
+      } catch (e) {
+        console.warn('[import] portrait non conservé :', e)
+      }
+      res.json({ character: saved })
     } catch (e) {
       sendError(res, 500, e)
     }

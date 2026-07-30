@@ -96,6 +96,7 @@ data/                  # TES données (jamais committées)
 presets/               # personnages livrés avec l'app (copiés dans data/ au 1er lancement)
 vrm/                   # tes modèles .vrm
 backgrounds/           # tes fonds d'écran
+portraits/             # portraits 2D des cards importées (avatar sans VRM)
 client/                # front React (Vite)
 server/                # serveur Express + API
 shared/                # types partagés client/serveur

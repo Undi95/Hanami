@@ -114,6 +114,24 @@
     linear-gradient(160deg, #1c1c21 0%, #121214 60%, #0c0c0e 100%);
 }
 
+/* ── Tailles réglables (poignées) ─────────────────────────────────────────
+   --chat-panel-w, --vn-box-w et --vn-text-h sont posées sur :root par
+   client/src/layout.ts quand l'utilisateur a réglé un panneau à la poignée.
+   ABSENTES le reste du temps : chaque var() porte son défaut en repli, et le
+   double-clic sur une poignée les retire (retour à ces défauts).
+   Le bornage est écrit DEUX fois — ici pour survivre à un redimensionnement de
+   la fenêtre, en JS pour ce qui est enregistré. */
+
+:root {
+  /* Largeur effective de la colonne de chat (au-delà de 900 px) : la colonne ET
+     le portrait 2D lisent cette même valeur. */
+  --chat-col-w: clamp(320px, var(--chat-panel-w, 420px), 60vw);
+  /* Largeur effective de la boîte de dialogue VN. Ses trois sections (dialogue,
+     saisie, bande basse) la partagent : c'est ce qui les garde solidaires. Le
+     100 % se résout chez l'élément qui l'utilise — les trois sont frères. */
+  --vn-w: min(max(520px, var(--vn-box-w, 900px)), calc(100% - 28px));
+}
+
 * {
   box-sizing: border-box;
 }
@@ -272,6 +290,42 @@ select {
   }
 }
 
+/* ── Portrait 2D (personnage sans modèle VRM) ─────────────────────────── */
+
+/* Image de la card importée posée dans la scène, à la place du canvas 3D vide.
+   Mêmes règles de placement que l'avatar : posée au bas de l'écran, centrée, et
+   décalée du panneau de chat sur grand écran. Inerte (pointer-events) et
+   décorative : elle ne prend jamais la main sur la scène. */
+.scene-portrait {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  margin: 0 auto;
+  max-width: 92%;
+  max-height: 75vh;
+  max-height: 75dvh;
+  pointer-events: none;
+  /* Ombre douce façon visual novel : le sujet se détache du fond, sans cadre —
+     drop-shadow suit la silhouette des PNG détourés des cards. */
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.45));
+}
+
+/* Le panneau de chat devient une colonne à droite : le portrait se centre dans
+   ce qui reste (mêmes marges de sécurité que l'avatar 3D décalé). */
+@media (min-width: 900px) {
+  .scene-portrait {
+    right: var(--chat-col-w);
+    max-width: calc(100% - var(--chat-col-w) - 32px);
+  }
+  /* Mode VN : plus de colonne, la scène est plein écran — retour au centre. */
+  .scene-portrait.vn {
+    right: 0;
+    max-width: 92%;
+  }
+}
+
 /* ── Panneau de chat en verre ─────────────────────────────────────────── */
 
 .chat-panel {
@@ -324,7 +378,7 @@ select {
   .chat-panel {
     left: auto;
     top: 0;
-    width: 420px;
+    width: var(--chat-col-w);
     height: 100vh;
     height: 100dvh;
     border-radius: 0;
@@ -334,6 +388,110 @@ select {
   }
   .sheet-handle {
     display: none;
+  }
+}
+
+/* ── Poignées de redimensionnement ────────────────────────────────────────
+   Zone de saisie fine, invisible au repos : un filet accent apparaît au survol
+   et pendant le geste. Double-clic = retour à la taille par défaut. */
+
+.panel-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  display: none; /* feuille basse : rien à élargir (cf. le media juste après) */
+  width: 7px;
+  cursor: col-resize;
+  user-select: none;
+  /* Le geste VERTICAL reste au navigateur (le fil défile au doigt), seul
+     l'horizontal nous revient : redimensionner ne coûte pas le défilement. */
+  touch-action: pan-y;
+}
+
+/* La poignée n'a de sens que là où le panneau EST une colonne de largeur réglée.
+   Déclaré après la règle de base : même spécificité, c'est l'ordre qui tranche. */
+@media (min-width: 900px) {
+  .panel-grip {
+    display: block;
+  }
+}
+
+/* Mode visual novel : plus de colonne, plus rien à élargir. */
+.chat-panel.vn .panel-grip {
+  display: none;
+}
+
+.panel-grip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.panel-grip:hover::before,
+.panel-grip[data-dragging]::before {
+  opacity: 0.7;
+}
+
+/* Coin haut-gauche de la boîte de dialogue VN : un petit équerre d'accent, posée
+   dans le retrait de la boîte (elle ne mord ni sur le texte ni sur l'étiquette
+   de nom, qui commence à 16 px). Le geste est diagonal : largeur ET hauteur. */
+.vn-grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  width: 15px;
+  height: 15px;
+  cursor: nwse-resize;
+  user-select: none;
+  touch-action: none; /* rien ne défile sous ce coin : le geste est à nous */
+}
+
+.vn-grip::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 7px;
+  height: 7px;
+  border-top: 1px solid var(--accent);
+  border-left: 1px solid var(--accent);
+  border-radius: 3px 0 0 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.vn-grip:hover::before,
+.vn-grip[data-dragging]::before {
+  opacity: 0.8;
+}
+
+/* Tactile : aucun survol ne peut les révéler — zone de toucher élargie et filet
+   en demi-teinte permanent (même esprit que .scene-reset). */
+@media (pointer: coarse) {
+  .panel-grip {
+    width: 16px;
+  }
+  .panel-grip::before {
+    left: 7px;
+    opacity: 0.3;
+  }
+  .vn-grip {
+    width: 26px;
+    height: 26px;
+  }
+  .vn-grip::before {
+    width: 10px;
+    height: 10px;
+    opacity: 0.35;
   }
 }
 
@@ -422,11 +580,18 @@ select {
   color: var(--accent);
 }
 
-/* Sept icônes en ligne : on resserre leur largeur sur les écrans étroits pour
-   laisser respirer le nom du personnage (la hauteur de touche reste à 44 px). */
+/* Huit icônes en ligne (loupe comprise) : on resserre leur largeur sur les écrans
+   étroits pour laisser respirer le nom du personnage — la hauteur de touche, elle,
+   reste à 44 px. Deuxième palier pour les téléphones les plus étroits. */
 @media (max-width: 430px) {
   .icon-btn {
-    width: 38px;
+    width: 35px;
+  }
+}
+
+@media (max-width: 380px) {
+  .icon-btn {
+    width: 31px;
   }
 }
 
@@ -1491,6 +1656,24 @@ select {
   color: var(--text-dim);
 }
 
+/* Portrait 2D dans le dialog Personnages : vignette INFORMATIVE (l'image vient de
+   la card importée, choisir un modèle 3D la remplace) — aucune action dessus. */
+.portrait-thumb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.portrait-thumb img {
+  flex: none;
+  width: 54px;
+  height: 74px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
 /* Variantes du message d'accueil : une ligne = un texte + son bouton retirer. */
 
 .variant-list {
@@ -1519,6 +1702,29 @@ select {
 .variant-row .btn svg {
   width: 14px;
   height: 14px;
+  display: block;
+}
+
+/* Champ « Fond » : le sélecteur, plus un bouton discret d'ajout d'image. */
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pick-row .select-menu-btn {
+  flex: 1;
+  min-width: 0;
+}
+
+.pick-row .btn {
+  flex: none;
+  padding: 0 12px;
+}
+
+.pick-row .btn svg {
+  width: 16px;
+  height: 16px;
   display: block;
 }
 
@@ -1779,6 +1985,30 @@ select {
   border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   color: var(--text);
   font-weight: 600;
+}
+
+/* Barre d'onglets (Réglages) : le même sélecteur segmenté, en pleine largeur.
+   Les onglets portent aria-selected (role="tab"), d'où l'état actif redonné. */
+.seg-tabs {
+  display: flex;
+  margin-bottom: 14px;
+}
+
+.seg-tabs .seg-btn {
+  flex: 1;
+  padding: 0 8px;
+}
+
+.seg-tabs .seg-btn[aria-selected='true'] {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Le premier titre de section suit la barre d'onglets sans creux. */
+.seg-tabs + .section-title {
+  margin-top: 0;
 }
 
 /* ── Toggles ──────────────────────────────────────────────────────────── */
@@ -2313,7 +2543,7 @@ select {
 
 .chat-panel.vn .reply-actions {
   order: 3;
-  width: min(900px, calc(100% - 28px));
+  width: var(--vn-w);
   margin: 0 auto 10px;
   justify-content: flex-end;
   gap: 14px;
@@ -2408,7 +2638,7 @@ select {
 /* Saisie : section médiane de la boîte — même largeur, mêmes bords, ton
    assombri, séparée du dialogue par un fin liseré. */
 .chat-panel.vn .composer {
-  width: min(900px, calc(100% - 28px));
+  width: var(--vn-w);
   margin: 0 auto 10px;
   padding: 7px 10px;
   background: rgba(19, 14, 29, 0.95);
@@ -2420,9 +2650,9 @@ select {
 /* Boîte de dialogue façon visual novel : hauteur stable, étiquette de nom
    chevauchant la bordure supérieure, texte défilant À L'INTÉRIEUR. */
 .vn-box {
-  position: relative; /* ancre de l'étiquette de nom */
+  position: relative; /* ancre de l'étiquette de nom et de la poignée */
   flex: 0 1 auto;
-  width: min(900px, calc(100% - 28px));
+  width: var(--vn-w);
   margin: 14px auto 0;
   padding: 15px 18px 10px;
   background: var(--panel-strong);
@@ -2454,8 +2684,12 @@ select {
 /* Le texte occupe une hauteur de boîte VN constante et défile au-delà.
    Centré dans les DEUX axes (safe : s'il déborde, il repart du haut et défile). */
 .vn-text {
-  min-height: 84px;
-  max-height: 24dvh;
+  /* Hauteur réglable à la poignée (--vn-text-h) : min = max, donc FIXE, et le
+     texte défile au-delà. Sans réglage, les valeurs d'origine (84 px → 24dvh).
+     Le plafond à 40dvh vaut pour les deux : une hauteur réglée sur un grand
+     écran ne mange pas tout un petit. */
+  min-height: min(var(--vn-text-h, 84px), 40dvh);
+  max-height: min(var(--vn-text-h, 24dvh), 40dvh);
   overflow-y: auto;
   overscroll-behavior: contain;
   white-space: pre-wrap;

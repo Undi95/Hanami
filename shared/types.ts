@@ -47,6 +47,10 @@ export interface CharacterMeta {
   name: string
   theme?: string // thème de couleurs propre au personnage (absent = thème de l'app)
   vrm: string // ex: /vrm/reference.vrm ('' = pas de modèle 3D)
+  // Portrait 2D servi par /portraits — avatar de repli affiché dans la scène
+  // TANT QUE `vrm` est vide. Posé par l'import d'une card SillyTavern (le PNG de
+  // la card EST l'image). Champ absent = aucune représentation visuelle.
+  portrait?: string // ex: /portraits/sakura.png
   background: string // ex: /backgrounds/room.png ('' = dégradé par défaut)
   greeting: string // premier message affiché dans un nouveau chat
   greetings?: string[] // variantes supplémentaires (tirage au hasard avec greeting)
@@ -128,6 +132,12 @@ export interface UiPrefs {
   theme?: string // identifiant de thème préfait, ou 'custom'
   customTheme?: UiCustomTheme
   vnMode?: boolean // mode visual novel
+  // Tailles réglées à la poignée (pixels). Clé ABSENTE = taille par défaut de
+  // styles.css : l'utilisateur qui n'y touche pas n'a rien dans ui.json, et un
+  // double-clic sur la poignée efface la clé (retour au défaut).
+  chatPanelWidth?: number // largeur de la colonne de chat (desktop, ≥ 900 px)
+  vnBoxWidth?: number // largeur de la boîte de dialogue du mode visual novel
+  vnBoxHeight?: number // hauteur de la zone de texte de cette boîte
   activeCharacter?: string // dernier personnage ouvert
   activeChat?: Record<string, string> // dernière conversation ouverte, par personnage
   // Cadrage caméra choisi, par personnage ET par mode d'affichage : clé composée

@@ -31,11 +31,12 @@ const REST_POSE_Z: ReadonlyArray<readonly [VRMHumanBoneName, number]> = [
 ]
 
 // Cadrage 'left' : le panneau de chat occupe une colonne à DROITE de l'écran
-// (420 px, à partir de 900 px de large — cf. styles.css). Pour que l'avatar
-// tombe au centre de la bande restée visible, il faut le déplacer vers la gauche
-// de la moitié de cette colonne. Sous ce seuil le panneau est une feuille BASSE :
+// (420 px par défaut, à partir de 900 px de large — cf. styles.css, et la
+// poignée de redimensionnement qui pose setPanelWidth). Pour que l'avatar tombe
+// au centre de la bande restée visible, il faut le déplacer vers la gauche d'une
+// fraction de cette colonne. Sous ce seuil le panneau est une feuille BASSE :
 // la scène occupe toute la largeur, aucun décalage n'aurait de sens.
-const CHAT_PANEL_W = 420
+const CHAT_PANEL_DEFAULT_W = 420
 const CHAT_PANEL_MIN_W = 900
 
 // Os dont la pose de base est mémorisée : l'idle écrit base + offset à chaque
@@ -104,6 +105,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // Cadrage par défaut voulu par l'UI (setFrameMode) : 'centered' tant que
   // personne ne dit le contraire — c'est le comportement historique.
   let frameMode: FrameMode = 'centered'
+  // Largeur de la colonne de chat (setPanelWidth) : la valeur par défaut du CSS
+  // tant que l'UI ne dit rien.
+  let panelWidth = CHAT_PANEL_DEFAULT_W
 
   function currentView(): StageView {
     return {
@@ -199,7 +203,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const worldPerPixel = (2 * distance * Math.tan((camera.fov * Math.PI) / 360)) / h
     // Le quart (et non la moitié) de la colonne : viser le centre exact de la
     // zone hors panneau déportait trop l'avatar — retour visuel utilisateur.
-    return (CHAT_PANEL_W / 4) * worldPerPixel
+    return (panelWidth / 4) * worldPerPixel
   }
 
   // Cadrage buste + tête : cible légèrement sous la tête, caméra de face (décalée
@@ -288,6 +292,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
     setFrameMode(mode: FrameMode): void {
       frameMode = mode // le prochain frameCamera/resetView s'y conforme
+    },
+
+    setPanelWidth(px: number): void {
+      // Idem : aucun recadrage ici. Élargir le panneau ne doit pas faire sauter
+      // l'avatar sous les doigts de l'utilisateur (le resize de fenêtre non plus
+      // ne recadre pas) — la valeur servira au prochain cadrage par défaut.
+      if (Number.isFinite(px) && px > 0) panelWidth = px
     },
 
     setEmotion(emotion: string): void {

@@ -39,6 +39,19 @@ function asCustomTheme(value: unknown): UiCustomTheme | undefined {
   return { bg: o.bg, accent: o.accent }
 }
 
+/**
+ * Taille de panneau en pixels : entier dans des bornes LARGES. Le bornage fin
+ * (60 % de la fenêtre, marges de la boîte VN) appartient au client, qui seul
+ * connaît l'écran ; ici on ne refuse que l'absurde.
+ */
+function asPixels(min: number, max: number): (value: unknown) => number | undefined {
+  return (value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+    const px = Math.round(value)
+    return px >= min && px <= max ? px : undefined
+  }
+}
+
 function asTriple(value: unknown): [number, number, number] | undefined {
   if (!Array.isArray(value) || value.length !== 3) return undefined
   if (!value.every((n) => typeof n === 'number' && Number.isFinite(n))) return undefined
@@ -75,6 +88,9 @@ const VALIDATORS: { [K in keyof Required<UiPrefs>]: (value: unknown) => UiPrefs[
   theme: (v) => asString(v, 32),
   customTheme: asCustomTheme,
   vnMode: (v) => (typeof v === 'boolean' ? v : undefined),
+  chatPanelWidth: asPixels(280, 4000),
+  vnBoxWidth: asPixels(400, 8000),
+  vnBoxHeight: asPixels(60, 4000),
   activeCharacter: (v) => asString(v, 128),
   activeChat: (v) => asRecord(v, (raw) => asString(raw, 128)),
   views: (v) => asRecord(v, asView),
