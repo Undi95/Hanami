@@ -47,6 +47,9 @@ const FR = {
   env3d: 'Décor 3D',
   env3dSub:
     'Affiche le décor du personnage autour de l’avatar. Éteint : fond 2D ou dégradé, comme avant.',
+  vrmaOn: 'Animations gestuelles',
+  vrmaOnSub:
+    'Utilise les fichiers .vrma du dossier vrma/ : idle en boucle et gestes liés aux émotions. Éteint : respiration seule.',
 
   // ── Coquille de l’application ────────────────────────────────────────────
   collapseChat: 'Replier le chat pour voir l’avatar',
@@ -370,6 +373,9 @@ const EN: Record<Key, string> = {
   env3d: '3D environment',
   env3dSub:
     'Shows the character’s environment around the avatar. Off: 2D background or gradient, as before.',
+  vrmaOn: 'Gesture animations',
+  vrmaOnSub:
+    'Uses the .vrma files from the vrma/ folder: looping idle and gestures tied to emotions. Off: breathing only.',
 
   // ── App shell ────────────────────────────────────────────────────────────
   collapseChat: 'Collapse the chat to see the avatar',

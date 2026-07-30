@@ -77,6 +77,7 @@ export const UI_PREF_VALIDATORS: { [K in keyof Required<UiPrefs>]: (value: unkno
   customTheme: asCustomTheme,
   vnMode: (v) => (typeof v === 'boolean' ? v : undefined),
   env3d: (v) => (typeof v === 'boolean' ? v : undefined),
+  vrmaEnabled: (v) => (typeof v === 'boolean' ? v : undefined),
   chatPanelWidth: asPixels(280, 4000),
   vnBoxWidth: asPixels(400, 8000),
   vnBoxHeight: asPixels(60, 4000),

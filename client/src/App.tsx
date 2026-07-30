@@ -115,6 +115,8 @@ function AppInner() {
   const [vnMode, setVnMode] = useState(() => getPref('vnMode') === true)
   // Décor 3D : allumé par défaut (clé absente = allumé), éteint explicitement.
   const [env3d, setEnv3d] = useState(() => getPref('env3d') !== false)
+  // Animations gestuelles (.vrma) : même grammaire que le décor.
+  const [vrmaEnabled, setVrmaEnabled] = useState(() => getPref('vrmaEnabled') !== false)
   // Largeur de la colonne de chat (poignée de redimensionnement). L'affichage,
   // lui, ne passe pas par ici : layout.ts pose la variable CSS. Cet état ne sert
   // qu'à tenir la scène 3D au courant (cadrage 'left').
@@ -398,6 +400,13 @@ function AppInner() {
   useEffect(() => {
     stageRef.current?.setPanelWidth(chatWidth)
   }, [chatWidth, stageReady])
+
+  // Animations gestuelles : la scène démarre allumée (c'est le défaut), donc cet
+  // effet ne fait quelque chose qu'à l'extinction — et à chaque bascule ensuite.
+  // Éteindre DÉCHARGE le mixer, ça ne le met pas en pause.
+  useEffect(() => {
+    stageRef.current?.setAnimationsEnabled(vrmaEnabled)
+  }, [vrmaEnabled, stageReady])
 
   // Changement de personnage (ou scène prête) → charger son modèle VRM, puis
   // réappliquer le cadrage caméra choisi pour lui DANS LE MODE courant.
@@ -1403,6 +1412,11 @@ function AppInner() {
           onToggleEnv3d={(on) => {
             setEnv3d(on)
             setPref({ env3d: on })
+          }}
+          vrmaEnabled={vrmaEnabled}
+          onToggleVrma={(on) => {
+            setVrmaEnabled(on)
+            setPref({ vrmaEnabled: on })
           }}
           onSaved={handleSettingsSaved}
           onClose={() => setDialog(null)}

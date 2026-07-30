@@ -155,6 +155,10 @@ export interface UiPrefs {
   // l'utilisateur d'un appareil à l'autre, couper le décor sur mobile le coupe
   // aussi sur PC.
   env3d?: boolean
+  // Animations .vrma allumées/éteintes (défaut : allumé). Même famille que env3d
+  // — un réglage de confort, pas une propriété du personnage. Éteint, la scène
+  // décharge le mixer et retombe sur la respiration seule.
+  vrmaEnabled?: boolean
   // Tailles réglées à la poignée (pixels). Clé ABSENTE = taille par défaut de
   // styles.css : l'utilisateur qui n'y touche pas n'a rien dans ui.json, et un
   // double-clic sur la poignée efface la clé (retour au défaut).

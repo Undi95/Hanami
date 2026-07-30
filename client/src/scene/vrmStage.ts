@@ -527,13 +527,14 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    * Construit le mixer et les actions du modèle qui vient d'être chargé. Le
    * VRMAnimation est mutualisé (cache module) mais le clip, lui, est reconstruit
    * pour ce VRM précis — et jeté avec lui.
-   * `generation` : changer de personnage pendant le téléchargement des .vrma ne
-   * doit rien poser sur le nouveau modèle.
+   * Chaque reprise après un `await` revérifie tout : changer de personnage ou
+   * éteindre les animations pendant le téléchargement des .vrma ne doit rien
+   * poser sur le modèle en place.
    */
   async function buildAnimations(vrm: VRM, generation: number): Promise<void> {
     if (!animationsEnabled) return
     const cat = await loadCatalog()
-    if (generation !== loadGeneration || disposed || currentVrm !== vrm) return
+    if (!animationsEnabled || generation !== loadGeneration || disposed || currentVrm !== vrm) return
     catalog = cat
     if (cat.idle.length === 0) return // pas de socle : pas de mixer du tout
     // Le socle est tiré au hasard UNE FOIS par chargement de modèle ; les gestes
@@ -546,7 +547,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       ...[...cat.postures.values()].flat(),
     ]
     const loaded = await Promise.all(urls.map(async (url) => [url, await loadVrmAnimation(url)] as const))
-    if (generation !== loadGeneration || disposed || currentVrm !== vrm) return
+    if (!animationsEnabled || generation !== loadGeneration || disposed || currentVrm !== vrm) return
     const clips = new Map<string, AnimationClip>()
     for (const [url, animation] of loaded) {
       if (animation) clips.set(url, createVRMAnimationClip(animation, vrm))

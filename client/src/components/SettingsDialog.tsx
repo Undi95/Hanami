@@ -28,6 +28,8 @@ interface Props {
   // elle vit donc HORS du formulaire, comme le thème, et s'applique au clic.
   env3d: boolean
   onToggleEnv3d: (on: boolean) => void
+  vrmaEnabled: boolean
+  onToggleVrma: (on: boolean) => void
   onSaved: (s: Settings) => void
   onClose: () => void
 }
@@ -202,6 +204,8 @@ export default function SettingsDialog({
   onPickTheme,
   env3d,
   onToggleEnv3d,
+  vrmaEnabled,
+  onToggleVrma,
   onSaved,
   onClose,
 }: Props) {
@@ -521,6 +525,12 @@ export default function SettingsDialog({
             sub={t('env3dSub')}
             checked={env3d}
             onChange={onToggleEnv3d}
+          />
+          <Toggle
+            label={t('vrmaOn')}
+            sub={t('vrmaOnSub')}
+            checked={vrmaEnabled}
+            onChange={onToggleVrma}
           />
         </>
       )}
