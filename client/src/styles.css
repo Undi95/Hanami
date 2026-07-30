@@ -1256,6 +1256,45 @@ select {
   height: 19px;
 }
 
+/* ── Micro (dictée) ───────────────────────────────────────────────────────
+   Même gabarit que le trombone ; le bouton n'est monté que si le navigateur
+   sait reconnaître la parole. Pendant l'écoute il respire doucement — une
+   lueur accent, pas un gyrophare. */
+.mic-btn {
+  width: 36px;
+  height: 44px;
+  border-radius: 12px;
+}
+
+.mic-btn svg {
+  width: 19px;
+  height: 19px;
+}
+
+.mic-btn.listening {
+  color: var(--accent);
+  animation: mic-pulse 1.7s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 var(--accent-soft);
+  }
+  50% {
+    opacity: 0.62;
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mic-btn.listening {
+    animation: none;
+    opacity: 0.75;
+  }
+}
+
 /* Vignettes en attente d'envoi, au-dessus du champ. */
 .shots {
   flex: 0 0 100%;

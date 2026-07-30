@@ -28,6 +28,9 @@ Related: [CLOUDFLARE.md](CLOUDFLARE.md) · [back to the README](../README.md)
 
 - The mobile layout shows the avatar full-screen with the chat in a bottom sheet — drag the
   handle down to see more of your character.
+- Dictation (the mic button next to the input) needs a secure context — HTTPS or localhost: over
+  a Cloudflare Tunnel it works; on a plain `http://<pc-ip>:7788` LAN address the button may not
+  show up at all.
 - 3D rendering pauses when the app goes to the background, to save battery.
 - On a slow connection (public Wi-Fi…), the chat still works while the 3D model is loading:
   text never waits for the avatar.

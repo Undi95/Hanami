@@ -28,6 +28,9 @@
 
 - L'interface mobile affiche l'avatar en plein écran avec le chat en feuille basse — tire la
   poignée vers le bas pour voir le personnage en grand.
+- La dictée (bouton micro à côté du champ) exige un contexte sécurisé — HTTPS ou localhost : via
+  un tunnel Cloudflare c'est bon ; sur une simple adresse réseau `http://<ip-du-pc>:7788` le
+  bouton peut ne pas apparaître du tout.
 - Le rendu 3D se met en pause quand l'app passe en arrière-plan (économie de batterie).
 - Si la connexion est lente (Wi-Fi public…), le chat fonctionne même pendant le chargement du
   modèle 3D : le texte n'attend jamais l'avatar.

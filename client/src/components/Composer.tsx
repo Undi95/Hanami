@@ -1,10 +1,12 @@
 // Zone de saisie : textarea auto-grandissante, Entrée = envoyer (desktop),
 // Maj+Entrée = retour ligne, bouton stop pendant le streaming. Le trombone
 // (images) n'apparaît QUE si le modèle sait lire une image — sinon aucun pixel
-// n'est ajouté à l'interface. Taper « / » en tête de message ouvre le menu des
-// commandes (/compact, /clean) — invisible tant qu'on ne le cherche pas.
-import { useMemo, useRef, useState } from 'react'
-import { useI18n, type Key } from '../i18n'
+// n'est ajouté à l'interface. Même règle pour le micro (dictée) : sans API de
+// reconnaissance vocale, le bouton n'existe pas. Taper « / » en tête de message
+// ouvre le menu des commandes (/compact, /clean) — invisible tant qu'on ne le
+// cherche pas.
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { localeOf, useI18n, type Key } from '../i18n'
 
 /** Nom d'une commande slash du composer. */
 export type CommandName = 'compact' | 'clean'
@@ -90,8 +92,63 @@ async function shrink(file: File): Promise<string> {
   return canvas.toDataURL('image/jpeg', JPEG_QUALITY)
 }
 
+/* ── Dictée (Web Speech API) ───────────────────────────────────────────────
+   L'API n'est pas dans le lib.dom de tous les tsc : on décrit ICI le strict
+   minimum qu'on utilise (pas de `any`), et on la lit sur window — préfixe
+   webkit compris, c'est celui de Chrome Android et de Safari. */
+
+interface SpeechAlternative {
+  readonly transcript: string
+}
+
+interface SpeechResult {
+  readonly isFinal: boolean
+  readonly length: number
+  readonly [index: number]: SpeechAlternative
+}
+
+interface SpeechResultList {
+  readonly length: number
+  readonly [index: number]: SpeechResult
+}
+
+interface SpeechResultEvent {
+  readonly results: SpeechResultList
+}
+
+interface SpeechRecognizer {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  onresult: ((e: SpeechResultEvent) => void) | null
+  onerror: (() => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
+  abort: () => void
+}
+
+type SpeechRecognizerCtor = new () => SpeechRecognizer
+
+/** Constructeur disponible, ou null — sans lui, aucun bouton micro n'est monté. */
+function speechCtor(): SpeechRecognizerCtor | null {
+  if (typeof window === 'undefined') return null
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognizerCtor
+    webkitSpeechRecognition?: SpeechRecognizerCtor
+  }
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
+}
+
+/** Colle la parole au texte déjà présent, avec une espace si elle manque. */
+function joinSpoken(base: string, spoken: string): string {
+  const said = spoken.replace(/^\s+/, '')
+  if (!said) return base
+  return base === '' || /\s$/.test(base) ? base + said : `${base} ${said}`
+}
+
 export default function Composer({ disabled, streaming, vision, onSend, onCommand, onStop }: Props) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const [text, setText] = useState('')
   // Images en attente d'envoi (data URLs déjà réduites) — vidées à l'envoi.
   const [shots, setShots] = useState<string[]>([])
@@ -102,6 +159,16 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
   const fileRef = useRef<HTMLInputElement>(null)
   // Sur mobile (pointeur grossier), Entrée fait un retour ligne : le bouton envoie.
   const coarse = useMemo(() => window.matchMedia('(pointer: coarse)').matches, [])
+  // Dictée : le constructeur est cherché une seule fois — s'il manque, pas de micro.
+  const Speech = useMemo(speechCtor, [])
+  const [listening, setListening] = useState(false)
+  const recRef = useRef<SpeechRecognizer | null>(null)
+  // Texte présent au DÉMARRAGE de l'écoute : la transcription s'y ajoute, il se
+  // fige à l'arrêt (l'écoute suivante repart du champ tel qu'il est alors).
+  const baseRef = useRef('')
+
+  // Démonter le composer coupe le micro : rien ne continue d'écouter dans le vide.
+  useEffect(() => () => recRef.current?.abort(), [])
 
   // Commandes dont le nom commence par ce qui est tapé — « / » les montre toutes.
   const typing = TYPING_RE.exec(text)
@@ -119,6 +186,7 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
   /** Exécute la commande surlignée, sans argument — « / » puis Entrée suffit. */
   function runCommand(name: CommandName) {
     if (disabled || streaming) return
+    dropDictation()
     onCommand(name, '')
     setText('')
     setCmdIndex(0)
@@ -133,6 +201,53 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
     if (!el) return
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+  }
+
+  /**
+   * Micro : démarre l'écoute, ou la coupe si elle tourne déjà. Tout échec est
+   * SILENCIEUX (micro refusé, réseau, aucune voix entendue) — le bouton cesse
+   * simplement de pulser, aucun bandeau n'apparaît.
+   */
+  function toggleDictation() {
+    const running = recRef.current
+    if (running) {
+      running.stop() // onend remet l'état à plat
+      return
+    }
+    if (!Speech || disabled || streaming) return
+    const rec = new Speech()
+    rec.lang = localeOf(lang) // langue de l'interface : « fr-FR » ou « en-US »
+    rec.continuous = false
+    rec.interimResults = true
+    baseRef.current = text
+    rec.onresult = (e) => {
+      // Le champ vaut toujours « base + ce qui a été dit » : les résultats
+      // intermédiaires remplacent la portion en cours, jamais le texte tapé
+      // avant l'écoute — et le dernier résultat (final) reste tel quel.
+      let spoken = ''
+      for (let i = 0; i < e.results.length; i++) spoken += e.results[i][0].transcript
+      setText(joinSpoken(baseRef.current, spoken))
+      requestAnimationFrame(autosize)
+    }
+    const finish = () => {
+      recRef.current = null
+      setListening(false)
+    }
+    rec.onerror = finish // onend suit normalement, mais l'état est nettoyé quoi qu'il arrive
+    rec.onend = finish
+    try {
+      rec.start()
+    } catch {
+      return // start() refusé : rien n'a démarré, rien à nettoyer
+    }
+    recRef.current = rec
+    setListening(true)
+  }
+
+  /** Coupe l'écoute et oublie sa base — le champ vient d'être vidé (envoi, commande). */
+  function dropDictation() {
+    baseRef.current = ''
+    recRef.current?.abort() // abort() ne renvoie aucun résultat tardif
   }
 
   async function addFiles(files: FileList) {
@@ -156,6 +271,7 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
     if ((!value && shots.length === 0) || disabled || streaming) return
     // Commande complète → interceptée, jamais envoyée au modèle. Un « /xyz »
     // inconnu part comme du texte normal : seules NOS commandes sont happées.
+    dropDictation()
     const cmd = COMMAND_RE.exec(value)
     if (cmd) onCommand(canonical(cmd[1]), (cmd[2] ?? '').trim())
     else onSend(value, shots)
@@ -217,6 +333,27 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
             </svg>
           </button>
         </>
+      )}
+
+      {/* Micro : n'existe que si le navigateur sait reconnaître la parole
+          (téléphone, surtout). Contexte sécurisé requis — HTTPS ou localhost. */}
+      {Speech && (
+        <button
+          className={`icon-btn mic-btn${listening ? ' listening' : ''}`}
+          // On ne DÉMARRE pas pendant le streaming, mais une écoute déjà lancée
+          // reste toujours interruptible.
+          disabled={(disabled || streaming) && !listening}
+          title={listening ? t('dictateListening') : t('dictate')}
+          aria-label={listening ? t('dictateListening') : t('dictate')}
+          aria-pressed={listening}
+          onClick={toggleDictation}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3.5a2.6 2.6 0 012.6 2.6v5.4a2.6 2.6 0 01-5.2 0V6.1A2.6 2.6 0 0112 3.5z" />
+            <path d="M6.6 11a5.4 5.4 0 0010.8 0" />
+            <path d="M12 16.4v3.1M9.2 19.5h5.6" />
+          </svg>
+        </button>
       )}
 
       <textarea
