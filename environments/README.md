@@ -47,6 +47,169 @@ Dépose ici des fichiers `.glb` (ou `.gltf`) — ils apparaissent dans Hanami
 Toutes les clés sont facultatives ; une clé inconnue ou une valeur invalide est
 ignorée en silence.
 
+## Analyse automatique (`<nom>.scene.json`)
+
+Un décor déposé ici est **mesuré tout seul**, une fois, et le résultat est écrit
+à côté du modèle : `chambre.glb` → `chambre.scene.json`. C'est ce fichier que le
+moteur de scène lit pour faire **marcher** le personnage dans la pièce, l'empêcher
+de traverser un mur et savoir sur quoi il peut s'asseoir. Il ne contient aucune
+géométrie : rien que des mesures.
+
+Vous n'avez **rien à faire**. L'analyse démarre au lancement du serveur, ou dès
+que l'interface liste les décors, en tâche de fond et une pièce à la fois. Tant
+qu'elle n'est pas prête, le décor **s'affiche quand même** : il sert de fond,
+simplement sans interaction. `GET /api/environments` donne l'état de chacun
+(`pending`, `analyzing`, `ready`, `failed`, `unsupported`) — c'est ce qui permet à
+l'interface d'afficher « en préparation » puis « prêt ».
+
+L'analyse est **refaite** quand le `.glb` change, quand `scale`, `rotationY` ou
+`spawn` changent dans le sidecar, ou quand le format du fichier d'analyse évolue.
+Changer la seule `exposure` ne la refait pas : elle ne déplace rien.
+Un `.glb` illisible ou compressé n'est **jamais** une erreur bruyante : le décor
+reste un fond, et la raison est écrite dans l'état.
+
+### Le repère
+
+Le décor est mesuré **tel qu'il sera affiché**, sidecar appliqué. Toutes les
+coordonnées se posent donc telles quelles dans la scène :
+
+- **mètres**, **Y vers le haut** ;
+- **origine aux pieds du personnage** (le `spawn`), donc le sol est à `y ≈ 0` ;
+- le personnage regarde **+Z**, la caméra est du côté +Z.
+
+### Ce que contient le fichier
+
+```jsonc
+{
+  "format": "hanami-scene", "version": 1,
+  "generated": "2026-07-30T16:08:36.860Z",
+
+  // Fraîcheur : si l'un de ces champs ne colle plus, l'analyse est refaite.
+  "source":    { "file": "chambre.glb", "bytes": 5544308, "mtimeMs": 1785401140995, "sha256": "059d66e37e5846" },
+  "placement": { "scale": 0.031, "rotationY": 330, "spawn": [0.287, 0.256, -0.296], "fingerprint": "247decca1cfc09e9" },
+
+  "frame": { "units": "m", "up": "+Y", "forward": "+Z", "origin": "spawn — pieds de l’avatar, y = 0" },
+
+  // Le gabarit SOUS LEQUEL la carte a été calculée. La changer oblige à refaire
+  // l'analyse : « libre » veut dire « libre pour ce corps-là ».
+  "body": { "height": 1.6, "radius": 0.25, "step": 0.2, "seatRange": [0.15, 0.95] },
+
+  "room": {
+    // Boîte brute du modèle placé : elle DÉBORDE souvent très loin de la pièce
+    // (la salle de classe fait 27 m de long à cause du décor peint derrière les
+    // fenêtres). Ne vous en servez pas pour cadrer quoi que ce soit.
+    "modelBounds": [-2.509, -0.256, -1.977, 1.889, 2.974, 2.415],
+    // LA pièce : la boîte de ce qu'on atteint à pied depuis le point d'accueil.
+    "walkBounds": [-1.2, -0.7, 1.4, 2.3],
+    "walkArea": 2.98,          // m² réellement praticables — 0 = décor sans sol utilisable
+    "ground": -0.001,          // altitude du sol de la pièce (≈ 0 si le sidecar est bien réglé)
+    "ceiling": 2.975           // null si le décor est ouvert par le haut
+  },
+
+  // Distance libre depuis le point d'accueil, à hauteur d'objectif, dans 16
+  // directions : index k ⇒ cap k × 22,5°, donc 0 = +Z, 4 = +X, 8 = −Z, 12 = −X.
+  // 0 signifie « bouché dès 30 cm ». Mesuré sur une grille de repérage : précis
+  // au quart de mètre, et borné par l'étendue analysée.
+  "camera": { "eye": 1.3, "clearance": [2.2, 1.6, 1.4, 1.3, 1.4, 1, 8.4, 0.8, 0.7, 0.5, 0.3, 0, 0.5, 0.5, 1.4, 1.8] },
+
+  "grid": { … },   // voir plus bas
+  "seats": [ … ]   // voir plus bas
+}
+```
+
+### La carte du sol
+
+```jsonc
+"grid": {
+  "cell": 0.1,             // côté d'une case, en mètres
+  "origin": [-2.2, -1.7],  // coin minimal de la case (0, 0)
+  "cols": 41, "rows": 41,
+  "levels": [-0.001, 0.021, 0.051],   // altitudes de sol, croissantes
+  "map": [
+    "...........########......................",
+    "..........###########....................",
+    "################0000000000000000000###...",
+    "#############00#2222222222#00000000#.....",
+    …
+  ]
+}
+```
+
+`map[j][i]` décrit la case de colonne `i` et de rangée `j` — `i` suit **x
+croissant**, `j` suit **z croissant**. Son centre est à
+
+```
+x = origin[0] + (i + 0.5) × cell        i = floor((x − origin[0]) / cell)
+z = origin[1] + (j + 0.5) × cell        j = floor((z − origin[1]) / cell)
+```
+
+Quatre caractères, et rien d'autre :
+
+| caractère | sens |
+|---|---|
+| `.` | **pas de sol** — le vide, l'extérieur de la pièce |
+| `#` | **obstrué** : il y a un sol, mais on ne tient pas debout dessus (mur, meuble, sous une mezzanine) |
+| `~` | **sol libre, hors d'atteinte à pied** — dessus de pupitre, matelas, îlot séparé |
+| `0`-`9`, `a`-`z`, `A`-`Z` | **sol libre et atteignable** ; le caractère est l'**indice dans `levels`**, qui donne son altitude |
+
+Autrement dit : **tout ce qui n'est pas `.`, `#` ou `~` se marche**, et l'altitude
+se lit dans `levels`. C'est volontairement sans ambiguïté — un moteur qui traite
+« tout sauf `.#~` » comme praticable ne peut pas se tromper. L'atteignabilité a
+été calculée depuis le point d'accueil en franchissant au plus `body.step` d'une
+case à la suivante ; les dénivelés entre cases voisines se lisent dans `levels`.
+
+C'est un **plan, et il se lit** : les rangées sont dans l'ordre, une par ligne. On
+reconnaît les rangées de pupitres d'une salle de classe à l'œil nu. Il s'édite
+aussi à la main — boucher un passage se fait en remplaçant des caractères par des
+`#`. Attention : la prochaine régénération l'écrasera (voir plus bas).
+
+### Les assises
+
+Toute surface horizontale à hauteur plausible (`body.seatRange` au-dessus de
+`room.ground`) est listée, **sans aucun filtrage par modèle** : un lit, une marche,
+une caisse, un pupitre sont des assises. C'est au moteur, par sa cinématique
+inverse, d'adapter la pose à la hauteur réelle — pas à l'analyse de décider qu'un
+meuble est « incompatible ».
+
+```jsonc
+{
+  "id": "seat-1",
+  "y": 0.634,                       // altitude RÉELLE de l'assise
+  "center": [-0.846, -0.744],       // [x, z]
+  "bounds": [-1.5, -1.6, -0.1, 0.2],// [xMin, zMin, xMax, zMax] — la nappe, pas forcément pleine
+  "area": 1.07,                     // m²
+  "headroom": 0.84,                 // espace libre au-dessus
+  "yaw": 58.3,                      // regard, en DEGRÉS (voir ci-dessous)
+  "back": true,                     // le cap vient d'un dossier ou d'un mur ; false = de l'ouverture de la pièce
+  "approach": [-0.45, -0.05]        // case praticable d'où venir s'asseoir — null si inaccessible à pied
+}
+```
+
+`yaw` suit la convention de three : la direction du regard est
+`[sin(yaw), 0, cos(yaw)]`, et la valeur se pose telle quelle dans `rotation.y`
+(convertie en radians). Un personnage assis **tourne le dos** au dossier ou au mur
+le plus proche ; sans dossier lisible, il regarde là où la pièce est la plus ouverte.
+
+### Refaire une analyse, ou comprendre un résultat
+
+```
+npm run env:scene                    # ce qui manque ou a changé
+npm run env:scene -- --all           # tout refaire
+npm run env:scene -- chambre         # un décor, avec le détail de ce qui a été trouvé
+npm run env:scene -- chambre --explain   # …et pourquoi telle surface n'a pas été retenue
+npm run env:scene -- chambre --dry   # sans rien écrire
+```
+
+Le détail affiche les dimensions, les hauteurs d'assise en histogramme, la carte
+du sol et l'emprise des assises en surimpression. `--explain` compte les surfaces
+écartées et dit pourquoi (trop petite, pas de dégagement au-dessus, c'est du sol).
+
+**Effacer un `.scene.json` suffit** : il sera régénéré au prochain balayage.
+L'analyse est déterministe — mêmes fichiers, même résultat.
+
+Les `.scene.json` des décors livrés **sont committés** : c'est du calcul, pas de
+la donnée personnelle, et cela évite à chacun de refaire la même mesure.
+
 ## À savoir
 
 - Le canvas est **transparent** : un décor troué (pas de plafond, pas de mur
@@ -105,6 +268,167 @@ Next to `room.glb`, a `room.json` tunes placement without touching the model:
   to 1 (environment untouched): writing `4.5` gives a darker room, not a lighter one.
 
 Every key is optional; an unknown key or an invalid value is silently ignored.
+
+## Automatic analysis (`<name>.scene.json`)
+
+An environment dropped here is **measured on its own**, once, and the result is
+written next to the model: `room.glb` → `room.scene.json`. The scene engine reads
+that file to **walk** the character around the room, keep them out of walls, and
+know what they can sit on. It holds no geometry — only measurements.
+
+There is **nothing to do**. The analysis starts when the server boots, or as soon
+as the UI lists the environments, in the background and one room at a time. Until
+it is ready the environment **still shows up**: it works as a backdrop, just
+without interaction. `GET /api/environments` reports each one's state (`pending`,
+`analyzing`, `ready`, `failed`, `unsupported`) so the UI can say “preparing”, then
+“ready”.
+
+The analysis is **redone** when the `.glb` changes, when `scale`, `rotationY` or
+`spawn` change in the sidecar, or when the analysis format itself moves on.
+Changing only `exposure` does not: it moves nothing. An unreadable or compressed
+`.glb` is **never** a loud error: the environment stays a backdrop and the reason
+is recorded in its state.
+
+### Frame of reference
+
+The environment is measured **as it will be displayed**, sidecar applied. Every
+coordinate can therefore be used as-is in the scene:
+
+- **meters**, **Y up**;
+- **origin at the character's feet** (the `spawn`), so the floor sits at `y ≈ 0`;
+- the character faces **+Z**, the camera is on the +Z side.
+
+### What the file holds
+
+```jsonc
+{
+  "format": "hanami-scene", "version": 1,
+  "generated": "2026-07-30T16:08:36.860Z",
+
+  // Freshness: if any of these no longer matches, the analysis is redone.
+  "source":    { "file": "room.glb", "bytes": 5544308, "mtimeMs": 1785401140995, "sha256": "059d66e37e5846" },
+  "placement": { "scale": 0.031, "rotationY": 330, "spawn": [0.287, 0.256, -0.296], "fingerprint": "247decca1cfc09e9" },
+
+  "frame": { "units": "m", "up": "+Y", "forward": "+Z", "origin": "spawn — avatar feet, y = 0" },
+
+  // The body the map was computed FOR. Change it and the analysis must be redone:
+  // “free” means “free for that body”.
+  "body": { "height": 1.6, "radius": 0.25, "step": 0.2, "seatRange": [0.15, 0.95] },
+
+  "room": {
+    // Raw box of the placed model: it often reaches FAR beyond the room (the
+    // classroom is 27 m long because of the scenery painted behind the windows).
+    // Do not frame anything with it.
+    "modelBounds": [-2.509, -0.256, -1.977, 1.889, 2.974, 2.415],
+    // THE room: the box of what is reachable on foot from the spawn point.
+    "walkBounds": [-1.2, -0.7, 1.4, 2.3],
+    "walkArea": 2.98,          // m² actually walkable — 0 = no usable floor
+    "ground": -0.001,          // floor altitude (≈ 0 when the sidecar is well tuned)
+    "ceiling": 2.975           // null when the environment is open at the top
+  },
+
+  // Free distance from the spawn point, at lens height, in 16 directions:
+  // index k ⇒ heading k × 22.5°, so 0 = +Z, 4 = +X, 8 = −Z, 12 = −X. A 0 means
+  // “blocked from 30 cm on”. Measured on a coarse grid: accurate to about a
+  // quarter meter, and capped by the analysed extent.
+  "camera": { "eye": 1.3, "clearance": [2.2, 1.6, 1.4, 1.3, 1.4, 1, 8.4, 0.8, 0.7, 0.5, 0.3, 0, 0.5, 0.5, 1.4, 1.8] },
+
+  "grid": { … },   // see below
+  "seats": [ … ]   // see below
+}
+```
+
+### The floor map
+
+```jsonc
+"grid": {
+  "cell": 0.1,             // cell side, in meters
+  "origin": [-2.2, -1.7],  // minimum corner of cell (0, 0)
+  "cols": 41, "rows": 41,
+  "levels": [-0.001, 0.021, 0.051],   // floor altitudes, ascending
+  "map": [
+    "...........########......................",
+    "################0000000000000000000###...",
+    "#############00#2222222222#00000000#.....",
+    …
+  ]
+}
+```
+
+`map[j][i]` describes the cell at column `i`, row `j` — `i` follows **increasing
+x**, `j` follows **increasing z**. Its center is at
+
+```
+x = origin[0] + (i + 0.5) × cell        i = floor((x − origin[0]) / cell)
+z = origin[1] + (j + 0.5) × cell        j = floor((z − origin[1]) / cell)
+```
+
+Four characters, and nothing else:
+
+| character | meaning |
+|---|---|
+| `.` | **no floor** — the void, outside the room |
+| `#` | **blocked**: there is a floor, but you cannot stand on it (wall, furniture, under a mezzanine) |
+| `~` | **free floor, out of reach on foot** — desktop, mattress, separate island |
+| `0`-`9`, `a`-`z`, `A`-`Z` | **free and reachable floor**; the character is the **index into `levels`**, which gives its altitude |
+
+In other words: **anything that is not `.`, `#` or `~` can be walked on**, and its
+altitude is read from `levels`. That is deliberately unambiguous — an engine
+treating “everything but `.#~`” as walkable cannot get it wrong. Reachability was
+computed from the spawn point, climbing at most `body.step` from one cell to the
+next; the step between neighbouring cells is read from `levels`.
+
+It is a **floor plan, and it reads like one**: rows in order, one per line. You can
+spot a classroom's rows of desks with the naked eye. It can also be edited by
+hand — blocking a passage is a matter of replacing characters with `#`. Beware:
+the next regeneration overwrites it (see below).
+
+### Seats
+
+Every horizontal surface at a plausible height (`body.seatRange` above
+`room.ground`) is listed, **with no model-based filtering whatsoever**: a bed, a
+step, a crate, a desk are all seats. It is up to the engine, through inverse
+kinematics, to fit the pose to the real height — not up to the analysis to decide
+that a piece of furniture is “incompatible”.
+
+```jsonc
+{
+  "id": "seat-1",
+  "y": 0.634,                       // REAL altitude of the seating surface
+  "center": [-0.846, -0.744],       // [x, z]
+  "bounds": [-1.5, -1.6, -0.1, 0.2],// [xMin, zMin, xMax, zMax] — the patch, not necessarily solid
+  "area": 1.07,                     // m²
+  "headroom": 0.84,                 // free space above
+  "yaw": 58.3,                      // gaze, in DEGREES (see below)
+  "back": true,                     // heading comes from a backrest or a wall; false = from the room's opening
+  "approach": [-0.45, -0.05]        // walkable cell to come sit from — null when unreachable on foot
+}
+```
+
+`yaw` follows the three.js convention: the gaze direction is
+`[sin(yaw), 0, cos(yaw)]`, and the value drops straight into `rotation.y` (in
+radians). A seated character **turns their back** to the nearest backrest or wall;
+with no readable backrest, they look where the room opens up.
+
+### Redoing an analysis, or understanding a result
+
+```
+npm run env:scene                     # whatever is missing or has changed
+npm run env:scene -- --all            # redo everything
+npm run env:scene -- room             # one environment, with the detail of what was found
+npm run env:scene -- room --explain   # …and why a given surface was not kept
+npm run env:scene -- room --dry       # without writing anything
+```
+
+The detailed output shows dimensions, seat heights as a histogram, the floor map
+and the seat patches overlaid on it. `--explain` counts the discarded surfaces and
+says why (too small, no headroom above, it is floor).
+
+**Deleting a `.scene.json` is enough**: it gets regenerated on the next scan. The
+analysis is deterministic — same files, same result.
+
+The `.scene.json` files of the shipped environments **are committed**: they are
+computation, not personal data, and it saves everyone the same measurement.
 
 ## Good to know
 

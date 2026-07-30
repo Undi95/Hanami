@@ -24,6 +24,7 @@ import { ttsRouter } from './api/tts'
 import { statsRouter } from './api/stats'
 import { backupRouter } from './api/backup'
 import { startSpontaneous } from './lib/spontaneous'
+import { startEnvironmentIndex } from './lib/envIndex'
 import { uiRouter } from './api/ui'
 
 function firstLanIPv4(): string {
@@ -157,6 +158,12 @@ async function main(): Promise<void> {
 
   // Messages spontanés : le personnage peut écrire de lui-même (opt-in, Réglages).
   startSpontaneous()
+
+  // Décors 3D : analyse des .glb qui n'en ont pas (ou plus) une à jour. En tâche
+  // de fond, une pièce à la fois, en rendant la main à la boucle d'événements —
+  // le serveur répond normalement pendant ce temps, et un décor non analysé
+  // reste utilisable comme fond.
+  startEnvironmentIndex()
 }
 
 main().catch((e) => {

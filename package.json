@@ -10,7 +10,8 @@
     "build": "vite build",
     "start": "tsx server/index.ts --prod",
     "typecheck": "tsc --noEmit",
-    "mock-llm": "node scripts/mock-llm.cjs"
+    "mock-llm": "node scripts/mock-llm.cjs",
+    "env:scene": "tsx scripts/env-scene.ts"
   },
   "dependencies": {
     "@pixiv/three-vrm": "^3.1.0",

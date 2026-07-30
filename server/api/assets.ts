@@ -7,7 +7,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import express, { Router, type Response } from 'express'
-import { BACKGROUNDS_DIR, ENVIRONMENTS_DIR, VRMA_DIR, VRM_DIR } from '../lib/storage'
+import { BACKGROUNDS_DIR, VRMA_DIR, VRM_DIR } from '../lib/storage'
+import { environmentEntries, refreshEnvironmentIndex } from '../lib/envIndex'
 
 export const assetsRouter = Router()
 
@@ -37,13 +38,22 @@ assetsRouter.get('/api/vrm-models', (_req, res) => {
 
 // Décors 3D : même contrat que /api/vrm-models — le dossier absent renvoie une
 // liste vide, jamais une erreur (l'app marche sans décor).
+//
+// `scenes` double `environments` avec l'état de l'ANALYSE de chaque décor
+// (server/lib/envScene.ts) : ce qui permet à l'interface de dire « en
+// préparation » puis « prêt », et au moteur de scène de savoir s'il peut faire
+// marcher le personnage. Les deux tableaux sont dans le même ordre et décrivent
+// les mêmes fichiers ; `environments` reste un simple tableau d'URL pour ne rien
+// casser de ce qui existe.
+//
+// C'est aussi ici que le dossier est re-balayé : déposer un .glb pendant que le
+// serveur tourne suffit à lancer son analyse, sans redémarrage et sans
+// surveillance de fichiers (le balayage est bridé côté envIndex).
 assetsRouter.get('/api/environments', (_req, res) => {
   try {
-    res.json({
-      environments: listFiles(ENVIRONMENTS_DIR, ['.glb', '.gltf']).map(
-        (f) => `/environments/${encodeURIComponent(f)}`,
-      ),
-    })
+    refreshEnvironmentIndex()
+    const scenes = environmentEntries()
+    res.json({ environments: scenes.map((s) => s.url), scenes })
   } catch (e) {
     sendError(res, e)
   }

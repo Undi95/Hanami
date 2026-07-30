@@ -184,3 +184,106 @@ export interface UiPrefs {
 
 /** Corps du PUT /api/ui : merge superficiel — clé absente = inchangée, `null` = supprimée. */
 export type UiPrefsPatch = { [K in keyof UiPrefs]?: UiPrefs[K] | null }
+
+// ── Analyse des décors 3D (`<décor>.scene.json`) ───────────────────────────
+// Produite UNE FOIS à l'import par le serveur (server/lib/envScene.ts), posée à
+// côté du .glb, et lue par le moteur de scène du client. C'est LE contrat de
+// l'interaction : le moteur n'a jamais à retoucher la géométrie, tout ce dont il
+// a besoin est ici.
+//
+// Repère : celui de la scène, une fois le décor placé (échelle, rotation et
+// calage au sol du sidecar appliqués). Origine aux PIEDS de l'avatar (y = 0),
+// Y vers le haut, mètres, l'avatar regardant +Z. Autrement dit, ces coordonnées
+// se posent telles quelles dans la scène three.js.
+
+/** Une surface sur laquelle un personnage peut s'asseoir. Aucun filtrage par modèle : c'est l'IK qui adapte. */
+export interface SceneSeat {
+  id: string
+  /** Altitude RÉELLE de l'assise (m). Un lit à 0,51 m et une marche à 0,20 m sont également valables. */
+  y: number
+  /** Centre de la nappe, [x, z]. */
+  center: [number, number]
+  /** Emprise [xMin, zMin, xMax, zMax]. */
+  bounds: [number, number, number, number]
+  /** Aire de la nappe (m²). */
+  area: number
+  /** Espace libre au-dessus de la nappe (m, médiane) : de quoi savoir si un buste, voire un corps debout, y tient. */
+  headroom: number
+  /**
+   * Direction du regard, en DEGRÉS : direction = [sin(yaw), 0, cos(yaw)].
+   * Se pose telle quelle dans `object.rotation.y` (convertie en radians), la
+   * convention de three pour un objet qui regarde +Z au repos.
+   */
+  yaw: number
+  /** `true` si le cap vient d'un dossier ou d'un mur ; `false` s'il vient de l'ouverture de la pièce. */
+  back: boolean
+  /** Case praticable d'où venir s'asseoir, [x, z] — `null` si l'assise n'est pas accessible à pied. */
+  approach: [number, number] | null
+}
+
+export interface SceneFile {
+  format: 'hanami-scene'
+  version: number
+  generated: string
+  /** Fraîcheur : si l'un de ces champs ne colle plus au .glb, l'analyse est refaite. */
+  source: { file: string; bytes: number; mtimeMs: number; sha256: string }
+  /** Placement effectivement appliqué (recopié du sidecar) + empreinte de ce qui déplace la géométrie. */
+  placement: {
+    scale: number | null
+    rotationY: number | null
+    spawn: [number, number, number] | null
+    fingerprint: string
+  }
+  frame: { units: 'm'; up: '+Y'; forward: '+Z'; origin: string }
+  /** Gabarit sous lequel l'analyse a été faite (m) — la carte en dépend. */
+  body: { height: number; radius: number; step: number; seatRange: [number, number] }
+  room: {
+    /** Boîte brute du modèle placé [xMin, yMin, zMin, xMax, yMax, zMax] — peut déborder très loin de la pièce. */
+    modelBounds: [number, number, number, number, number, number]
+    /** Boîte de la zone atteignable à pied [xMin, zMin, xMax, zMax] — LA pièce. */
+    walkBounds: [number, number, number, number]
+    /** Surface atteignable à pied (m²). */
+    walkArea: number
+    /** Altitude du sol de la pièce (m) — l'étalon des hauteurs d'assise. Vaut ≈ 0 quand le sidecar est bien réglé. */
+    ground: number
+    /** Hauteur sous plafond (m), ou `null` si le décor est ouvert par le haut. */
+    ceiling: number | null
+  }
+  /** Distance libre depuis l'origine, à hauteur d'objectif, dans 16 directions (0 = +Z, sens trigo inverse). */
+  camera: { eye: number; clearance: number[] }
+  grid: {
+    /** Côté d'une cellule (m). */
+    cell: number
+    /** Coin minimal de la cellule (0, 0) : [x, z]. Centre de (i, j) = origin + ((i|j) + 0,5) × cell. */
+    origin: [number, number]
+    cols: number
+    rows: number
+    /** Altitudes des niveaux de sol (m), croissantes. Le caractère d'une case y renvoie. */
+    levels: number[]
+    legend: Record<string, string>
+    /** Une chaîne par rangée : `map[j][i]`, rangée j = z croissant, colonne i = x croissant. */
+    map: string[]
+  }
+  seats: SceneSeat[]
+}
+
+/**
+ * État de l'analyse d'un décor, exposé par `GET /api/environments`.
+ * `ready` = interaction possible · `pending`/`analyzing` = en préparation ·
+ * `failed`/`unsupported` = le décor reste utilisable comme simple fond.
+ */
+export type SceneState = 'ready' | 'pending' | 'analyzing' | 'failed' | 'unsupported'
+
+export interface EnvironmentEntry {
+  /** URL du modèle, la même que dans `environments`. */
+  url: string
+  name: string
+  state: SceneState
+  /** URL du `.scene.json` quand il est prêt. */
+  scene: string | null
+  /** Motif d'échec, à afficher tel quel. */
+  reason?: string
+  /** Résumé disponible dès que l'analyse est prête. */
+  seats?: number
+  walkArea?: number
+}
