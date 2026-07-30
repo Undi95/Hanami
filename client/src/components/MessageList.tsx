@@ -190,10 +190,23 @@ export default function MessageList({
   const [active, setActive] = useState(0)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // Autoscroll uniquement si l'utilisateur est déjà en bas du fil.
+  // Autoscroll : un NOUVEL item (message envoyé, réponse, chip) force le retour
+  // en bas ; la simple croissance du texte en streaming respecte la position de
+  // lecture (stick). Le scroll part en rAF, APRÈS la mise en page du contenu —
+  // sinon il vise une hauteur périmée et s'arrête quelques lignes trop tôt.
+  const prevLenRef = useRef(0)
   useEffect(() => {
     const el = scrollRef.current
-    if (el && stickRef.current) el.scrollTop = el.scrollHeight
+    if (!el) return
+    if (items.length !== prevLenRef.current) {
+      prevLenRef.current = items.length
+      stickRef.current = true
+    }
+    if (stickRef.current) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight
+      })
+    }
   }, [items])
 
   // ── Recherche ────────────────────────────────────────────────────────────
