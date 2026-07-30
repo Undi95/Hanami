@@ -2851,7 +2851,8 @@ select {
   left: 16px;
   max-width: calc(100% - 32px);
   padding: 2px 14px;
-  font-size: 12.5px;
+  font-family: 'Trebuchet MS', 'Segoe UI', Verdana, sans-serif; /* assortie au texte */
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.05em;
   color: var(--accent);
@@ -2876,11 +2877,18 @@ select {
   overscroll-behavior: contain;
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.65;
+  line-height: 1.7;
   text-align: center;
   display: flex;
   flex-direction: column;
   justify-content: safe center;
+  /* Police façon visual novel : humaniste arrondie (le ton des VN classiques),
+     un cran plus grande que l'interface, ombre douce — le texte se pose sur la
+     scène au lieu de ressembler au reste de l'app. Aucune webfont : pile système. */
+  font-family: 'Trebuchet MS', 'Segoe UI', Verdana, sans-serif;
+  font-size: 16.5px;
+  letter-spacing: 0.012em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
 }
 
 /* Heure de la réplique, dans le coin bas droit de la boîte (façon .bubble-ts).
