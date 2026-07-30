@@ -14,6 +14,20 @@
  *
  * Pack source : Universal Animation Library de Quaternius, CC0 1.0.
  *
+ * ─── PÉRIMÈTRE RÉDUIT ───────────────────────────────────────────────────────
+ * L'essentiel de la bibliothèque vient désormais d'Overte (Apache-2.0), dont les
+ * clips sont mesurés meilleurs sur tous les critères retenus. Ne restent de
+ * Quaternius que les familles qu'Overte n'a pas :
+ *   - l'entrée et la sortie d'assise (Overte n'a aucune transition debout↔assis) ;
+ *   - le saut (chez Overte la phase aérienne n'existe que sous forme de trois
+ *     poses fixes pilotées par le moteur, cf. avatar-animation.json).
+ *
+ * ATTENTION : `world-sit-enter` et `world-sit-exit` subissent APRÈS cette
+ * conversion deux retouches consignées dans vrma/NOTICE.md (recalage horizontal
+ * du bassin sur l'origine assise, et raccordement de l'extrémité assise sur la
+ * posture de world-sit-idle). Relancer ce script seul les écrase et fait
+ * réapparaître un saut de bassin de 27,6 cm à l'assise.
+ *
  * ─── LE CONTRÔLE QUI MANQUAIT ───────────────────────────────────────────────
  * @pixiv/three-vrm-animation normalise la translation du bassin en multipliant
  * TOUTE la piste par hanchesVRM / restHipsPosition.y (trois-vrm-animation, vers
@@ -54,28 +68,11 @@ const EXTENSION = 'VRMC_vrm_animation';
 // ─── Clips retenus : slug de sortie ← nom du clip dans le pack ───────────────
 
 const CLIPS = {
-  idle: 'Idle_Loop',
-  'idle-talking': 'Idle_Talking_Loop',
-  dance: 'Dance_Loop',
-  'hit-head': 'Hit_Head',
-  'hit-chest': 'Hit_Chest',
-  interact: 'Interact',
-  pickup: 'PickUp_Table',
-  'sit-enter': 'Sitting_Enter',
-  'sit-idle': 'Sitting_Idle_Loop',
-  'sit-talking': 'Sitting_Talking_Loop',
-  'sit-exit': 'Sitting_Exit',
-  'swim-idle': 'Swim_Idle_Loop',
-  swim: 'Swim_Fwd_Loop',
-  walk: 'Walk_Loop',
-  'walk-formal': 'Walk_Formal_Loop',
-  jog: 'Jog_Fwd_Loop',
-  sprint: 'Sprint_Loop',
-  'crouch-idle': 'Crouch_Idle_Loop',
-  'crouch-walk': 'Crouch_Fwd_Loop',
-  'jump-start': 'Jump_Start',
-  'jump-loop': 'Jump_Loop',
-  'jump-land': 'Jump_Land',
+  'world-sit-enter': 'Sitting_Enter',
+  'world-sit-exit': 'Sitting_Exit',
+  'world-jump-start': 'Jump_Start',
+  'world-jump-loop': 'Jump_Loop',
+  'world-jump-land': 'Jump_Land',
 };
 
 // ─── Mapping manuel os Rigify (DEF-*) → os humanoïdes VRM 1.0 ───────────────
