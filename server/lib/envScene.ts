@@ -446,17 +446,26 @@ function cellSurfaces(field: Field, ci: number, cj: number, minArea: number): Su
     }
     const y = weighted / area
     if (area >= minArea) {
-      // Dégagement : première tranche occupée AU-DESSUS de la nappe. Le départ
-      // est la tranche qui suit le groupe, pas une marge fixe : avec une marge
-      // de 12 cm, la tablette d'un pupitre « ne voyait pas » le plateau 8 cm
-      // plus haut et passait pour une assise dégagée.
+      // Dégagement : première tranche occupée AU-DESSUS de la nappe, en
+      // ENJAMBANT les rebords. Un rebord, c'est de la géométrie basse (moins
+      // d'une marche au-dessus de la nappe) qui n'offre elle-même AUCUNE surface :
+      // le chant d'une lame de plancher, une plinthe, un seuil. Sans cette
+      // nuance, le point d'accueil de la chambre en rondins était déclaré
+      // obstrué par le bord de sa propre lame de parquet, 5 cm plus haut.
+      //
+      // La condition « sans surface propre » est ce qui distingue un chant de
+      // lame d'un plateau de pupitre 8 cm au-dessus de sa tablette : le plateau,
+      // lui, est une surface, et il bouche pour de bon. Et un mur, qui n'a pas
+      // de surface non plus, dépasse la hauteur d'une marche : il bouche aussi.
       let top = Y_MAX - y
       for (let k = last + 1; k < field.bins; k++) {
-        if (field.occ[base + k] >= OCC_MIN_AREA) {
-          // Milieu de la tranche : l'obstacle est quelque part dedans, pas à son plancher.
-          top = field.binY(k) + field.vbin / 2 - y
-          break
-        }
+        if (field.occ[base + k] < OCC_MIN_AREA) continue
+        // Seuil FIXE, indépendant de `minArea` : le dégagement est une propriété
+        // de la géométrie, pas de ce qu'on est en train d'y chercher.
+        if (field.up[base + k] < field.cellArea * SURFACE_COVER && field.binY(k) + field.vbin - y <= STEP_MAX) continue
+        // Milieu de la tranche : l'obstacle est quelque part dedans, pas à son plancher.
+        top = field.binY(k) + field.vbin / 2 - y
+        break
       }
       out.push({ y, area, headroom: Math.max(top, 0) })
     }
