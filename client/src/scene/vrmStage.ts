@@ -39,6 +39,14 @@ const REST_POSE_Z: ReadonlyArray<readonly [VRMHumanBoneName, number]> = [
 const CHAT_PANEL_DEFAULT_W = 420
 const CHAT_PANEL_MIN_W = 900
 
+// three est consommé SANS @types/three (types inférés du build JS) et
+// l'inférence ne voit pas le décentrement d'objectif : déclaration locale,
+// signatures de la doc three (PerspectiveCamera.setViewOffset).
+interface ViewOffsetCamera {
+  setViewOffset(fullWidth: number, fullHeight: number, x: number, y: number, width: number, height: number): void
+  clearViewOffset(): void
+}
+
 // Os dont la pose de base est mémorisée : l'idle écrit base + offset à chaque
 // frame (jamais de cumul), les bras restent simplement sur leur base.
 const TRACKED_BONES: readonly VRMHumanBoneName[] = [
@@ -139,6 +147,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const h = Math.max(1, container.clientHeight)
     renderer.setSize(w, h, false)
     camera.aspect = w / h
+    applyViewOffset() // le décentrement est en pixels : il suit la taille réelle
     camera.updateProjectionMatrix()
   }
   resize()
@@ -189,25 +198,27 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   }
 
   /**
-   * Décalage horizontal (unités monde) du cadrage par défaut. Caméra et cible
-   * bougent ENSEMBLE : l'image se translate, la géométrie du cadre ne change pas.
-   * À la distance `distance`, un pixel du canvas vaut (2·d·tan(fov/2)) / hauteur
-   * du canvas en unités monde — décaler la caméra vers +X pousse l'avatar vers la
-   * gauche de l'écran.
+   * Décalage 'left' par DÉCENTREMENT D'OBJECTIF (setViewOffset), jamais en
+   * déplaçant la caméra : une caméra décalée latéralement voit l'avatar
+   * hors de son axe optique, donc légèrement de biais — le regard semblait
+   * fuir vers la gauche en mode desktop alors qu'il est droit en VN. Avec le
+   * décentrement, la caméra reste PILE en face (visage identique au VN) et
+   * c'est le cadre qui glisse, comme un objectif à bascule d'architecte.
+   * Le quart de la colonne de chat : viser le centre exact de la zone hors
+   * panneau déportait trop l'avatar — retour visuel utilisateur.
    */
-  function frameOffsetX(distance: number): number {
-    if (frameMode !== 'left') return 0
-    const w = container.clientWidth
-    const h = container.clientHeight
-    if (w < CHAT_PANEL_MIN_W || h <= 0) return 0 // écran étroit : avatar centré
-    const worldPerPixel = (2 * distance * Math.tan((camera.fov * Math.PI) / 360)) / h
-    // Le quart (et non la moitié) de la colonne : viser le centre exact de la
-    // zone hors panneau déportait trop l'avatar — retour visuel utilisateur.
-    return (panelWidth / 4) * worldPerPixel
+  function applyViewOffset(): void {
+    const w = Math.max(1, container.clientWidth)
+    const h = Math.max(1, container.clientHeight)
+    const off = frameMode === 'left' && w >= CHAT_PANEL_MIN_W ? Math.round(panelWidth / 4) : 0
+    // setViewOffset/clearViewOffset recalculent la matrice de projection.
+    const cam = camera as unknown as ViewOffsetCamera
+    if (off > 0) cam.setViewOffset(w, h, off, 0, w, h)
+    else cam.clearViewOffset()
   }
 
-  // Cadrage buste + tête : cible légèrement sous la tête, caméra de face (décalée
-  // horizontalement en mode 'left', cf. frameOffsetX).
+  // Cadrage buste + tête : cible légèrement sous la tête, caméra DE FACE dans
+  // tous les modes (le décalage desktop est un décentrement, cf. applyViewOffset).
   // Tout est dérivé de la hauteur effective `h` : pour h = 1.6 m les bornes
   // valent exactement les anciennes constantes (0.6, 4) — rendu inchangé pour
   // les modèles normaux.
@@ -217,12 +228,12 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const headPos = new Vector3(0, h * (1.35 / 1.6), 0) // repli si modèle sans os "head"
     if (head) head.getWorldPosition(headPos)
     const distance = Math.min(2.5 * h, Math.max(0.375 * h, headPos.y * 1.4))
-    const dx = frameOffsetX(distance)
-    controls.target.set(headPos.x + dx, headPos.y - 0.12, headPos.z)
-    camera.position.set(dx, controls.target.y, distance)
+    controls.target.set(headPos.x, headPos.y - 0.12, headPos.z)
+    camera.position.set(headPos.x, controls.target.y, distance)
     controls.minDistance = 0.3 * h
     controls.maxDistance = 3 * h
     camera.far = 15 * h
+    applyViewOffset()
     camera.updateProjectionMatrix()
     controls.update()
   }
@@ -291,14 +302,20 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     resetView,
 
     setFrameMode(mode: FrameMode): void {
-      frameMode = mode // le prochain frameCamera/resetView s'y conforme
+      frameMode = mode
+      // Position/cible : rien ne bouge (l'appelant applique la vue ensuite).
+      // Le DÉCENTREMENT, lui, suit tout de suite : il doit refléter le mode
+      // même quand une vue personnalisée est posée par setView, sans frameCamera.
+      applyViewOffset()
     },
 
     setPanelWidth(px: number): void {
-      // Idem : aucun recadrage ici. Élargir le panneau ne doit pas faire sauter
-      // l'avatar sous les doigts de l'utilisateur (le resize de fenêtre non plus
-      // ne recadre pas) — la valeur servira au prochain cadrage par défaut.
-      if (Number.isFinite(px) && px > 0) panelWidth = px
+      // Aucun recadrage ici (comme le resize de fenêtre) — seul le décentrement
+      // est réaligné, il dépend de la largeur de la colonne.
+      if (Number.isFinite(px) && px > 0) {
+        panelWidth = px
+        applyViewOffset()
+      }
     },
 
     setEmotion(emotion: string): void {
