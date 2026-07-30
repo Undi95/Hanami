@@ -155,6 +155,10 @@ const FR = {
   photoTooLarge: 'Image trop lourde (8 Mo maximum).',
   background: 'Fond',
   defaultGradient: 'Dégradé par défaut',
+  environment: 'Décor 3D',
+  noEnvironment: 'Aucun décor',
+  environmentHint:
+    'Remplace le fond 2D — l’avatar est posé dans le décor. Fichiers .glb du dossier environments/.',
   addBackground: 'Ajouter une image de fond',
   backgroundFormat: 'Format non pris en charge (png, jpg, webp).',
   backgroundTooLarge: 'Image trop lourde (15 Mo maximum).',
@@ -466,6 +470,10 @@ const EN: Record<Key, string> = {
   photoTooLarge: 'Image too large (8 MB maximum).',
   background: 'Background',
   defaultGradient: 'Default gradient',
+  environment: '3D environment',
+  noEnvironment: 'No environment',
+  environmentHint:
+    'Replaces the 2D background — the avatar stands inside the room. .glb files from the environments/ folder.',
   addBackground: 'Add a background image',
   backgroundFormat: 'Unsupported format (png, jpg, webp).',
   backgroundTooLarge: 'Image too large (15 MB maximum).',

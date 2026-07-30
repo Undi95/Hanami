@@ -30,6 +30,7 @@ interface FormState {
   name: string
   vrm: string
   background: string
+  environment: string // '' = pas de décor 3D (fond 2D)
   theme: string // '' = thème de l'app
   greeting: string
   greetings: string[]
@@ -41,6 +42,7 @@ const EMPTY_FORM: FormState = {
   name: '',
   vrm: '',
   background: '',
+  environment: '',
   theme: '',
   greeting: '',
   greetings: [],
@@ -164,6 +166,7 @@ export default function CharactersDialog({
   const [initialForm, setInitialForm] = useState<FormState>(EMPTY_FORM)
   const [vrms, setVrms] = useState<string[]>([])
   const [bgs, setBgs] = useState<string[]>([])
+  const [envs, setEnvs] = useState<string[]>([])
   // Portrait 2D du personnage édité : HORS du formulaire, car il ne s'édite pas
   // ici (l'import de la card le pose, le serveur le conserve d'une édition à
   // l'autre) — il se montre seulement, tant qu'aucun modèle 3D ne le remplace.
@@ -185,6 +188,7 @@ export default function CharactersDialog({
     if (view.kind === 'list') return
     api.getVrmModels().then(setVrms).catch((e) => console.error('[characters]', e))
     api.getBackgrounds().then(setBgs).catch((e) => console.error('[characters]', e))
+    api.getEnvironments().then(setEnvs).catch((e) => console.error('[characters]', e))
   }, [view.kind])
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -210,6 +214,7 @@ export default function CharactersDialog({
         name: c.name,
         vrm: c.vrm,
         background: c.background,
+        environment: c.environment ?? '',
         theme: c.theme ?? '',
         greeting: c.greeting,
         greetings: c.greetings ?? [],
@@ -323,6 +328,7 @@ export default function CharactersDialog({
           name: form.name.trim(),
           vrm: form.vrm,
           background: form.background,
+          environment: form.environment,
           theme: form.theme,
           greeting: form.greeting,
           greetings,
@@ -335,6 +341,7 @@ export default function CharactersDialog({
           name: form.name.trim(),
           vrm: form.vrm,
           background: form.background,
+          environment: form.environment,
           theme: form.theme,
           greeting: form.greeting,
           greetings,
@@ -477,6 +484,19 @@ export default function CharactersDialog({
                 </button>
               </div>
             </div>
+          </div>
+          {/* Décor 3D : pleine largeur (les noms de fichiers de décors sont
+              longs), et pas de bouton d'ajout — un .glb ne se reconnaît pas à
+              ses octets comme une image, il se dépose dans environments/. */}
+          <div className="field">
+            <label htmlFor="char-env">{t('environment')}</label>
+            <SelectMenu
+              id="char-env"
+              value={form.environment}
+              options={fileOptions(t('noEnvironment'), form.environment, envs)}
+              onChange={(v) => set('environment', v)}
+            />
+            <span className="hint">{t('environmentHint')}</span>
           </div>
           {/* Portrait 2D : montré seulement quand il sert, c'est-à-dire sans
               modèle 3D. Choisir un VRM dans la liste au-dessus fait disparaître

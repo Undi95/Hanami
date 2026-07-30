@@ -202,6 +202,7 @@ export function createCharacter(input: {
   name: string
   vrm?: string
   background?: string
+  environment?: string
   greeting?: string
   greetings?: string[]
   greetingMode?: GreetingMode
