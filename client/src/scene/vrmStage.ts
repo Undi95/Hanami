@@ -365,6 +365,26 @@ function pickOne<T>(list: readonly T[]): T {
   return list[Math.floor(Math.random() * list.length)]
 }
 
+/**
+ * Poids de chaque action à l'avancement `p` (0 → 1) d'un fondu vers `to`, à
+ * partir des poids `from` relevés au déclenchement de ce fondu.
+ *
+ * FONCTION PURE, et SEULE règle de calcul des poids du fichier : c'est donc le
+ * seul endroit à relire pour vérifier l'invariant de la section (« la somme des
+ * poids ne descend jamais sous 1 »). Cette somme vaut `p + (1 − p) · Σfrom`, donc
+ * exactement 1 dès que `Σfrom` vaut 1 — quel que soit `p`, et quel que soit le
+ * nombre de fondus qui se recouvrent, puisque `from` contient TOUTES les actions
+ * qui portaient du poids, fondu abandonné en cours de route compris.
+ * Corollaire : `from` vide est le seul cas où fondre ferait passer la somme sous
+ * 1, et c'est précisément là que `fadeTo` pose le poids 1 immédiatement.
+ */
+function fadeWeights<A>(from: ReadonlyMap<A, number>, to: A, p: number): Map<A, number> {
+  const out = new Map<A, number>()
+  for (const [action, weight] of from) out.set(action, weight * (1 - p))
+  out.set(to, p + (from.get(to) ?? 0) * (1 - p))
+  return out
+}
+
 export function createVrmStage(container: HTMLElement): VrmStage {
   // ── Renderer : fond transparent (le fond visuel est géré par l'UI en CSS) ──
   const renderer = new WebGLRenderer({ alpha: true, antialias: true })
@@ -423,12 +443,14 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   let disposed = false
 
   // ── Animations .vrma ──────────────────────────────────────────────────────
-  // RÈGLE FONDATRICE : le socle en boucle tient le poids 1 EN PERMANENCE et tous
-  // les fondus vont d'un clip À UN AUTRE, jamais d'un clip vers rien. Une action
-  // à poids partiel se fond en effet vers la pose d'origine du squelette (bras en
-  // croix), pas vers notre pose de repos. Corollaire assumé : sans socle d'idle
-  // utilisable, AUCUN mixer n'est créé et l'avatar retombe à l'octet près sur le
-  // comportement d'avant les animations.
+  // RÈGLE FONDATRICE : la somme des poids d'action vaut EXACTEMENT 1 à chaque
+  // image, et tous les fondus vont d'un clip À UN AUTRE, jamais d'un clip vers
+  // rien. Une somme inférieure à 1 fait en effet fondre le squelette vers sa pose
+  // d'ORIGINE (bras en croix), pas vers notre pose de repos ; une somme supérieure
+  // dilue chaque clip, `accumulate` normalisant. La règle n'est pas seulement
+  // écrite : elle est TENUE par fadeWeights et contrôlée par poseWeights.
+  // Corollaire assumé : sans socle d'idle utilisable, AUCUN mixer n'est créé et
+  // l'avatar retombe à l'octet près sur le comportement d'avant les animations.
   let animationsEnabled = true
   let catalog: VrmaCatalog | null = null
   let mixer: AnimationMixer | null = null
@@ -440,6 +462,28 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   let baseAction: AnimationAction | null = null // socle voulu (en boucle)
   let activeAction: AnimationAction | null = null // ce qui tient l'écran : socle ou geste
   let talking = false
+  // Poids porté par chaque action à cette image, et fondu en cours. C'est NOTRE
+  // livre de comptes, trois raisons de ne pas laisser three le tenir :
+  // - `crossFadeFrom` code en dur les poids de DÉPART (1 → 0 et 0 → 1) et
+  //   `_scheduleFading` réécrit les bornes de l'interpolant sans regarder le poids
+  //   effectif courant : deux fondus qui se recouvrent remettent l'action sortante
+  //   à 1 et laissent celle du fondu précédent finir le sien — somme jusqu'à 2 ;
+  // - le cas est le cas NORMAL, pas un cas limite : à chaque réponse, le socle
+  //   « parle » et le geste d'émotion partent du même callback synchrone ;
+  // - `accumulate` normalise (mix = weight / cumulativeWeight), donc une somme de
+  //   2 ne casse rien mais divise l'amplitude du geste par deux le temps du
+  //   recouvrement, et une somme < 1 fait fondre le squelette vers sa pose
+  //   d'origine.
+  // Les poids sont donc écrits à chaque image par fadeWeights, dont la somme vaut
+  // exactement 1 par construction.
+  const weights = new Map<AnimationAction, number>()
+  let fade: {
+    to: AnimationAction
+    from: Map<AnimationAction, number> // poids relevés au déclenchement
+    elapsed: number
+    duration: number
+  } | null = null
+  let weightSumWarned = false
   // Un socle vient d'être posé : recadrer à la PROCHAINE image évaluée par le
   // mixer (cf. reframeAfterMixer). Le drapeau est consommé là et nulle part
   // ailleurs — sans mixer, il ne se passe rien.
@@ -567,19 +611,73 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     return ready.length > 0 ? pickOne(ready) : null
   }
 
+  /** Poids effectif d'une action, et livre tenu à jour. */
+  function setWeight(action: AnimationAction, weight: number): void {
+    // `enabled` recalculé à CHAQUE écriture : setEffectiveWeight rend un poids
+    // effectif nul sur une action désactivée, celle qui reprend du poids doit donc
+    // être réactivée d'abord. Et à poids nul on désactive — exactement ce que
+    // three fait à la fin d'un fadeOut : l'action reste connue du mixer (son temps
+    // ne repart pas de zéro, les socles gardent donc leur continuité) mais elle
+    // n'est plus évaluée. setEffectiveWeight rend au passage l'interpolant de
+    // fondu au mixer, ce qui garantit que three ne touche plus jamais à ce poids.
+    action.enabled = weight > 0
+    action.setEffectiveWeight(weight)
+    if (weight > 0) weights.set(action, weight)
+    else weights.delete(action)
+  }
+
   /**
-   * Amène `next` au poids 1 en fondu DEPUIS l'action en place. Jamais depuis rien :
-   * c'est la règle qui empêche la somme des poids de passer sous 1, donc le fondu
-   * vers la pose d'origine du squelette.
+   * Écrit les poids d'une image, et VÉRIFIE l'invariant au passage : le contrôle
+   * coûte une addition par action portante (deux ou trois), ne tourne que quand
+   * les poids changent et ne parle qu'une fois par session. C'est ce qui rendra
+   * visible tout de suite, et non par une revue de code, un futur appelant qui
+   * poserait un poids dans le dos de fadeTo.
+   */
+  function poseWeights(next: ReadonlyMap<AnimationAction, number>): void {
+    for (const [action, weight] of next) setWeight(action, weight)
+    if (weightSumWarned) return
+    let sum = 0
+    for (const weight of weights.values()) sum += weight
+    if (Math.abs(sum - 1) < 1e-3) return
+    weightSumWarned = true
+    console.warn(
+      `[vrma] somme des poids = ${sum.toFixed(3)} au lieu de 1 — ` +
+        `le squelette fond vers sa pose d'origine (bras en croix)`,
+    )
+  }
+
+  /**
+   * Amène `next` au poids 1 en fondu DEPUIS tout ce qui porte du poids. Jamais
+   * depuis rien : c'est la règle qui empêche la somme des poids de passer sous 1,
+   * donc le fondu vers la pose d'origine du squelette.
+   * Un fondu encore en cours est ABANDONNÉ, pas empilé : ses poids de l'image
+   * courante deviennent le point de départ du nouveau.
    */
   function fadeTo(next: AnimationAction, duration: number): void {
-    const prev = activeAction
-    if (prev === next) return
+    if (activeAction === next) return
+    const from = new Map(weights)
+    // `paused` : un geste figé par clampWhenFinished redevient pilotable.
+    next.paused = false
     next.enabled = true
-    next.setEffectiveWeight(1)
     next.play()
-    if (prev) next.crossFadeFrom(prev, duration, false)
     activeAction = next
+    // Rien en place (premier socle) ou fondu nul : poids 1 tout de suite.
+    if (from.size === 0 || duration <= 0) {
+      fade = null
+      poseWeights(fadeWeights(from, next, 1))
+      return
+    }
+    fade = { to: next, from, elapsed: 0, duration }
+    poseWeights(fadeWeights(from, next, 0))
+  }
+
+  /** Avance le fondu en cours d'une image (appelé JUSTE AVANT mixer.update). */
+  function advanceFade(delta: number): void {
+    if (!fade) return
+    fade.elapsed += delta
+    const p = Math.min(1, fade.elapsed / fade.duration)
+    poseWeights(fadeWeights(fade.from, fade.to, p))
+    if (p >= 1) fade = null
   }
 
   /** Socle voulu maintenant : une posture prime, sinon « parle », sinon l'idle. */
@@ -641,6 +739,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     postureAction = null
     baseAction = null
     activeAction = null
+    // Le livre des poids ne survit pas aux actions qu'il décrit.
+    weights.clear()
+    fade = null
     // Plus de mixer : un recadrage encore en attente n'aurait plus rien à
     // rattraper (le squelette repart de la pose de repos).
     reframePending = false
@@ -963,6 +1064,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // re-capture les prendrait pour de la pose animée sur les os que le clip
       // courant ne touche pas — et les cumulerait à l'infini.
       for (const { node, base } of posedBones.values()) node.rotation.copy(base)
+      // Les poids du fondu en cours sont posés AVANT l'évaluation : le mixer lit
+      // ceux de CETTE image, et leur somme vaut 1 quand il accumule.
+      advanceFade(delta)
       mixer.update(delta)
       for (const bone of posedBones.values()) bone.base.copy(bone.node.rotation)
       // Le squelette porte maintenant la pose du socle, et RIEN d'autre : c'est

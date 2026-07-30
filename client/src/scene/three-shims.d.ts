@@ -157,6 +157,11 @@ declare module 'three' {
 
   export class AnimationAction {
     enabled: boolean
+    // Une action à cycle unique terminée avec clampWhenFinished reste ACTIVE et
+    // mise en pause sur sa dernière image : c'est ce qui lui permet de participer
+    // à son propre fondu de sortie (cf. vrmStage/playGesture). `paused` est remis
+    // à faux à la main quand elle reprend la main.
+    paused: boolean
     weight: number
     time: number
     clampWhenFinished: boolean
@@ -166,10 +171,9 @@ declare module 'three' {
     stop(): this
     setLoop(mode: number, repetitions: number): this
     setEffectiveWeight(weight: number): this
-    fadeIn(duration: number): this
-    fadeOut(duration: number): this
-    crossFadeFrom(fadeOutAction: AnimationAction, duration: number, warp?: boolean): this
-    crossFadeTo(fadeInAction: AnimationAction, duration: number, warp?: boolean): this
+    // fadeIn/fadeOut/crossFade* NE SONT PAS déclarés : les poids sont pilotés à la
+    // main (cf. vrmStage/fadeWeights), et les fondus de three ne savent pas se
+    // recouvrir sans faire déraper la somme des poids.
   }
 
   /** Événement 'finished' du mixer : l'action à cycle unique qui vient de s'achever. */
