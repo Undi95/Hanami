@@ -79,6 +79,9 @@ const FR = {
 
   // ── Saisie et fil de messages ────────────────────────────────────────────
   writeMessage: 'Écrire un message…',
+  cmdMenuLabel: 'Commandes',
+  cmdCompactHint: 'Compacter la conversation (instruction possible après la commande)',
+  cmdCleanHint: 'Ouvrir une conversation vierge',
   vnYou: 'Vous',
   send: 'Envoyer',
   stop: 'Arrêter la génération',
@@ -369,6 +372,9 @@ const EN: Record<Key, string> = {
 
   // ── Composer and message feed ────────────────────────────────────────────
   writeMessage: 'Write a message…',
+  cmdMenuLabel: 'Commands',
+  cmdCompactHint: 'Compact the conversation (an instruction may follow the command)',
+  cmdCleanHint: 'Open a fresh conversation',
   vnYou: 'You',
   send: 'Send',
   stop: 'Stop generating',

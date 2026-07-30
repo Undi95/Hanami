@@ -1260,6 +1260,22 @@ function AppInner() {
           streaming={streaming}
           vision={visionEnabled}
           onSend={(text, images) => send(text, images).catch((e) => console.error('[send]', e))}
+          onCommand={(name, arg) => {
+            const char = character
+            const chat = chatMeta
+            if (!char || !chat) return
+            // /compact [instruction] — même chemin que l'Inspecteur (pastille +
+            // ligne d'info) ; /clean — conversation vierge, même chemin que le
+            // bouton « Nouvelle conversation » (l'ancienne reste dans la liste).
+            const run =
+              name === 'compact'
+                ? compact(char.id, chat.id, arg)
+                : api.createChat(char.id, defaultChatTitle()).then((c) => openChat(char, c.id))
+            run.catch((e) => {
+              if (e instanceof api.AuthRequiredError) setNeedLogin(true)
+              else setFeed((f) => [...f, { kind: 'error', text: api.errorMessage(e) }])
+            })
+          }}
           onStop={stopStreaming}
         />
       </div>

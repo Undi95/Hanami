@@ -1223,6 +1223,7 @@ select {
 
 .composer {
   flex: none;
+  position: relative; /* ancre du menu des commandes (.cmd-menu) */
   display: flex;
   align-items: flex-end;
   /* Enveloppe : la bande de vignettes (.shots, largeur pleine) prend la ligne
@@ -1339,6 +1340,53 @@ select {
   max-width: 100%;
   max-height: 100%;
   border-radius: 8px;
+}
+
+/* Menu des commandes slash : flotte juste au-dessus du champ, dans les deux
+   modes (le composer est son ancre). Sobre : deux lignes, pas d'ombre lourde. */
+.cmd-menu {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 4px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  z-index: 4;
+}
+
+.cmd-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+}
+
+.cmd-item.active,
+.cmd-item:hover {
+  background: var(--accent-soft);
+}
+
+.cmd-name {
+  font-family: var(--mono);
+  color: var(--accent);
+  flex: none;
+}
+
+.cmd-hint {
+  color: var(--text-dim);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer textarea {
