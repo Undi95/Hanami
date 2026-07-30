@@ -109,11 +109,27 @@ declare module 'three' {
     stop(): void
   }
 
+  // Couleur d'un matériau. Les composantes sont des flottants dans l'espace de
+  // travail de three (linéaire) et ne sont PAS bornées à 1 : c'est l'exposition
+  // des décors qui décide de les borner ou non (cf. vrmStage/exposedClone).
+  export class Color {
+    r: number
+    g: number
+    b: number
+  }
+
   // Référencés par les .d.ts de @pixiv/three-vrm (skipLibCheck, mais les noms doivent exister).
   export class Material {
+    // Clone INDÉPENDANT : les Color (`color`, `emissive`) sont recopiées, les
+    // textures restent partagées avec l'original par référence.
+    clone(): this
     dispose(): void
   }
-  export class Mesh extends Object3D {}
+  export class Mesh extends Object3D {
+    // Un mesh porte UN matériau, ou un par groupe de faces — l'exposition des
+    // décors doit gérer les deux cas.
+    material: Material | Material[]
+  }
   export class SkinnedMesh extends Mesh {}
 
   // ── Animation (.vrma) ──────────────────────────────────────────────────────

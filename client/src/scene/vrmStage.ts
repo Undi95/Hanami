@@ -18,7 +18,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three'
-import type { AnimationAction, AnimationClip } from 'three'
+import type { AnimationAction, AnimationClip, Color, Material, Mesh } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
@@ -70,6 +70,12 @@ const FILL_LIGHT_SOLO = 0.6
 const KEY_LIGHT_ENV = 1.1
 const FILL_LIGHT_ENV = 0.35
 
+// Exposition d'un décor : bornes de plausibilité du multiplicateur du sidecar.
+// Même doctrine que le reste du fichier — on ne refuse que l'absurde, et une
+// valeur hors bornes est OMISE, donc repli sur 1 (décor intact).
+const ENV_MIN_EXPOSURE = 0.1
+const ENV_MAX_EXPOSURE = 4
+
 const DEG2RAD = Math.PI / 180
 
 /**
@@ -81,7 +87,7 @@ interface EnvPlacement {
   scale?: number // échelle explicite — DÉSACTIVE l'ajustement automatique
   rotationY?: number // degrés autour de la verticale
   spawn?: [number, number, number] // point du décor où poser le personnage (mètres, y depuis le sol)
-  exposure?: number // multiplicateur d'éclairage
+  exposure?: number // multiplicateur de luminosité des MATÉRIAUX du décor (cf. applyEnvExposure)
 }
 
 /** Nombre fini dans des bornes larges — on ne refuse que l'absurde. */
@@ -104,7 +110,7 @@ function parsePlacement(raw: unknown): EnvPlacement {
   if (scale !== undefined) out.scale = scale
   const rotationY = asNumberIn(o.rotationY, -3600, 3600)
   if (rotationY !== undefined) out.rotationY = rotationY
-  const exposure = asNumberIn(o.exposure, 0.1, 5)
+  const exposure = asNumberIn(o.exposure, ENV_MIN_EXPOSURE, ENV_MAX_EXPOSURE)
   if (exposure !== undefined) out.exposure = exposure
   if (Array.isArray(o.spawn) && o.spawn.length === 3) {
     const t = o.spawn.map((n) => asNumberIn(n, -1000, 1000))
@@ -145,6 +151,94 @@ function compressionError(e: unknown): Error | null {
   return new Error(
     'Décor compressé (Draco, meshopt ou KTX2) — non pris en charge : réexporte le .glb sans compression.',
   )
+}
+
+/**
+ * Matériau de décor vu par l'exposition. `color`, `emissive` et leurs textures
+ * ne sont PAS sur Material (la classe de base) mais sur MeshBasicMaterial /
+ * MeshStandardMaterial. Un .glb de pièce peut porter les deux — trois des cinq
+ * matériaux de rustic-bedroom sont unlit sans texture, les deux autres unlit avec
+ * texture, et cozy-loft-room est en PBR : d'où des propriétés TOUTES optionnelles,
+ * dans l'esprit du ViewOffsetCamera plus bas.
+ */
+interface ShadedMaterial {
+  color?: Color
+  emissive?: Color
+  map?: unknown
+  emissiveMap?: unknown
+}
+
+/**
+ * Multiplie une couleur par le facteur d'exposition, composante par composante.
+ *
+ * `clampToGamut` distingue les deux natures que peut avoir une couleur de
+ * matériau glTF :
+ * - SANS texture, `color` EST l'albédo : une composante au-delà de 1 ne veut rien
+ *   dire (une surface ne renvoie pas plus de lumière qu'elle n'en reçoit) et sur
+ *   un matériau PBR elle se verrait vraiment, dans les zones peu éclairées. Bornée.
+ * - AVEC texture, `color` est un simple GAIN appliqué par-dessus le texel
+ *   (`baseColorFactor`, qui vaut exactement [1,1,1,1] sur les cinq matériaux
+ *   texturés des décors livrés). Le borner à 1 rendrait tout éclaircissement
+ *   IMPOSSIBLE — c'est précisément le piège : sur rustic-bedroom, la moitié
+ *   texturée de la surface serait restée inchangée et seuls les sols auraient
+ *   éclairci, déséquilibrant la pièce. L'écrêtage a lieu de toute façon plus tard
+ *   et au bon endroit : à la sortie du fragment shader, par texel, une fois la
+ *   multiplication faite.
+ */
+function scaleColor(color: Color, factor: number, clampToGamut: boolean): void {
+  const limit = clampToGamut ? 1 : Infinity
+  color.r = Math.min(limit, color.r * factor)
+  color.g = Math.min(limit, color.g * factor)
+  color.b = Math.min(limit, color.b * factor)
+}
+
+/**
+ * Clone exposé d'un matériau. Le CLONE est obligatoire : three mutualise
+ * volontiers un matériau entre plusieurs meshes, et sans copie la couleur serait
+ * multipliée une fois par mesh qui la partage — puis encore à chaque rechargement
+ * du décor, l'effet se cumulant jusqu'au blanc.
+ * Un seul clone par matériau d'ORIGINE (d'où le cache) : les meshes qui
+ * partageaient un matériau continuent d'en partager un, le nombre de programmes
+ * GPU et le regroupement des appels de dessin restent ceux d'avant.
+ */
+function exposedClone(source: Material, factor: number, cache: Map<Material, Material>): Material {
+  const known = cache.get(source)
+  if (known) return known
+  const clone = source.clone()
+  const shaded = clone as unknown as ShadedMaterial
+  if (shaded.color) scaleColor(shaded.color, factor, !shaded.map)
+  // L'émissif suit le même facteur : sinon une lampe du décor garderait sa
+  // luminosité propre pendant que tout le reste change, et l'exposition
+  // déplacerait l'équilibre de la pièce au lieu de la rendre plus lisible.
+  // Nul sur les matériaux unlit (MeshBasicMaterial n'a pas d'émissif du tout).
+  if (shaded.emissive) scaleColor(shaded.emissive, factor, !shaded.emissiveMap)
+  cache.set(source, clone)
+  return clone
+}
+
+/**
+ * Applique l'exposition du sidecar aux MATÉRIAUX du décor, et non à l'intensité
+ * des lumières comme avant : `anime-classroom.glb` et `rustic-bedroom.glb`
+ * déclarent l'extension glTF `KHR_materials_unlit`, donc GLTFLoader les charge en
+ * MeshBasicMaterial et ils IGNORENT totalement les lumières de la scène — le
+ * réglage n'avait aucun effet sur deux décors sur trois, dont celui qui en a le
+ * plus besoin. Multiplier la couleur marche à l'identique pour l'unlit et le PBR.
+ * Pas de `renderer.toneMapping` / `toneMappingExposure` : ils toucheraient tout le
+ * rendu, avatar compris, y compris quand aucun décor n'est chargé.
+ * Facteur 1 (le cas de très loin le plus courant — sidecar absent) : on ne touche
+ * à RIEN, pas même un clone, donc rendu strictement identique à avant.
+ */
+function applyEnvExposure(root: Object3D, factor: number): void {
+  if (factor === 1) return
+  const cache = new Map<Material, Material>()
+  root.traverse((node) => {
+    const mesh = node as Mesh
+    const material = mesh.material
+    if (!material) return // un Object3D quelconque (nœud de transformation, os…)
+    mesh.material = Array.isArray(material)
+      ? material.map((one) => exposedClone(one, factor, cache))
+      : exposedClone(material, factor, cache)
+  })
 }
 
 // three est consommé SANS @types/three (types inférés du build JS) et
@@ -352,9 +446,6 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // Dimensions du décor en place (mètres) : elles pilotent le plan lointain de la
   // caméra et la distance de recul maximale. null = pas de décor.
   let envMetrics: { radius: number; height: number } | null = null
-  // Multiplicateur d'éclairage du décor en place (sidecar `exposure`) : 1 = régime
-  // standard. Rattrape une pièce livrée trop sombre ou trop claire.
-  let envExposure = 1
   let envGeneration = 0
 
   // ── Cadrage utilisateur (pan/zoom/rotation) : persistance + reset ─────────
@@ -645,11 +736,25 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     camera.updateProjectionMatrix()
   }
 
-  /** Régime d'éclairage : l'avatar seul dans le vide, ou posé dans une pièce. */
+  /**
+   * Régime d'éclairage : l'avatar seul dans le vide, ou posé dans une pièce.
+   *
+   * Les deux régimes sont CONSERVÉS tels quels : ils parlent bien de l'AVATAR, qui
+   * est en MToon et que ces lumières éclairent réellement — surexposé devant une
+   * pièce, il « décollerait » du fond. C'est le seul rôle qui leur reste.
+   *
+   * En revanche l'exposition du sidecar n'y touche PLUS (elle est passée sur les
+   * matériaux du décor, cf. applyEnvExposure), pour deux raisons :
+   * 1. elle décrit la clarté des TEXTURES DE LA PIÈCE ; en faire dépendre
+   *    l'éclairage du personnage est une confusion de genres — sur les deux décors
+   *    unlit, cela n'éclaircissait que l'avatar, jamais le décor visé ;
+   * 2. sur cozy-loft-room, le seul décor réellement éclairé, la garder ici
+   *    appliquerait désormais la correction DEUX FOIS (lumières × albédo).
+   */
   function applyLightRegime(): void {
     const lit = envRoot !== null
-    keyLight.intensity = (lit ? KEY_LIGHT_ENV : KEY_LIGHT_SOLO) * envExposure
-    fillLight.intensity = (lit ? FILL_LIGHT_ENV : FILL_LIGHT_SOLO) * envExposure
+    keyLight.intensity = lit ? KEY_LIGHT_ENV : KEY_LIGHT_SOLO
+    fillLight.intensity = lit ? FILL_LIGHT_ENV : FILL_LIGHT_SOLO
   }
 
   function unloadEnvironment(): void {
@@ -658,11 +763,14 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // deepDispose est générique (géométries, matériaux, textures) : il vaut
       // pour un décor comme pour un VRM. Sans lui, changer de décor deux fois
       // laisse deux pièces en VRAM.
+      // Il lit `mesh.material` AU MOMENT du déchargement : ce sont donc bien les
+      // clones exposés qu'il libère, textures comprises. Les originaux, remplacés
+      // avant le premier rendu, n'ont jamais rien alloué sur le GPU et partagent
+      // leurs textures avec les clones — libérées avec eux.
       VRMUtils.deepDispose(envRoot)
       envRoot = null
     }
     envMetrics = null
-    envExposure = 1
     envGroup.position.set(0, 0, 0)
     envGroup.rotation.set(0, 0, 0)
     envGroup.scale.setScalar(1)
@@ -726,7 +834,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       }
       unloadEnvironment()
       envRoot = gltf.scene
-      envExposure = placement.exposure ?? 1
+      // Exposition AVANT l'ajout à la scène : les matériaux clonés sont en place
+      // dès la première image, jamais un éclair à la couleur d'origine.
+      applyEnvExposure(envRoot, placement.exposure ?? 1)
       envGroup.add(envRoot)
       fitEnvironment(envRoot, placement)
       applyLightRegime()
