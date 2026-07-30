@@ -37,8 +37,12 @@ Dépose ici des fichiers `.glb` (ou `.gltf`) — ils apparaissent dans Hanami
   mesurent sur le décor tel qu'il s'affiche (après `scale` et `rotationY`), et `y`
   se compte **depuis le sol** du décor — `[0, 1.2, 0]` pose le personnage sur une
   estrade de 1,2 m.
-- `exposure` — multiplicateur de l'éclairage (0,1 à 5) pour un décor déjà sombre
-  ou déjà très clair.
+- `exposure` — multiplicateur des **couleurs des matériaux du décor** (0,1 à 4)
+  pour un décor déjà sombre ou déjà très clair. Il n'agit pas sur les lumières :
+  deux des trois décors livrés sont `KHR_materials_unlit` et les ignorent
+  totalement. L'avatar, lui, n'est jamais touché. Attention, comme partout ici,
+  une valeur **hors bornes est ignorée**, donc repli sur 1 (décor intact) : écrire
+  `4.5` rend un décor plus sombre qu'attendu, pas plus clair.
 
 Toutes les clés sont facultatives ; une clé inconnue ou une valeur invalide est
 ignorée en silence.
@@ -93,8 +97,12 @@ Next to `room.glb`, a `room.json` tunes placement without touching the model:
   `x`/`z` are measured on the environment as displayed (after `scale` and
   `rotationY`), and `y` counts **from the floor** — `[0, 1.2, 0]` puts the
   character on a 1.2 m platform.
-- `exposure` — lighting multiplier (0.1 to 5) for an environment that is already
-  dark or already very bright.
+- `exposure` — multiplier applied to the **colors of the environment materials**
+  (0.1 to 4), for an environment that is already dark or already very bright. It
+  does not touch the lights: two of the three shipped environments are
+  `KHR_materials_unlit` and ignore them entirely. The avatar is never affected.
+  Beware, as everywhere here, an **out-of-range value is ignored** and falls back
+  to 1 (environment untouched): writing `4.5` gives a darker room, not a lighter one.
 
 Every key is optional; an unknown key or an invalid value is silently ignored.
 
