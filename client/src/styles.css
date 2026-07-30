@@ -203,6 +203,73 @@ select {
   height: 100%;
 }
 
+/* Recadrage de l'avatar : bouton posé SUR la scène, hors du panneau de chat (le
+   mode VN y coupe les pointer-events). Discret au repos, franc au survol.
+   Placement : le bas de l'écran appartient au panneau (feuille basse sous 900 px)
+   ou à la boîte de visual novel — par défaut le bouton se range donc en haut à
+   gauche, le seul coin libre partout, et ne descend que là où c'est net. */
+.scene-reset {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.scene-reset svg {
+  width: 17px;
+  height: 17px;
+}
+
+.scene-reset:hover,
+.scene-reset:focus-visible {
+  opacity: 1;
+  color: var(--accent);
+  background: var(--panel);
+  border-color: var(--border);
+}
+
+/* Tactile : aucun survol pour le révéler — il reste en demi-teinte, avec une
+   zone de toucher confortable (même esprit que .msg-edit). */
+@media (pointer: coarse) {
+  .scene-reset {
+    width: 38px;
+    height: 38px;
+    opacity: 0.55;
+  }
+}
+
+/* Le panneau de chat est devenu une colonne à droite : tout le bas gauche de la
+   scène est libre, le bouton s'y range (loin de l'avatar et de son visage). */
+@media (min-width: 900px) {
+  .scene-reset {
+    top: auto;
+    bottom: 14px;
+    left: 14px;
+  }
+}
+
+/* Mode VN : la boîte de dialogue (centrée, jusqu'à 900 px de large) mange le bas
+   de l'écran — le coin bas gauche n'est franchement libre qu'au-delà. */
+@media (max-width: 1099px) {
+  .scene-reset.vn {
+    top: 12px;
+    bottom: auto;
+  }
+}
+
 /* ── Panneau de chat en verre ─────────────────────────────────────────── */
 
 .chat-panel {
@@ -301,18 +368,20 @@ select {
   text-overflow: ellipsis;
 }
 
-/* Ligne 2 : titre pleine largeur + jauge de contexte à droite */
+/* Ligne 2 : titre du chat, la jauge de contexte accolée juste après */
 .topbar-sub {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 11.5px;
   color: var(--text-dim);
   padding: 0 6px 2px 0;
 }
 
+/* `flex: 0 1 auto` : le titre ne s'étire pas (la jauge reste collée à lui) mais
+   il se laisse rétrécir avec des points de suspension quand la place manque. */
 .topbar-title {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -704,7 +773,7 @@ select {
   }
 }
 
-/* Badge de jauge de contexte (fin de la ligne titre, jamais tronqué) */
+/* Badge de jauge de contexte (accolé au titre du chat, jamais tronqué) */
 .ctx-badge {
   flex: none;
   font-size: 10px;
@@ -716,9 +785,21 @@ select {
   cursor: default;
 }
 
-.ctx-badge.high {
-  color: var(--danger);
-  border-color: rgba(255, 122, 144, 0.4);
+/* Code couleur du pourcentage — seul le TEXTE change, le fond reste neutre.
+   Tons volontairement désaturés : ils doivent rester lisibles sur les cinq
+   thèmes sombres ET sur un thème perso clair, d'où des valeurs de luminosité
+   moyennes plutôt qu'un vert/rouge vif. 85 % = seuil d'auto-compaction. */
+.ctx-badge.ctx-ok {
+  color: #62b189;
+}
+
+.ctx-badge.ctx-warn {
+  color: #cf9550;
+}
+
+.ctx-badge.ctx-high {
+  color: #d4787e;
+  border-color: color-mix(in srgb, currentColor 40%, transparent);
 }
 
 /* Indicateur « … » pendant l'attente du premier delta */
@@ -2079,6 +2160,12 @@ select {
   padding-bottom: 6px;
 }
 
+/* La boîte réserve sous le texte la bande où l'heure est ancrée (voir .vn-ts).
+   Un greeting n'a pas d'horodatage : la boîte reprend alors sa hauteur normale. */
+.chat-panel.vn .vn-box:has(.vn-ts) {
+  padding-bottom: 17px;
+}
+
 .chat-panel.vn .composer {
   order: 2;
 }
@@ -2104,7 +2191,40 @@ select {
   border-radius: 0;
 }
 
+/* Infos de conversation dans la bande basse : la TopBar est masquée en mode VN,
+   le titre du chat et la jauge se rattrapent donc ici, à gauche — `flex: 1`
+   repousse les actions contre le bord droit. Le titre rétrécit avant tout le
+   reste (points de suspension) pour ne jamais bousculer les boutons. */
+.chat-panel.vn .reply-actions:has(.vn-info) {
+  padding-top: 4px;
+}
+
+.chat-panel.vn .vn-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.chat-panel.vn .vn-info-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La bande laisse passer les gestes vers la scène : seule la jauge redevient
+   survolable, sinon son tooltip (~tokens / limite) serait inatteignable. */
+.chat-panel.vn .vn-info .ctx-badge {
+  pointer-events: auto;
+}
+
 .chat-panel.vn .reply-actions .btn {
+  flex: none; /* les libellés ne se coupent jamais : c'est .vn-info qui cède */
   background: none;
   border: none;
   padding: 1px 2px;
@@ -2204,6 +2324,20 @@ select {
   display: flex;
   flex-direction: column;
   justify-content: safe center;
+}
+
+/* Heure de la réplique, dans le coin bas droit de la boîte (façon .bubble-ts).
+   HORS du flux, et ancrée sur la boîte et non sur .vn-text : le texte reste
+   centré sur ses deux axes et l'heure ne part pas avec le défilement interne. */
+.vn-ts {
+  position: absolute;
+  right: 18px;
+  bottom: 4px;
+  font-size: 9.5px;
+  line-height: 1;
+  color: var(--text-dim);
+  user-select: none;
+  pointer-events: none;
 }
 
 /* Points de chargement seuls (thinking) : centrés au milieu de la boîte. */

@@ -126,7 +126,10 @@ export interface UiPrefs {
   vnMode?: boolean // mode visual novel
   activeCharacter?: string // dernier personnage ouvert
   activeChat?: Record<string, string> // dernière conversation ouverte, par personnage
-  views?: Record<string, StageView> // cadrage caméra choisi, par personnage
+  // Cadrage caméra choisi, par personnage ET par mode d'affichage : clé composée
+  // « <charId>::desktop » ou « <charId>::vn » (une clé nue est un reliquat d'avant
+  // la séparation par mode — lue en repli côté client, cf. prefs.ts).
+  views?: Record<string, StageView>
 }
 
 /** Corps du PUT /api/ui : merge superficiel — clé absente = inchangée, `null` = supprimée. */

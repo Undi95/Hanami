@@ -334,24 +334,48 @@ export function setActiveChat(charId: string, chatId: string): void {
   setPref({ activeChat: { ...cache.activeChat, [charId]: chatId } })
 }
 
-export function getSavedView(charId: string): StageView | undefined {
-  return cache.views?.[charId]
+// Le cadrage dépend du MODE d'affichage : en desktop l'avatar est posé à côté du
+// panneau de chat, en visual novel il occupe tout l'écran — la même position ne
+// convient pas aux deux. Une vue est donc mémorisée PAR personnage ET PAR mode,
+// sous une clé composée « <charId>::<mode> ».
+export type ViewMode = 'desktop' | 'vn'
+
+const VIEW_MODES = ['desktop', 'vn'] as const satisfies readonly ViewMode[]
+
+function viewKey(charId: string, mode: ViewMode): string {
+  return `${charId}::${mode}`
 }
 
-/** Cadrage caméra d'un personnage — `null` l'oublie (double-clic dans la scène). */
-export function setSavedView(charId: string, view: StageView | null): void {
+export function getSavedView(charId: string, mode: ViewMode): StageView | undefined {
+  const views = cache.views
+  if (!views) return undefined
+  const saved = views[viewKey(charId, mode)]
+  if (saved) return saved
+  // Repli : avant la séparation par mode, un seul cadrage était enregistré sous
+  // l'id nu du personnage. Il tenait lieu de placement « à côté du chat », donc
+  // il ne sert de repli qu'au mode desktop.
+  return mode === 'desktop' ? views[charId] : undefined
+}
+
+/** Cadrage caméra d'un personnage dans un mode — `null` l'oublie (reset de la scène). */
+export function setSavedView(charId: string, mode: ViewMode, view: StageView | null): void {
   const views = { ...cache.views }
-  if (view) views[charId] = view
-  else delete views[charId]
+  const key = viewKey(charId, mode)
+  if (view) views[key] = view
+  else delete views[key]
+  // L'ancienne clé nue est remplacée par celle du mode desktop : sans ça, oublier
+  // le cadrage desktop ferait resurgir la vue héritée au lieu du cadrage par défaut.
+  if (mode === 'desktop') delete views[charId]
   setPref({ views: Object.keys(views).length > 0 ? views : null })
 }
 
-/** Personnage supprimé : sa conversation active, son cadrage et sa sélection s'effacent. */
+/** Personnage supprimé : sa conversation active, ses cadrages et sa sélection s'effacent. */
 export function forgetCharacter(charId: string): void {
   const activeChat = { ...cache.activeChat }
   delete activeChat[charId]
   const views = { ...cache.views }
-  delete views[charId]
+  delete views[charId] // clé héritée (avant la séparation par mode)
+  for (const mode of VIEW_MODES) delete views[viewKey(charId, mode)]
   setPref({
     activeChat: Object.keys(activeChat).length > 0 ? activeChat : null,
     views: Object.keys(views).length > 0 ? views : null,

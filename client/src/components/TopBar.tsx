@@ -15,6 +15,22 @@ interface Props {
   onOpen: (d: DialogKind) => void
 }
 
+/**
+ * Jauge de contexte : petit badge accolé au titre de la conversation. Seul le
+ * TEXTE se colore, par palier — 85 % est le seuil de l'auto-compaction, donc le
+ * moment où l'avertissement doit se voir. Exportée parce que le mode VN masque
+ * la TopBar et rejoue la jauge dans la bande basse de sa boîte.
+ */
+export function CtxBadge({ percent, title }: { percent: number; title: string }) {
+  const { t } = useI18n()
+  const tone = percent >= 85 ? 'ctx-high' : percent >= 50 ? 'ctx-warn' : 'ctx-ok'
+  return (
+    <span className={`ctx-badge ${tone}`} title={title}>
+      {t('contextBadge', { percent })}
+    </span>
+  )
+}
+
 function Icon({ d, extra }: { d: string; extra?: React.ReactNode }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -98,7 +114,7 @@ export default function TopBar({
 
   return (
     <header className="topbar">
-      {/* Ligne 1 : nom + icônes. Ligne 2 : titre du chat pleine largeur + jauge —
+      {/* Ligne 1 : nom + icônes. Ligne 2 : titre du chat suivi de la jauge —
           plus jamais tronqué par la rangée d'icônes. */}
       <div className="topbar-main">
         <div className="topbar-name">{characterName}</div>
@@ -133,11 +149,7 @@ export default function TopBar({
       {chatTitle && (
         <div className="topbar-sub">
           <span className="topbar-title">{chatTitle}</span>
-          {contextPercent !== null && (
-            <span className={`ctx-badge${contextPercent >= 80 ? ' high' : ''}`} title={contextTitle}>
-              {t('contextBadge', { percent: contextPercent })}
-            </span>
-          )}
+          {contextPercent !== null && <CtxBadge percent={contextPercent} title={contextTitle} />}
         </div>
       )}
     </header>

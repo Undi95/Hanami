@@ -561,7 +561,7 @@ type VnItem = Extract<FeedItem, { kind: 'msg' } | { kind: 'greeting' }>
  * complet). Le streaming s'y affiche tel quel — c'est le même `items`.
  */
 export function VnBox({ items, characterName }: { items: FeedItem[]; characterName: string }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const boxRef = useRef<HTMLDivElement>(null)
   const [zoom, setZoom] = useState<string | null>(null)
 
@@ -598,6 +598,9 @@ export function VnBox({ items, characterName }: { items: FeedItem[]; characterNa
         : isUser
           ? last.msg.content
           : stripEmotionTags(last.msg.content)
+  // Heure de la réplique : un greeting n'en a pas (pas de message sauvegardé),
+  // et pendant l'attente du premier delta la boîte ne montre que les points.
+  const ts = last !== null && last.kind === 'msg' && !(pending && !text) ? fmtTime(last.msg.ts, lang) : ''
 
   return (
     // L'étiquette de nom chevauche la bordure supérieure (namebox de visual
@@ -621,6 +624,9 @@ export function VnBox({ items, characterName }: { items: FeedItem[]; characterNa
           )}
         </div>
       )}
+      {/* Horodatage ancré dans le coin bas droit de la boîte (CSS, hors du flux) :
+          il ne décentre pas la réplique et ne suit pas le scroll de .vn-text. */}
+      {ts !== '' && <span className="vn-ts">{ts}</span>}
       {trailingError && <div className="error-bubble vn-error">{trailingError}</div>}
       {zoom && <ImageOverlay url={zoom} onClose={() => setZoom(null)} />}
     </div>

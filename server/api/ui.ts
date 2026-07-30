@@ -18,9 +18,11 @@ const MAX_STRING = 200
 const MAX_ENTRIES = 200
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
-// Clés des dictionnaires (identifiants de personnage/conversation) : jeu de
-// caractères restreint, et jamais un nom qui toucherait au prototype.
-const KEY_RE = /^[A-Za-z0-9._-]{1,64}$/
+// Clés des dictionnaires (identifiants de personnage/conversation, parfois
+// suffixés du mode d'affichage : « <charId>::vn » pour les cadrages caméra) :
+// jeu de caractères restreint, et jamais un nom qui toucherait au prototype.
+// La longueur laisse la place à un id de 64 caractères plus son suffixe.
+const KEY_RE = /^[A-Za-z0-9._:-]{1,80}$/
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 // ── Validateurs (tout ce qui n'est pas reconnu est IGNORÉ) ─────────────────

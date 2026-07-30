@@ -17,7 +17,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
 import type { VRM, VRMHumanBoneName } from '@pixiv/three-vrm'
-import type { StageView, VrmStage } from './types'
+import type { FrameMode, StageView, VrmStage } from './types'
 import { IdleAnimator } from './idle'
 import type { PosedBone } from './idle'
 import { normalizeEmotion, resolveExpressions } from './emotionMap'
@@ -29,6 +29,14 @@ const REST_POSE_Z: ReadonlyArray<readonly [VRMHumanBoneName, number]> = [
   ['leftLowerArm', 0.12],
   ['rightLowerArm', -0.12],
 ]
+
+// Cadrage 'left' : le panneau de chat occupe une colonne à DROITE de l'écran
+// (420 px, à partir de 900 px de large — cf. styles.css). Pour que l'avatar
+// tombe au centre de la bande restée visible, il faut le déplacer vers la gauche
+// de la moitié de cette colonne. Sous ce seuil le panneau est une feuille BASSE :
+// la scène occupe toute la largeur, aucun décalage n'aurait de sens.
+const CHAT_PANEL_W = 420
+const CHAT_PANEL_MIN_W = 900
 
 // Os dont la pose de base est mémorisée : l'idle écrit base + offset à chaque
 // frame (jamais de cumul), les bras restent simplement sur leur base.
@@ -93,6 +101,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // ── Cadrage utilisateur (pan/zoom/rotation) : persistance + reset ─────────
   let lastFrame: { vrm: VRM; h: number } | null = null // cadrage par défaut re-calculable
   let viewChangeCb: ((view: StageView | null) => void) | null = null
+  // Cadrage par défaut voulu par l'UI (setFrameMode) : 'centered' tant que
+  // personne ne dit le contraire — c'est le comportement historique.
+  let frameMode: FrameMode = 'centered'
 
   function currentView(): StageView {
     return {
@@ -173,7 +184,24 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     return 1.6
   }
 
-  // Cadrage buste + tête : cible légèrement sous la tête, caméra de face.
+  /**
+   * Décalage horizontal (unités monde) du cadrage par défaut. Caméra et cible
+   * bougent ENSEMBLE : l'image se translate, la géométrie du cadre ne change pas.
+   * À la distance `distance`, un pixel du canvas vaut (2·d·tan(fov/2)) / hauteur
+   * du canvas en unités monde — décaler la caméra vers +X pousse l'avatar vers la
+   * gauche de l'écran.
+   */
+  function frameOffsetX(distance: number): number {
+    if (frameMode !== 'left') return 0
+    const w = container.clientWidth
+    const h = container.clientHeight
+    if (w < CHAT_PANEL_MIN_W || h <= 0) return 0 // écran étroit : avatar centré
+    const worldPerPixel = (2 * distance * Math.tan((camera.fov * Math.PI) / 360)) / h
+    return (CHAT_PANEL_W / 2) * worldPerPixel
+  }
+
+  // Cadrage buste + tête : cible légèrement sous la tête, caméra de face (décalée
+  // horizontalement en mode 'left', cf. frameOffsetX).
   // Tout est dérivé de la hauteur effective `h` : pour h = 1.6 m les bornes
   // valent exactement les anciennes constantes (0.6, 4) — rendu inchangé pour
   // les modèles normaux.
@@ -182,9 +210,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const head = vrm.humanoid.getNormalizedBoneNode('head')
     const headPos = new Vector3(0, h * (1.35 / 1.6), 0) // repli si modèle sans os "head"
     if (head) head.getWorldPosition(headPos)
-    controls.target.set(headPos.x, headPos.y - 0.12, headPos.z)
     const distance = Math.min(2.5 * h, Math.max(0.375 * h, headPos.y * 1.4))
-    camera.position.set(0, controls.target.y, distance)
+    const dx = frameOffsetX(distance)
+    controls.target.set(headPos.x + dx, headPos.y - 0.12, headPos.z)
+    camera.position.set(dx, controls.target.y, distance)
     controls.minDistance = 0.3 * h
     controls.maxDistance = 3 * h
     camera.far = 15 * h
@@ -253,6 +282,11 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
   return {
     loadModel,
+    resetView,
+
+    setFrameMode(mode: FrameMode): void {
+      frameMode = mode // le prochain frameCamera/resetView s'y conforme
+    },
 
     setEmotion(emotion: string): void {
       idle.setEmotion(normalizeEmotion(emotion))

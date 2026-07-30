@@ -53,6 +53,7 @@ const FR = {
   settingsUnavailable: 'Réglages indisponibles (serveur injoignable).',
   responseInterrupted: 'Réponse interrompue par le serveur.',
   vrmLoadError: 'Le modèle 3D n’a pas pu être chargé.',
+  resetView: 'Recentrer l’avatar',
 
   // ── Erreurs côté client (celles du serveur sont affichées telles quelles) ─
   authRequired: 'Authentification requise',
@@ -326,6 +327,7 @@ const EN: Record<Key, string> = {
   settingsUnavailable: 'Settings unavailable (server unreachable).',
   responseInterrupted: 'The server cut the response short.',
   vrmLoadError: 'The 3D model could not be loaded.',
+  resetView: 'Recenter the avatar',
 
   // ── Client-side errors (server errors are shown verbatim) ────────────────
   authRequired: 'Authentication required',

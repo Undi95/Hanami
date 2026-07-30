@@ -8,7 +8,7 @@ import type {
   ContextInfo,
   Settings,
 } from '../../shared/types'
-import type { VrmStage } from './scene/types'
+import type { FrameMode, VrmStage } from './scene/types'
 import * as api from './api'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
 import {
@@ -32,9 +32,10 @@ import {
   setPref,
   setSavedView,
   subscribePrefs,
+  type ViewMode,
 } from './prefs'
 import { I18nProvider, getLang, localeOf, useI18n } from './i18n'
-import TopBar, { type DialogKind } from './components/TopBar'
+import TopBar, { CtxBadge, type DialogKind } from './components/TopBar'
 import MessageList, { VnBox, type FeedItem } from './components/MessageList'
 import Composer from './components/Composer'
 import LoginGate from './components/LoginGate'
@@ -71,6 +72,15 @@ function greetingPool(char: CharacterFull): string[] {
 /** Tirage d'un accueil : chaque nouvelle conversation peut s'ouvrir autrement. */
 function pickGreeting(pool: string[]): string {
   return pool[Math.floor(Math.random() * pool.length)]
+}
+
+/**
+ * Cadrage par défaut de l'avatar selon le mode d'affichage : en visual novel la
+ * scène est plein écran (avatar centré) ; en desktop le panneau de chat occupe la
+ * droite, l'avatar est décalé pour rester entier dans la partie visible.
+ */
+function frameModeOf(mode: ViewMode): FrameMode {
+  return mode === 'vn' ? 'centered' : 'left'
 }
 
 function AppInner() {
@@ -130,6 +140,9 @@ function AppInner() {
   // Personnage courant pour le callback de cadrage (posé une fois à la création
   // de la scène, qui vit plus longtemps que chaque personnage).
   const characterIdRef = useRef<string | null>(null)
+  // Idem pour le mode d'affichage : le callback du stage ne doit jamais lire un
+  // vnMode capturé au rendu qui l'a posé — il choisirait la mauvaise clé de vue.
+  const viewModeRef = useRef<ViewMode>(getPref('vnMode') === true ? 'vn' : 'desktop')
   // Dernières couleurs perso appliquées — sert à ne bumper customVersion que
   // sur un vrai changement (les notifications de prefs sont fréquentes).
   const customCodeRef = useRef<string>(themeCode(savedCustom()))
@@ -284,6 +297,19 @@ function AppInner() {
 
   // ── Scène 3D (import lazy, contrat scene/types.ts) ───────────────────────
 
+  /**
+   * Pose le cadrage du mode d'affichage courant : la vue que l'utilisateur avait
+   * choisie DANS CE MODE, ou à défaut le cadrage par défaut du mode (resetView).
+   * Sans effet visible si aucun modèle n'est chargé (resetView se tait).
+   */
+  const applyViewFor = useCallback((stage: VrmStage, charId: string) => {
+    const mode = viewModeRef.current
+    stage.setFrameMode(frameModeOf(mode))
+    const view = getSavedView(charId, mode)
+    if (view) stage.setView(view)
+    else stage.resetView()
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     setVrmError(null)
@@ -291,11 +317,12 @@ function AppInner() {
       const { createVrmStage } = await import('./scene/vrmStage')
       if (cancelled || !sceneRef.current) return
       stageRef.current = createVrmStage(sceneRef.current)
-      // Cadrage modifié à la main → persisté par personnage ; double-clic → oubli.
+      // Cadrage modifié à la main → persisté par personnage ET par mode
+      // d'affichage ; reset (double-clic ou bouton) → view null, donc oubli.
       stageRef.current.onViewChange((view) => {
         const id = characterIdRef.current
         if (!id) return
-        setSavedView(id, view)
+        setSavedView(id, viewModeRef.current, view)
       })
       setStageReady(true)
     })().catch((e) => {
@@ -313,26 +340,42 @@ function AppInner() {
   }, [])
 
   // Changement de personnage (ou scène prête) → charger son modèle VRM, puis
-  // réappliquer le cadrage caméra que l'utilisateur avait choisi pour lui.
+  // réappliquer le cadrage caméra choisi pour lui DANS LE MODE courant.
   useEffect(() => {
     characterIdRef.current = character?.id ?? null
     const stage = stageRef.current
     if (!stage || !stageReady) return
     setVrmError(null)
     const charId = character?.id ?? null
+    // Le cadrage automatique de fin de chargement doit déjà connaître le mode.
+    stage.setFrameMode(frameModeOf(viewModeRef.current))
     stage
       .loadModel(character?.vrm ?? '')
       .then(() => {
         if (!charId || characterIdRef.current !== charId) return
-        const view = getSavedView(charId)
-        if (view) stage.setView(view)
+        applyViewFor(stage, charId)
       })
       .catch((e) => {
         console.error('[vrm]', e)
         setVrmError(api.errorMessage(e))
       })
     stage.setEmotion(lastEmotionRef.current)
-  }, [stageReady, character?.vrm, character?.id])
+  }, [stageReady, character?.vrm, character?.id, applyViewFor])
+
+  // Bascule desktop ↔ VN : la place laissée à la scène change du tout au tout, le
+  // cadrage du nouveau mode s'applique donc immédiatement (sa vue sauvegardée,
+  // sinon le cadrage par défaut du mode).
+  useEffect(() => {
+    const mode: ViewMode = vnMode ? 'vn' : 'desktop'
+    if (viewModeRef.current === mode) return // rien n'a basculé (premier rendu inclus)
+    viewModeRef.current = mode
+    const stage = stageRef.current
+    const charId = character?.id ?? null
+    // Scène pas encore prête : la ref est à jour, le chargement du modèle
+    // appliquera le bon cadrage de lui-même.
+    if (!stage || !stageReady || !charId) return
+    applyViewFor(stage, charId)
+  }, [vnMode, stageReady, character?.id, applyViewFor])
 
   // ── Chargement personnage / chat ─────────────────────────────────────────
 
@@ -861,6 +904,17 @@ function AppInner() {
   const canRegen = !!lastFeedMsg && !lastFeedMsg.pending
   const canContinue = canRegen && lastFeedMsg.msg.role === 'assistant'
 
+  // Jauge de contexte : calculée une fois, partagée par la TopBar et le mode VN.
+  const ctxPercent = context && context.limit > 0 ? context.percent : null
+  const ctxTooltip = context ? t('contextBadgeTitle', { tokens: context.tokens, limit: context.limit }) : ''
+  // En mode VN le CSS masque la TopBar : titre du chat et jauge migrent dans la
+  // bande basse de la boîte. null = rien à y montrer (pas de titre, pas de jauge).
+  const vnChatTitle = chatMeta?.title ?? ''
+  const vnInfo =
+    vnMode && (vnChatTitle !== '' || ctxPercent !== null)
+      ? { title: vnChatTitle, percent: ctxPercent, tooltip: ctxTooltip }
+      : null
+
   // ── Rendu ────────────────────────────────────────────────────────────────
   // NB : la div .scene reste montée en permanence (le stage 3D y est attaché via
   // un effet à deps []) — l'écran de connexion se rend en OVERLAY, jamais à la
@@ -874,6 +928,27 @@ function AppInner() {
         aria-hidden="true"
         style={character?.background ? { backgroundImage: `url("${character.background}")` } : undefined}
       />
+
+      {/* Recadrage de l'avatar. Le double-clic dans la scène fait la même chose,
+          mais rien ne le laisse deviner : ce bouton l'expose dans les deux modes.
+          Il vit HORS du chat-panel (le mode VN y coupe les pointer-events) et
+          n'existe que si un modèle est réellement chargé. resetView émet
+          onViewChange(null) : le cadrage sauvegardé DU MODE COURANT est donc
+          oublié par le même chemin que le double-clic. */}
+      {stageReady && !vrmError && !!character?.vrm && (
+        <button
+          className={`scene-reset${vnMode ? ' vn' : ''}`}
+          onClick={() => stageRef.current?.resetView()}
+          title={t('resetView')}
+          aria-label={t('resetView')}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <circle cx="12" cy="12" r="6.6" />
+            <path d="M12 2.6v3.1M12 18.3v3.1M2.6 12h3.1M18.3 12h3.1" />
+            <circle cx="12" cy="12" r="1.1" />
+          </svg>
+        </button>
+      )}
 
       {vrmError && (
         <div
@@ -909,10 +984,8 @@ function AppInner() {
         <TopBar
           characterName={character?.name ?? 'Hanami'}
           chatTitle={chatMeta?.title ?? ''}
-          contextPercent={context && context.limit > 0 ? context.percent : null}
-          contextTitle={
-            context ? t('contextBadgeTitle', { tokens: context.tokens, limit: context.limit }) : ''
-          }
+          contextPercent={ctxPercent}
+          contextTitle={ctxTooltip}
           hasCharacter={!!character}
           hasChat={!!character && !!chatMeta}
           vnMode={vnMode}
@@ -999,35 +1072,51 @@ function AppInner() {
           />
         )}
 
-        {!booting && character && chatMeta && !streaming && canRegen && (
+        {/* Bande basse : en mode VN elle sert AUSSI de pied à la boîte de dialogue
+            (infos de conversation à gauche), donc elle existe même sans action à
+            proposer. En desktop rien ne change : vnInfo y est null. */}
+        {!booting && character && chatMeta && (vnInfo !== null || (!streaming && canRegen)) && (
           <div className="reply-actions">
-            <button
-              className="btn small"
-              onClick={() => runGeneration({ mode: 'regenerate' }).catch((e) => console.error('[regen]', e))}
-            >
-              {t('regenerate')}
-            </button>
-            {canContinue && (
-              <button
-                className="btn small"
-                onClick={() => runGeneration({ mode: 'continue' }).catch((e) => console.error('[continue]', e))}
-              >
-                {t('continueReply')}
-              </button>
+            {vnInfo !== null && (
+              <div className="vn-info">
+                {vnInfo.title !== '' && <span className="vn-info-title">{vnInfo.title}</span>}
+                {vnInfo.percent !== null && <CtxBadge percent={vnInfo.percent} title={vnInfo.tooltip} />}
+              </div>
             )}
-            {/* En VN les bulles sont hors d'atteinte : le rejeu vit ici. En
-                desktop, l'icône haut-parleur de la bulle s'en charge déjà. */}
-            {vnMode && canContinue && settings?.ttsEnabled && lastFeedMsg && (
-              <button
-                className="btn small"
-                onClick={() => {
-                  playTts(lastFeedMsg.msg.content).catch((e) =>
-                    setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }]),
-                  )
-                }}
-              >
-                {t('replayTts')}
-              </button>
+            {!streaming && canRegen && (
+              <>
+                <button
+                  className="btn small"
+                  onClick={() => runGeneration({ mode: 'regenerate' }).catch((e) => console.error('[regen]', e))}
+                >
+                  {t('regenerate')}
+                </button>
+                {canContinue && (
+                  <button
+                    className="btn small"
+                    onClick={() => runGeneration({ mode: 'continue' }).catch((e) => console.error('[continue]', e))}
+                  >
+                    {t('continueReply')}
+                  </button>
+                )}
+                {/* En VN les bulles sont hors d'atteinte : le rejeu vit ici. En
+                    desktop, l'icône haut-parleur de la bulle s'en charge déjà. */}
+                {vnMode && canContinue && settings?.ttsEnabled && lastFeedMsg && (
+                  <button
+                    className="btn small"
+                    onClick={() => {
+                      playTts(lastFeedMsg.msg.content).catch((e) =>
+                        setFeed((f) => [
+                          ...f,
+                          { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) },
+                        ]),
+                      )
+                    }}
+                  >
+                    {t('replayTts')}
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}
