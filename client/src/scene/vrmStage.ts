@@ -440,6 +440,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   let baseAction: AnimationAction | null = null // socle voulu (en boucle)
   let activeAction: AnimationAction | null = null // ce qui tient l'écran : socle ou geste
   let talking = false
+  // Un socle vient d'être posé : recadrer à la PROCHAINE image évaluée par le
+  // mixer (cf. reframeAfterMixer). Le drapeau est consommé là et nulle part
+  // ailleurs — sans mixer, il ne se passe rien.
+  let reframePending = false
 
   // ── Décor ─────────────────────────────────────────────────────────────────
   let envRoot: Object3D | null = null
@@ -451,6 +455,11 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // ── Cadrage utilisateur (pan/zoom/rotation) : persistance + reset ─────────
   let lastFrame: { vrm: VRM; h: number } | null = null // cadrage par défaut re-calculable
   let viewChangeCb: ((view: StageView | null) => void) | null = null
+  // La caméra tient-elle EXACTEMENT le cadrage par défaut calculé par frameCamera,
+  // sans que personne n'y ait touché depuis ? Faux dès qu'une vue sauvegardée est
+  // posée (setView) ou que l'utilisateur commence à manipuler la scène. C'est la
+  // seule autorisation de recadrer tout seul (cf. reframeAfterMixer).
+  let defaultFramed = false
   // Cadrage par défaut voulu par l'UI (setFrameMode) : 'centered' tant que
   // personne ne dit le contraire — c'est le comportement historique.
   let frameMode: FrameMode = 'centered'
@@ -468,7 +477,17 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // 'end' ne se déclenche qu'à la fin d'une interaction UTILISATEUR — jamais
   // sur un setView/frameCamera programmatique.
   controls.addEventListener('end', () => {
+    // Une vue vient d'être persistée : le cadrage n'est plus celui par défaut.
+    // Redondant avec 'start' dans le cas courant, mais pas toujours — un clic sur
+    // un bouton non mappé fait un 'end' SANS 'start'.
+    defaultFramed = false
     viewChangeCb?.(currentView())
+  })
+  // 'start' est utilisateur lui aussi. Le cadrage cesse d'être « celui par
+  // défaut » DÈS LE DÉBUT du geste et pas à sa fin : un recadrage automatique au
+  // milieu d'un glissement arracherait la caméra des mains de l'utilisateur.
+  controls.addEventListener('start', () => {
+    defaultFramed = false
   })
 
   function resetView(): void {
@@ -612,6 +631,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     postureAction = null
     baseAction = null
     activeAction = null
+    // Plus de mixer : un recadrage encore en attente n'aurait plus rien à
+    // rattraper (le squelette repart de la pose de repos).
+    reframePending = false
   }
 
   /**
@@ -656,6 +678,36 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     talkingAction = asBase(pickAction(cat.talking))
     postureAction = asBase(postureName ? pickAction(cat.postures.get(postureName)) : null)
     syncBase(0)
+    // Le socle est posé mais PAS ENCORE ÉVALUÉ : le squelette est toujours dans la
+    // pose de repos, recadrer maintenant ne gagnerait rien. C'est la boucle de
+    // rendu qui s'en charge, une fois le mixer passé (cf. reframeAfterMixer).
+    reframePending = true
+  }
+
+  /**
+   * CORRECTIF du cadrage initial. frameCamera lit la position de la tête, et
+   * loadModel l'appelle AVANT que les .vrma soient là (volontairement : l'avatar
+   * ne doit pas attendre le téléchargement des animations). Si la stance de
+   * `idle.vrma` ne place pas la tête à la même hauteur que la pose de repos, le
+   * premier cadrage est légèrement décalé et il fallait un double-clic pour le
+   * rattraper. On recadre donc une fois le socle réellement appliqué.
+   *
+   * DEUX GARDE-FOUS, parce qu'écraser un cadrage choisi serait bien pire que le
+   * décalage qu'on corrige :
+   * - `defaultFramed` : la caméra tient encore le cadrage calculé par frameCamera.
+   *   Faux si l'UI a posé une vue sauvegardée (setView, appelé par applyViewFor
+   *   quand UiPrefs.views contient une entrée pour ce personnage ET ce mode), et
+   *   faux dès que l'utilisateur commence à manipuler la scène ('start').
+   * - l'appel se fait dans la boucle de rendu, donc dans une macrotâche : le
+   *   `.then(loadModel)` de l'UI, qui choisit entre setView et resetView, a
+   *   forcément déjà été exécuté. Aucune course possible entre les deux.
+   *
+   * Rien n'est notifié à l'UI : ce recadrage ne change pas l'état « pas de vue
+   * sauvegardée », il ne fait que corriger le défaut lui-même.
+   */
+  function reframeAfterMixer(): void {
+    reframePending = false
+    if (defaultFramed && lastFrame) frameCamera(lastFrame.vrm, lastFrame.h)
   }
 
   // Normalisation d'échelle : un VRM exporté en centimètres (ou en unités
@@ -714,6 +766,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     applyViewOffset()
     camera.updateProjectionMatrix()
     controls.update()
+    defaultFramed = true
   }
 
   /**
@@ -902,6 +955,11 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       for (const { node, base } of posedBones.values()) node.rotation.copy(base)
       mixer.update(delta)
       for (const bone of posedBones.values()) bone.base.copy(bone.node.rotation)
+      // Le squelette porte maintenant la pose du socle, et RIEN d'autre : c'est
+      // l'instant juste pour recadrer, avant que l'idle n'ajoute sa respiration
+      // (ses offsets oscillent — les inclure figerait une phase au hasard dans le
+      // cadrage).
+      if (reframePending) reframeAfterMixer()
     }
     // Les EXPRESSIONS restent maîtresses : l'idle les écrit après le mixer, donc
     // une .vrma qui porterait des pistes de visage est surchargée sur ces canaux.
@@ -993,6 +1051,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       camera.position.set(view.pos[0], view.pos[1], view.pos[2])
       controls.target.set(view.target[0], view.target[1], view.target[2])
       controls.update()
+      // Vue CHOISIE par l'utilisateur (sauvegardée pour ce personnage et ce mode) :
+      // plus rien ne recadre tout seul par-dessus.
+      defaultFramed = false
     },
 
     onViewChange(cb: (view: StageView | null) => void): void {
