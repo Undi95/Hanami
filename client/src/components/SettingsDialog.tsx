@@ -219,8 +219,10 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
   // Demandes d'effacement des secrets (envoient la sentinelle au PUT).
   const [clearApiKey, setClearApiKey] = useState(false)
   const [clearPassword, setClearPassword] = useState(false)
-  const [models, setModels] = useState<string[] | null>(null)
-  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  // Sonde du backend LLM : une ligne de résultat + les modèles annoncés, sur le
+  // même modèle que la sonde TTS plus bas. Le résultat ne vaut que pour l'URL
+  // testée, donc il s'efface dès qu'elle change.
+  const [backendProbe, setBackendProbe] = useState<{ ok: boolean; text: string; models: string[] } | null>(null)
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -249,10 +251,14 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
     return configured ? t('secretConfiguredPlaceholder') : t('secretNotConfiguredPlaceholder')
   }
 
+  /**
+   * Teste le backend et récupère la liste des modèles : l'id exact attendu par le
+   * serveur (du genre « qwen3:14b-q4_K_M ») se recopie mal à la main, une pastille
+   * cliquable le remet dans le champ « Modèle ».
+   */
   async function test() {
     setTesting(true)
-    setTestMsg(null)
-    setModels(null)
+    setBackendProbe(null)
     try {
       // Test SANS persistance : les valeurs COURANTES du formulaire partent au
       // POST /models ; champ vide = le serveur retombe sur la valeur enregistrée.
@@ -261,14 +267,14 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
       if (url) input.backendUrl = url
       if (clearApiKey) input.apiKey = ''
       else if (form.apiKey) input.apiKey = form.apiKey
-      const list = await api.testModels(input)
-      setModels(list)
-      setTestMsg({
+      const models = await api.testModels(input)
+      setBackendProbe({
         ok: true,
-        text: t(isPlural(lang, list.length) ? 'testOkMany' : 'testOkOne', { n: list.length }),
+        text: t(isPlural(lang, models.length) ? 'testOkMany' : 'testOkOne', { n: models.length }),
+        models,
       })
     } catch (e) {
-      setTestMsg({ ok: false, text: api.errorMessage(e) })
+      setBackendProbe({ ok: false, text: api.errorMessage(e), models: [] })
     } finally {
       setTesting(false)
     }
@@ -433,7 +439,10 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
           type="url"
           value={form.backendUrl}
           placeholder="http://127.0.0.1:5001/v1"
-          onChange={(e) => set('backendUrl', e.target.value)}
+          onChange={(e) => {
+            setBackendProbe(null)
+            set('backendUrl', e.target.value)
+          }}
         />
       </div>
       <div className="field">
@@ -480,22 +489,27 @@ export default function SettingsDialog({ settings, theme, onPickTheme, onSaved, 
             {testing ? t('testing') : t('testConnection')}
           </button>
         </div>
-        {testMsg && <span className={testMsg.ok ? 'msg-ok' : 'msg-err'}>{testMsg.text}</span>}
-        {models && models.length > 0 && (
-          <select
-            aria-label={t('chooseDetectedModel')}
-            value={models.includes(form.model) ? form.model : ''}
-            onChange={(e) => {
-              if (e.target.value) set('model', e.target.value)
-            }}
-          >
-            <option value="">{t('chooseDetectedModelOption')}</option>
-            {models.map((m) => (
-              <option key={m} value={m}>
+        {backendProbe && (
+          <span className={`probe-line${backendProbe.ok ? '' : ' err'}`}>
+            <span className="probe-mark">{backendProbe.ok ? '✓' : '✗'}</span>
+            <span>{backendProbe.text}</span>
+          </span>
+        )}
+        {backendProbe && backendProbe.models.length > 0 && (
+          <div className="voice-chips" role="group" aria-label={t('chooseDetectedModel')}>
+            {backendProbe.models.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className="voice-chip"
+                aria-pressed={form.model.trim() === m}
+                title={m}
+                onClick={() => set('model', m)}
+              >
                 {m}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
         )}
       </div>
       <div className="field">
