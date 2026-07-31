@@ -29,8 +29,10 @@
 //   node diagnostic.mjs --rapport                régénère index.json + RAPPORT.md
 //                                                depuis les fiche.json existants
 // Options :
-//   --modele=<motif>    .vrm utilisé PARTOUT (défaut : sakura). Toute mesure ne
-//                       se compare qu'à modèle égal — il est écrit dans chaque fiche.
+//   --modele=<nom>      .vrm utilisé PARTOUT (défaut : EtalonChibi, épinglé).
+//                       Nom exact d'abord ; une sous-chaîne ambiguë est refusée
+//                       avec la liste des candidats. Toute mesure ne se compare
+//                       qu'à modèle égal — il est écrit dans chaque fiche.
 //   --sans-images       fiches seules (rapide) ; les images existantes restent.
 //   --poses=N           cases des planches (défaut 12)
 //
@@ -332,6 +334,11 @@ function genererIndexEtRapport() {
   L.push(`**${nb('bon')} bons · ${nb('limite')} limites · ${nb('defaut')} défauts.** ` +
     'Verdict = le pire critère applicable ; « limite » signifie « regarder l\'image avant de trancher », pas « à jeter ».')
   L.push('')
+  L.push('Chaque verdict est prononcé contre le RÉFÉRENTIEL de sa famille (colonne « jugé selon ») : ' +
+    'les critères universels (torsion, genoux, coudes, sol, vitesses) plus ceux de la famille — marche à son allure, ' +
+    'assise, repos debout, gestes… Un clip assis n\'est jamais comparé au repos debout, une allure jamais à un geste : ' +
+    '« défaut » veut dire un défaut contre SON référentiel, pas un écart à la pose debout.')
+  L.push('')
   L.push('Chaque clip a son dossier : `fiche.md` (verdict, phrases, critères, frises ASCII), `fiche.json`, ' +
     'et cinq PNG (`planche-face/profil/dessus`, `traces`, `phase`). Sur les planches : squelette **bleu = gauche**, ' +
     '**rouge = droite**, sol = y 0, bandeau ATTENTION si la semelle passe sous le sol. ' +
@@ -355,15 +362,16 @@ function genererIndexEtRapport() {
     const gn = (v) => clips.filter((c) => c.verdict === v).length
     L.push(`## ${gtitre} — ${clips.length} clip(s) : ${gn('bon')} bons · ${gn('limite')} limites · ${gn('defaut')} défauts`)
     L.push('')
-    L.push('| clip | verdict | durée | ✗/~ | ce que le juge dit | vu sur les images | liens |')
-    L.push('|---|---|---|---|---|---|---|')
+    L.push('| clip | verdict | jugé selon | durée | ✗/~ | ce que le juge dit | vu sur les images | liens |')
+    L.push('|---|---|---|---|---|---|---|---|')
     for (const c of clips) {
       const liens = [
         `[fiche](${c.dossier}/fiche.md)`,
         `[profil](${c.dossier}/planche-profil.png)`, `[face](${c.dossier}/planche-face.png)`,
         `[dessus](${c.dossier}/planche-dessus.png)`, `[traces](${c.dossier}/traces.png)`, `[phase](${c.dossier}/phase.png)`,
       ].join(' · ')
-      L.push(`| **${c.id}** | ${SYM[c.verdict]?.sym ?? '·'} ${SYM[c.verdict]?.texte ?? c.verdict} | ${c.duree.toFixed(2)} s | ` +
+      L.push(`| **${c.id}** | ${SYM[c.verdict]?.sym ?? '·'} ${SYM[c.verdict]?.texte ?? c.verdict} | ` +
+        `critères « ${sansPipe(c.famille)} » | ${c.duree.toFixed(2)} s | ` +
         `${c.defauts}/${c.limites} | ${sansPipe(c.resume ?? '—')} | ${sansPipe(c.note ?? '—')} | ${liens} |`)
     }
     L.push('')
@@ -420,7 +428,9 @@ async function principal() {
   }
 
   // UN modèle pour tout : la fiche et les images parlent du même squelette.
-  const modeleFichier = REN.scene.resoudreModele(opt.get('modele') ?? 'sakura')
+  // EtalonChibi est ÉPINGLÉ (nom exact — « sakura » attrapait
+  // « ModeleAmbigu.vrm » selon l'ordre du disque).
+  const modeleFichier = REN.scene.resoudreModele(opt.get('modele') ?? 'EtalonChibi')
   const rig = JR.chargerRig(modeleFichier)
   console.log(`modèle : ${rig.nom} — hanches ${rig.hanchesM.toFixed(3)} m, échelle ${rig.echelle.toFixed(3)}`)
   console.log(`sortie : ${SORTIE}`)

@@ -27,8 +27,11 @@ Les résultats se regardent dans l'onglet **Diagnostic** du banc d'essai
 (`devtools/LANCER-LE-BANC.cmd`, ou `node devtools/anim-lab/serve.mjs`), ou
 directement dans `devtools/diagnostic-out/RAPPORT.md`, lisible sans navigateur.
 
-Modèle épinglé par défaut : **sakura** (`reference.vrm`, hanches 0,755 m).
+Modèle épinglé par défaut : **`reference.vrm`** (hanches 0,755 m).
 Toute mesure ne se compare qu'à modèle égal — il est écrit dans chaque fiche.
+`--modele=<nom>` : nom **exact** d'abord ; une sous-chaîne ambiguë est refusée
+avec la liste des candidats (« sakura » attrapait « ModeleAmbigu.vrm »
+selon l'ordre du disque).
 
 ## Les pièges déjà payés (ne pas les réintroduire)
 

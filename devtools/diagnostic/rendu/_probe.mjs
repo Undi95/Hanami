@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import * as S from './scene.mjs'
 // Sans argument : le modèle épinglé du diagnostic, résolu dans <racine>/vrm/.
-const f = process.argv[2] || S.resoudreModele('sakura')
+const f = process.argv[2] || S.resoudreModele('EtalonChibi')
 const buf = fs.readFileSync(f)
 const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
 const jl = dv.getUint32(12, true)

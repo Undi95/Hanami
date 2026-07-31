@@ -144,13 +144,42 @@ export function familleDeduite(slug) {
     return 'geste'
   }
   const s = slug.slice('world-'.length)
-  if (/^walk(-slow|-fast|-back)?$/.test(s)) return 'allure'
+  if (/^(walk|run|jog)(-back)?(-slow|-fast)?$/.test(s)) return 'allure'
+  if (/^(strafe|step)-/.test(s)) return 'allure'
   if (/^turn-/.test(s)) return 'pivot'
-  if (/^walk-(start|stop)$/.test(s)) return 'transition'
+  if (/^walk-(start|stop)(-.+)?$/.test(s)) return 'transition'
   if (/^sit-(enter|exit)$/.test(s)) return 'transition'
   if (/^sit-/.test(s)) return 'assis'
+  if (/^(clap|point|raise-hand)-(in|out|hold)$/.test(s)) return 'geste tenu'
+  if (/^idle-alt\d+$/.test(s)) return 'repos'
+  if (/^idle-alt\d+-(enter|exit)$/.test(s)) return 'transition'
   if (/^jump-/.test(s)) return 'saut'
   return 'monde'
+}
+
+/** La famille, en préférant ce que world.json affirme au nom seul. */
+export const familleDe = (slug, worldJson) => worldJson?.clips?.[slug]?.famille ?? familleDeduite(slug)
+
+/** Boucle déduite du NOM seul (le repli quand world.json manque). */
+export const boucleDeduite = (slug) =>
+  /^idle(-talking)?(-\d+)?$/.test(slug) ||
+  /^world-.*-(idle|loop|talking|hold)(-\d+)?$/.test(slug) ||
+  (/^world-(walk|run|jog|strafe|step|turn)(-[a-z0-9]+)*$/.test(slug) &&
+    !/-(start|stop|enter|exit|end|in|out)(-|$)/.test(slug))
+
+/** Voisins d'enchaînement déduits du NOM seul (le repli quand world.json manque). */
+export function enchaineDeduit(slug) {
+  let m
+  if (slug === 'world-walk-start') return { depuis: 'idle', vers: 'world-walk' }
+  if (/^world-walk-stop/.test(slug)) return { depuis: 'world-walk', vers: 'idle' }
+  if (slug === 'world-sit-enter') return { depuis: 'idle', vers: 'world-sit-idle' }
+  if (slug === 'world-sit-exit') return { depuis: 'world-sit-idle', vers: 'idle' }
+  if ((m = /^world-(.+)-in$/.exec(slug))) return { depuis: 'idle', vers: `world-${m[1]}-hold` }
+  if ((m = /^world-(.+)-out$/.exec(slug))) return { depuis: `world-${m[1]}-hold`, vers: 'idle' }
+  if ((m = /^world-(idle-alt\d+)-enter$/.exec(slug))) return { depuis: 'idle', vers: `world-${m[1]}` }
+  if ((m = /^world-(idle-alt\d+)-exit$/.exec(slug))) return { depuis: `world-${m[1]}`, vers: 'idle' }
+  if ((m = /^(world-sit-turn-(?:left|right))-end$/.exec(slug))) return { depuis: m[1], vers: 'world-sit-idle' }
+  return null
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -520,17 +549,45 @@ export const SEQUENCES = [
  * phase quelconque. On échantillonne donc TOUT le cycle et on juge sur le PIRE
  * cas : c'est lui qui décidera de la crédibilité de la scène, pas la moyenne.
  *
+ * SAUF si un CONTRAT DE PHASE existe (world.json, `phaseSortieCibleS` /
+ * `phaseEntreeCibleS`) : wander.ts quitte alors le cycle À CETTE PHASE (l'arrêt
+ * attend la couture de la marche) ou démarre le cycle d'arrivée à la sienne
+ * (world-walk repris à t = 0,200 s après walk-start). Juger la jointure à une
+ * autre phase, c'est juger un enchaînement que le code ne fait jamais.
+ *   opts.phaseA : A (boucle) est quitté à cet instant précis ;
+ *   opts.phaseB : B (boucle) est repris à cet instant, pas à t = 0.
+ *
  * `a` et `b` : { slug, ech, duree, boucle }.
  */
-export function mesurerJonction(THREE, rig, a, b) {
-  const poseB = b.ech(0)
+
+/** Le contrat de phase d'une jointure a → b, lu dans world.json (`enchaine`). */
+export function contratPhase(worldJson, aSlug, bSlug) {
+  const metaA = worldJson?.clips?.[aSlug] ?? null
+  const metaB = worldJson?.clips?.[bSlug] ?? null
+  let phaseA = null, phaseB = null
+  // Sortie du cycle amont : déclarée sur le clip d'arrivée (walk-stop : « quitte
+  // world-walk à t = 0 ») ou sur le cycle lui-même (clap-hold : « je suis quitté
+  // à t = 0 vers world-clap-out »).
+  if (metaB?.enchaine?.depuis === aSlug && metaB.enchaine.phaseSortieCibleS != null) phaseA = metaB.enchaine.phaseSortieCibleS
+  if (phaseA == null && metaA?.enchaine?.vers === bSlug && metaA.enchaine.phaseSortieCibleS != null) phaseA = metaA.enchaine.phaseSortieCibleS
+  // Entrée dans le cycle aval : déclarée sur le clip sortant (walk-start :
+  // « world-walk reprend à t = 0,200 s », jamais à t = 0).
+  if (metaA?.enchaine?.vers === bSlug && metaA.enchaine.phaseEntreeCibleS != null) phaseB = metaA.enchaine.phaseEntreeCibleS
+  return { phaseA, phaseB }
+}
+
+export function mesurerJonction(THREE, rig, a, b, opts = {}) {
+  const phaseB = opts.phaseB != null ? Math.min(Math.max(0, opts.phaseB), Math.max(0, b.duree - EPS)) : 0
+  const poseB = b.ech(phaseB)
   const qB = new Map(poseB.q)
   for (const os of rig.osTous) if (!qB.has(os)) qB.set(os, (rig.reposQ.get(os) ?? new THREE.Quaternion()).clone())
   const refB = { q: qB, p: poseB.p ?? rig.reposHips.clone(), poses: [poseB] }
   refB.positions = appliquer(THREE, rig, { q: qB, p: poseB.p })
 
   const instants = []
-  if (a.boucle) {
+  if (a.boucle && opts.phaseA != null) {
+    instants.push(Math.min(Math.max(0, opts.phaseA), Math.max(0, a.duree - EPS)))
+  } else if (a.boucle) {
     const n = Math.max(1, Math.round(a.duree * FPS))
     for (let i = 0; i < n; i++) instants.push((i / FPS) % a.duree)
   } else {
@@ -545,10 +602,189 @@ export function mesurerJonction(THREE, rig, a, b) {
   }
   return {
     de: a.slug, vers: b.slug, aBoucle: !!a.boucle, phases: instants.length,
+    phaseA: a.boucle && opts.phaseA != null ? arr2(instants[0]) : null,
+    phaseB: opts.phaseB != null ? arr2(phaseB) : null,
     pireCm: pire.maxCm, osPire: pire.osCm, pireDeg: pire.maxDeg, osPireDeg: pire.osMax, tPire: pire.t,
     meilleurCm: meilleur.maxCm, moyenneCm: arr1(somme / instants.length),
     verdict: verdict(pire.maxCm),
   }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// LE RÉFÉRENTIEL DE JUGEMENT — chaque clip est jugé contre CE QU'IL RACCORDE
+//
+// « 79 échoue » venait d'un tableau qui jugeait TOUS les clips contre le socle
+// debout, alors qu'un clip assis est à ~45 cm de la pose debout PAR CONSTRUCTION
+// — c'est la hauteur d'une chaise, pas un défaut. Le verdict n'a de sens que
+// contre le référentiel que l'app utilisera vraiment :
+//   · geste face à face  → les socles debout (idle, idle-talking) — inchangé ;
+//   · geste assis        → le socle assis (world-sit-idle), celui vers lequel
+//     il revient réellement en fondu ;
+//   · boucle qui tourne (allure, pivot, repos alterné, geste tenu, socle assis
+//     lui-même) → sa COUTURE : pose ET vitesse à l'endroit où elle se referme,
+//     la seule chose que l'œil peut y voir ;
+//   · transition (walk-start, sit-enter, clap-in…) → ses JOINTURES de séquence :
+//     dernière image du clip amont contre sa première, sa dernière contre la
+//     première du clip aval — world.json (`enchaine`) dit qui enchaîne avec qui.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Le référentiel d'un clip : { type: 'socles' | 'couture' | 'jonctions', … }.
+ * `libelle` est ce que la colonne « jugé contre » du tableau affiche.
+ */
+export function referentielDe(slug, worldJson) {
+  const meta = worldJson?.clips?.[slug] ?? null
+  if (!estMonde(slug)) {
+    return { type: 'socles', socles: ['idle', 'idle-talking'], libelle: 'idle / idle-talking' }
+  }
+  const fam = familleDe(slug, worldJson)
+  const boucle = meta ? !!meta.boucle : boucleDeduite(slug)
+  if (boucle) {
+    // Les pivots assis (world-sit-turn-*) sont des CYCLES de rotation continue,
+    // pas des gestes : comme une allure, aucune de leurs phases ne ressemble au
+    // socle assis — c'est leur couture qui se juge, et leurs clips -end qui
+    // portent le retour vers world-sit-idle.
+    if (fam === 'assis' && slug !== 'world-sit-idle' && !/^world-sit-turn-/.test(slug)) {
+      return { type: 'socles', socles: ['world-sit-idle'], libelle: 'world-sit-idle' }
+    }
+    return { type: 'couture', libelle: 'sa couture (boucle)' }
+  }
+  const ench = meta?.enchaine ?? enchaineDeduit(slug)
+  if (ench && (ench.depuis || ench.vers)) {
+    return {
+      type: 'jonctions', de: ench.depuis ?? null, vers: ench.vers ?? null,
+      libelle: `jointures ${ench.depuis ?? '?'} → clip → ${ench.vers ?? '?'}`,
+    }
+  }
+  if (fam === 'assis') return { type: 'socles', socles: ['world-sit-idle'], libelle: 'world-sit-idle' }
+  return { type: 'socles', socles: ['idle', 'idle-talking'], libelle: 'idle / idle-talking' }
+}
+
+/**
+ * Vitesse angulaire interne du clip (°/s, os majeurs, grille FPS) : LE point de
+ * comparaison pour dire si une couture est « plus violente que l'animation
+ * elle-même » — un saut de 300 °/s sur une course qui tourne à 500 °/s est
+ * invisible, le même saut sur un repos à 30 °/s est un coup de fouet.
+ */
+export function vitesseInterneDegS(THREE, rig, ech, duree) {
+  const n = Math.max(2, Math.round(duree * FPS))
+  const dt = 1 / FPS
+  const serie = []
+  let prev = ech(0)
+  for (let i = 1; i < n; i++) {
+    const cur = ech(Math.min(duree - EPS, i * dt))
+    let m = 0
+    for (const os of OS_MAJEURS) {
+      const a = prev.q.get(os), b = cur.q.get(os)
+      if (a && b) { const v = ang(a, b) / dt; if (v > m) m = v }
+    }
+    serie.push(m)
+    prev = cur
+  }
+  const s = [...serie].sort((x, y) => x - y)
+  return {
+    max: Math.round(s[s.length - 1] ?? 0),
+    p95: Math.round(s[Math.min(s.length - 1, Math.floor(0.95 * s.length))] ?? 0),
+    med: Math.round(s[Math.floor(0.5 * s.length)] ?? 0),
+  }
+}
+
+// Une couture se franchit en UNE image (1/30 s), pas en un fondu de 0,3 s : ses
+// seuils de POSE sont donc bien plus stricts que ceux des raccords en fondu.
+export const SEUIL_COUTURE_EXCELLENT_CM = 0.5
+export const SEUIL_COUTURE_PASSE_CM = 2
+export const SEUIL_COUTURE_ECHEC_CM = 4
+
+export function verdictCouturePose(cm) {
+  if (!isFinite(cm)) return 'inconnu'
+  if (cm > SEUIL_COUTURE_ECHEC_CM) return 'echoue'
+  if (cm > SEUIL_COUTURE_PASSE_CM) return 'limite'
+  if (cm > SEUIL_COUTURE_EXCELLENT_CM) return 'passe'
+  return 'excellent'
+}
+
+/**
+ * Discontinuité de vitesse à la couture, RELATIVE au p95 du clip (plancher
+ * 60 °/s : en dessous de 2°/image, aucun saut n'est visible, quel que soit le
+ * clip). > 2 × le p95 = coup de fouet ; entre 1,25 et 2 = à regarder.
+ */
+export function verdictCoutureVitesse(discontDegS, p95DegS) {
+  if (!isFinite(discontDegS)) return 'inconnu'
+  const r = discontDegS / Math.max(60, p95DegS || 0)
+  if (r > 2) return 'echoue'
+  if (r > 1.25) return 'limite'
+  if (r > 0.75) return 'passe'
+  return 'excellent'
+}
+
+/**
+ * Juge un clip contre SON référentiel. Le contexte fournit les clips et les
+ * socles — la page et la sonde en donnent chacune un, le jugement est LE MÊME :
+ *   ctx.echPour(slug)  → { ech, duree } | null
+ *   ctx.socleRef(nom)  → pose de référence (poseReference) | null
+ *   ctx.boucle(slug)   → bool
+ *   ctx.worldJson
+ * Rend { referentiel, verdict, raccords?, couture?, vitesseInterne?, jonctions? }.
+ */
+export function jugerReferentiel(THREE, rig, ctx, slug) {
+  const referentiel = referentielDe(slug, ctx.worldJson)
+  const e = ctx.echPour(slug)
+  if (!e) return null
+  const out = { referentiel, verdict: 'inconnu' }
+
+  if (referentiel.type === 'socles') {
+    const pE = e.ech(0)
+    const pS = e.ech(Math.max(0, e.duree - EPS))
+    out.raccords = {}
+    const verdicts = []
+    for (const nomSocle of referentiel.socles) {
+      const ref = ctx.socleRef(nomSocle)
+      if (!ref) continue
+      const entree = ecart(THREE, rig, pE, ref)
+      const sortie = ecart(THREE, rig, pS, ref)
+      out.raccords[nomSocle] = {
+        entree: { ...entree, phaseSocle: ecartParPhase(THREE, rig, pE, ref) },
+        sortie: { ...sortie, phaseSocle: ecartParPhase(THREE, rig, pS, ref) },
+        verdict: pireVerdict(entree.verdict, sortie.verdict),
+      }
+      verdicts.push(out.raccords[nomSocle].verdict)
+    }
+    if (verdicts.length) out.verdict = pireVerdict(...verdicts)
+    else out.socleAbsent = true
+    return out
+  }
+
+  if (referentiel.type === 'couture') {
+    out.couture = coutureBoucle(THREE, rig, e.ech, e.duree)
+    out.vitesseInterne = vitesseInterneDegS(THREE, rig, e.ech, e.duree)
+    if (out.couture) {
+      out.verdictPose = verdictCouturePose(out.couture.maxCm)
+      out.verdictVitesse = verdictCoutureVitesse(out.couture.discontVitDegS, out.vitesseInterne.p95)
+      out.verdict = pireVerdict(out.verdictPose, out.verdictVitesse)
+    }
+    return out
+  }
+
+  // jonctions — la mécanique de l'onglet Séquences, appliquée au clip seul.
+  const moi = { slug, ech: e.ech, duree: e.duree, boucle: !!ctx.boucle(slug) }
+  const voisin = (s) => {
+    const v = s === slug ? e : ctx.echPour(s)
+    return v ? { slug: s, ech: v.ech, duree: v.duree, boucle: !!ctx.boucle(s) } : null
+  }
+  out.jonctions = []
+  if (referentiel.de) {
+    const a = voisin(referentiel.de)
+    if (a) out.jonctions.push(mesurerJonction(THREE, rig, a, moi, contratPhase(ctx.worldJson, referentiel.de, slug)))
+    else out.jonctions.push({ de: referentiel.de, vers: slug, absent: true })
+  }
+  if (referentiel.vers) {
+    const b = voisin(referentiel.vers)
+    if (b) out.jonctions.push(mesurerJonction(THREE, rig, moi, b, contratPhase(ctx.worldJson, slug, referentiel.vers)))
+    else out.jonctions.push({ de: slug, vers: referentiel.vers, absent: true })
+  }
+  const js = out.jonctions.filter((j) => !j.absent)
+  if (js.length) out.verdict = pireVerdict(...js.map((j) => j.verdict))
+  return out
 }
 
 // ════════════════════════════════════════════════════════════════════════════

@@ -223,18 +223,31 @@ export function chargerRig(fichier) {
   return rig
 }
 
-/** Le premier .vrm du dossier, ou celui demandé. */
+/**
+ * Le premier .vrm du dossier, ou celui demandé.
+ *
+ * Résolution : chemin existant, puis NOM EXACT (avec ou sans .vrm, insensible à
+ * la casse), puis sous-chaîne — mais si PLUSIEURS fichiers répondent, on refuse
+ * en les listant au lieu de prendre le premier. Le raccourci « premier qui
+ * contient » faisait résoudre « sakura » vers « ModeleAmbigu.vrm » au
+ * lieu de « reference.vrm » : c'était l'ordre du disque qui choisissait le
+ * modèle jugé, et toutes les mesures avec.
+ */
 export function choisirVrm(demande) {
+  const liste = fs.readdirSync(VRM_DIR).filter((f) => f.toLowerCase().endsWith('.vrm')).sort()
   if (demande) {
     const p = path.isAbsolute(demande) ? demande : path.join(VRM_DIR, demande)
     if (fs.existsSync(p)) return p
-    const cand = fs.readdirSync(VRM_DIR).find((f) => f.toLowerCase().includes(demande.toLowerCase()) && f.toLowerCase().endsWith('.vrm'))
-    if (cand) return path.join(VRM_DIR, cand)
-    throw new Error(`.vrm introuvable : ${demande}`)
+    const bas = demande.toLowerCase()
+    const exact = liste.find((f) => f.toLowerCase() === bas || f.toLowerCase() === bas + '.vrm')
+    if (exact) return path.join(VRM_DIR, exact)
+    const cand = liste.filter((f) => f.toLowerCase().includes(bas))
+    if (cand.length === 1) return path.join(VRM_DIR, cand[0])
+    if (cand.length > 1) throw new Error(`« ${demande} » est ambigu — ${cand.length} candidats, nomme-le exactement : ${cand.join(' · ')}`)
+    throw new Error(`.vrm introuvable : ${demande} (disponibles : ${liste.join(', ')})`)
   }
-  const l = fs.readdirSync(VRM_DIR).filter((f) => f.toLowerCase().endsWith('.vrm')).sort()
-  if (!l.length) throw new Error(`aucun .vrm dans ${VRM_DIR}`)
-  return path.join(VRM_DIR, l[0])
+  if (!liste.length) throw new Error(`aucun .vrm dans ${VRM_DIR}`)
+  return path.join(VRM_DIR, liste[0])
 }
 
 export function listerVrm() {

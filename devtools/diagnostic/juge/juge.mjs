@@ -7,7 +7,9 @@
 //   node juge.mjs --lot                      les 32 clips, tableau récapitulatif
 //   node juge.mjs --lot --tout               idem, avec toutes les phrases
 //   node juge.mjs --comparer a b             le même critère sur deux clips
-//   node juge.mjs world-walk --vrm=Cynthia   sur un autre modèle
+//   node juge.mjs world-walk --modele=Chloe  sur un autre modèle (--vrm accepté ;
+//                                            nom exact d'abord, ambiguïté refusée ;
+//                                            défaut : EtalonChibi, épinglé)
 //   node juge.mjs world-walk --tousvrm       sur les 12 modèles (défaut du clip
 //                                            ou du rig ? c'est la question)
 //   node juge.mjs --lot --json=x.json        sortie machine
@@ -45,6 +47,13 @@ for (const a of process.argv.slice(2)) {
 const SYM = C.VERDICTS
 const pad = (s, n) => String(s).padEnd(n)
 const padL = (s, n) => String(s).padStart(n)
+
+/** Le modèle demandé (--modele, alias historique --vrm) — EtalonChibi épinglé
+ *  par défaut : toute mesure ne se compare qu'à modèle égal. */
+function modeleDemande() {
+  const v = args.get('modele') ?? args.get('vrm')
+  return v && v !== '1' ? v : 'EtalonChibi'
+}
 
 const W = R.world()
 // Les socles face à face sont tous des boucles, variantes numérotées comprises
@@ -229,19 +238,19 @@ if (args.has('tousvrm')) {
     console.log(`   ${stable ? '·' : '≠'} ${pad(vals[0].libelle, 52)} ${padL(mn.toFixed(2), 9)} … ${padL(mx.toFixed(2), 9)}  ${verdicts.length > 1 ? 'verdict VARIABLE selon le modèle : ' + verdicts.join('/') : 'verdict stable : ' + verdicts[0]}`)
   }
 } else if (args.has('comparer')) {
-  const rig = R.chargerRig(R.choisirVrm(args.get('vrm') === '1' ? null : args.get('vrm')))
+  const rig = R.chargerRig(R.choisirVrm(modeleDemande()))
   const [x, y] = libres
   if (!x || !y) throw new Error('--comparer demande deux noms de clips')
   comparer(C.juger(await analyser(rig, x)), C.juger(await analyser(rig, y)))
 } else if (args.has('lot')) {
-  const rig = R.chargerRig(R.choisirVrm(args.get('vrm') === '1' ? null : args.get('vrm')))
+  const rig = R.chargerRig(R.choisirVrm(modeleDemande()))
   console.log(`juge biomécanique — ${slugs.length} clips sur ${rig.nom} (hanches ${rig.hanchesM.toFixed(3)} m, échelle ${rig.echelle.toFixed(3)})`)
   if (!rig.solSuppose) console.log(`   ⚠ ce modèle ne pose pas ses pieds sur y = 0 : le sol a été pris au point le plus bas du rig au repos.`)
   const fiches = await lot(rig, slugs, { tout: args.has('tout') })
   sortie.fiches = fiches.map(dep)
   sortie.meta = { rig: rig.nom, hanchesM: rig.hanchesM, echelle: rig.echelle, genere: new Date().toISOString() }
 } else {
-  const rig = R.chargerRig(R.choisirVrm(args.get('vrm') === '1' ? null : args.get('vrm')))
+  const rig = R.chargerRig(R.choisirVrm(modeleDemande()))
   if (!rig.solSuppose) console.log(`⚠ ${rig.nom} ne pose pas ses pieds sur y = 0 : sol pris au point le plus bas du rig au repos.`)
   for (const slug of slugs) {
     const f = C.juger(await analyser(rig, slug))

@@ -1,6 +1,6 @@
 import * as S from './scene.mjs'
 
-const m = S.chargerModele(S.resoudreModele('sakura'), { maillage: true })
+const m = S.chargerModele(S.resoudreModele('EtalonChibi'), { maillage: true })
 S.preparerSemelles(m)
 console.log('sommets de semelle : G', m.semelles.g.length / 2, ' D', m.semelles.d.length / 2)
 

@@ -115,7 +115,7 @@ rendu.mjs — banc de rendu d'animations VRM, sans navigateur, sans dépendance.
   node rendu.mjs liste               clips et modèles disponibles
 
 Options
-  --modele=<motif>     motif ou chemin d'un .vrm            (défaut : sakura)
+  --modele=<nom>       nom exact ou chemin d'un .vrm        (défaut : EtalonChibi)
   --vue=<v>            face | profil | dessus | toutes      (défaut : profil)
   --poses=N            nombre de cases de la planche        (défaut : 12)
   --colonnes=N         cases par rangée                     (défaut : 4)

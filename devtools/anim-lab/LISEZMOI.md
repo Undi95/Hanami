@@ -7,7 +7,12 @@ Sa question principale tient en une phrase, celle du propriétaire :
 
 > **Si les animations ne s'emboîtent pas comme il faut (idle, anim, idle), on vire.**
 
-Le banc la transforme en un chiffre, en centimètres, et en un verdict par clip.
+Le banc la transforme en un chiffre, en centimètres, et en un verdict par clip —
+chaque clip jugé **contre SON référentiel** (voir « La règle d'acceptation ») :
+un geste contre le socle qu'il quitte et retrouve en fondu, une boucle sur sa
+couture, une transition à ses jointures de séquence. Juger un clip assis contre
+le socle **debout** donnait « échoue » à 79 clips sur 111 : l'écart mesuré était
+la hauteur d'une chaise, pas un défaut.
 
 ## Lancer
 
@@ -36,6 +41,9 @@ node sonde.mjs --rig=vrm            # ce que la PAGE affichera
 node sonde.mjs --rig=vrm --vrm=<chemin.vrm>
 node sonde.mjs --clips=wave,happy   # un sous-ensemble
 node sonde.mjs --json=sortie.json   # écrit dans le dossier du banc, nulle part ailleurs
+node sonde.mjs --modeles=tous       # LA MATRICE clips × modèles (squelettes seuls,
+                                    # sans mesh : toute la boucle tient en minutes)
+node sonde.mjs --modeles=a.vrm,b.vrm
 ```
 
 `sonde.mjs` importe **`mesures.mjs`, exactement le même fichier que la page**, et
@@ -74,8 +82,10 @@ autrement qu'à l'œil :
 banc.analyses.get('world-walk')   // l'objet complet d'un clip
 banc.lignes()                     // le tableau, tel qu'il est exporté
 banc.sequences()                  // les jointures mesurées
+banc.matrice()                    // la matrice clips × modèles, si la passe a tourné
 banc.hanchesRepos(), banc.echelleWorld()
 await banc.analyserTout()         // relancer l'analyse depuis la console
+await banc.passeMultiModeles()    // la passe multi-modèles depuis la console
 banc.mesures                      // le noyau ./mesures.mjs lui-même
 ```
 
@@ -121,9 +131,11 @@ node devtools/diagnostic/diagnostic.mjs --lot --extra=tous     # + tout vrma/ext
 node devtools/diagnostic/diagnostic.mjs --rapport              # refond index.json + RAPPORT.md seuls
 ```
 
-Options : `--modele=<motif>`
-(défaut **sakura** — épinglé : deux exécutions ne se comparent qu'à modèle
-égal), `--sans-images` (fiches seules, rapide), `--poses=N`.
+Options : `--modele=<nom>`
+(défaut **EtalonChibi** — épinglé : deux exécutions ne se comparent qu'à
+modèle égal ; nom **exact** d'abord, une sous-chaîne ambiguë est **refusée**
+avec la liste des candidats — « sakura » attrapait « ModeleAmbigu.vrm »
+selon l'ordre du disque), `--sans-images` (fiches seules, rapide), `--poses=N`.
 
 ## Ce que chaque sortie signifie
 
@@ -184,7 +196,7 @@ critère : « limite » = regarder l'image avant de trancher.
   **l'esthétique** (il dit plausible, pas joli).
 - Un verdict **ne se transporte pas d'un modèle à l'autre** : le lot committé
   est mesuré sur `reference.vrm` ; pour comparer avant/après retouche,
-  garder `--modele=sakura`.
+  garder `--modele=EtalonChibi`.
 
 Dans la page : l'onglet **Diagnostic** montre tout ça pour le clip sélectionné
 (verdict, phrases, note visuelle, les cinq images cliquables, les critères en
@@ -216,9 +228,25 @@ la pose du socle.
 | ≤ 10 cm | **limite** | à la frontière : à regarder à l'œil, en 0,25× |
 | **> 10 cm** | **ÉCHOUE** | le clip ne s'emboîte pas — c'est le seuil posé par le propriétaire |
 
-Le verdict d'un clip est le **pire** de ses quatre écarts : entrée et sortie,
-contre `idle` **et** contre `idle-talking`. Un geste ne sait pas vers quel socle
-il reviendra — pendant qu'une réponse s'écrit, c'est `idle-talking` qui tourne.
+## Le référentiel : contre QUOI chaque clip est jugé
+
+C'est la colonne « **jugé contre** » du tableau, et la logique vit dans
+`referentielDe()` (`mesures.mjs`, donc partagée avec la sonde) :
+
+| Clip | Jugé contre | Pourquoi |
+| --- | --- | --- |
+| geste face à face | `idle` **et** `idle-talking` (entrée + sortie, pire des quatre) | il ne sait pas vers quel socle il reviendra — pendant qu'une réponse s'écrit, c'est `idle-talking` qui tourne |
+| geste ou boucle **assis** (`world-sit-*`) | le socle **`world-sit-idle`** | c'est de lui qu'il part et vers lui qu'il revient, en fondu — le socle debout est à ~45 cm PAR CONSTRUCTION (la hauteur d'une chaise) |
+| **boucle** qui tourne (allures, pivots — assis compris —, repos alternés, gestes tenus, `world-sit-idle` lui-même) | sa **COUTURE** : écart de pose dernière ↔ première image (seuils stricts 0,5 / 2 / 4 cm : elle se franchit en UNE image, pas en un fondu) **et** saut de vitesse comparé au p95 du clip | aucune phase d'un cycle ne ressemble à un socle ; ce que l'œil peut y voir, c'est la couture |
+| **transition** (`walk-start`, `walk-stop*`, `sit-enter/exit`, `*-in/out`, `idle-alt*-enter/exit`, `sit-turn-*-end`) | ses **JOINTURES de séquence** : dernière image du clip amont ↔ sa première, sa dernière ↔ première du clip aval (`enchaine` de `world.json`) | c'est exactement l'enchaînement que `wander.ts` fera |
+
+**Contrats de phase.** Quand `world.json` déclare `phaseSortieCibleS` /
+`phaseEntreeCibleS` (l'arrêt quitte `world-walk` sur sa couture, `world-walk`
+reprend à t = 0,200 s après `walk-start` — et `wander.ts` s'y tient), la jointure
+est mesurée **à cette phase-là**, pas au pire du cycle : juger une autre phase,
+c'est juger un enchaînement que le code ne fait jamais. Sans contrat déclaré, un
+cycle amont est quitté à une phase quelconque → on juge le **pire** cas, et la
+fiche donne moyenne et meilleur cas.
 
 Le chiffre du verdict est en **centimètres** : la distance parcourue par l'os le
 plus concerné, en position monde. Les degrés disent *quel* os ; les centimètres
@@ -279,15 +307,37 @@ idle → world-sit-enter → world-sit-idle → world-sit-exit → idle
 L'écart est mesuré à chaque **jointure** : dernière image du clip sortant contre
 première image du clip entrant, mêmes seuils, même verdict.
 
-Si le clip sortant **boucle**, sa « dernière image » n'a aucun sens : il sera
-quitté à une phase quelconque. On échantillonne alors tout le cycle et on juge sur
-le **pire** cas — c'est lui qui décidera de la crédibilité de la scène, pas la
-moyenne. La fiche donne quand même moyenne et meilleur cas, et l'instant du pire.
+Si le clip sortant **boucle sans contrat de phase**, sa « dernière image » n'a
+aucun sens : il sera quitté à une phase quelconque. On échantillonne alors tout
+le cycle et on juge sur le **pire** cas — c'est lui qui décidera de la
+crédibilité de la scène, pas la moyenne. La fiche donne quand même moyenne et
+meilleur cas, et l'instant du pire. Quand `world.json` déclare un **contrat de
+phase** (`phaseSortieCibleS` / `phaseEntreeCibleS`), la jointure est mesurée à
+cette phase précise — c'est l'enchaînement que `wander.ts` fait vraiment.
 
 Le bouton **jouer en boucle** enchaîne réellement les clips, avec les fondus de
 l'app, pour juger à l'œil. Les clips en boucle sont tenus quelques secondes
 seulement : assez pour être quittés à une phase quelconque, pas assez pour rendre
 la séquence interminable.
+
+## La passe multi-modèles (onglet Multi-modèles)
+
+La réponse à « **parfait, pour toutes les tailles et toutes les formes** » : le
+bouton **« passe multi-modèles »** (onglet Clips) recharge **chaque `.vrm` de
+`vrm/`** — l'ancien est **déchargé** (`deepDispose`) avant le suivant, la mémoire
+reste plate — et rejoue l'analyse complète, chaque clip contre son référentiel.
+
+Il en sort la **matrice clips × modèles** : une ligne par clip (les pires
+d'abord), une colonne par modèle (taille et hanches dans l'infobulle de
+l'en-tête), le verdict et l'écart en cm dans chaque case, et une colonne
+« partout ? » — *passe partout*, ou *échoue sur n/N* avec les modèles fautifs.
+Copiable en TSV. Les fondus simulés et les grandeurs de cycle sont sautés
+pendant cette passe (le verdict n'en dépend pas ; des dizaines de modèles × des
+dizaines de fondus prendraient des heures) ; la passe télécharge chaque modèle,
+compter quelques minutes. À la fin, la page recharge le modèle de départ.
+
+Le pendant headless est `node sonde.mjs --modeles=tous` : squelettes montés
+depuis le glTF sans mesh ni texture, mêmes appels, mêmes chiffres, en minutes.
 
 ---
 

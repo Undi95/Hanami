@@ -503,14 +503,26 @@ export function listerModeles() {
   return fs.readdirSync(DOSSIER_VRM).filter((f) => f.toLowerCase().endsWith('.vrm')).sort()
 }
 
-/** Résout un nom de modèle partiel (« sakura ») en chemin complet. */
+/**
+ * Résout un nom de modèle en chemin complet : chemin existant, puis NOM EXACT
+ * (avec ou sans .vrm, insensible à la casse), puis sous-chaîne — mais si
+ * PLUSIEURS fichiers répondent, on refuse en les listant au lieu de prendre le
+ * premier (« sakura » attrapait « ModeleAmbigu.vrm » selon l'ordre du
+ * disque). Sans nom : reference.vrm, le modèle épinglé du diagnostic.
+ */
 export function resoudreModele(nom) {
+  const liste = listerModeles()
   if (!nom) {
-    const d = listerModeles().find((f) => /sakura/i.test(f)) ?? listerModeles()[0]
+    const d = liste.find((f) => f.toLowerCase() === 'sakurakinomoto.vrm') ?? liste[0]
+    if (!d) throw new Error(`aucun .vrm dans ${DOSSIER_VRM}`)
     return path.join(DOSSIER_VRM, d)
   }
   if (fs.existsSync(nom)) return nom
-  const t = listerModeles().find((f) => f.toLowerCase().includes(nom.toLowerCase()))
-  if (!t) throw new Error(`modèle introuvable : ${nom} (dispo : ${listerModeles().join(', ')})`)
-  return path.join(DOSSIER_VRM, t)
+  const bas = nom.toLowerCase()
+  const exact = liste.find((f) => f.toLowerCase() === bas || f.toLowerCase() === bas + '.vrm')
+  if (exact) return path.join(DOSSIER_VRM, exact)
+  const cand = liste.filter((f) => f.toLowerCase().includes(bas))
+  if (cand.length === 1) return path.join(DOSSIER_VRM, cand[0])
+  if (cand.length > 1) throw new Error(`« ${nom} » est ambigu — ${cand.length} candidats, nomme-le exactement : ${cand.join(' · ')}`)
+  throw new Error(`modèle introuvable : ${nom} (dispo : ${liste.join(', ')})`)
 }

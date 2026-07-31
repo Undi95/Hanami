@@ -30,6 +30,9 @@
 //   node sonde.mjs --clips=wave,happy        un sous-ensemble
 //   node sonde.mjs --json=sonde-resultats.json
 //   node sonde.mjs --sequences               seulement les séquences
+//   node sonde.mjs --modeles=tous            LA MATRICE clips × modèles (squelettes
+//                                           seuls, sans mesh : rapide) ; ou
+//   node sonde.mjs --modeles=a.vrm,b.vrm     un sous-ensemble de modèles
 // ════════════════════════════════════════════════════════════════════════════
 
 import fs from 'node:fs'
@@ -198,8 +201,8 @@ try {
 // Mesure d'un rig complet
 // ════════════════════════════════════════════════════════════════════════════
 
-async function mesurerRig(nomRig, ctx) {
-  const { vrm, adapt, nom } = ctx
+async function mesurerRig(nomRig, ctxRig, opts = {}) {
+  const { vrm, adapt, nom } = ctxRig
   const liste = await listerClips()
   const slugs = liste.slugs.filter((s) => !FILTRE || FILTRE.has(s))
 
@@ -223,54 +226,63 @@ async function mesurerRig(nomRig, ctx) {
   const hanchesRepos = M.hanchesAuRepos(THREE, adapt)
   const echelle = hanchesRepos / M.HANCHES_RIG_MESURE
 
-  // Socles de référence
+  // Socles de référence, construits À LA DEMANDE : idle, idle-talking,
+  // world-sit-idle… — chaque clip désigne le sien via son référentiel.
   const socles = new Map()
-  for (const nomSocle of ['idle', 'idle-talking']) {
+  const socleRefPour = (nomSocle) => {
+    if (socles.has(nomSocle)) return socles.get(nomSocle)
     const c = clips.get(nomSocle)
-    if (c) socles.set(nomSocle, M.poseReference(THREE, adapt, c.ech, c.duree))
+    const ref = c ? M.poseReference(THREE, adapt, c.ech, c.duree) : null
+    socles.set(nomSocle, ref)
+    return ref
   }
-  if (!socles.size) throw new Error('ni idle.vrma ni idle-talking.vrma : aucun socle de référence')
+  if (!clips.has('idle') && !clips.has('idle-talking')) {
+    throw new Error('ni idle.vrma ni idle-talking.vrma : aucun socle de référence')
+  }
+  const ctxJuge = {
+    echPour: (slug) => clips.get(slug) ?? null,
+    socleRef: socleRefPour,
+    boucle: (slug) => clips.get(slug)?.boucle ?? M.boucleDeduite(slug),
+    worldJson: WORLD,
+  }
 
-  console.log('')
-  console.log(`══ rig ${nomRig} : ${nom}`)
-  console.log(`   clips : ${clips.size} (liste : ${liste.source})`)
-  console.log(`   hanches au repos : ${hanchesRepos.toFixed(4)} m → facteur d'échelle world.json = ${echelle.toFixed(4)}`)
-  for (const [n, r] of socles) {
-    console.log(`   socle ${n} : ${r.duree.toFixed(2)} s, ${r.osAnimes.size}/${adapt.osTous.length} os animés, dispersion max ${r.dispersionMaxDeg}°`)
+  if (!opts.silencieux) {
+    console.log('')
+    console.log(`══ rig ${nomRig} : ${nom}`)
+    console.log(`   clips : ${clips.size} (liste : ${liste.source})`)
+    console.log(`   hanches au repos : ${hanchesRepos.toFixed(4)} m → facteur d'échelle world.json = ${echelle.toFixed(4)}`)
   }
 
   const resultats = []
   for (const c of clips.values()) {
-    const pE = c.ech(0)
-    const pS = c.ech(Math.max(0, c.duree - M.EPS))
-    const pSbrut = c.ech(c.duree) // le PIÈGE : LoopRepeat rend ici la 1re image
-
+    // LE jugement : contre le référentiel du clip, par le noyau partagé — la
+    // page fait exactement le même appel avec les mêmes arguments.
+    const jug = M.jugerReferentiel(THREE, adapt, ctxJuge, c.slug)
     const r = {
-      slug: c.slug, domaine: M.domaine(c.slug), famille: M.familleDeduite(c.slug),
+      slug: c.slug, domaine: M.domaine(c.slug), famille: M.familleDe(c.slug, WORLD),
       duree: M.arr2(c.duree), osAnimes: c.osAnimes.size, aTranslation: c.aTranslation,
-      tailleOctets: c.taille, raccords: {},
+      tailleOctets: c.taille,
+      referentiel: jug.referentiel.libelle, typeRef: jug.referentiel.type,
+      raccords: jug.raccords ?? {}, jonctions: jug.jonctions ?? null,
+      couture: jug.couture ?? null, vitesseInterne: jug.vitesseInterne ?? null,
+      verdictPose: jug.verdictPose ?? null, verdictVitesse: jug.verdictVitesse ?? null,
+      verdict: jug.verdict,
     }
-    for (const [nomSocle, ref] of socles) {
-      const e = M.ecart(THREE, adapt, pE, ref)
-      const s = M.ecart(THREE, adapt, pS, ref)
-      r.raccords[nomSocle] = {
-        entree: { ...e, phaseSocle: M.ecartParPhase(THREE, adapt, pE, ref) },
-        sortie: { ...s, phaseSocle: M.ecartParPhase(THREE, adapt, pS, ref) },
-        verdict: M.pireVerdict(e.verdict, s.verdict),
+
+    // Simulation du fondu réel — seulement là où le fondu socle→clip existe
+    // (les boucles et transitions ne se déclenchent pas depuis un socle).
+    r.sim = null
+    if (!opts.sansSim && jug.referentiel.type === 'socles') {
+      const nomSocle = jug.referentiel.socles.find((s) => clips.has(s))
+      const socleClip = nomSocle ? clips.get(nomSocle) : null
+      if (socleClip && socleClip.slug !== c.slug) {
+        r.sim = M.simulerFondu(THREE, adapt, c.clip, socleClip.clip)
       }
     }
-    r.sortieSansEps = { maxDeg: M.ecart(THREE, adapt, pSbrut, socles.get('idle') ?? [...socles.values()][0]).maxDeg }
-    r.verdict = M.pireVerdict(...Object.values(r.raccords).map((x) => x.verdict))
 
-    // Simulation du fondu réel (le socle ne peut pas se fondre vers lui-même)
-    const socleClip = clips.get('idle') ?? clips.get('idle-talking')
-    if (socleClip && socleClip.slug !== c.slug) {
-      r.sim = M.simulerFondu(THREE, adapt, c.clip, socleClip.clip)
-    } else r.sim = null
-
-    // Boucle + grandeurs de cycle
-    if (c.boucle) r.boucle = M.coutureBoucle(THREE, adapt, c.ech, c.duree)
-    if (r.domaine === 'monde') {
+    // Couture pour TOUTES les boucles (celles jugées autrement la gardent en info)
+    if (c.boucle && !r.couture) r.couture = M.coutureBoucle(THREE, adapt, c.ech, c.duree)
+    if (!opts.sansCycle && r.domaine === 'monde') {
       r.cycle = M.mesurerCycle(THREE, adapt, c.ech, c.duree, hanchesRepos)
       r.monde = M.confronterWorld(c.meta, r.cycle, echelle)
       if (c.meta && c.meta.tailleOctets != null && c.meta.tailleOctets !== c.taille) {
@@ -288,7 +300,10 @@ async function mesurerRig(nomRig, ctx) {
     if (etapes.length < 2) { sequences.push({ nom: seq.nom, absent: manquants }); continue }
     const jonctions = []
     for (let i = 0; i < etapes.length - 1; i++) {
-      jonctions.push(M.mesurerJonction(THREE, adapt, clips.get(etapes[i]), clips.get(etapes[i + 1])))
+      jonctions.push(M.mesurerJonction(
+        THREE, adapt, clips.get(etapes[i]), clips.get(etapes[i + 1]),
+        M.contratPhase(WORLD, etapes[i], etapes[i + 1]),
+      ))
     }
     sequences.push({
       nom: seq.nom, etapes, manquants, jonctions,
@@ -307,31 +322,55 @@ const pad = (s, n) => String(s).padEnd(n)
 const padL = (s, n) => String(s).padStart(n)
 const SYMBOLE = { excellent: '✓✓', passe: '✓ ', limite: '~ ', echoue: '✗✗', inconnu: '? ' }
 
+/** L'écart d'entrée / sortie qui a décidé du verdict, selon le référentiel. */
+function chiffresVerdict(r) {
+  if (r.typeRef === 'couture') {
+    return { e: '—', s: r.couture ? r.couture.maxCm : '—', os: r.couture?.osMax ?? '—' }
+  }
+  if (r.typeRef === 'jonctions') {
+    const amont = r.jonctions?.find((j) => j.vers === r.slug && !j.absent)
+    const aval = r.jonctions?.find((j) => j.de === r.slug && !j.absent)
+    return { e: amont ? amont.pireCm : '—', s: aval ? aval.pireCm : '—', os: aval?.osPire ?? amont?.osPire ?? '—' }
+  }
+  // Le raccord qui a DÉCIDÉ : le pire des socles, pas le premier venu.
+  const i = Object.values(r.raccords)
+    .sort((a, b) => (M.VERDICTS[b.verdict]?.rang ?? -1) - (M.VERDICTS[a.verdict]?.rang ?? -1))[0]
+  return i ? { e: i.entree.maxCm, s: i.sortie.maxCm, os: i.sortie.osCm ?? '—' } : { e: '—', s: '—', os: '—' }
+}
+
 function imprimer(res) {
   const lignes = [...res.clips].sort((a, b) => {
     const ra = M.VERDICTS[a.verdict]?.rang ?? 9, rb = M.VERDICTS[b.verdict]?.rang ?? 9
     if (ra !== rb) return rb - ra
-    return (b.raccords[res.socles[0]]?.sortie.maxCm ?? 0) - (a.raccords[res.socles[0]]?.sortie.maxCm ?? 0)
+    if (a.famille !== b.famille) return a.famille.localeCompare(b.famille)
+    return a.slug.localeCompare(b.slug)
   })
   console.log('')
-  console.log(`   ${pad('clip', 20)} ${pad('dom', 5)} ${padL('durée', 6)} │ ${padL('E cm', 6)} ${padL('S cm', 6)} ${pad('os de sortie', 15)} ${padL('S °', 6)} │ ${padL('E-t cm', 7)} ${padL('S-t cm', 7)} │ ${padL('fondu', 6)} ${padL('clip95', 6)} ${padL('ratio', 6)} │ verdict`)
+  console.log(`   ${pad('clip', 24)} ${pad('famille', 12)} ${padL('durée', 6)} │ ${pad('jugé contre', 34)} │ ${padL('E cm', 6)} ${padL('S cm', 6)} ${pad('os', 14)} │ ${padL('cout.', 6)} ${padL('saut', 5)} ${padL('p95', 5)} │ verdict`)
   console.log('   ' + '─'.repeat(140))
   for (const r of lignes) {
-    const i = r.raccords['idle'] ?? r.raccords[res.socles[0]]
-    const t = r.raccords['idle-talking']
-    const s = r.sim
+    const c = chiffresVerdict(r)
     console.log(
-      `   ${pad(r.slug, 20)} ${pad(r.domaine, 5)} ${padL(r.duree, 6)} │ ` +
-      `${padL(i.entree.maxCm, 6)} ${padL(i.sortie.maxCm, 6)} ${pad(i.sortie.osCm ?? '—', 15)} ${padL(i.sortie.maxDeg, 6)} │ ` +
-      `${padL(t ? t.entree.maxCm : '—', 7)} ${padL(t ? t.sortie.maxCm : '—', 7)} │ ` +
-      `${padL(s ? s.sortie.deg : '—', 6)} ${padL(s ? s.clip.p95 : '—', 6)} ${padL(s ? s.ratioSortieP95 : '—', 6)} │ ` +
+      `   ${pad(r.slug, 24)} ${pad(r.famille, 12)} ${padL(r.duree, 6)} │ ${pad(r.referentiel, 34)} │ ` +
+      `${padL(c.e, 6)} ${padL(c.s, 6)} ${pad(c.os, 14)} │ ` +
+      `${padL(r.couture ? r.couture.maxCm : '—', 6)} ${padL(r.couture ? r.couture.discontVitDegS : '—', 5)} ${padL(r.vitesseInterne ? r.vitesseInterne.p95 : '—', 5)} │ ` +
       `${SYMBOLE[r.verdict] ?? '? '} ${r.verdict}`,
     )
   }
   const parV = {}
   for (const r of res.clips) parV[r.verdict] = (parV[r.verdict] ?? 0) + 1
   console.log('   ' + '─'.repeat(140))
-  console.log(`   verdicts : ${Object.entries(parV).map(([k, v]) => `${k} ${v}`).join(' · ')}   (seuils ${M.SEUIL_EXCELLENT_CM} / ${M.SEUIL_PASSE_CM} / ${M.SEUIL_ECHEC_CM} cm)`)
+  console.log(`   verdicts : ${Object.entries(parV).map(([k, v]) => `${k} ${v}`).join(' · ')}   (raccords ${M.SEUIL_EXCELLENT_CM}/${M.SEUIL_PASSE_CM}/${M.SEUIL_ECHEC_CM} cm · coutures ${M.SEUIL_COUTURE_EXCELLENT_CM}/${M.SEUIL_COUTURE_PASSE_CM}/${M.SEUIL_COUTURE_ECHEC_CM} cm + saut vs p95)`)
+  const parFam = new Map()
+  for (const r of res.clips) {
+    if (!parFam.has(r.famille)) parFam.set(r.famille, {})
+    const f = parFam.get(r.famille)
+    f[r.verdict] = (f[r.verdict] ?? 0) + 1
+  }
+  console.log('   par famille :')
+  for (const [f, v] of [...parFam].sort((a, b) => a[0].localeCompare(b[0]))) {
+    console.log(`     ${pad(f, 16)} ${Object.entries(v).map(([k, n]) => `${k} ${n}`).join(' · ')}`)
+  }
 
   // Séquences
   for (const s of res.sequences) {
@@ -421,6 +460,64 @@ function comparerRaccords(res) {
 
 console.log('sonde du banc d’essai — noyau de mesure ./mesures.mjs, hors navigateur')
 console.log(`three r${THREE.REVISION} · projet ${PROJET}`)
+
+// ── LA MATRICE clips × modèles : le même jugement, sur tous les gabarits ────
+// Squelettes montés depuis le glTF (aucun mesh, aucune texture) : la boucle
+// entière tient en mémoire et en minutes. C'est le pendant headless du bouton
+// « passe multi-modèles » de la page — mêmes appels, mêmes chiffres.
+if (args.has('modeles')) {
+  const demande = args.get('modeles')
+  const tousVrm = fs.readdirSync(VRM_DIR).filter((x) => x.toLowerCase().endsWith('.vrm')).sort()
+  const fichiers = demande === 'tous' || demande === '1'
+    ? tousVrm
+    : demande.split(',').map((s) => s.trim()).filter(Boolean)
+  const parClip = new Map() // slug → { famille, referentiel, verdicts: [] }
+  const modeles = []
+  for (const f of fichiers) {
+    const chemin = path.isAbsolute(f) ? f : path.join(VRM_DIR, f)
+    let ctxRig
+    try { ctxRig = rigVrm(chemin) } catch (e) {
+      console.error(`   ${path.basename(f)} : ILLISIBLE — ${e.message}`)
+      modeles.push({ nom: path.basename(f), echec: e.message })
+      continue
+    }
+    const res = await mesurerRig('vrm', ctxRig, { silencieux: true, sansSim: true, sansCycle: true })
+    modeles.push({ nom: path.basename(f), hanchesRepos: res.hanchesRepos })
+    const col = modeles.length - 1
+    for (const r of res.clips) {
+      if (!parClip.has(r.slug)) parClip.set(r.slug, { famille: r.famille, referentiel: r.referentiel, verdicts: [] })
+      const c = chiffresVerdict(r)
+      parClip.get(r.slug).verdicts[col] = { v: r.verdict, cm: Math.max(+c.e || 0, +c.s || 0) }
+    }
+    const parV = {}
+    for (const r of res.clips) parV[r.verdict] = (parV[r.verdict] ?? 0) + 1
+    console.log(`   ${pad(path.basename(f), 44)} hanches ${padL(res.hanchesRepos, 7)} m  ${Object.entries(parV).map(([k, v]) => `${k} ${v}`).join(' · ')}`)
+  }
+  // Synthèse : quels clips ne passent PAS partout, et sur quels gabarits.
+  const ok = modeles.filter((m) => !m.echec)
+  console.log('')
+  console.log(`── matrice : ${parClip.size} clips × ${ok.length} modèles lisibles (${modeles.length - ok.length} illisibles)`)
+  const aProblemes = []
+  for (const [slug, ligne] of parClip) {
+    const mauvais = []
+    ligne.verdicts.forEach((v, i) => {
+      if (v && (v.v === 'echoue' || v.v === 'limite')) mauvais.push({ modele: modeles[i], ...v })
+    })
+    if (mauvais.length) aProblemes.push({ slug, ligne, mauvais })
+  }
+  console.log(`   ${parClip.size - aProblemes.length} clips passent PARTOUT · ${aProblemes.length} clips en limite/échec quelque part`)
+  for (const p of aProblemes.sort((a, b) => b.mauvais.length - a.mauvais.length)) {
+    console.log(`   ${pad(p.slug, 26)} (${p.ligne.referentiel}) : ` +
+      p.mauvais.map((m) => `${m.modele.nom} ${SYMBOLE[m.v].trim()} ${m.cm} cm`).join(' · '))
+  }
+  if (args.has('json')) {
+    const dest = path.resolve(LAB, args.get('json') === '1' ? 'sonde-matrice.json' : args.get('json'))
+    if (!dest.startsWith(LAB)) throw new Error('la sonde n’écrit QUE dans le dossier du banc')
+    fs.writeFileSync(dest, JSON.stringify({ modeles, clips: Object.fromEntries(parClip) }, null, 1))
+    console.log(`\nécrit : ${dest}`)
+  }
+  process.exit(0)
+}
 
 const sorties = {}
 for (const nomRig of RIGS) {

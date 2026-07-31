@@ -298,7 +298,7 @@
         <!-- LA règle d'acceptation, en tête et en gros : « si les animations ne
              s'emboîtent pas comme il faut (idle, anim, idle), on vire ». -->
         <div class="carte v-inconnu" id="carteVerdict">
-          <h2>Emboîtement idle → anim → idle (seuil 10 cm)</h2>
+          <h2>Emboîtement — chaque clip contre SON référentiel</h2>
           <div class="enorme" id="valVerdict">—</div>
           <div class="petit" id="detVerdict">lance « Analyser les raccords » ou clique un clip</div>
           <div class="petit" id="detVerdict2"></div>
@@ -334,6 +334,7 @@
           <button data-panneau="pSequences">Séquences</button>
           <button data-panneau="pDecors">Décors</button>
           <button data-panneau="pTableau">Tableau</button>
+          <button data-panneau="pMatrice" title="la matrice clips × modèles : le verdict de chaque clip sur chaque .vrm">Multi-modèles</button>
         </div>
 
         <div class="panneau actif" id="pClips">
@@ -361,6 +362,7 @@
           <div class="ligne">
             <button id="btnRaccords" class="primaire" title="statique + simulation des fondus : quelques secondes, aucune lecture">Analyser les raccords</button>
             <button id="btnBalayage" title="joue chaque clip 3 s : ajoute les mesures en direct">+ passe en direct (3 s / clip)</button>
+            <button id="btnMatrice" title="rejoue l'analyse sur TOUS les .vrm de vrm/ et bâtit la matrice clips × modèles — télécharge chaque modèle, compter quelques minutes">passe multi-modèles</button>
             <button id="btnStopBalayage" disabled>arrêter</button>
           </div>
           <div class="barre"><i id="progres"></i></div>
@@ -368,7 +370,10 @@
           <div id="clips"></div>
           <div class="legende">
             <b>Verdict</b> = liseré gauche de chaque clip, d'après l'écart d'emboîtement en
-            centimètres : ≤ 2 excellent, ≤ 7 passe, ≤ 10 limite, <b>&gt; 10 échoue</b>.
+            centimètres <b>contre SON référentiel</b> : un geste contre son socle (idle debout,
+            world-sit-idle assis), une boucle sur sa couture, une transition à ses jointures de
+            séquence. Seuils des raccords : ≤ 2 excellent, ≤ 7 passe, ≤ 10 limite,
+            <b>&gt; 10 échoue</b> (coutures : 0,5 / 2 / 4 cm + saut de vitesse).
             Il faut avoir lancé « Analyser les raccords » pour qu'il s'affiche.<br />
             Dans la scène : la <b>flèche verte</b> montre le +Z, c'est-à-dire la direction
             « face à la caméra ». Chaque <b>anneau au sol</b> marque la position de départ d'un
@@ -402,8 +407,11 @@
           <div class="note" id="etatSequence">
             Les enchaînements que l'app fera. L'écart est mesuré à chaque <b>jointure</b> :
             dernière image du clip sortant contre première image du clip entrant. Si le clip
-            sortant boucle, il sera quitté à une phase quelconque — on juge donc sur le
-            <b>pire</b> cas du cycle, pas sur la moyenne.
+            sortant boucle <b>sans contrat de phase</b>, il sera quitté à une phase quelconque —
+            on juge alors sur le <b>pire</b> cas du cycle. Quand world.json déclare un contrat
+            de phase (l'arrêt attend la couture de la marche, world-walk reprend à t = 0,200 s),
+            la jointure est mesurée à cette phase-là : c'est le seul enchaînement que
+            wander.ts fait vraiment.
           </div>
           <div id="ficheSequence" class="fiche"></div>
         </div>
@@ -434,6 +442,21 @@
             <span class="etiquette" id="etatTableau">aucune analyse effectuée</span>
           </div>
           <div id="tableau"></div>
+        </div>
+
+        <div class="panneau" id="pMatrice">
+          <div class="ligne">
+            <button id="btnMatriceTsv">copier en TSV</button>
+            <button id="btnLargeMatrice" title="élargit le panneau : une colonne par modèle">élargir</button>
+            <span class="etiquette" id="etatMatrice">aucune passe multi-modèles effectuée</span>
+          </div>
+          <div class="note">
+            « Parfait, pour toutes les tailles et toutes les formes » : la passe recharge chaque
+            <code>.vrm</code> de <code>vrm/</code> (l'ancien est déchargé avant le suivant) et
+            rejoue l'analyse — chaque clip jugé contre SON référentiel, mêmes règles que le
+            Tableau. Le chiffre d'une case est l'écart en cm qui a décidé du verdict.
+          </div>
+          <div id="matrice"></div>
         </div>
 
         <!-- Bandeau de résultat. Il ne reste pas ici : le JS le déplace dans
@@ -557,7 +580,7 @@
        *  Déduit du NOM (les allures, le saut, les départs / arrêts du monde 3D) —
        *  aucune liste de fichiers en dur, l'autre agent en ajoute et en retire. */
       const estLocomotion = (slug) =>
-        /^world-(walk|jump|turn)/.test(slug) || /^(walk|jog|sprint|swim|crouch-walk|jump)/.test(slug)
+        /^world-(walk|run|jog|strafe|step|jump|turn)/.test(slug) || /^(walk|jog|sprint|swim|crouch-walk|jump)/.test(slug)
 
       // ── Scène ─────────────────────────────────────────────────────────────
       const conteneur = document.getElementById('vue')
@@ -929,7 +952,14 @@
         cycleJeton++
       }
 
-      async function chargerModele(url) {
+      /**
+       * Charge un modèle .vrm — et DISPOSE l'ancien (deepDispose) avant : la
+       * passe multi-modèles en charge des dizaines à la suite, la mémoire doit
+       * rester plate. `options.leger` (passe multi-modèles) saute la relecture
+       * du clip courant et les reconstructions d'interface. Rend true si le
+       * modèle est chargé et mesurable.
+       */
+      async function chargerModele(url, options = {}) {
         el('etatGeneral').textContent = `chargement du modèle…`
         try {
           libererAnimations()
@@ -1009,14 +1039,18 @@
           el('etatGeneral').textContent = `${decodeURIComponent(url.split('/').pop())} · ${hauteurModele.toFixed(2)} m · hanches ${hanchesRepos.toFixed(3)} m`
           // Les clips sont liés à l'instance de VRM : le socle d'idle est reconstruit
           // pour le nouveau modèle (les VRMAnimation, eux, restent en cache).
-          if (urlIdle) actionIdle = await actionPour(urlIdle)
-          construireGrilleClips()
-          dessinerTableau()
-          if (clipCourant) await jouer(clipCourant) // même clip, nouveau modèle
-          majMesureDecor()
+          if (!options.leger) {
+            if (urlIdle) actionIdle = await actionPour(urlIdle)
+            construireGrilleClips()
+            dessinerTableau()
+            if (clipCourant) await jouer(clipCourant) // même clip, nouveau modèle
+            majMesureDecor()
+          }
+          return true
         } catch (e) {
           journal(`chargement du modèle : ${texteErreur(e)}`, 'err')
           el('etatGeneral').textContent = 'échec du chargement du modèle'
+          return false
         }
       }
 
@@ -1083,10 +1117,15 @@
         return e
       }
 
-      /** Pose de référence d'un socle (moyenne sur un tour de boucle). */
+      /** URL d'un clip désigné par son slug (socles debout, world-sit-idle, voisins de jointure…). */
+      function urlParSlug(slug) {
+        return urlsSocles.get(slug) ?? urlsClips.find((u) => nomClip(u) === slug) ?? null
+      }
+
+      /** Pose de référence d'un socle (moyenne sur un tour de boucle) — debout OU assis. */
       function socleRef(nom) {
         if (socles.has(nom)) return socles.get(nom)
-        const url = urlsSocles.get(nom)
+        const url = urlParSlug(nom)
         const e = url && echantillonneurPour(url)
         if (!e) return null
         const snap = M.sauverPose(THREE, rig)
@@ -1104,49 +1143,60 @@
       const boucleAttendue = (nom) =>
         worldJson?.clips?.[nom]?.boucle ?? /^(idle|idle-2|idle-3|idle-talking|world-.*-(idle|loop|talking)(-\d+)?)$/.test(nom)
 
+      /** Le contexte que le noyau attend pour juger : clips et socles par slug. */
+      const ctxJuge = {
+        echPour: (slug) => { const u = urlParSlug(slug); return u ? echantillonneurPour(u) : null },
+        socleRef: (nomSocle) => socleRef(nomSocle),
+        boucle: (slug) => boucleAttendue(slug),
+        get worldJson() { return worldJson },
+      }
+
       /**
-       * Analyse complète d'un clip : écart d'entrée et de sortie contre CHAQUE
-       * socle, verdict, simulation des fondus, couture de boucle, et — pour le
-       * domaine monde 3D — les grandeurs de cycle confrontées à world.json.
+       * Analyse complète d'un clip : LE jugement contre SON référentiel (socles,
+       * couture de boucle ou jointures de séquence — voir referentielDe dans
+       * ./mesures.mjs), simulation des fondus quand un fondu socle → clip existe,
+       * couture pour toute boucle, et — pour le domaine monde 3D — les grandeurs
+       * de cycle confrontées à world.json.
        */
-      function analyser(url) {
+      function analyser(url, options = {}) {
         const nom = nomClip(url)
         const e = echantillonneurPour(url)
         if (!e) return null
         const snap = M.sauverPose(THREE, rig)
         try {
           const r = {
-            nom, url, domaine: M.domaine(nom), famille: M.familleDeduite(nom),
+            nom, url, domaine: M.domaine(nom), famille: M.familleDe(nom, worldJson),
             duree: e.duree, osAnimes: e.osAnimes.size, aTranslation: e.aTranslation,
-            octets: tailles.get(url) ?? NaN, loco: estLocomotion(nom), raccords: {},
+            octets: tailles.get(url) ?? NaN, loco: estLocomotion(nom),
           }
-          const pE = e.ech(0)
-          // LE PIÈGE : à t = durée, LoopRepeat a déjà rebouclé et rend la PREMIÈRE
-          // image — l'écart de sortie serait faussement nul. D'où le − EPS.
-          const pS = e.ech(Math.max(0, e.duree - M.EPS))
-          for (const nomSocle of urlsSocles.keys()) {
-            const ref = socleRef(nomSocle)
-            if (!ref) continue
-            const entree = M.ecart(THREE, rig, pE, ref)
-            const sortie = M.ecart(THREE, rig, pS, ref)
-            r.raccords[nomSocle] = {
-              entree: { ...entree, phaseSocle: M.ecartParPhase(THREE, rig, pE, ref) },
-              sortie: { ...sortie, phaseSocle: M.ecartParPhase(THREE, rig, pS, ref) },
-              verdict: M.pireVerdict(entree.verdict, sortie.verdict),
+          // LE jugement, par le noyau partagé — la sonde fait le même appel.
+          const j = M.jugerReferentiel(THREE, rig, ctxJuge, nom)
+          r.referentiel = j.referentiel
+          r.verdict = j.verdict
+          r.raccords = j.raccords ?? {}
+          r.jonctions = j.jonctions ?? null
+          r.vitesseInterne = j.vitesseInterne ?? null
+          r.verdictPose = j.verdictPose ?? null
+          r.verdictVitesse = j.verdictVitesse ?? null
+
+          // Simulation du fondu réel — seulement là où un fondu socle → clip
+          // existe (les boucles et les transitions ne partent pas d'un socle).
+          r.sim = null
+          if (!options.sansSim && j.referentiel.type === 'socles') {
+            const nomSocle = j.referentiel.socles.find((s) => urlParSlug(s))
+            const urlSocle = nomSocle ? urlParSlug(nomSocle) : null
+            const clipSocle = urlSocle ? clipPour(urlSocle) : null
+            const clipGeste = clipPour(url)
+            if (clipSocle && clipGeste && clipSocle !== clipGeste) {
+              r.sim = M.simulerFondu(THREE, rig, clipGeste, clipSocle)
             }
           }
-          r.verdict = M.pireVerdict(...Object.values(r.raccords).map((x) => x.verdict))
 
-          // Simulation du fondu réel : le socle ne peut pas se fondre vers lui-même.
-          const urlSocle = urlsSocles.get('idle') ?? [...urlsSocles.values()][0]
-          const clipSocle = urlSocle ? clipPour(urlSocle) : null
-          const clipGeste = clipPour(url)
-          if (clipSocle && clipGeste && clipSocle !== clipGeste) {
-            r.sim = M.simulerFondu(THREE, rig, clipGeste, clipSocle)
-          } else r.sim = null
-
-          if (boucleAttendue(nom)) r.boucle = M.coutureBoucle(THREE, rig, e.ech, e.duree)
-          if (r.domaine === 'monde') {
+          // Couture pour TOUTES les boucles — même celles jugées autrement la
+          // gardent en information.
+          if (j.couture) r.boucle = j.couture
+          else if (boucleAttendue(nom)) r.boucle = M.coutureBoucle(THREE, rig, e.ech, e.duree)
+          if (r.domaine === 'monde' && !options.sansCycle) {
             r.cycle = M.mesurerCycle(THREE, rig, e.ech, e.duree, hanchesRepos)
             r.monde = M.confronterWorld(worldJson?.clips?.[nom] ?? null, r.cycle, echelleWorld)
             const annonce = worldJson?.clips?.[nom]?.tailleOctets
@@ -1243,7 +1293,10 @@
             })
             const jonctions = []
             for (let i = 0; i < pieces.length - 1; i++) {
-              jonctions.push(M.mesurerJonction(THREE, rig, pieces[i], pieces[i + 1]))
+              jonctions.push(M.mesurerJonction(
+                THREE, rig, pieces[i], pieces[i + 1],
+                M.contratPhase(worldJson, pieces[i].slug, pieces[i + 1].slug),
+              ))
             }
             return {
               nom: seq.nom, etapes: dispo, manquants, jonctions, pieces,
@@ -1426,16 +1479,16 @@
         const d = durees.get(url)
         const anim = animCache.get(url)
         const a = analyses.get(nomClip(url))
-        const r = a?.raccords?.[socleAffiche] ?? a?.raccords?.idle
+        const c = chiffresReferentiel(a)
         b.querySelector('.duree').textContent =
           d !== undefined ? `${d.toFixed(2)} s${isFinite(a?.octets) ? ` · ${Math.round(a.octets / 1024)} ko` : ''}` : anim === null ? 'illisible' : '…'
         const vd = b.querySelector('.vd')
-        for (const c of ['v-excellent', 'v-passe', 'v-limite', 'v-echoue', 'v-inconnu']) b.classList.remove(c)
-        if (a && r) {
+        for (const c2 of ['v-excellent', 'v-passe', 'v-limite', 'v-echoue', 'v-inconnu']) b.classList.remove(c2)
+        if (a && c) {
           b.dataset.verdict = a.verdict
           b.classList.add(M.VERDICTS[a.verdict]?.classe ?? 'v-inconnu')
           vd.className = 'vd ' + (M.VERDICTS[a.verdict]?.classe ?? 'v-inconnu')
-          vd.textContent = `${M.VERDICTS[a.verdict]?.texte ?? '?'} · E ${r.entree.maxCm} / S ${r.sortie.maxCm} cm`
+          vd.textContent = `${M.VERDICTS[a.verdict]?.texte ?? '?'} · ${c.texte}`
         } else {
           delete b.dataset.verdict
           vd.className = 'vd'
@@ -1578,6 +1631,56 @@
       const classeV = (v) => M.VERDICTS[v]?.classe ?? 'v-inconnu'
       const texteV = (v) => M.VERDICTS[v]?.texte ?? 'non analysé'
 
+      /** Le raccord affiché pour un clip jugé contre des socles (le sélecteur de
+       *  socle ne vaut que pour le face à face ; un clip assis n'a que le sien). */
+      function raccordPrincipal(a) {
+        if (!a || !a.raccords) return null
+        return a.raccords[socleAffiche] ?? a.raccords.idle ?? Object.values(a.raccords)[0] ?? null
+      }
+
+      /** Libellé court du référentiel, pour la colonne « jugé contre ». */
+      function refCourt(a) {
+        const t = a?.referentiel?.type
+        if (t === 'couture') return 'couture (boucle)'
+        if (t === 'jonctions') return `jointures ${a.referentiel.de ?? '·'} → ${a.referentiel.vers ?? '·'}`
+        return (a?.referentiel?.socles ?? []).join(' / ') || '—'
+      }
+
+      /**
+       * Les chiffres qui ont décidé du verdict, selon le référentiel :
+       * socles → écarts d'entrée / sortie ; jointures → jointure amont / aval ;
+       * couture → l'écart de pose de la couture et son saut de vitesse.
+       */
+      function chiffresReferentiel(a) {
+        if (!a || !a.referentiel) return null
+        if (a.referentiel.type === 'couture') {
+          if (!a.boucle) return null
+          return {
+            e: NaN, s: a.boucle.maxCm, eDeg: NaN, sDeg: a.boucle.maxDeg,
+            eOs: null, sOs: a.boucle.osMax,
+            texte: `couture ${a.boucle.maxCm} cm · saut ${a.boucle.discontVitDegS} °/s` +
+              (a.vitesseInterne ? ` (clip p95 ${a.vitesseInterne.p95})` : ''),
+          }
+        }
+        if (a.referentiel.type === 'jonctions') {
+          const amont = a.jonctions?.find((x) => x.vers === a.nom && !x.absent)
+          const aval = a.jonctions?.find((x) => x.de === a.nom && !x.absent)
+          return {
+            e: amont ? amont.pireCm : NaN, s: aval ? aval.pireCm : NaN,
+            eDeg: amont ? amont.pireDeg : NaN, sDeg: aval ? aval.pireDeg : NaN,
+            eOs: amont?.osPire ?? null, sOs: aval?.osPire ?? null,
+            texte: `jointures ${amont ? amont.pireCm : '—'} / ${aval ? aval.pireCm : '—'} cm`,
+          }
+        }
+        const r = raccordPrincipal(a)
+        if (!r) return null
+        return {
+          e: r.entree.maxCm, s: r.sortie.maxCm, eDeg: r.entree.maxDeg, sDeg: r.sortie.maxDeg,
+          eOs: r.entree.osCm ?? null, sOs: r.sortie.osCm ?? null,
+          texte: `E ${r.entree.maxCm} / S ${r.sortie.maxCm} cm`,
+        }
+      }
+
       /** Le verdict, en gros, dans la scène. C'est lui qui décide du sort du clip. */
       function majVerdictHud() {
         const carte = el('carteVerdict')
@@ -1593,18 +1696,23 @@
           return
         }
         carte.classList.add(classeV(a.verdict))
-        const r = a.raccords[socleAffiche] ?? a.raccords.idle
-        el('valVerdict').textContent = `${texteV(a.verdict).toUpperCase()} — ${Math.max(r.entree.maxCm, r.sortie.maxCm)} cm`
+        const c = chiffresReferentiel(a)
+        const pic = c ? Math.max(isFinite(c.e) ? c.e : 0, isFinite(c.s) ? c.s : 0) : NaN
+        el('valVerdict').textContent =
+          `${texteV(a.verdict).toUpperCase()}${isFinite(pic) ? ` — ${+pic.toFixed(1)} cm` : ''}`
         el('detVerdict').textContent =
-          `${a.nom} vs ${socleAffiche} · entrée ${r.entree.maxCm} cm (${r.entree.maxDeg}° ${r.entree.osMax ?? '—'})` +
-          ` · sortie ${r.sortie.maxCm} cm (${r.sortie.maxDeg}° ${r.sortie.osMax ?? '—'})`
-        const autres = Object.entries(a.raccords)
-          .filter(([n]) => n !== socleAffiche)
-          .map(([n, x]) => `${n} ${Math.max(x.entree.maxCm, x.sortie.maxCm)} cm (${texteV(x.verdict)})`)
+          `${a.nom} · jugé contre ${a.referentiel?.libelle ?? '?'}${c ? ' · ' + c.texte : ''}`
         const s = a.sim
+        const autres = a.referentiel?.type === 'socles'
+          ? Object.entries(a.raccords)
+              .filter(([n]) => raccordPrincipal(a) !== a.raccords[n])
+              .map(([n, x]) => `${n} ${Math.max(x.entree.maxCm, x.sortie.maxCm)} cm (${texteV(x.verdict)})`)
+          : []
         el('detVerdict2').textContent =
           (autres.length ? autres.join(' · ') + ' · ' : '') +
-          (s ? `fondu de sortie ${s.sortie.deg} °/s vs clip p95 ${s.clip.p95} → ×${s.ratioSortieP95}` : '')
+          (a.referentiel?.type === 'couture' && a.boucle && a.vitesseInterne
+            ? `pose ${texteV(a.verdictPose)} · vitesse ${texteV(a.verdictVitesse)} (saut ${a.boucle.discontVitDegS} °/s vs p95 ${a.vitesseInterne.p95})`
+            : s ? `fondu de sortie ${s.sortie.deg} °/s vs clip p95 ${s.clip.p95} → ×${s.ratioSortieP95}` : '')
       }
 
       // Petites fabriques de DOM : aucun innerHTML avec des données mesurées.
@@ -1648,10 +1756,40 @@
         grand.className = 'enorme ' + classeV(a.verdict)
         grand.textContent = texteV(a.verdict).toUpperCase()
         boite.appendChild(grand)
+        boite.appendChild(ligneFiche('jugé contre', a.referentiel?.libelle ?? '—'))
         boite.appendChild(ligneFiche(
           'règle',
-          `écart ≤ ${M.SEUIL_EXCELLENT_CM} excellent, ≤ ${M.SEUIL_PASSE_CM} passe, ≤ ${M.SEUIL_ECHEC_CM} limite, > ${M.SEUIL_ECHEC_CM} cm ÉCHOUE`,
+          a.referentiel?.type === 'couture'
+            ? `couture : pose ≤ ${M.SEUIL_COUTURE_EXCELLENT_CM} excellent, ≤ ${M.SEUIL_COUTURE_PASSE_CM} passe, ≤ ${M.SEUIL_COUTURE_ECHEC_CM} limite, au-delà ÉCHOUE — et saut de vitesse comparé au p95 du clip`
+            : `écart ≤ ${M.SEUIL_EXCELLENT_CM} excellent, ≤ ${M.SEUIL_PASSE_CM} passe, ≤ ${M.SEUIL_ECHEC_CM} limite, > ${M.SEUIL_ECHEC_CM} cm ÉCHOUE`,
         ))
+
+        if (a.referentiel?.type === 'jonctions' && a.jonctions) {
+          boite.appendChild(titreFiche('jointures de séquence — la mécanique de l’onglet Séquences'))
+          for (const jn of a.jonctions) {
+            if (jn.absent) {
+              boite.appendChild(puce(`${jn.de} → ${jn.vers} : clip absent, jointure non mesurable`, 'reserve'))
+              continue
+            }
+            boite.appendChild(ligneFiche(
+              `${jn.de} → ${jn.vers}`,
+              `${jn.pireCm} cm — ${jn.osPire ?? '—'} · ${jn.pireDeg}° ${jn.osPireDeg ?? ''}`,
+              classeV(jn.verdict),
+            ))
+            if (jn.phaseA != null) {
+              boite.appendChild(ligneFiche('  contrat de phase (sortie)', `le cycle amont est quitté à t = ${jn.phaseA} s — world.json, respecté par wander.ts`))
+            }
+            if (jn.phaseB != null) {
+              boite.appendChild(ligneFiche('  contrat de phase (entrée)', `le cycle aval reprend à t = ${jn.phaseB} s — world.json, respecté par wander.ts`))
+            }
+            if (jn.aBoucle && jn.phases > 1) {
+              boite.appendChild(ligneFiche(
+                '  sur tout le cycle amont',
+                `pire ${jn.pireCm} (à t=${jn.tPire} s) · moyenne ${jn.moyenneCm} · meilleur ${jn.meilleurCm} cm, sur ${jn.phases} phases — aucun contrat de phase déclaré, le cycle peut être quitté n'importe où`,
+              ))
+            }
+          }
+        }
 
         for (const [nomSocle, r] of Object.entries(a.raccords)) {
           boite.appendChild(titreFiche(`contre le socle « ${nomSocle} » — ${texteV(r.verdict)}`))
@@ -1699,11 +1837,20 @@
         }
 
         if (a.boucle) {
-          boite.appendChild(titreFiche('couture de boucle (dernière image ↔ première)'))
+          boite.appendChild(titreFiche(
+            a.referentiel?.type === 'couture'
+              ? 'couture de boucle — LE référentiel de ce clip'
+              : 'couture de boucle (information : le verdict vient d’ailleurs)',
+          ))
           boite.appendChild(ligneFiche('écart de pose', `${a.boucle.maxCm} cm · ${a.boucle.maxDeg}° — ${a.boucle.osMax ?? '—'}`,
-            classeV(M.verdict(a.boucle.maxCm))))
-          boite.appendChild(ligneFiche('discontinuité de vitesse', `${a.boucle.discontVitDegS} °/s — ${a.boucle.osDiscont ?? '—'}`))
-          boite.appendChild(puce('une boucle peut être parfaite en pose et donner un coup de fouet si la vitesse saute.'))
+            classeV(a.verdictPose ?? M.verdictCouturePose(a.boucle.maxCm))))
+          boite.appendChild(ligneFiche(
+            'discontinuité de vitesse',
+            `${a.boucle.discontVitDegS} °/s — ${a.boucle.osDiscont ?? '—'}` +
+              (a.vitesseInterne ? ` · p95 du clip ${a.vitesseInterne.p95} °/s (max ${a.vitesseInterne.max})` : ''),
+            a.verdictVitesse ? classeV(a.verdictVitesse) : undefined,
+          ))
+          boite.appendChild(puce('une boucle peut être parfaite en pose et donner un coup de fouet si la vitesse saute — d’où les deux verdicts.'))
         }
       }
 
@@ -1947,7 +2094,19 @@
             `${j.pireCm} cm — ${j.osPire ?? '—'} · ${j.pireDeg}° ${j.osPireDeg ?? '—'}`,
             classeV(j.verdict),
           ))
-          if (j.aBoucle) {
+          if (j.phaseA != null) {
+            boite.appendChild(ligneFiche(
+              '  contrat de phase (sortie)',
+              `le cycle sortant est quitté à t = ${j.phaseA} s — world.json, respecté par wander.ts`,
+            ))
+          }
+          if (j.phaseB != null) {
+            boite.appendChild(ligneFiche(
+              '  contrat de phase (entrée)',
+              `le cycle d'arrivée reprend à t = ${j.phaseB} s, pas à t = 0`,
+            ))
+          }
+          if (j.aBoucle && j.phases > 1) {
             boite.appendChild(ligneFiche(
               '  sur tout le cycle sortant',
               `pire ${j.pireCm} (à t=${j.tPire} s) · moyenne ${j.moyenneCm} · meilleur ${j.meilleurCm} cm, sur ${j.phases} phases`,
@@ -2101,6 +2260,213 @@
       el('btnBalayage').onclick = () => balayer().catch((e) => journal(`passe : ${texteErreur(e)}`, 'err'))
       el('btnStopBalayage').onclick = () => { arreterBalayage = true }
 
+      // ════════════════════════════════════════════════════════════════════════
+      // PASSE MULTI-MODÈLES — « parfait, pour toutes les tailles et toutes les
+      // formes » : l'analyse complète, rejouée sur chaque .vrm de vrm/, et la
+      // matrice clips × modèles qui en sort. Chaque modèle est chargé par
+      // chargerModele(), qui DISPOSE le précédent : la mémoire reste plate.
+      // ════════════════════════════════════════════════════════════════════════
+      let matrice = null // { modeles: [{url, nom, hauteur, hanches, echec?}], clips: Map }
+
+      async function passeMultiModeles() {
+        if (balayageEnCours || !urlsClips.length) return
+        const sel = el('selModele')
+        const urlsModeles = [...sel.options].map((o) => o.value)
+        if (!urlsModeles.length) { journal('aucun modèle dans vrm/ — passe impossible', 'err'); return }
+        const modeleInitial = sel.value
+        balayageEnCours = true
+        arreterBalayage = false
+        ouvrirCampagne()
+        for (const id of ['btnRaccords', 'btnBalayage', 'btnMatrice']) el(id).disabled = true
+        el('btnStopBalayage').disabled = false
+        matrice = { modeles: [], clips: new Map() }
+        for (let i = 0; i < urlsModeles.length; i++) {
+          if (arreterBalayage) break
+          const um = urlsModeles[i]
+          const nomM = decodeURIComponent(um.split('/').pop())
+          annoncerProgres(`Passe multi-modèles ${i + 1}/${urlsModeles.length}`, nomM, i / urlsModeles.length)
+          el('etatClips').textContent = `multi-modèles ${i + 1}/${urlsModeles.length} — ${nomM}`
+          sel.value = um
+          const ok = await chargerModele(um, { leger: true })
+          if (!ok || !rig) {
+            matrice.modeles.push({ url: um, nom: nomM, echec: true })
+            continue
+          }
+          const colonne = matrice.modeles.length
+          matrice.modeles.push({ url: um, nom: nomM, hauteur: hauteurModele, hanches: hanchesRepos })
+          const cibles = urlsClips.filter((u) => animCache.get(u))
+          const memoLecture = enLecture
+          enLecture = false
+          const snap = M.sauverPose(THREE, rig)
+          let faits = 0
+          for (const u of cibles) {
+            if (arreterBalayage) break
+            // sansSim / sansCycle : le verdict n'en dépend pas, et des dizaines de
+            // modèles × des dizaines de fondus simulés prendraient des heures.
+            sansCasser(`analyse ${nomClip(u)} sur ${nomM}`, () => analyser(u, { sansSim: true, sansCycle: true }))
+            if (++faits % 12 === 0) await rendreLaMain()
+          }
+          M.restaurerPose(rig, snap)
+          enLecture = memoLecture
+          for (const a of analyses.values()) {
+            if (!matrice.clips.has(a.nom)) {
+              matrice.clips.set(a.nom, { famille: a.famille, ref: refCourt(a), verdicts: [] })
+            }
+            const c = chiffresReferentiel(a)
+            matrice.clips.get(a.nom).verdicts[colonne] = {
+              v: a.verdict,
+              cm: c ? +Math.max(isFinite(c.e) ? c.e : 0, isFinite(c.s) ? c.s : 0).toFixed(1) : NaN,
+            }
+          }
+          sansCasser('matrice', dessinerMatrice)
+          await rendreLaMain()
+        }
+        const interrompue = arreterBalayage
+        // Retour au modèle de départ : la page repart d'un état propre et complet.
+        arreterBalayage = false
+        sel.value = modeleInitial
+        await chargerModele(modeleInitial)
+        balayageEnCours = false
+        for (const id of ['btnRaccords', 'btnBalayage', 'btnMatrice']) el(id).disabled = false
+        el('btnStopBalayage').disabled = true
+        sansCasser('matrice', dessinerMatrice)
+        const nbOk = matrice.modeles.filter((m) => !m.echec).length
+        const bilan = bilanMatrice()
+        el('etatClips').textContent = interrompue
+          ? `passe multi-modèles interrompue à ${matrice.modeles.length}/${urlsModeles.length} modèles`
+          : `passe multi-modèles terminée : ${nbOk} modèles`
+        el('etatMatrice').textContent =
+          `${matrice.clips.size} clips × ${nbOk} modèles · ${bilan.partout} clips passent partout · ${bilan.aRegarder.length} en limite/échec quelque part`
+        if (!interrompue && !ongletChoisiPendant) basculerOnglet('pMatrice')
+        annoncerFin(
+          interrompue
+            ? `Passe multi-modèles interrompue — ${matrice.modeles.length}/${urlsModeles.length} modèles`
+            : `Passe multi-modèles terminée — ${nbOk} modèles × ${matrice.clips.size} clips`,
+          `${bilan.partout} clips passent partout · ${bilan.aRegarder.length} à regarder`,
+          true,
+        )
+        poserAnnonce(ongletActif)
+      }
+
+      /** Le pire verdict de chaque clip sur l'ensemble des modèles, et la liste à regarder. */
+      function bilanMatrice() {
+        let partout = 0
+        const aRegarder = []
+        if (!matrice) return { partout, aRegarder }
+        for (const [nomC, ligne] of matrice.clips) {
+          const vs = ligne.verdicts.filter(Boolean)
+          const pire = vs.length ? M.pireVerdict(...vs.map((v) => v.v)) : 'inconnu'
+          ligne.pire = pire
+          ligne.nbEchoue = vs.filter((v) => v.v === 'echoue').length
+          ligne.nbLimite = vs.filter((v) => v.v === 'limite').length
+          ligne.nbMauvais = ligne.nbEchoue + ligne.nbLimite
+          if (pire === 'echoue' || pire === 'limite') aRegarder.push(nomC)
+          else if (vs.length) partout++
+        }
+        return { partout, aRegarder }
+      }
+
+      const SYMBOLE_V = { excellent: '✓✓', passe: '✓', limite: '~', echoue: '✗', inconnu: '?' }
+
+      function dessinerMatrice() {
+        const boite = el('matrice')
+        boite.textContent = ''
+        if (!matrice || !matrice.modeles.length) {
+          boite.appendChild(puce('Lance « passe multi-modèles » (onglet Clips) pour remplir cette matrice.'))
+          return
+        }
+        bilanMatrice()
+        const t = document.createElement('table')
+        const thead = document.createElement('thead')
+        const tr = document.createElement('tr')
+        for (const titre of ['clip', 'famille', 'jugé contre', 'partout ?']) {
+          const th = document.createElement('th')
+          th.textContent = titre
+          tr.appendChild(th)
+        }
+        for (const m of matrice.modeles) {
+          const th = document.createElement('th')
+          th.textContent = m.echec ? `${m.nom} ✗` : m.nom.replace(/\.vrm$/i, '')
+          th.title = m.echec ? `${m.nom} : modèle illisible` : `${m.nom} — ${m.hauteur.toFixed(2)} m, hanches ${m.hanches.toFixed(3)} m`
+          tr.appendChild(th)
+        }
+        thead.appendChild(tr)
+        const tbody = document.createElement('tbody')
+        const nomsTries = [...matrice.clips.keys()].sort((x, y) => {
+          const a = matrice.clips.get(x), b = matrice.clips.get(y)
+          const ra = M.VERDICTS[a.pire]?.rang ?? -1, rb = M.VERDICTS[b.pire]?.rang ?? -1
+          if (ra !== rb) return rb - ra
+          return x.localeCompare(y)
+        })
+        for (const nomC of nomsTries) {
+          const ligne = matrice.clips.get(nomC)
+          const trc = document.createElement('tr')
+          const ajouter = (texte, classe, title) => {
+            const td = document.createElement('td')
+            td.textContent = texte
+            if (classe) td.className = classe
+            if (title) td.title = title
+            trc.appendChild(td)
+          }
+          ajouter(nomC)
+          ajouter(ligne.famille)
+          ajouter(ligne.ref)
+          const vs = ligne.verdicts.filter(Boolean)
+          ajouter(
+            ligne.pire === 'echoue' || ligne.pire === 'limite'
+              ? [ligne.nbEchoue ? `✗ ${ligne.nbEchoue}` : '', ligne.nbLimite ? `~ ${ligne.nbLimite}` : '']
+                  .filter(Boolean).join(' · ') + ` / ${vs.length}`
+              : vs.length ? 'passe partout' : '—',
+            classeV(ligne.pire),
+          )
+          matrice.modeles.forEach((m, i) => {
+            if (m.echec) { ajouter('·') ; return }
+            const v = ligne.verdicts[i]
+            if (!v) { ajouter('—'); return }
+            ajouter(
+              `${SYMBOLE_V[v.v] ?? '?'} ${isFinite(v.cm) ? v.cm : ''}`,
+              classeV(v.v),
+              `${nomC} sur ${m.nom} : ${texteV(v.v)}${isFinite(v.cm) ? ` (${v.cm} cm)` : ''}`,
+            )
+          })
+          tbody.appendChild(trc)
+        }
+        t.append(thead, tbody)
+        boite.appendChild(t)
+        const lg = document.createElement('div')
+        lg.className = 'legende'
+        lg.textContent =
+          '✓✓ excellent · ✓ passe · ~ limite · ✗ échoue — le chiffre est l\'écart (cm) qui a décidé du verdict, ' +
+          'sur le référentiel de la colonne « jugé contre ». Survole une case ou un en-tête pour le détail (taille du modèle). ' +
+          'Les lignes sont triées : pires d\'abord.'
+        boite.appendChild(lg)
+      }
+
+      el('btnMatrice').onclick = () => passeMultiModeles().catch((e) => journal(`multi-modèles : ${texteErreur(e)}`, 'err'))
+      el('btnMatriceTsv').onclick = async () => {
+        if (!matrice || !matrice.modeles.length) return
+        const entete = ['clip', 'famille', 'jugé contre', 'pire', ...matrice.modeles.map((m) => m.nom)].join('\t')
+        const corps = [...matrice.clips.entries()].map(([nomC, ligne]) =>
+          [
+            nomC, ligne.famille, ligne.ref, texteV(ligne.pire ?? 'inconnu'),
+            ...matrice.modeles.map((m, i) => {
+              if (m.echec) return 'modèle illisible'
+              const v = ligne.verdicts[i]
+              return v ? `${texteV(v.v)}${isFinite(v.cm) ? ` (${v.cm})` : ''}` : ''
+            }),
+          ].join('\t'),
+        ).join('\n')
+        try {
+          await navigator.clipboard.writeText(entete + '\n' + corps)
+          el('etatMatrice').textContent = `matrice copiée (TSV, ${matrice.clips.size} lignes × ${matrice.modeles.length} modèles)`
+        } catch (e) { journal(`copie impossible : ${texteErreur(e)}`, 'warn') }
+      }
+      el('btnLargeMatrice').onclick = () => {
+        document.body.classList.toggle('large')
+        el('btnLargeMatrice').classList.toggle('actif', document.body.classList.contains('large'))
+        el('btnLargeMatrice').textContent = document.body.classList.contains('large') ? 'rétrécir' : 'élargir'
+      }
+
       /**
        * Une ligne de tableau par clip : l'analyse des raccords (statique + fondu
        * simulé) et, si une passe en direct a eu lieu, ses trois mesures.
@@ -2114,20 +2480,21 @@
           if (filtreDomaine !== 'tous' && M.domaine(nom) !== filtreDomaine) continue
           const a = analyses.get(nom)
           const d = mesuresDirectes.get(nom) ?? {}
-          const r = a?.raccords?.[socleAffiche] ?? a?.raccords?.idle
+          const c = chiffresReferentiel(a)
           const t = a?.raccords?.['idle-talking']
           const ctrlV = a?.monde?.controles?.vitesseMS
           const ctrlH = a?.monde?.controles?.['hanchesFraction.min']
           lignes.push({
-            nom, url, domaine: M.domaine(nom), famille: a?.famille ?? M.familleDeduite(nom),
+            nom, url, domaine: M.domaine(nom), famille: a?.famille ?? M.familleDe(nom, worldJson),
+            refCourt: a ? refCourt(a) : '—', refType: a?.referentiel?.type ?? null,
             loco: estLocomotion(nom),
             verdict: a?.verdict ?? 'inconnu',
             rang: M.VERDICTS[a?.verdict]?.rang ?? -1,
             duree: durees.get(url) ?? NaN,
             octets: tailles.get(url) ?? NaN,
-            entreeCm: r ? r.entree.maxCm : NaN, entreeDeg: r ? r.entree.maxDeg : NaN, entreeOs: r?.entree.osMax ?? '—',
-            sortieCm: r ? r.sortie.maxCm : NaN, sortieDeg: r ? r.sortie.maxDeg : NaN, sortieOs: r?.sortie.osMax ?? '—',
-            osCm: r?.sortie.osCm ?? '—',
+            entreeCm: c ? c.e : NaN, entreeDeg: c ? c.eDeg : NaN, entreeOs: c?.eOs ?? '—',
+            sortieCm: c ? c.s : NaN, sortieDeg: c ? c.sDeg : NaN, sortieOs: c?.sOs ?? '—',
+            osCm: c?.sOs ?? '—',
             talkEntreeCm: t ? t.entree.maxCm : NaN, talkSortieCm: t ? t.sortie.maxCm : NaN,
             fonduEntree: a?.sim ? a.sim.entree.deg : NaN,
             fonduSortie: a?.sim ? a.sim.sortie.deg : NaN,
@@ -2157,10 +2524,18 @@
         { cle: 'nom', titre: 'clip', fmt: (r) => r.nom + (r.loco ? ' †' : '') },
         { cle: 'domaine', titre: 'domaine', fmt: (r) => (r.domaine === 'monde' ? 'monde 3D' : 'face') },
         { cle: 'famille', titre: 'famille', fmt: (r) => r.famille },
+        // ── Le référentiel du verdict : contre QUOI ce clip est jugé ──────────
+        { cle: 'refCourt', titre: 'jugé contre', fmt: (r) => r.refCourt },
         // ── LE VERDICT : la règle d'acceptation, en premier après l'identité ──
         { cle: 'rang', titre: 'VERDICT', fmt: (r) => texteV(r.verdict), classe: (r) => classeV(r.verdict) },
-        { cle: 'entreeCm', titre: 'entrée cm', fmt: (r) => n1(r.entreeCm), classe: (r) => classeV(M.verdict(r.entreeCm)) },
-        { cle: 'sortieCm', titre: 'sortie cm', fmt: (r) => n1(r.sortieCm), classe: (r) => classeV(M.verdict(r.sortieCm)) },
+        // entrée / sortie : les cm sur l'échelle du référentiel — un fondu (2/7/10)
+        // ou, pour une couture franchie en une image, l'échelle stricte (0,5/2/4).
+        { cle: 'entreeCm', titre: 'entrée cm', fmt: (r) => n1(r.entreeCm),
+          classe: (r) => (isFinite(r.entreeCm) ? classeV(M.verdict(r.entreeCm)) : '') },
+        { cle: 'sortieCm', titre: 'sortie cm', fmt: (r) => n1(r.sortieCm),
+          classe: (r) => (isFinite(r.sortieCm)
+            ? classeV(r.refType === 'couture' ? M.verdictCouturePose(r.sortieCm) : M.verdict(r.sortieCm))
+            : '') },
         { cle: 'entreeDeg', titre: 'entrée °', fmt: (r) => n1(r.entreeDeg) },
         { cle: 'sortieDeg', titre: 'sortie °', fmt: (r) => n1(r.sortieDeg) },
         { cle: 'osCm', titre: 'os de sortie', fmt: (r) => r.osCm },
@@ -2248,11 +2623,19 @@
         const parV = {}
         for (const r of lignes) parV[r.verdict] = (parV[r.verdict] ?? 0) + 1
         for (const t2 of [
-          `VERDICT : la règle « idle → anim → idle ». Écart d'emboîtement max (entrée ou sortie, contre tous les socles) : ` +
-            `≤ ${M.SEUIL_EXCELLENT_CM} excellent · ≤ ${M.SEUIL_PASSE_CM} passe · ≤ ${M.SEUIL_ECHEC_CM} limite · > ${M.SEUIL_ECHEC_CM} cm ÉCHOUE.`,
+          `VERDICT : chaque clip est jugé contre SON référentiel — colonne « jugé contre ». Un geste s'emboîte dans le socle qu'il ` +
+            `quitte et retrouve en fondu (idle / idle-talking debout, world-sit-idle assis — un clip assis est à ~45 cm du socle debout ` +
+            `PAR CONSTRUCTION, c'est la hauteur d'une chaise, pas un défaut) ; une boucle (allure, pivot, repos, geste tenu) se juge sur ` +
+            `sa COUTURE ; une transition (walk-start, sit-enter…) se juge à ses JOINTURES de séquence, aux phases que world.json déclare ` +
+            `et que wander.ts respecte.`,
+          `seuils raccords et jointures (franchis en fondu) : ≤ ${M.SEUIL_EXCELLENT_CM} excellent · ≤ ${M.SEUIL_PASSE_CM} passe · ` +
+            `≤ ${M.SEUIL_ECHEC_CM} limite · > ${M.SEUIL_ECHEC_CM} cm ÉCHOUE. Seuils de couture (franchie en UNE image) : ` +
+            `≤ ${M.SEUIL_COUTURE_EXCELLENT_CM} · ≤ ${M.SEUIL_COUTURE_PASSE_CM} · ≤ ${M.SEUIL_COUTURE_ECHEC_CM} cm, plus le saut de ` +
+            `vitesse comparé au p95 du clip.`,
           `bilan : ${Object.entries(parV).map(([k, v]) => `${v} ${texteV(k)}`).join(' · ')}.`,
-          `entrée / sortie cm = distance parcourue par l'os le plus concerné, en position monde, entre l'extrémité du clip et la pose ` +
-            `moyenne du socle « ${socleAffiche} » ; talk E/S = les mêmes contre idle-talking (le socle vers lequel les gestes reviennent réellement).`,
+          `entrée / sortie cm = distance parcourue par l'os le plus concerné, en position monde : contre le socle du référentiel pour ` +
+            `un geste (socle affiché : « ${socleAffiche} » pour le face à face), jointure amont / aval pour une transition, couture pour ` +
+            `une boucle (colonne sortie) ; talk E/S = les mêmes contre idle-talking (face à face uniquement).`,
           `fondu °/s = pic de vitesse angulaire pendant le fondu de retour simulé · clip p95 = 95e centile pendant le clip · ` +
             `fondu/clip > 1 = la transition est plus violente que l'animation, l'œil y voit une secousse.`,
           `v mes. / v attendue = vitesse d'allure que le banc mesure, contre celle de world.json mise à l'échelle par ×${isFinite(echelleWorld) ? echelleWorld.toFixed(4) : '?'} ; ` +
@@ -2296,7 +2679,7 @@
 
       /** Onglets qui remplissent l'écran de données : la scène y passe au second
        *  plan, ses cartes de mesure n'ont donc rien à faire par-dessus. */
-      const ONGLETS_DONNEES = new Set(['pTableau', 'pRaccords', 'pMonde', 'pSequences', 'pDiagnostic'])
+      const ONGLETS_DONNEES = new Set(['pTableau', 'pRaccords', 'pMonde', 'pSequences', 'pDiagnostic', 'pMatrice'])
 
       /** Les mesures appartiennent à la vue scène : visibles sur Clips et Décors,
        *  effacées partout où l'on vient lire des données. */
@@ -2319,6 +2702,7 @@
         else if (id === 'pMonde') majFicheMonde()
         else if (id === 'pDiagnostic') majFicheDiagnostic().catch((e) => journal(`diagnostic : ${texteErreur(e)}`, 'warn'))
         else if (id === 'pSequences') majFicheSequence()
+        else if (id === 'pMatrice') sansCasser('matrice', dessinerMatrice)
       }
       for (const b of document.querySelectorAll('#onglets button')) b.onclick = () => basculerOnglet(b.dataset.panneau, true)
       majVisibiliteHud()
@@ -2623,8 +3007,10 @@
         worldJson: () => worldJson,
         echelleWorld: () => echelleWorld,
         hanchesRepos: () => hanchesRepos,
+        matrice: () => matrice,
         analyser,
         analyserTout,
+        passeMultiModeles,
         construireLignes,
         dessinerTableau,
         mesures: M,
