@@ -12,6 +12,7 @@ import {
   MOUSE,
   Object3D,
   PerspectiveCamera,
+  Quaternion,
   Raycaster,
   Scene,
   SRGBColorSpace,
@@ -47,6 +48,7 @@ import { createLegIk } from './legIk'
 import type { FootMode, LegIk } from './legIk'
 import { createJointLimits } from './jointLimits'
 import type { JointLimits } from './jointLimits'
+import { CriticallyDampedSpringPoseHelper } from './overteMath'
 import { fetchSceneMap } from './sceneMap'
 import type { SceneMap } from './sceneMap'
 
@@ -610,6 +612,15 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   let sceneMap: SceneMap | null = null
   // Ce que les pieds doivent faire à cette image (cf. legIk.FootMode).
   let footMode: FootMode = 'planted'
+  // Ressort amorti critique d'Overte (AnimUtil.h) sur la VERTICALE du corps :
+  // la marche franchit un changement de niveau de la carte (l'estrade) par un
+  // saut discret de p.y — le ressort l'absorbe en ~0,3 s (timescale 0,15 s =
+  // « mi-chemin par timescale »). L'horizontale passe telle quelle (échelle de
+  // temps quasi nulle) : lisser le déplacement retarderait la marche.
+  const bodySpring = new CriticallyDampedSpringPoseHelper()
+  bodySpring.horizontalTimescale = 1e-6
+  const springPose = { trans: new Vector3(), rot: new Quaternion() }
+  let frameDelta = 1 / 60
   // Déplacement au sol dépeint par l'animation à cette image, relevé UNE FOIS
   // par tour de boucle (cf. legIk.stride) et lu par le comportement.
   const strideBuf = { x: 0, z: 0 }
@@ -977,7 +988,17 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   const wanderHost: WanderHost = {
     hips: hipsRest,
     place(x, y, z, yaw, ground) {
-      avatarGroup.position.set(x, y, z)
+      // Verticale au ressort — debout seulement : assis, l'altitude est déjà
+      // interpolée par le glissement d'assise (la re-lisser prendrait du
+      // retard sur le clip), et un vrai saut (retour à l'accueil, changement
+      // de décor) se téléporte au lieu de traîner une rampe de 15 cm.
+      springPose.trans.set(x, y, z)
+      const jump =
+        Math.abs(y - avatarGroup.position.y) > 0.5 * hipsRest() ||
+        Math.hypot(x - avatarGroup.position.x, z - avatarGroup.position.z) > 0.5 * hipsRest()
+      if (footMode === 'reach' || jump) bodySpring.teleport(springPose)
+      else bodySpring.update(springPose, frameDelta)
+      avatarGroup.position.set(x, springPose.trans.y, z)
       avatarGroup.rotation.y = yaw
       bodyGround = ground
     },
@@ -1508,6 +1529,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   function tick(): void {
     rafId = requestAnimationFrame(tick)
     const delta = Math.min(clock.getDelta(), 0.1)
+    frameDelta = delta // lu par place() — le ressort vertical du corps
     if (mixer) {
       // Arbitrage animation ↔ idle. IdleAnimator écrit `base + offset` sur ses
       // 9 os à chaque frame : tel quel, il écraserait l'animation. La base DEVIENT
@@ -1550,7 +1572,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
         wander?.update(delta)
         // 3. CORRECTION D'ASSIETTE, une fois le corps posé : elle vise le sol
         //    sous les pieds, donc elle a besoin de la position définitive.
-        legIk.apply(footMode, groundAt)
+        //    `delta` alimente le lissage du pole vector du genou et le fondu
+        //    anti-pop du changement de régime (machineries d'Overte).
+        legIk.apply(footMode, groundAt, delta)
       }
       // Le squelette porte maintenant la pose du socle, et RIEN d'autre : c'est
       // l'instant juste pour recadrer, avant que l'idle n'ajoute sa respiration
