@@ -37,3 +37,10 @@ devtools/diagnostic-out/
 *.log
 .env
 .env.*
+
+# Archives personnelles posées à la racine (collections de modèles, exports) :
+# jamais dans le dépôt. Chemins ancrés à la racine — pas des règles par extension
+# globales (cf. garde-fou ci-dessus).
+/*.zip
+/*.7z
+/*.7z.*
