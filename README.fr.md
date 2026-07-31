@@ -76,8 +76,9 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
   personnage exprime une émotion, et un idle « qui parle » pendant qu'une réponse s'écrit. Le nom du
   fichier dans `vrma/` est toute la configuration — `idle`, les six noms d'émotion (`happy`, `sad`,
   `angry`, `surprised`, `relaxed`, `neutral`), un suffixe `-2`/`-3` pour des variantes tirées au
-  hasard, et un préfixe `world-` pour les clips réservés à la scène 3D (allures, postures assises,
-  saut), qui ne sont donc même pas téléchargés ici ; tout autre nom est ignoré. La respiration
+  hasard, et un préfixe `world-` pour les clips réservés à la scène 3D (allures, arrêts, gestes
+  tenus, postures et émotes assises), qui ne sont donc même pas téléchargés ici ; tout autre nom
+  est ignoré. La respiration
   et le sway de la tête continuent **par-dessus** l'animation, et le visage reste l'affaire du
   modèle. Les clips livrés avec l'app sont tous librement redistribuables — voir les
   [crédits](#crédits). Interrupteur dans *Réglages > Apparence > Scène*.
@@ -233,15 +234,19 @@ qu'aucune licence n'oblige à citer**, parce qu'un crédit caché n'honore perso
 
 ### Animations
 
-- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **30 des 32 clips**, et de
-  loin la source principale : **tout le mode face à face** — les quatre animations de repos, le
-  repos « en train de parler », et les douze gestes (`neutral`, `happy` ×3, `sad`, `angry` ×2,
-  `relaxed` ×2, `nod`, `shake`, `think`) — plus l'intégralité de la locomotion et des postures
-  assises de la scène 3D : marche, marche lente et rapide, recul, pivots, départ, arrêt, maintien
-  assis, parole assise. Ce ne sont ni des captures brutes ni du Mixamo recyclé : elles ont été
-  **faites à la main dans Maya** par un animateur salarié de High Fidelity, et c'est ce soin
-  d'animateur qui se voit — les doigts sont animés, les poses se raccordent entre elles, et les
-  boucles se referment.
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **107 des 109 clips**, et de
+  loin la source principale : **tout le mode face à face** — cinq animations de repos, quatre repos
+  « en train de parler », et dix-neuf gestes (`neutral`, `happy` ×3, `sad`, `angry` ×2, `relaxed`
+  ×2, `nod` ×5, `shake`, `think` ×2, `raise-hand` ×2) — plus l'intégralité de la locomotion, des
+  gestes tenus et des postures assises de la scène 3D : vingt allures, cinq arrêts, pivots, départ,
+  changements de posture debout, gestes tenus décomposés en intro-maintien-sortie, et le
+  vocabulaire assis complet (maintiens, parole, micro-variations, pivots, accord, désaccord, joie,
+  pointage, lever de main). Le **graphe d'animation** d'Overte est livré avec, sous la même licence
+  (`vrma/transitions.json`) : 34 machines à états, 165 états, 392 transitions — la logique de
+  comportement d'un avatar, déjà résolue. Ce ne sont ni des captures brutes ni du Mixamo recyclé :
+  elles ont été **faites à la main dans Maya** par un animateur salarié de High Fidelity, et c'est
+  ce soin d'animateur qui se voit — les doigts sont animés, les poses se raccordent entre elles, et
+  les boucles se referment.
   Copyright High Fidelity (2013-2019), contributeurs Vircadia (2019-2021), Overte e.V. (2022-2026).
 - **[Quaternius](https://quaternius.com)**, *Universal Animation Library* — *CC0 1.0*, domaine
   public, **aucune attribution requise** : on la donne quand même. Deux clips, la seule famille

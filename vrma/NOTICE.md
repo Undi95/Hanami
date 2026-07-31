@@ -14,12 +14,18 @@ redistribution.*
 
 ## 1. Overte — Apache License 2.0
 
-**Trente fichiers sur trente-deux** dérivent des animations d'avatar du projet
+**Cent sept fichiers sur cent neuf** dérivent des animations d'avatar du projet
 **Overte** (`overte-org/overte`, `interface/resources/avatar/animations/`,
-127 fichiers FBX) : **tout le domaine face à face** — les quatre animations de
-repos, qui sont le socle permanent de la scène, et les douze gestes — ainsi que
-tout le domaine monde 3D sauf les deux transitions assises. C'est la source
-de la bibliothèque, à deux fichiers près.
+127 fichiers FBX) : **tout le domaine face à face** — les neuf animations de
+repos et de parole, qui sont le socle permanent de la scène, et les dix-neuf
+gestes — ainsi que tout le domaine monde 3D sauf les deux transitions assises.
+C'est la source de la bibliothèque, à deux fichiers près.
+
+Le fichier [`transitions.json`](transitions.json) livré à côté des clips dérive de
+la **même source** sous la **même licence** : c'est la lecture exploitable de
+`interface/resources/avatar/avatar-animation.json` — 34 machines à états, 165
+états, 392 transitions, 116 variables. Il n'y a pas de restriction supplémentaire :
+la mention Apache-2.0 ci-dessous le couvre comme elle couvre les `.vrma`.
 
 Ces animations ont été produites en interne chez High Fidelity par un animateur,
 dans Maya — les métadonnées internes des FBX déclarent
@@ -28,12 +34,13 @@ dans Maya — les métadonnées internes des FBX déclarent
 Mixamo recyclé : la recherche de chaînes ne donne aucune occurrence de « mixamo »
 ou « adobe », et aucun os ne porte le préfixe `mixamorig:`.
 
-*Thirty files out of thirty-two derive from the avatar animations of the
-**Overte** project (127 FBX files): the whole face-to-face domain — all four idle
-animations, which are the permanent base of the scene, and the twelve gestures —
-plus the whole 3D-world domain except the two seated transitions. It is
-the library's source, bar two files. These animations were hand-made in-house at
-High Fidelity by an animator, in Maya.*
+*One hundred and seven files out of one hundred and nine derive from the avatar
+animations of the **Overte** project (127 FBX files): the whole face-to-face
+domain — all nine idle and talking animations, which are the permanent base of the
+scene, and the nineteen gestures — plus the whole 3D-world domain except the two
+seated transitions. `transitions.json` derives from the same repository's animation
+graph under the same licence. These animations were hand-made in-house at High
+Fidelity by an animator, in Maya.*
 
 ```
 Copyright (c) 2013-2019, High Fidelity, Inc.
@@ -65,7 +72,7 @@ Dépôt / repository : <https://github.com/overte-org/overte>
 | `idle-2.vrma` | `idle04.fbx` | 0,033 → 30,067 s |
 | `idle-3.vrma` | `idle03.fbx` | sous-boucle 4,833 → 18,167 s |
 | `neutral.vrma` | `idle_once_headtilt.fbx` | intégralité, 5,07 s |
-| `happy.vrma` | `emote_clap01_all.fbx` | intégralité, 5,30 s |
+| `happy.vrma` | `emote_clap01_all.fbx` | intégralité, images 1 → 160, 5,30 s — **reconverti à la passe v6**, cf. plus bas |
 | `happy-2.vrma` | `emote_clap02_all.fbx` | images 1 → 114, 3,77 s |
 | `happy-3.vrma` | `emote_clap03_all.fbx` | images 15 → 163, 4,93 s |
 | `sad.vrma` | `emote_disagree_drophead.fbx` | intégralité, 3,27 s |
@@ -103,6 +110,50 @@ animation source.
 *`angry.vrma` and `shake.vrma` derive from the **same** FBX: the first is the
 gesture played for the anger emotion, the second the reserved "no" primitive.*
 
+### Domaine face à face — les douze clips de la passe v6
+
+Repartie du **graphe d'animation** plutôt que des noms de fichiers, la passe v6
+donne pour chaque clip le nœud qui le déclare et la fenêtre que ce nœud déclare —
+c'est vérifiable ligne à ligne dans `transitions.json`.
+
+| Fichier dérivé | Animation source Overte | Nœud du graphe | Fenêtre (images), durée |
+| --- | --- | --- | --- |
+| `idle-4.vrma` | `idle02.fbx` | `masterIdle2` | 1→400 ×0,75, 17,73 s |
+| `idle-7.vrma` | `idleWS_all.fbx` | `idleWS_all` | 1→1620 ×0,7, 18,90 s |
+| `idle-talking-5.vrma` | `talk04.fbx` | `talk04` | 1→500, 16,63 s |
+| `idle-talking-6.vrma` | `talk_lefthand.fbx` | `talk_lefthand` | 1→500, 16,63 s |
+| `idle-talking-7.vrma` | `talk_righthand.fbx` | `talk_righthand` | 1→502, 16,73 s |
+| `think-2.vrma` | `idle_once_lookleftright.fbx` | `idle_once_lookleftright` | 1→375 ×0,7, 17,81 s |
+| `nod-2.vrma` | `emote_agree_acknowledge.fbx` | `positiveAcknowledge` | 1→64, 2,10 s |
+| `nod-3.vrma` | `emote_agree_headnodyes.fbx` | `positiveHeadNodYes` | 1→94, 3,10 s |
+| `nod-4.vrma` | `emote_agree_longheadnod.fbx` | `positiveLongHeadNod` | 1→68, 2,20 s |
+| `nod-5.vrma` | `emote_agree_thoughtfulheadnod.fbx` | `positiveThoughtfulHeadNod` | 1→84, 2,73 s |
+| `raise-hand.vrma` | `emote_raisehand03_all.fbx` | `raiseHand03` intro + boucle + sortie | 1→300, 9,97 s |
+| `raise-hand-2.vrma` | `emote_raisehand04_all.fbx` | `raiseHand04` intro + boucle + sortie | 1→400, 13,27 s |
+
+`happy.vrma` a été **reconverti** depuis la même source et la même fenêtre
+(`emote_clap01_all.fbx`, images 1 → 160) par la chaîne de la passe v6 : son écart
+au socle passe de 8,0 à 5,3 cm, sur la pire de ses quatre mesures. Le fichier
+précédent n'était ni tronqué ni fautif — il sortait simplement d'une chaîne de
+conversion antérieure. `happy-2.vrma` et `happy-3.vrma` ont été **laissés en
+place** : leurs reconversions mesurent moins bien (7,4 → 8,7 cm et 8,0 → 14,9 cm,
+la seconde parce que la version livrée rogne un reliquat de pose parasite de
+quinze images que la reconversion garde).
+
+**Ralenti de lecture.** Trois de ces clips sont joués par Overte à une cadence
+réduite que son graphe déclare (`timeScale` : 0,75 pour `idle02`, 0,70 pour
+`idleWS_all` et `idle_once_lookleftright`). Le nombre d'images ne change pas, la
+durée si : `idle-4` dure 17,73 s au lieu de 13,30. C'est **déjà appliqué au
+fichier**.
+
+*The twelve clips added by pass v6, taken from Overte's animation graph rather
+than from file names: each row gives the graph node that declares the clip and the
+frame window that node declares. Three of them are played at a reduced rate that
+Overte's graph declares (`timeScale`), already baked into the file. `happy.vrma`
+was re-converted from the same source and window by the v6 chain (8.0 → 5.3 cm to
+the base pose); `happy-2` and `happy-3` were left in place, their re-conversions
+measuring worse.*
+
 ### Domaine monde 3D / 3D-world domain
 
 Les fenêtres reprises sont celles que le graphe d'animation d'Overte
@@ -133,6 +184,163 @@ images, et l'image suivant `endFrame` est déjà la copie de `startFrame`.
 Modifications apportées / changes made : os Mixamo mappés vers les os humanoïdes
 VRM 1.0, frame de bind pose parasite retirée, échelle cm → m, ré-échantillonnage
 à 30 fps, export en `VRMC_vrm_animation` 1.0.
+
+### Domaine monde 3D — les soixante-cinq clips de la passe v6
+
+| Fichier dérivé | Animation source Overte | Nœud du graphe | Fenêtre (images), durée |
+| --- | --- | --- | --- |
+| **allures** | | | |
+| `world-jog.vrma` | `jog_fwd.fbx` | `walkFwdJog_c` | 1→18, 0,60 s |
+| `world-run.vrma` | `run_fast_fwd.fbx` | `walkFwdRun_c` | 1→19, 0,63 s |
+| `world-walk-back-fast.vrma` | `walk_bwd_fast.fbx` | `walkBwdFast_c` | 1→28, 0,93 s |
+| `world-jog-back.vrma` | `jog_bwd.fbx` | `jogBwd_c` | 1→20, 0,67 s |
+| `world-run-back.vrma` | `run_bwd.fbx` | `runBwd_c` | 1→14, 0,47 s |
+| `world-strafe-left.vrma` | `walk_left.fbx` | `strafeLeftWalk_c` | 1→35, 1,13 s |
+| `world-strafe-right.vrma` | `walk_right.fbx` | `strafeRightWalk_c` | 1→35, 1,13 s |
+| `world-strafe-left-fast.vrma` | `walk_left_fast.fbx` | `strafeLeftWalkFast_c` | 1→21, 0,67 s |
+| `world-strafe-right-fast.vrma` | `walk_right_fast.fbx` | `strafeRightFast_c` | 1→21, 0,67 s |
+| `world-strafe-left-jog.vrma` | `jog_left.fbx` | `strafeLeftJog_c` | 1→20, 0,67 s |
+| `world-strafe-right-jog.vrma` | `jog_right.fbx` | `strafeRightJog_c` | 1→20, 0,67 s |
+| `world-strafe-left-run.vrma` | `run_fast_left.fbx` | `strafeLeftRun_c` | 1→19, 0,63 s |
+| `world-strafe-right-run.vrma` | `run_fast_right.fbx` | `strafeRightRun_c` | 1→19, 0,63 s |
+| `world-step-left.vrma` | `side_step_left.fbx` | `stepLeft_c` | 1→20, 0,67 s |
+| `world-step-left-short.vrma` | `side_step_short_left.fbx` | `stepLeftShort_c` | 1→30, 1,00 s |
+| `world-step-left-fast.vrma` | `side_step_left_fast.fbx` | `strafeLeftAnim_c` | 1→16, 0,53 s |
+| **arrêts** | | | |
+| `world-walk-stop-2.vrma` | `settle_to_idle02.fbx` | `idleSettle02` | 1→40, 1,27 s |
+| `world-walk-stop-3.vrma` | `settle_to_idle03.fbx` | `idleSettle03` | 1→60, 1,97 s |
+| `world-walk-stop-4.vrma` | `settle_to_idle04.fbx` | `idleSettle04` | 1→82, 2,70 s |
+| `world-walk-stop-small.vrma` | `settle_to_idle_small.fbx` | `idleSettleSmall` | 1→40, 1,27 s |
+| **repos alternés et leurs transitions** | | | |
+| `world-idle-alt1.vrma` | `idle_LFF_all.fbx` | `altIdle1` | 80→388, 10,30 s |
+| `world-idle-alt1-enter.vrma` | `idle_LFF_all.fbx` | `transitionToAltIdle1` | 1→80 ×0,65, 4,05 s |
+| `world-idle-alt1-exit.vrma` | `idle_LFF_all.fbx` | `alt1ToMasterIdle` | 388→472, 2,77 s |
+| `world-idle-alt2.vrma` | `idle_RFF_all.fbx` | `altIdle2` | 80→388, 10,30 s |
+| `world-idle-alt2-enter.vrma` | `idle_RFF_all.fbx` | `transitionToAltIdle2` | 1→80 ×0,65, 4,05 s |
+| `world-idle-alt2-exit.vrma` | `idle_RFF_all.fbx` | `alt2ToMasterIdle` | 388→453, 2,10 s |
+| **gestes tenus** | | | |
+| `world-clap-in.vrma` | `emote_clap01_all.fbx` | `applaudClap01Intro` | 1→17, 0,53 s |
+| `world-clap-hold.vrma` | `emote_clap01_all.fbx` | `applaudClap01Loop` | 17→111, 3,17 s |
+| `world-clap-out.vrma` | `emote_clap01_all.fbx` | `applaudClap01Outro` | 111→160, 1,60 s |
+| `world-point-in.vrma` | `emote_point01_all.fbx` | `reactionPointIntro` | 1→21, 0,67 s |
+| `world-point-hold.vrma` | `emote_point01_all.fbx` | `reactionPointLoop` | 21→100, 2,67 s |
+| `world-point-out.vrma` | `emote_point01_all.fbx` | `reactionPointOutro` | 100→134, 1,13 s |
+| `world-raise-hand-in.vrma` | `emote_raisehand01_all.fbx` | `raiseHand01Intro` | 1→18, 0,57 s |
+| `world-raise-hand-hold.vrma` | `emote_raisehand01_all.fbx` | `raiseHand01Loop` | 18→378, 12,03 s |
+| `world-raise-hand-out.vrma` | `emote_raisehand01_all.fbx` | `raiseHand01Outro` | 378→435, 1,90 s |
+| **maintiens assis** | | | |
+| `world-sit-idle-3.vrma` | `sitting_idle02.fbx` | `seatedIdle02` | 1→800, 13,23 s |
+| `world-sit-idle-4.vrma` | `sitting_idle03.fbx` | `seatedIdle03` | 0→800, 13,33 s |
+| `world-sit-idle-5.vrma` | `sitting_idle05.fbx` | `seatedIdle05` | 1→332, 11,03 s |
+| `world-sit-talking-3.vrma` † | `sitting_talk04.fbx` | `seatedTalk04` | 0→442, 10,43 s |
+| **micro-variations assises** | | | |
+| `world-sit-fidget.vrma` | `sitting_idle_once_fidget.fbx` | `seatedFidgeting` | 1→428, 14,20 s |
+| `world-sit-lean.vrma` | `sitting_idle_once_leanforward.fbx` | `seatedFidgetLeanForward` | 1→178, 5,90 s |
+| `world-sit-lookfidget.vrma` | `sitting_idle_once_lookfidget.fbx` | `seatedFidgetLookFidget` | 1→420, 13,97 s |
+| `world-sit-look-2.vrma` | `sitting_idle_once_lookleftright.fbx` | `seatedFidgetLookLeftRight` | 1→120, 3,97 s |
+| `world-sit-legs.vrma` | `sitting_idle_once_shakelegs.fbx` | `seatedFidgetShakeLegs` | 1→140, 4,60 s |
+| `world-sit-shifting.vrma` | `sitting_idle_once_shifting.fbx` | `seatedFidgetShifting` | 1→744, 24,73 s |
+| **pivots assis** | | | |
+| `world-sit-turn-left.vrma` | `sitting_turn_left.fbx` | `seatedTurnLeft` | 1→200, 6,63 s |
+| `world-sit-turn-left-end.vrma` | `settle_sitturnleft_to_sitidle.fbx` | `seatedTurnLeft_to_Idle` | 1→45, 1,47 s |
+| `world-sit-turn-right.vrma` | `sitting_turn_right.fbx` | `seatedTurnRight` | 1→200, 6,63 s |
+| `world-sit-turn-right-end.vrma` | `settle_sitturnright_to_sitidle.fbx` | `seatedTurnRight_to_Idle` | 1→45, 1,47 s |
+| **accord assis** | | | |
+| `world-sit-nod.vrma` | `sitting_emote_agree_headnod.fbx` | `seatedReactionPositiveHeadNod` | 1→44, 1,40 s |
+| `world-sit-nod-2.vrma` | `sitting_emote_agree_headnodyes.fbx` | `seatedReactionPositiveHeadNodYes` | 1→78, 2,53 s |
+| `world-sit-nod-3.vrma` † | `sitting_emote_agree_longheadnod.fbx` | `seatedReactionPositiveLongHeadNod` | 1→65, 2,13 s |
+| `world-sit-ack.vrma` | `sitting_emote_agree_acknowledge.fbx` | `seatedReactionPositiveAcknowledge` | 1→64, 2,10 s |
+| **désaccord assis** | | | |
+| `world-sit-shake.vrma` † | `sitting_emote_disagree_headshake.fbx` | `seatedReactionNegativeDisagreeHeadshake` | 0→64, 2,13 s |
+| `world-sit-dismiss.vrma` | `sitting_emote_disagree_dismiss.fbx` | `seatedReactionNegativeDisagreeDismiss` | 0→70, 2,30 s |
+| `world-sit-disbelief.vrma` | `sitting_emote_disagree_disbelief.fbx` | `seatedReactionNegativeDisagreeDisbelief` | 1→124, 4,10 s |
+| `world-sit-sad.vrma` | `sitting_emote_disagree_drophead.fbx` | `seatedReactionNegativeDisagreeDropHead` | 0→99, 3,27 s |
+| **joie assise** | | | |
+| `world-sit-clap.vrma` † | `sitting_emote_clap_all.fbx` | `seatedReactionApplaud` intro+boucle+sortie | 0→99, 3,27 s |
+| `world-sit-clap-2.vrma` | `sitting_emote_clap02_all.fbx` | `seatedReactionApplaud02` idem | 0→132, 4,40 s |
+| `world-sit-clap-3.vrma` | `sitting_emote_clap03_all.fbx` | `seatedReactionApplaud03` idem | 0→136, 4,50 s |
+| `world-sit-cheer.vrma` | `sitting_emote_agree_cheer.fbx` | `seatedReactionPositiveCheer` | 1→78, 2,53 s |
+| **pointage et lever de main assis** | | | |
+| `world-sit-point.vrma` †‡ | `sitting_emote_point_all.fbx` | `seatedReactionPoint` intro+boucle+sortie | 1→134, 4,43 s |
+| `world-sit-raise-hand.vrma` † | `sitting_emote_raisehand_all.fbx` | `seatedReactionRaiseHand` idem | 0→400, 13,30 s |
+| `world-sit-raise-hand-2.vrma` †‡ | `sitting_emote_raisehand02_all.fbx` | `seatedReactionRaiseHand02` idem | 0→435, 14,50 s |
+| `world-sit-raise-hand-3.vrma` | `sitting_emote_raisehand03_all.fbx` | `seatedReactionRaiseHand03` idem | 0→296, 9,87 s |
+
+Modifications apportées / changes made : mêmes opérations que ci-dessus (os
+Mixamo → os humanoïdes VRM 1.0, T-pose de bind d'`emote_clap01_all.fbx` imposée,
+échelle cm → m, ré-échantillonnage à 30 fps, translation horizontale annulée sur
+les allures et les pivots, export en `VRMC_vrm_animation` 1.0), plus les trois
+retouches décrites ci-dessous.
+
+### † Bas du corps rendu aux clips assis / seated clips given their lower body
+
+Sept FBX assis d'Overte n'ont **aucune piste sur le bassin** :
+`sitting_emote_agree_longheadnod`, `_disagree_headshake`, `_clap_all`,
+`_point_all`, `_raisehand_all`, `_raisehand02_all` et `sitting_talk04`. Overte s'en
+accommode parce que chez lui ces clips sont posés **par-dessus** le maintien assis
+par un nœud `overlay` limité au haut du corps : le bassin vient de la couche du
+dessous. Isolés dans un `.vrma`, leur bassin resterait à la pose de bind —
+c'est-à-dire **debout**, sous un corps assis. Le bassin de `sitting_idle.fbx` leur
+a donc été rendu, constant ; les sept retombent exactement sur la hauteur d'assise
+commune, **0,5409**.
+
+**‡ Deux d'entre eux avaient perdu davantage.** `sitting_emote_point_all.fbx` et
+`sitting_emote_raisehand02_all.fbx` n'ont pas non plus de piste sur les **six os
+des jambes**. Le bassin rendu ne suffisait donc pas : les jambes restaient à la
+pose de repos du rig — debout — sous un bassin assis, et les deux clips mesuraient
+**50,5 cm** d'écart au maintien assis, portés par `leftLowerLeg` (105° sur
+`rightLowerLeg`), à l'identique puisque c'est la même pose de repos qui était en
+cause. Les six os ont reçu la posture assise de `world-sit-idle`, prise en pose
+moyenne donc constante — la posture assise d'Overte l'est : la dispersion de la
+source sur un tour de boucle vaut 0 à 0,2°. Écart après greffe : **5,4 et 5,5 cm**.
+Le pic de vitesse angulaire des deux clips est inchangé (340 et 545 °/s) : la
+correction ne rajoute aucune secousse.
+
+*Seven seated Overte FBX carry no hip track at all — Overte plays them as an
+upper-body overlay on top of the seated hold, so the hips come from the layer
+below. They were given the constant hips of `sitting_idle.fbx`. Two of them,
+`sitting_emote_point_all` and `sitting_emote_raisehand02_all`, were missing the six
+leg bones as well, which left their legs standing under a seated pelvis (50.5 cm
+of gap); they were given the seated leg posture of `world-sit-idle`, constant
+(source dispersion 0–0.2°). Gap after the graft: 5.4 and 5.5 cm, peak angular speed
+unchanged.*
+
+### Ancrage des quatre nouveaux arrêts / anchoring of the four new stops
+
+`settle_to_idle` était déjà **ancré** sur le cycle de marche à la passe v5 ; ses
+quatre frères ne l'étaient pas. À la meilleure phase du cycle ils laissaient encore
+10,5 / 13,1 / 15,3 / 12,8 cm là où l'arrêt ancré laisse 0 — la différence n'était
+pas dans les clips mais dans le traitement. La même passe leur a donc été
+appliquée : **première image forcée sur la pose de `world-walk` à t = 0** (la
+couture du cycle), **dernière image forcée sur `idle`**, la correction se
+dissolvant vers l'intérieur sur une fenêtre en `smoothstep` de 0,50 s côté marche
+et 0,40 s côté repos.
+
+| Clip | Correction côté marche | Correction côté repos | Pic de vitesse |
+| --- | --- | --- | --- |
+| `world-walk-stop-2` | 41,1° (`rightHand`), bassin +1,4 cm | 1,8° (`hips`) | 271 → 263 °/s |
+| `world-walk-stop-3` | 36,1° (`rightHand`), bassin +6,5 cm | 1,8° (`hips`) | 244 → 219 °/s |
+| `world-walk-stop-4` | 34,7° (`rightLowerArm`), bassin +1,5 cm | 5,1° (`rightHand`) | 256 → 218 °/s |
+| `world-walk-stop-small` | 25,2° (`leftLowerLeg`) | 6,3° (`neck`) | 77 → 77 °/s |
+
+Les cinq arrêts partagent désormais **le même contrat de phase** — quitter le cycle
+de marche sur sa couture — si bien que le code peut en tirer un au hasard sans rien
+changer à sa sortie. Les trois jointures de chacune des quatre séquences mesurent
+**0 / 0 / 0 cm**, comme celles de l'arrêt déjà livré. Aucun pic de vitesse n'a
+augmenté.
+
+*The four new stops got the same anchoring pass as `world-walk-stop` had in v5:
+first frame forced onto `world-walk` at t = 0 (the cycle seam), last frame onto
+`idle`, correction dissolving over a smoothstep window. All five stops now share
+the same exit-phase contract, and each of the four sequences measures 0 / 0 / 0 cm
+at its three seams. No peak angular speed went up.*
+
+### Ralenti de lecture / playback slowdown
+
+Deux clips de ce lot (`world-idle-alt1-enter`, `world-idle-alt2-enter`) sont joués
+par Overte à `timeScale` 0,65, déclaré dans son graphe. Le nombre d'images ne
+change pas, la durée si : 4,05 s au lieu de 2,63. C'est **déjà appliqué au
+fichier**, et consigné dans `world.json` (`source.timeScale`).
 
 ### Ancrage des transitions de marche / anchoring of the walk transitions
 
@@ -354,12 +562,14 @@ not in the file. A believable jump needs code, not clips.*
 
 ## 4. Répartition / breakdown
 
-32 fichiers, 5,50 Mo au total :
+109 fichiers `.vrma`, 18,82 Mo — 19,26 Mo avec `world.json`, `transitions.json` et
+les deux documents :
 
 | Source | Licence | Fichiers | Domaine |
 | --- | --- | --- | --- |
-| Overte | Apache-2.0 | 30 | 16 face à face, 14 monde 3D |
+| Overte | Apache-2.0 | 107 | 28 face à face, 79 monde 3D |
 | Quaternius | CC0-1.0 | 2 | monde 3D (les deux transitions assises) |
+| Overte — `transitions.json` | Apache-2.0 | 1 | le graphe d'animation, hors clips |
 
 **Deux sources, et une seule licence à respecter** : Apache-2.0 pour Overte, le
 reste étant en domaine public. Le domaine face à face est intégralement Overte.
@@ -396,7 +606,7 @@ carried an attribution requirement, so their removal changes no obligation.*
   a été changée. Les six gestes remplacés sortent d'Overte sans aucune correction
   géométrique — même studio, même station, les raccords tombent d'eux-mêmes entre
   1,2 et 8,0 cm sur leurs vingt-quatre mesures.
-- **v5, la passe courante** : la même règle appliquée au domaine monde 3D, mais aux
+- **v5** : la même règle appliquée au domaine monde 3D, mais aux
   **jointures des séquences** cette fois — ce n'est pas l'écart d'un clip au repos
   qui compte (un clip assis en est forcément à 45 cm), c'est l'écart à chaque
   jointure de l'enchaînement que l'application jouera. Les deux transitions assises
@@ -410,9 +620,29 @@ carried an attribution requirement, so their removal changes no obligation.*
   quatre allures, ce qui n'était pas le cas (2,6 à 4 % d'écart), et les valeurs
   annoncées tiennent dans la fourchette mesurée.
 
-*v5, the current pass: the same rule applied to the 3D-world domain, but at the
-**seams of the sequences** this time. The seated sequence went from
-42.1 / 10.7 / 11.0 / 42.0 cm to 1.7 / 0 / 1.0 / 0.3; the walking sequence from
-34.8 / 57.5 / 3.2 cm to 0 / 0 / 0, provided the code enters the walk cycle at
-0.200 s and leaves it on its seam. The jump was removed. `world.json` was also
-brought back in line with the measurement.*
+- **v6, la passe courante** : le pack d'Overte repris **par son graphe** plutôt que
+  par ses noms de fichiers. Les 127 FBX déclarent 204 nœuds `clip` répartis sur 34
+  machines à états ; c'est ce graphe qui dit la fenêtre exacte de chaque clip, sa
+  cadence de lecture, et la façon dont Overte l'enchaîne. 77 clips sont entrés
+  (12 en face à face, 65 dans le monde 3D), `happy` a été reconverti, et
+  `transitions.json` — le graphe lui-même, exploitable — est livré à côté d'eux.
+  Trois corrections tenaient à la lecture du graphe : les **cinq clips joués
+  ralentis** (`timeScale` 0,65 à 0,75) durent maintenant ce qu'ils doivent durer ;
+  les **sept clips assis sans bassin** ont retrouvé celui du maintien assis, et
+  **deux d'entre eux leurs six os de jambes** (50,5 → 5,4 cm) ; les **quatre
+  nouveaux arrêts** ont reçu la passe d'ancrage de la v5 (0 / 0 / 0 cm aux trois
+  jointures). Enfin, deux repos et deux gestes tenus qui échouaient la règle du
+  face à face y sont entrés **sous le préfixe `world-`**, où ils sont séquencés par
+  une transition dédiée au lieu d'être fondus : l'enchaînement complet reste sous
+  6 cm là où le clip seul en valait 15.
+
+*v6, the current pass: Overte's pack taken from its **animation graph** rather than
+from its file names. 77 clips entered (12 face-to-face, 65 in the 3D world),
+`happy` was re-converted, and `transitions.json` — the graph itself, made
+machine-readable — ships beside them. Three fixes came straight out of reading the
+graph: the five clips Overte plays **slowed down** now last what they should; the
+seven seated clips with **no hip track** got the seated hold's hips back, and two
+of them their six leg bones as well (50.5 → 5.4 cm); the four new **stops** got the
+v5 anchoring pass (0 / 0 / 0 cm at their three seams). Two idles and two held
+gestures that failed the face-to-face rule entered under the `world-` prefix
+instead, where they are sequenced rather than cross-faded.*

@@ -72,7 +72,8 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
   expresses an emotion, and a talking idle while a reply is being written. The file name in `vrma/`
   is the whole configuration — `idle`, the six emotion names (`happy`, `sad`, `angry`, `surprised`,
   `relaxed`, `neutral`), a `-2`/`-3` suffix for variants picked at random, and a `world-` prefix for
-  the clips that belong to the 3D scene only (gaits, seated postures, jump) and are therefore never
+  the clips that belong to the 3D scene only (gaits, stops, held gestures, seated postures and
+  emotes) and are therefore never
   even downloaded here; any other name is ignored. Breathing and head sway keep playing **on top** of
   the animation, and the face stays the model's business. The clips shipped with the app are all
   freely redistributable — see the [credits](#credits). Switch in *Settings > Appearance > Scene*.
@@ -223,11 +224,15 @@ no licence obliges us to name**, because a credit that is hidden honours nobody.
 
 ### Animations
 
-- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **30 of the 32 clips**, and by
-  far the primary source: **the whole face-to-face mode** — the four idle animations, the "talking"
-  idle, and the twelve gestures (`neutral`, `happy` ×3, `sad`, `angry` ×2, `relaxed` ×2, `nod`,
-  `shake`, `think`) — plus all of the 3D scene's locomotion and seated postures: walking, slow and
-  fast walking, walking backwards, turns, start, stop, seated hold, seated talking. These are
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **107 of the 109 clips**, and by
+  far the primary source: **the whole face-to-face mode** — five idle animations, four "talking"
+  idles, and nineteen gestures (`neutral`, `happy` ×3, `sad`, `angry` ×2, `relaxed` ×2, `nod` ×5,
+  `shake`, `think` ×2, `raise-hand` ×2) — plus all of the 3D scene's locomotion, held gestures and
+  seated postures: twenty gaits, five stops, turns, start, standing posture changes, held gestures
+  split into intro-hold-outro, and the complete seated vocabulary (holds, talking,
+  micro-variations, turns, agreement, disagreement, joy, pointing, raised hand). Overte's
+  **animation graph** ships with them under the same licence (`vrma/transitions.json`): 34 state
+  machines, 165 states, 392 transitions — an avatar's behaviour logic, already solved. These are
   neither raw capture nor recycled Mixamo: they were **hand-made in Maya** by an animator on staff
   at High Fidelity, and that animator's care is what shows — the fingers are animated, the poses
   join up with each other, and the loops close. Copyright High Fidelity (2013-2019), Vircadia
