@@ -361,6 +361,14 @@ export function createWander(host: WanderHost): Wander {
     sitZ: number
     standX: number // point de pré-assise THÉORIQUE : sitPoint + recul de world-sit-enter
     standZ: number
+    // La case d'approche DONNÉE PAR L'ANALYSE — praticable par construction, là
+    // où le point de pré-assise peut frôler le meuble jusqu'à sortir du sol
+    // connu. C'est le plan B de chaque segment de marche, pas seulement du
+    // premier : dans la chambre, le couloir vers la banquette fait un coude, la
+    // ligne droite vers le point théorique quitte le sol, et celle vers cette
+    // case passe.
+    apprX: number
+    apprZ: number
     // Où il se tenait VRAIMENT au moment de s'asseoir (figé par beginSitDown) :
     // c'est LÀ que le lever le ramène. Le point théorique peut être hors grille
     // (il frôle le meuble par construction) — on ne se relève jamais vers un
@@ -458,13 +466,28 @@ export function createWander(host: WanderHost): Wander {
     // Départ d'un endroit serré (on vient de se lever contre un meuble) : la
     // tête du chemin est en manœuvre, elle aussi au point.
     const head = host.canStand(p.x, p.z, radius) ? 0 : MANEUVER_M
-    // Nombre entier de cycles, au moins un, pour approcher `want` au mieux.
-    let n = Math.max(1, Math.round((want - startD) / stride))
+    /**
+     * FRACTION DE CYCLE entre la phase d'ENTRÉE et la phase de SORTIE. La marche
+     * n'est pas faite de cycles entiers : elle entre à `enterS` et sort à
+     * `exitS`, et ne dépeint entre les deux que cette fraction-là du dernier
+     * cycle. La compter pour un cycle plein décalait toute l'arithmétique
+     * d'arrêt d'autant — et comme l'arrêt ne part QUE sur une phase de sortie,
+     * le personnage dépassait sa destination de la fraction manquante puis
+     * finissait le cycle : mesuré 0,84 m de trop (0,8 cycle de `world-walk`,
+     * entrée 0,200 s / sortie 0,000 s) sur CHAQUE marche franche. La flânerie
+     * n'en souffrait presque pas (0,133 s d'écart, 3,8 cm) — c'est ce qui a
+     * caché le défaut aux premiers bancs, qui ne mesuraient la position que sur
+     * elle.
+     */
+    const exitFrac = ((g.exitS - g.enterS + g.durationS) % g.durationS) / g.durationS
+    // Nombre de cycles, au moins un, le dernier étant PARTIEL (entrée → sortie),
+    // pour approcher `want` au mieux.
+    let n = Math.max(1, Math.round((want - startD) / stride - exitFrac))
     const dir = { x: dx / want, z: dz / want }
     // On raccourcit tant que le chemin ne passe pas : mieux vaut s'arrêter avant
     // l'obstacle que de s'y cogner et de rester planté contre lui.
     for (; n >= 1; n--) {
-      const d = startD + stride * n
+      const d = startD + stride * (n + exitFrac)
       const tx = p.x + dir.x * d
       const tz = p.z + dir.z * d
       const rEnd = seatLeg && Math.hypot(x - tx, z - tz) < tail ? 0 : radius
@@ -532,7 +555,13 @@ export function createWander(host: WanderHost): Wander {
       startPivot(seatRun.yaw, 'seatAlign')
       return
     }
-    if (seatRun.legsLeft > 0 && planWalk(seatRun.standX, seatRun.standZ, true)) {
+    // Le point de pré-assise d'abord, la case d'approche de l'analyse ensuite —
+    // le MÊME repli que tryGoSit, et pour la même raison : le point théorique
+    // frôle le meuble, il peut être hors sol connu, la case d'approche jamais.
+    if (
+      seatRun.legsLeft > 0 &&
+      (planWalk(seatRun.standX, seatRun.standZ, true) || planWalk(seatRun.apprX, seatRun.apprZ, true))
+    ) {
       seatRun.legsLeft--
       beginWalk()
       return
@@ -562,6 +591,7 @@ export function createWander(host: WanderHost): Wander {
     const yaw = seat.yaw * DEG2RAD
     const fx = Math.sin(yaw)
     const fz = Math.cos(yaw)
+    const back = SIT_BACKUP_FRAC * h
     let sitX = seat.center[0]
     let sitZ = seat.center[1]
     if (seat.bounds) {
@@ -574,8 +604,28 @@ export function createWander(host: WanderHost): Wander {
       const s = Math.max(sEdge - SEAT_INSET_FRAC * h, 0)
       sitX = bx + fx * s
       sitZ = bz + fz * s
+      // GLISSEMENT LE LONG DU BORD. Le milieu du bord n'est pas toujours
+      // servi par du sol : le pied du lit de la chambre affleure le bord de la
+      // zone praticable, et son point de pré-assise central tombe dans le vide
+      // de la carte — l'assise était déclarée approchable par l'analyse et
+      // restait imprenable par le moteur. On décale alors le point d'assise le
+      // long du MÊME bord, vers la case d'approche (qui est praticable par
+      // construction), jusqu'à ce que le point de pré-assise retrouve du sol.
+      // On s'assoit au coin du lit qui donne sur la chambre — comme un corps.
+      if (host.floorAt(sitX + fx * back, sitZ + fz * back) === null) {
+        const px = fz // perpendiculaire au regard : l'axe du bord
+        const pz = -fx
+        const pHalf = Math.max((Math.abs(px) * (x1 - x0) + Math.abs(pz) * (z1 - z0)) / 2 - SEAT_INSET_FRAC * h, 0)
+        const off = clamp((seat.approach[0] - bx) * px + (seat.approach[1] - bz) * pz, -pHalf, pHalf)
+        for (const t of [off / 2, off]) {
+          if (host.floorAt(sitX + px * t + fx * back, sitZ + pz * t + fz * back) !== null) {
+            sitX += px * t
+            sitZ += pz * t
+            break
+          }
+        }
+      }
     }
-    const back = SIT_BACKUP_FRAC * h
     const standX = sitX + fx * back
     const standZ = sitZ + fz * back
     // Le sol sous les pieds une fois assis : sous le point de pré-assise (les
@@ -587,6 +637,8 @@ export function createWander(host: WanderHost): Wander {
       sitZ,
       standX,
       standZ,
+      apprX: seat.approach[0],
+      apprZ: seat.approach[1],
       outX: standX,
       outZ: standZ,
       yaw,
@@ -601,12 +653,21 @@ export function createWander(host: WanderHost): Wander {
     if (!host.has('sit-idle')) return false
     const run = planSeat(seat)
     if (!run) return false
-    // Marcher vers le point de pré-assise ; s'il est injoignable en ligne
-    // droite, vers la case d'approche donnée par l'analyse (un second segment
-    // s'occupera du reste, cf. endLeg).
+    // DÉJÀ à portée du point de pré-assise — on est venu par ses propres clics,
+    // ou on se tient simplement devant le meuble : pas un pas de plus, pivot et
+    // assise. Exiger une marche ici refusait l'assise à qui était déjà devant
+    // (planWalk refuse tout trajet de moins de 5 cm) : cliquer la banquette en
+    // étant à 2 cm de sa case d'approche ne faisait RIEN.
+    if (Math.hypot(run.standX - p.x, run.standZ - p.z) <= Math.max(SEAT_NEAR_FRAC * host.hips(), 0.45)) {
+      seatRun = run
+      startPivot(run.yaw, 'seatAlign')
+      return true
+    }
+    // Sinon, marcher vers le point de pré-assise ; s'il est injoignable en
+    // ligne droite, vers la case d'approche donnée par l'analyse (les segments
+    // suivants s'occuperont du reste, cf. endLeg — même repli).
     const walkable =
-      planWalk(run.standX, run.standZ, true) ||
-      (seat.approach !== null && planWalk(seat.approach[0], seat.approach[1], true))
+      planWalk(run.standX, run.standZ, true) || planWalk(run.apprX, run.apprZ, true)
     if (!walkable) return false
     seatRun = run
     beginWalk()
@@ -749,6 +810,18 @@ export function createWander(host: WanderHost): Wander {
     now += delta
     switch (state) {
       case 'rest': {
+        // Le sol RÉEL sous le point de repos. Les trois décors livrés affleurent
+        // à y ≈ 0 par calage du sidecar, mais un décor importé SANS préparation
+        // n'a aucune raison de tomber juste : sa boîte englobante est calée au
+        // sol par le bas de sa dalle, et la surface de marche est l'épaisseur de
+        // la dalle PLUS HAUT. Sans ce recalage, le personnage attendrait enfoncé
+        // dans le plancher jusqu'à son premier pas (advance() corrige, mais
+        // seulement en marchant). Coût : une lecture de tableau par image.
+        const floor = host.floorAt(p.x, p.z)
+        if (floor !== null) {
+          p.ground = floor
+          p.y = floor
+        }
         const attentive = now < attentiveUntil
         // On ne bouge pas la scène sous la main de l'utilisateur — SAUF pendant
         // l'attention : le clic qui la déclenche vient de compter comme un geste
@@ -962,13 +1035,17 @@ export function createWander(host: WanderHost): Wander {
         afterStand = { x, z }
         return true
       }
-      if (state !== 'rest') return false
+      // Le PIVOT face caméra n'est pas une occupation : il suit chaque arrivée,
+      // et refuser les clics pendant ses deux ou trois secondes rendait le
+      // « cliquer pour y aller » sourd une fois sur deux. beginWalk pose son
+      // propre pivot d'alignement par-dessus, les états s'enchaînent déjà.
+      if (state !== 'rest' && state !== 'pivot') return false
       if (!planWalk(x, z)) return false
       beginWalk()
       return true
     },
     goSit(seat): boolean {
-      if (state !== 'rest') return false
+      if (state !== 'rest' && state !== 'pivot') return false
       return tryGoSit(seat)
     },
     poke(): void {

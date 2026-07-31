@@ -362,7 +362,7 @@ class Field {
     this.cellArea = cell * cell
   }
 
-  /** Coin minimal (x, z) de la cellule (ci, cj) ; le centre est à +cell/2. */
+  /** CENTRE (x, z) de la cellule (ci, cj) — le coin minimal est à −cell/2. */
   cellX(ci: number): number {
     return this.x0 + (ci + 0.5) * this.cell
   }

@@ -39,8 +39,13 @@ const SUPPORTED_VERSION = 1
 
 /** Rayon par défaut du gabarit, si le fichier ne le dit pas (m). */
 const DEFAULT_RADIUS = 0.25
-/** Dénivelé franchissable par défaut (m). */
-const DEFAULT_STEP = 0.3
+/**
+ * Dénivelé franchissable par défaut (m) — la valeur que l'analyseur émet
+ * (`STEP_MAX` de server/lib/envScene.ts, la hauteur d'une contremarche). Ne sert
+ * qu'à un fichier édité à la main qui aurait perdu son champ `body.step` : les
+ * fichiers produits le portent toujours, et c'est LEUR valeur qui fait foi.
+ */
+const DEFAULT_STEP = 0.2
 
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v)
