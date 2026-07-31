@@ -15,6 +15,9 @@
 //
 // Aucun import de `three` : que des nombres, donc vérifiable sous Node.
 //
+// Un seul import, et de la même farine : la recherche de chemin, qui a besoin de
+// la grille brute pour la parcourir case par case.
+//
 // Et AUCUN import du type `SceneFile` de shared/types.ts, alors qu'il existe et
 // décrit ce fichier : un chargeur tolérant ne peut pas se faire vérifier contre
 // un type qu'il ne contrôle pas. Il lit du JSON venu du disque, dont rien ne
@@ -22,6 +25,9 @@
 // s'accrocher à ce type rendrait le client incompilable à chaque champ ajouté
 // là-bas, pour un fichier qu'il sait déjà ignorer. Ce qu'on attend est décrit
 // ci-dessous, champ par champ ; ce qu'on ne comprend pas est ignoré.
+
+import { createPathfinder } from './pathfind'
+import type { Pathfinder, Waypoint } from './pathfind'
 
 /**
  * Alphabet des niveaux de sol, recopié de server/lib/envScene.ts. Le caractère
@@ -105,6 +111,14 @@ export interface SceneMap {
    * en biais fait longer le mur, il n'arrête pas net).
    */
   slide(fromX: number, fromZ: number, toX: number, toZ: number, radius: number): { x: number; z: number }
+  /**
+   * Itinéraire par les allées : les étapes à enchaîner pour rejoindre (toX, toZ),
+   * la dernière étant l'arrivée — ou null s'il n'existe aucun chemin AU GABARIT.
+   * À LA DEMANDE seulement (un clic, une assise, une déambulation), jamais par
+   * image : cf. pathfind.ts. Le premier appel construit la carte de
+   * praticabilité ; un décor où l'on ne se déplace jamais ne la paie pas.
+   */
+  path(fromX: number, fromZ: number, toX: number, toZ: number, radius: number): Waypoint[] | null
   /** Assises trouvées par l'analyse. AUCUN filtrage par modèle : c'est l'IK qui adapte. */
   readonly seats: readonly Seat[]
   /** Emprise de la zone praticable [xMin, zMin, xMax, zMax]. */
@@ -282,10 +296,31 @@ export function parseSceneMap(raw: unknown): SceneMap | null {
     return { x: fromX, z: fromZ }
   }
 
+  // La recherche de chemin naît À LA PREMIÈRE DEMANDE : elle alloue ses
+  // tableaux de travail et balaie la grille au gabarit, ce qu'un décor de fond
+  // — jamais cliqué, personnage immobile — n'a aucune raison de payer.
+  let finder: Pathfinder | null = null
+  function path(
+    fromX: number,
+    fromZ: number,
+    toX: number,
+    toZ: number,
+    radius: number,
+  ): Waypoint[] | null {
+    if (!finder) {
+      finder = createPathfinder(
+        { cols, rows, cell, originX: x0, originZ: z0, heights, solid, step },
+        { canStand, floorAt },
+      )
+    }
+    return finder.path(fromX, fromZ, toX, toZ, radius)
+  }
+
   return {
     floorAt,
     canStand,
     slide,
+    path,
     seats,
     bounds: wb,
     body: { radius, step, height },
