@@ -242,10 +242,10 @@ no licence obliges us to name**, because a credit that is hidden honours nobody.
 
 ### Animations
 
-- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **107 of the 109 clips** in the
-  active library (plus the 19 spare clips in `vrma/extra/`, also all Overte), and by
-  far the primary source: **the whole face-to-face mode** — five idle animations, four "talking"
-  idles, and nineteen gestures (`neutral`, `happy` ×3, `sad`, `angry` ×2, `relaxed` ×2, `nod` ×5,
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **109 of the 111 clips** in the
+  active library (plus the 17 spare clips in `vrma/extra/`, also all Overte), and by
+  far the primary source: **the whole face-to-face mode** — five idle animations, five "talking"
+  idles, and twenty gestures (`neutral`, `happy` ×3, `sad`, `angry` ×2, `relaxed` ×3, `nod` ×5,
   `shake`, `think` ×2, `raise-hand` ×2) — plus all of the 3D scene's locomotion, held gestures and
   seated postures: twenty gaits, five stops, turns, start, standing posture changes, held gestures
   split into intro-hold-outro, and the complete seated vocabulary (holds, talking,

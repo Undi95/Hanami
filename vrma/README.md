@@ -14,7 +14,7 @@ préfixe du nom suffit à les distinguer** :
 
 | Domaine | Nom | Contenu | Poids |
 | --- | --- | --- | --- |
-| **face à face** | pas de préfixe | l'avatar debout devant l'utilisateur qui discute : repos, repos en train de parler, gestes d'émotion | 28 fichiers, 6,92 Mo |
+| **face à face** | pas de préfixe | l'avatar debout devant l'utilisateur qui discute : repos, repos en train de parler, gestes d'émotion | 30 fichiers, 7,69 Mo |
 | **monde 3D** | préfixe `world-` | la scène interactive où le personnage marche, divague, s'assoit et réagit : allures, départs et arrêts, virages, changements de posture, gestes tenus, tout le vocabulaire assis | 81 fichiers, 11,89 Mo |
 
 Le face à face est **sévère** : on n'y ajoute un geste que s'il est utile, agréable
@@ -33,9 +33,12 @@ pendant qu'une réponse s'écrit. Sous ce seuil, les fondus de 0,3 s (entrée) e
 0,4 s (sortie) sont invisibles ; au-dessus, le corps est tiré et les pieds glissent
 sans pas.
 
-Les 28 clips actuels tiennent tous entre **4,1 et 8,0 cm** sur la pire de leurs
+Les 30 clips actuels tiennent tous entre **4,1 et 8,8 cm** sur la pire de leurs
 quatre mesures (entrée et sortie, contre chacun des deux socles), médiane 5,5 ;
-contre le socle `idle` seul, de **0,8 à 6,8 cm**, médiane 3,2. Un clip qui ne tient
+contre le socle `idle` seul, de **0,8 à 6,8 cm**, médiane 3,2. Les deux plus hauts
+(8,8 et 7,6 cm) sont `idle-talking-4` et `relaxed-3`, promus depuis `extra/` après
+jugement à l'image : leur raccord est en haut de la fourchette, pas au-dessus du
+seuil, et le fondu l'absorbe. Un clip qui ne tient
 pas ce seuil est retiré, pas rafistolé — une émotion sans geste n'est pas un drame (le
 déclenchement ne trouve rien, l'avatar continue de respirer), un geste qui accroche
 l'œil en est un. C'est ce qui a coûté leur place aux quinze gestes issus du mocap
@@ -59,11 +62,11 @@ C'est ce que fait Overte lui-même, et l'enchaînement complet retombe alors sou
 | `happy` | `happy`, `happy-2`, `happy-3` | trois applaudissements |
 | `sad` | `sad` | tête qui tombe |
 | `angry` | `angry`, `angry-2` | dénégation agacée, dénégation posée |
-| `relaxed` | `relaxed`, `relaxed-2` | étirement de la nuque, report de poids |
+| `relaxed` | `relaxed`, `relaxed-2`, `relaxed-3` | étirement de la nuque, report de poids, dandinement d'attente (14 s) |
 | `surprised` | **aucun** | Overte n'a pas d'émote de surprise |
 
 Et les socles, que le lecteur tire au hasard : **cinq repos** (`idle` → `idle-4`,
-`idle-7`) et **quatre repos parlants** (`idle-talking` → `idle-talking-7`). Overte
+`idle-7`) et **cinq repos parlants** (`idle-talking`, `idle-talking-4` → `-7`). Overte
 en tire respectivement quatre et sept, toutes les 10 à 30 s pour le repos et 7 à
 12 s pour la parole ; c'est ce qui fait qu'un avatar ne « rejoue pas sa boucle ».
 
@@ -93,6 +96,14 @@ l'est à contrecœur : lever la main n'est ni un `happy` ni un `nod`, il n'y ava
 aucun rôle voisin à enrichir. Comme `nod`, `shake` et `think`, il n'a pas de
 mot-clé et le lecteur d'aujourd'hui l'ignore — il attend une lecture du texte de la
 réponse. Le vocabulaire de **déclenchement** reste donc inchangé.
+
+**Et `raise-hand` LÈVE la main, il ne fait pas signe.** `raise-hand` et
+`raise-hand-2` lèvent la main et la **tiennent** — 8 s de maintien pour le premier.
+L'avant-bras n'y bat qu'à 0,20 et 0,08 aller-retour par seconde, là où un
+« coucou » en demande deux ou trois : c'est le geste de qui **demande la parole**,
+et c'est le rôle voulu. Le banc de diagnostic le compte comme un défaut de cadence
+faute d'avoir une fourchette pour « main levée et tenue ». Si l'app veut un jour un
+salut de la main, ces deux clips n'en sont pas.
 
 Le lecteur regroupe les variantes en retirant le suffixe `-<chiffres>` du nom :
 `happy-2` est une variante de `happy`. **Les trous de numérotation sont sans
@@ -133,7 +144,7 @@ bibliothèque n'avait **aucune** émote assise.
 
 ## `extra/` — les clips convertis et non retenus
 
-Le sous-dossier [`extra/`](extra) contient **19 clips** (5,22 Mo) issus de la même
+Le sous-dossier [`extra/`](extra) contient **17 clips** (4,51 Mo) issus de la même
 passe de conversion que les autres : mêmes outils, mêmes corrections, même
 validation à l'aller-retour, mêmes crédits (voir [`NOTICE.md`](NOTICE.md) §1). Ils
 n'ont simplement pas leur place dans la bibliothèque active. Ils sont livrés quand
@@ -157,10 +168,8 @@ et `idle-talking`. Seuil d'échec : 10 cm.
 | `point.vrma` | pointage, passe complète — même histoire, livré découpé en `world-point-…` | 15,7 cm |
 | `happy-6.vrma` | quatrième applaudissement | 14,9 cm |
 | `idle-talking-3.vrma` | repos parlant, dépasse le seuil de peu | 11,2 cm |
-| `idle-talking-4.vrma` | repos parlant | 8,8 cm |
-| `happy-5.vrma` | applaudissement | 8,7 cm |
-| `neutral-2.vrma` | hochement de tête lent | 8,1 cm |
-| `relaxed-3.vrma` | remuement sur place | 7,6 cm |
+| `happy-5.vrma` | applaudissement — **c'est `happy-2`** : les deux clips ne s'écartent jamais de plus de **3,4°** (os le plus concerné, sur toute la durée). Le promouvoir donnerait au tirage au sort deux fois la même émote. L'à-coup de poignet qu'il porte (1000 °/s à t = 0,3 s) a donc été lissé **dans `happy-2`**, où il est réellement joué | 8,7 cm |
+| `neutral-2.vrma` | hochement de tête lent — **redondant avec les cinq `nod`** : le vocabulaire du face à face doit rester court, et `neutral` a déjà son clip. Tient visuellement, mais n'ajoute rien | 8,1 cm |
 | `cand-idle-fenetre.vrma` | `idle` reconverti sur la fenêtre **déclarée** par le graphe (1→300) au lieu du découpage retenu — quasi identique au fichier livré | 5,0 cm |
 | `cand-idle-2-fenetre.vrma` | idem pour `idle-2` (1→902) | 5,0 cm |
 | `cand-idle-3-fenetre.vrma` | idem pour `idle-3`, mais la fenêtre déclarée fait **26,63 s** là où le fichier livré n'en garde qu'une sous-boucle de 13,33 s : celui-ci est réellement différent | 5,2 cm |
@@ -168,9 +177,14 @@ et `idle-talking`. Seuil d'échec : 10 cm.
 | `world-jump-start.vrma`, `world-jump-air.vrma`, `world-jump-land.vrma`, `world-jump-run-start.vrma`, `world-jump-run-land.vrma` | les cinq temps du saut. Chez Overte la phase aérienne n'est pas une animation mais des **poses fixes mélangées par la vitesse verticale** du moteur physique, et la hauteur du saut vit dans la simulation, pas dans le fichier : sans ce code, ils ne se tiennent pas (cf. [`NOTICE.md`](NOTICE.md) §3) | — |
 | `world-afk-texting.vrma` | personnage qui pianote sur son téléphone. **Orphelin du graphe** : `afk_texting.fbx` n'est référencé par aucun nœud, Overte lui-même ne le joue jamais | — |
 
-Les quatre clips entre 7,6 et 8,8 cm passent le seuil mais sortent de la fourchette
-des 28 clips retenus (4,1 à 8,0 cm) : ils attendent un jugement à l'œil, que la
-mesure ne peut pas rendre.
+**Deux de ces clips sont montés à la racine** après le premier jugement à l'image
+de la bibliothèque : `idle-talking-4` (8,8 cm) et `relaxed-3` (7,6 cm). Ils
+sortaient de la fourchette des clips retenus (4,1 à 8,0 cm) sans dépasser le seuil
+de 10 cm, et c'est le seul reproche que la mesure leur faisait ; à l'image, le
+premier gesticule exactement comme les `idle-talking-5/-6/-7` déjà en place, le
+second est une attente crédible en boucle de fond. Les deux qui restent au-dessus
+de la fourchette, `happy-5` et `neutral-2`, restent ici — non pour leur raccord,
+mais parce qu'ils **doublent** un clip déjà livré (voir le tableau).
 
 **Six clips convertis ne sont pas ici, et c'est voulu** : les versions brutes de
 `world-sit-point`, `world-sit-raise-hand-2` et des quatre `world-walk-stop-…`
@@ -188,7 +202,7 @@ variante, c'est un état antérieur.
 3. **Recharger la page.** Le catalogue est reconstruit à partir des fichiers
    réellement présents ; le serveur n'a pas besoin d'être redémarré.
 
-`happy-5`, `happy-6`, `idle-talking-2` à `-4`, `neutral-2` et `relaxed-3` portent
+`happy-5`, `happy-6`, `idle-talking-2`, `-3` et `neutral-2` portent
 déjà un nom conforme et un numéro libre : ils se déplacent tels quels, et **les
 trous de numérotation sont sans effet**. Les autres demandent un nom :
 
@@ -204,6 +218,69 @@ Ces clips ont été écartés **sur mesure**, pas au hasard. Au-dessus de 10 cm,
 raccord socle → geste → socle se voit : le corps est tiré et les pieds glissent sans
 pas. C'est exactement ce que la règle protège, et c'est ce qu'on accepte de perdre en
 en activant un.
+
+## La semelle sous le sol : ce que ces fichiers ne corrigent pas, et pourquoi
+
+Un banc de diagnostic mesure, sur `reference.vrm` (hanches 0,755 m), que
+**55 clips enfoncent la semelle sous le plancher** : toute la famille assise de 8,5
+à 10,4 cm, les pas chassés et les courses de 5 à 10, la marche de 2,5 à 5,2. Le
+réflexe est de remonter la piste verticale du bassin dans les `.vrma`. **Ce serait
+faux, trois fois.**
+
+**1. Les 55 clips sont tous des `world-`.** Le pire du face à face est `idle-7` à
+1,6 cm, sous les 2 cm d'épaisseur de semelle que le banc tolère. Or le domaine
+monde 3D tourne sous une **cinématique inverse de jambes** (`client/src/scene/legIk.ts`),
+appelée à chaque image, dont c'est exactement le métier : debout elle **remonte**
+un pied qui traverse, assise elle lui fait **viser** le sol. Son en-tête cite les
+mêmes mesures que le banc (« `world-sit-idle` — de 37 à 62 mm → très visible ») :
+ce défaut est déjà corrigé, au bon endroit, par l'articulation de la jambe et non
+par une translation du corps.
+
+**2. Pour la famille assise, la hauteur du bassin est PORTEUSE.** Elle vaut
+`postureAssiseCanonique` dans [`world.json`](world.json) — 0,5409 hanche — et le
+code s'en sert pour poser le bassin sur l'assise réelle du meuble. Remonter les
+clips assis de 8,6 cm ferait **flotter le personnage au-dessus de sa chaise** de
+très exactement cet écart, et l'IK tendrait les jambes pour rattraper le sol.
+
+**3. Pour les allures, ce n'est pas un offset.** Mesurée image par image, la
+semelle de `world-walk` va de 0 à −5,2 cm dans le cycle (médiane −1,1) : elle
+touche juste au double appui et s'enfonce au milieu de l'appui, parce que le genou
+porteur est trop plié. Un décalage constant de 5,2 cm laisserait **85 % du cycle en
+vol à plus de 2 cm** — on échangerait un pied dans le sol contre un personnage sur
+coussin d'air. Et un décalage suivant la pénétration image par image redresse bien
+la courbe du bassin, mais introduit **2 cm de boiterie** entre les deux demi-cycles
+et **1,4 cm de saut à la couture** de boucle. La famille assise, elle, est le seul
+cas où l'enfoncement EST constant (dispersion ≤ 0,4 cm sur 34 clips) — et c'est
+précisément celle que le point 2 interdit de toucher.
+
+La règle qui en sort : **un `.vrma` décrit une pose, pas une altitude.** Le sol,
+c'est le travail du moteur.
+
+## Retouches apportées aux clips livrés
+
+Ces clips ne sont plus la conversion brute de leur source. Chaque retouche a été
+mesurée avant et après avec le même banc, et validée par un aller-retour complet
+(`GLTFLoader` + `VRMAnimationLoaderPlugin` + `createVRMAnimationClip`, rejeu image
+par image, échantillon à `durée − 1e-4`).
+
+| Clip | Retouche | Avant → après |
+| --- | --- | --- |
+| `world-run`, `world-strafe-left-run`, `world-strafe-right-run` | le genou droit se cassait **à l'envers** à la poussée : à l'instant le pire, le genou sort de 13 cm en avant de la ligne hanche-cheville. La piste du genou est écrêtée en douceur (`tanh`, donc sans à-coup ni rupture de couture) à la limite humaine | hyperextension **41°, 41°, 37° → 10°** — la pénétration de semelle, la levée de pied et la couture sont inchangées |
+| `world-turn-right` | le genou gauche pliait à 58° hors du plan de la jambe pendant le croisement. Le tibia est ramené dans le plan de la cuisse par une torsion autour de l'axe fémoral (qui ne touche pas la flexion) | charnière **58° → 29°**, dans l'enveloppe de `world-turn-left` (31°), qui est sain. Verdict du banc : **défaut → bon** |
+| `shake` | ne se lisait pas comme un « non » : **un seul** balayage de 56°. La fenêtre déclarée par le graphe d'Overte (images 1→72) est déjà le fichier entier, et le seul autre « non » debout de la source (`thoughtfulheadshake`) ne fait lui aussi qu'un balayage — il n'y avait rien de plus à aller chercher. Le balayage central est donc **rejoué en miroir temporel**, avec les points de retournement pris aux extrêmes du lacet, là où la vitesse est nulle ; puis l'amplitude est ramenée à celle de `world-sit-shake`, le « non » assis d'Overte | **0,5 → 1,5** aller-retour · amplitude **56° → 39°** · durée 2,30 → 3,63 s · **les deux poses de bord sont bit à bit celles d'origine**, donc le raccord au socle ne bouge pas |
+| `happy-2` | à-coup de poignet de 1000 °/s à t = 0,3 s (un raccord de clés mal interpolé), et un second à 818 °/s à t = 0,7 s. Lissage laplacien local sur les quaternions, à poids nul aux bords de la fenêtre | vitesse de pointe **1000 → 688 °/s** · hors fenêtre le fichier est inchangé, **bords compris** |
+
+**`world-walk-slow` a été examiné et laissé tel quel.** Ses pieds ne décollent que
+de 2,6 cm et c'est l'allure de la déambulation autonome, mais les deux issues
+proposées échouent à la mesure : le remplacer par `world-walk` ralenti demande un
+facteur **3,69** (1,421 contre 0,385 m/s), soit une foulée de 1,42 m étalée sur
+3,7 s, et casserait le contrat de phase et la foulée de la flânerie, qui vivent
+dans `client/src/scene/wander.ts` ; le retoucher en pliant le genou oscillant
+**échange un défaut contre un autre** — à +18° la garde au sol passe de 2,6 à
+5,6 cm (défaut → limite) mais le double appui tombe de 15 à 5 % du cycle (bon →
+défaut), et à +26° la garde au sol devient bonne au prix du même double appui.
+C'est un traînement de pieds à petits pas (18,4 cm, 0,20 × la hanche) : lui faire
+lever les pieds en fait une autre allure.
 
 ## `world.json` — ce que le nom ne peut pas dire
 
@@ -309,7 +386,7 @@ prefix alone tells them apart**:
 
 | Domain | Name | Contents | Weight |
 | --- | --- | --- | --- |
-| **face to face** | no prefix | the avatar standing in front of the user, talking: idles, talking idles, emotion gestures | 28 files, 6.92 MB |
+| **face to face** | no prefix | the avatar standing in front of the user, talking: idles, talking idles, emotion gestures | 30 files, 7.69 MB |
 | **3D world** | `world-` prefix | the interactive scene where the character walks, wanders, sits down and reacts: gaits, starts and stops, turns, posture changes, held gestures, the whole seated vocabulary | 81 files, 11.89 MB |
 
 Face to face is **strict**: a gesture only earns its place if it is useful,
@@ -327,9 +404,12 @@ against `idle-talking.vrma`, since that is what gestures return to while a reply
 being written. Below that threshold the 0.3 s (in) and 0.4 s (out) fades are
 invisible; above it, the body is dragged and the feet slide without a step.
 
-The current 28 clips all stay between **4.1 and 8.0 cm** on the worst of their four
+The current 30 clips all stay between **4.1 and 8.8 cm** on the worst of their four
 measurements (in and out, against each of the two idles), median 5.5; against the
-`idle` base alone, **0.8 to 6.8 cm**, median 3.2. A clip that misses the threshold
+`idle` base alone, **0.8 to 6.8 cm**, median 3.2. The two highest (8.8 and 7.6 cm)
+are `idle-talking-4` and `relaxed-3`, promoted from `extra/` after a judgement by
+eye: their seam is at the top of the range, not over the threshold, and the fade
+absorbs it. A clip that misses the threshold
 is removed, not patched — an emotion with no gesture is no drama (the
 trigger finds nothing and the avatar keeps breathing), a gesture that catches the
 eye is. That is what cost the fifteen CMU-mocap gestures their place, and the
@@ -352,11 +432,12 @@ perfect in its place.
 | `happy` | `happy`, `happy-2`, `happy-3` | three claps |
 | `sad` | `sad` | head drop |
 | `angry` | `angry`, `angry-2` | annoyed head shake, measured head shake |
-| `relaxed` | `relaxed`, `relaxed-2` | neck stretch, weight shift |
+| `relaxed` | `relaxed`, `relaxed-2`, `relaxed-3` | neck stretch, weight shift, 14 s waiting fidget |
 | `surprised` | **none** | Overte has no surprise emote |
 
 And the base poses, which the player picks at random: **five idles** (`idle` →
-`idle-4`, `idle-7`) and **four talking idles** (`idle-talking` → `idle-talking-7`).
+`idle-4`, `idle-7`) and **five talking idles** (`idle-talking`, `idle-talking-4` → `-7`).
+
 Overte draws from four and seven respectively, every 10–30 s for the idle and
 7–12 s for speech; that is what keeps an avatar from visibly replaying its loop.
 
@@ -386,6 +467,13 @@ reluctantly so: raising a hand is neither a `happy` nor a `nod`, there was no
 neighbouring role to enrich. Like `nod`, `shake` and `think` it has no keyword and
 today's player ignores it — it waits for a reading of the reply text. The
 **trigger** vocabulary is therefore unchanged.
+
+**And `raise-hand` RAISES a hand, it does not wave.** `raise-hand` and
+`raise-hand-2` raise a hand and **hold** it — 8 s of hold for the first. The forearm
+beats at only 0.20 and 0.08 round trips per second, where a wave needs two or three:
+this is the gesture of someone **asking to speak**, and that is the intended role.
+The diagnostic bench counts it as a cadence defect for lack of a range for "hand
+raised and held". If the app ever wants a wave, these two are not it.
 
 The player groups variants by stripping the `-<digits>` suffix from the name:
 `happy-2` is a variant of `happy`. **Gaps in the numbering have no effect** — the
@@ -450,10 +538,8 @@ pose of the `idle` and `idle-talking` bases. Failure threshold: 10 cm.
 | `point.vrma` | pointing, whole pass — same story, shipped split as `world-point-…` | 15.7 cm |
 | `happy-6.vrma` | a fourth clap | 14.9 cm |
 | `idle-talking-3.vrma` | talking idle, just over the threshold | 11.2 cm |
-| `idle-talking-4.vrma` | talking idle | 8.8 cm |
-| `happy-5.vrma` | clap | 8.7 cm |
-| `neutral-2.vrma` | slow head nod | 8.1 cm |
-| `relaxed-3.vrma` | in-place fidget | 7.6 cm |
+| `happy-5.vrma` | clap — **it is `happy-2`**: the two clips never differ by more than **3.4°** (worst bone, over the whole duration). Promoting it would give the random draw the same emote twice. The wrist jolt it carries (1000 °/s at t = 0.3 s) was therefore smoothed **in `happy-2`**, where it actually plays | 8.7 cm |
+| `neutral-2.vrma` | slow head nod — **redundant with the five `nod`s**: the face-to-face vocabulary must stay short, and `neutral` already has its clip. It holds up visually, but adds nothing | 8.1 cm |
 | `cand-idle-fenetre.vrma` | `idle` re-converted on the window the graph **declares** (1→300) instead of the trim that was kept — near-identical to the shipped file | 5.0 cm |
 | `cand-idle-2-fenetre.vrma` | same for `idle-2` (1→902) | 5.0 cm |
 | `cand-idle-3-fenetre.vrma` | same for `idle-3`, but the declared window runs **26.63 s** where the shipped file keeps only a 13.33 s sub-loop: this one really is different | 5.2 cm |
@@ -461,9 +547,14 @@ pose of the `idle` and `idle-talking` bases. Failure threshold: 10 cm.
 | `world-jump-start.vrma`, `world-jump-air.vrma`, `world-jump-land.vrma`, `world-jump-run-start.vrma`, `world-jump-run-land.vrma` | the five beats of a jump. In Overte the airborne phase is not an animation but **fixed poses blended by the physics engine's vertical speed**, and the jump height lives in the simulation, not in the file: without that code they do not stand up (see [`NOTICE.md`](NOTICE.md) §3) | — |
 | `world-afk-texting.vrma` | character tapping at a phone. **Orphaned in the graph**: `afk_texting.fbx` is referenced by no node, Overte itself never plays it | — |
 
-The four clips between 7.6 and 8.8 cm clear the threshold but fall outside the
-range of the 28 clips that were kept (4.1 to 8.0 cm): they are waiting on a
-judgement by eye, which the measurement cannot deliver.
+**Two of these clips moved up to the root** after the library's first judgement by
+eye: `idle-talking-4` (8.8 cm) and `relaxed-3` (7.6 cm). They fell outside the range
+of the clips that were kept (4.1 to 8.0 cm) without crossing the 10 cm threshold,
+and that was the only reproach the measurement had for them; on screen, the first
+gesticulates exactly like the `idle-talking-5/-6/-7` already in place, the second is
+a credible background loop. The two that remain above the range, `happy-5` and
+`neutral-2`, stay here — not for their seam, but because they **duplicate** a clip
+that already ships (see the table).
 
 **Six converted clips are deliberately not here**: the raw versions of
 `world-sit-point`, `world-sit-raise-hand-2` and the four `world-walk-stop-…`, from
@@ -497,6 +588,66 @@ These clips were set aside **on a measurement**, not at random. Above 10 cm the
 base → gesture → base seam shows: the body is dragged and the feet slide without a
 step. That is exactly what the rule protects, and what you accept losing by
 enabling one.
+
+## The sole under the floor: what these files do NOT fix, and why
+
+A diagnostic bench measures, on `reference.vrm` (hips 0.755 m), that **55 clips
+sink the sole below the floor**: the whole seated family by 8.5 to 10.4 cm, the
+strafes and runs by 5 to 10, the walks by 2.5 to 5.2. The reflex is to raise the
+hips translation track inside the `.vrma`. **That would be wrong, three times over.**
+
+**1. All 55 are `world-` clips.** The worst of the face-to-face domain is `idle-7`
+at 1.6 cm, under the 2 cm of sole thickness the bench tolerates. And the 3D world
+runs under a **leg inverse kinematics** pass (`client/src/scene/legIk.ts`), called
+every frame, whose whole job is exactly this: standing it **lifts** a foot that goes
+through the floor, seated it makes the foot **reach** for it. Its header quotes the
+same measurements as the bench ("`world-sit-idle` — 37 to 62 mm → very visible"):
+the defect is already corrected, in the right place, by articulating the leg rather
+than translating the body.
+
+**2. For the seated family, hip height is LOAD-BEARING.** It is
+`postureAssiseCanonique` in [`world.json`](world.json) — 0.5409 hip — and the code
+uses it to place the pelvis on the furniture's real seat. Raising the seated clips by
+8.6 cm would make the character **hover above the chair** by exactly that much, and
+the IK would stretch the legs to catch the floor.
+
+**3. For the gaits, it is not an offset.** Measured frame by frame, the sole of
+`world-walk` ranges from 0 to −5.2 cm within the cycle (median −1.1): it just touches
+at double support and sinks at mid-stance, because the stance knee is over-flexed. A
+constant 5.2 cm lift would leave **85 % of the cycle airborne by more than 2 cm** —
+trading a foot in the floor for a character on an air cushion. And a lift that
+follows the penetration frame by frame does straighten the pelvis curve, but injects
+**2 cm of limp** between the two half-cycles and **1.4 cm of pop at the loop seam**.
+The seated family is the one case where the sink IS constant (spread ≤ 0.4 cm across
+34 clips) — and that is precisely the one point 2 forbids touching.
+
+The rule that falls out: **a `.vrma` describes a pose, not an altitude.** The floor
+is the engine's job.
+
+## Fixes applied to the shipped clips
+
+These clips are no longer the raw conversion of their source. Every fix was measured
+before and after on the same bench, and validated by a full round trip (`GLTFLoader`
++ `VRMAnimationLoaderPlugin` + `createVRMAnimationClip`, frame-by-frame replay,
+sample at `duration − 1e-4`).
+
+| Clip | Fix | Before → after |
+| --- | --- | --- |
+| `world-run`, `world-strafe-left-run`, `world-strafe-right-run` | the right knee broke **backwards** at push-off: at the worst instant the knee sticks out 13 cm in front of the hip-ankle line. The knee track is soft-clipped (`tanh`, so no jolt and no broken seam) at the human limit | hyperextension **41°, 41°, 37° → 10°** — sole penetration, foot lift and seam all unchanged |
+| `world-turn-right` | the left knee bent 58° out of the plane of the leg during the crossover. The shin is brought back into the thigh's plane by a twist about the femoral axis (which does not touch flexion) | hinge **58° → 29°**, inside the envelope of `world-turn-left` (31°), which is healthy. Bench verdict: **defect → good** |
+| `shake` | did not read as a "no": **one single** 56° sweep. The window Overte's graph declares (frames 1→72) is already the whole file, and the only other standing "no" in the source (`thoughtfulheadshake`) is a single sweep too — there was nothing more to fetch. The central sweep is therefore **replayed as a time mirror**, with the turning points taken at the yaw extremes where the speed is zero; then the amplitude is brought down to that of `world-sit-shake`, Overte's own seated "no" | **0.5 → 1.5** round trips · amplitude **56° → 39°** · duration 2.30 → 3.63 s · **both edge poses are bit-for-bit the originals**, so the seam to the idle does not move |
+| `happy-2` | a 1000 °/s wrist jolt at t = 0.3 s (a badly interpolated key join), and a second at 818 °/s at t = 0.7 s. Local Laplacian smoothing on the quaternions, with zero weight at the window edges | peak speed **1000 → 688 °/s** · outside the window the file is unchanged, **edges included** |
+
+**`world-walk-slow` was examined and left alone.** Its feet only clear the ground by
+2.6 cm and it is the gait of the autonomous wander, but both proposed exits fail on
+measurement: replacing it with a slowed `world-walk` needs a factor of **3.69**
+(1.421 against 0.385 m/s), i.e. a 1.42 m stride spread over 3.7 s, and would break
+the stroll's phase contract and stride, which live in `client/src/scene/wander.ts`;
+retouching it by flexing the swing knee **trades one defect for another** — at +18°
+ground clearance goes from 2.6 to 5.6 cm (defect → borderline) but double support
+falls from 15 to 5 % of the cycle (good → defect), and at +26° clearance becomes good
+at the cost of that same double support. It is a short-stepped shuffle (18.4 cm,
+0.20 × hip height): making it lift its feet makes it a different gait.
 
 ## `world.json` — what a name cannot say
 

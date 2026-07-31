@@ -254,11 +254,11 @@ qu'aucune licence n'oblige à citer**, parce qu'un crédit caché n'honore perso
 
 ### Animations
 
-- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **107 des 109 clips** de la
-  bibliothèque active (plus les 19 clips de réserve de `vrma/extra/`, tous Overte eux aussi), et de
-  loin la source principale : **tout le mode face à face** — cinq animations de repos, quatre repos
-  « en train de parler », et dix-neuf gestes (`neutral`, `happy` ×3, `sad`, `angry` ×2, `relaxed`
-  ×2, `nod` ×5, `shake`, `think` ×2, `raise-hand` ×2) — plus l'intégralité de la locomotion, des
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **109 des 111 clips** de la
+  bibliothèque active (plus les 17 clips de réserve de `vrma/extra/`, tous Overte eux aussi), et de
+  loin la source principale : **tout le mode face à face** — cinq animations de repos, cinq repos
+  « en train de parler », et vingt gestes (`neutral`, `happy` ×3, `sad`, `angry` ×2, `relaxed`
+  ×3, `nod` ×5, `shake`, `think` ×2, `raise-hand` ×2) — plus l'intégralité de la locomotion, des
   gestes tenus et des postures assises de la scène 3D : vingt allures, cinq arrêts, pivots, départ,
   changements de posture debout, gestes tenus décomposés en intro-maintien-sortie, et le
   vocabulaire assis complet (maintiens, parole, micro-variations, pivots, accord, désaccord, joie,
