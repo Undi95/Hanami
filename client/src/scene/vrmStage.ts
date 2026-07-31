@@ -358,6 +358,12 @@ const WORLD_NEEDED: readonly string[] = [
   'walk',
   'walk-start',
   'walk-stop',
+  'sit-enter',
+  'sit-exit',
+  'sit-idle',
+  'sit-talking',
+  'sit-look',
+  'sit-shift',
 ]
 
 function worldUrlsNeeded(cat: VrmaCatalog, on: boolean): string[] {
@@ -898,6 +904,23 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     canStand: (x, z, radius, fromY) => sceneMap?.canStand(x, z, radius, fromY) ?? false,
     bodyRadius: () => sceneMap?.body.radius ?? 0.25,
     transitioning: () => onceThen !== null,
+    onceProgress: () => {
+      // Pendant une transition, l'écran est tenu par l'action à cycle unique
+      // (fadeTo l'a promue activeAction) : son temps donne l'avancement.
+      if (!onceThen || !activeAction) return 1
+      const d = activeAction.getClip().duration
+      return d > 0 ? Math.min(1, activeAction.time / d) : 1
+    },
+    interrupt(fade) {
+      if (!onceThen) return
+      onceThen = null
+      baseAction = desiredBase()
+      if (baseAction && activeAction !== baseAction) fadeTo(baseAction, fade)
+    },
+    feet: (mode) => {
+      footMode = mode
+    },
+    seats: () => sceneMap?.seats ?? [],
     mapped: () => sceneMap !== null,
   }
 
@@ -937,10 +960,12 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   function playGesture(emotion: Emotion): void {
     if (!mixer) return
     // Un geste monte à poids 1 sur TOUT le squelette (three n'a ni couche ni
-    // masque d'os) : déclenché pendant un pivot ou une marche, il arrêterait les
-    // jambes net. Le VISAGE, lui, continue de s'appliquer — setEmotion écrit
-    // l'expression avant d'arriver ici, et c'est ce qui porte l'émotion.
-    if (gaitAction) return
+    // masque d'os) : déclenché pendant un pivot, une marche, une posture assise
+    // ou une TRANSITION (départ, assise…), il casserait les jambes net — et un
+    // geste debout sur un personnage assis le ferait « sauter » de sa chaise.
+    // Le VISAGE, lui, continue de s'appliquer — setEmotion écrit l'expression
+    // avant d'arriver ici, et c'est ce qui porte l'émotion.
+    if (gaitAction || onceThen) return
     const action = pickAction(catalog?.gestures.get(emotion))
     if (!action) return // aucun fichier pour cette émotion : le visage suffit
     action.reset()
@@ -1492,12 +1517,15 @@ export function createVrmStage(container: HTMLElement): VrmStage {
         return
       }
       // Extinction : on remet LITTÉRALEMENT l'état d'avant — avatar à l'origine,
-      // cap nul, aucune allure — et on redemande un cadrage par défaut, que
-      // reframeAfterMixer n'appliquera que si l'utilisateur n'a pas composé le sien.
-      wander?.home()
+      // cap nul, aucune allure, pieds « posés » — et on redemande un cadrage par
+      // défaut, que reframeAfterMixer n'appliquera que si l'utilisateur n'a pas
+      // composé le sien. Les lignes après home() sont la ceinture ET les
+      // bretelles : home() a déjà rendu l'écran au socle via le contrat.
+      wander?.home(BASE_FADE)
       wander = null
       onceThen = null
       gaitAction = null
+      footMode = 'planted'
       avatarGroup.position.set(0, 0, 0)
       avatarGroup.rotation.y = 0
       syncBase(BASE_FADE)

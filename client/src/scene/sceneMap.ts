@@ -67,7 +67,7 @@ export interface Seat {
   id: string
   /** Altitude RÉELLE de la surface (m). 0,20 m comme 0,90 m sont recevables. */
   y: number
-  /** Centre de la nappe [x, z] — là où le bassin se pose. */
+  /** Centre de la nappe [x, z] — le milieu de la surface, PAS où le bassin se pose. */
   center: [number, number]
   /** Cap du regard une fois assis (DEGRÉS ; direction = [sin, 0, cos]). */
   yaw: number
@@ -75,6 +75,13 @@ export interface Seat {
   area: number
   /** Case praticable d'où venir s'asseoir [x, z], ou null : inaccessible à pied. */
   approach: [number, number] | null
+  /**
+   * Emprise de la nappe [xMin, zMin, xMax, zMax], ou null si le fichier ne la
+   * donne pas. C'est elle qui distingue une chaise d'un lit : sur une grande
+   * nappe, le bassin se pose au BORD côté approche, pas au centre — personne ne
+   * s'assoit au milieu d'un lit de deux mètres.
+   */
+  bounds: [number, number, number, number] | null
 }
 
 /** Ce que le moteur sait faire d'un décor analysé. */
@@ -187,6 +194,7 @@ export function parseSceneMap(raw: unknown): SceneMap | null {
         area: isFiniteNumber(s.area) ? s.area : 0,
         yaw: s.yaw,
         approach: asPair(s.approach),
+        bounds: asQuad(s.bounds),
       })
     }
   }
