@@ -32,6 +32,10 @@
         --alerte: #fbbf24;
         --rouge: #f87171;
         --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+        /* Largeur de la colonne de droite. Elle est déclarée ici parce que les
+           cartes de mesure en surimpression doivent savoir où s'arrêter pour ne
+           jamais mordre sur elle (voir #hud). */
+        --aside-l: 400px;
       }
       * { box-sizing: border-box; }
       html, body { height: 100%; margin: 0; }
@@ -55,13 +59,19 @@
       }
       header h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 600; }
       header .etiquette { color: var(--doux); font-size: 12px; }
-      main { flex: 1 1 auto; display: flex; min-height: 0; }
-      #vue { position: relative; flex: 1 1 auto; min-width: 0; background: #0c0d11; }
+      main { position: relative; flex: 1 1 auto; display: flex; min-height: 0; }
+      #vue { position: relative; flex: 1 1 auto; min-width: 0; background: #0c0d11; overflow: hidden; }
       #vue canvas { display: block; width: 100%; height: 100%; }
 
-      /* ── Mesures en surimpression ───────────────────────────────────────── */
+      /* ── Mesures en surimpression ─────────────────────────────────────────
+         #hud est un enfant de <main>, PAS de <section id="vue"> : en fenêtre
+         étroite il doit pouvoir passer sous la scène (voir la media query en fin
+         de feuille) au lieu de flotter par-dessus. En fenêtre large il redevient
+         une surimpression, bornée à gauche de la colonne de droite. */
       #hud {
-        position: absolute; top: 10px; left: 10px;
+        position: absolute; top: 10px; left: 10px; z-index: 4;
+        width: 420px;
+        max-width: max(0px, calc(100% - var(--aside-l) - 20px));
         display: flex; flex-direction: column; gap: 6px;
         pointer-events: none;
       }
@@ -70,8 +80,9 @@
         border: 1px solid var(--bord);
         border-radius: 8px;
         padding: 7px 10px;
-        min-width: 300px;
-        max-width: 420px;
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
       }
       .carte h2 {
         margin: 0 0 2px; font-size: 10.5px; letter-spacing: 0.09em;
@@ -103,11 +114,18 @@
 
       /* ── Colonne de droite ──────────────────────────────────────────────── */
       aside {
-        flex: 0 0 400px; display: flex; flex-direction: column;
+        flex: 0 0 var(--aside-l); display: flex; flex-direction: column;
         background: var(--fond2); border-left: 1px solid var(--bord); min-height: 0;
+        /* min-width:auto (la valeur par défaut d'un élément flex) laissait le
+           tableau — une vingtaine de colonnes en nowrap — pousser la colonne à
+           2288 px : la scène était écrasée à 0 px de large et ses cartes de
+           mesure débordaient en travers du tableau. C'est le panneau qui défile,
+           pas la colonne qui grossit. */
+        min-width: 0;
       }
-      /* Le tableau récapitulatif a une vingtaine de colonnes : il lui faut la place. */
-      body.large aside { flex: 0 0 min(78vw, 1500px); }
+      /* Le tableau récapitulatif a une vingtaine de colonnes : il lui faut la place.
+         On passe par la variable pour que #hud sache, lui aussi, où s'arrêter. */
+      body.large { --aside-l: min(78vw, 1500px); }
       #onglets { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--bord); flex: 0 0 auto; }
       #onglets button {
         flex: 1 0 auto; padding: 9px 7px; background: none; border: none;
@@ -199,6 +217,52 @@
       .cle { color: var(--doux); }
       .barre { height: 4px; background: var(--fond3); border-radius: 2px; overflow: hidden; margin-top: 6px; }
       .barre i { display: block; height: 100%; background: var(--accent); width: 0; }
+
+      /* ── Bandeau de résultat ───────────────────────────────────────────────
+         « Mais où est ce bouton pour voir les analyses ? » Le résultat doit venir
+         à l'utilisateur : ce bandeau suit l'onglet où il se trouve pendant
+         l'analyse, puis s'installe juste au-dessus du tableau. */
+      #annonce {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        margin: 0 0 9px; padding: 7px 10px;
+        border: 1px solid var(--bord); border-left: 4px solid var(--accent);
+        border-radius: 6px; background: var(--fond3); font-size: 12.5px;
+      }
+      #annonce[hidden] { display: none; }
+      #annonce.fini { border-left-color: var(--ok); background: rgba(12, 40, 25, 0.55); }
+      #annonceTitre { font-weight: 600; }
+      #annonce .detail { color: var(--doux); font: 11.5px var(--mono); }
+      #annonce button { padding: 2px 8px; font-size: 12px; }
+      #annonceFermer { margin-left: auto; padding: 1px 7px; line-height: 1.15; }
+      #jaugeAnnonce { flex: 0 0 100%; height: 3px; background: var(--fond); border-radius: 2px; overflow: hidden; }
+      #jaugeAnnonce i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.15s linear; }
+
+      /* ── Les mesures appartiennent à la vue scène ──────────────────────────
+         Dès qu'un onglet remplit l'écran de données (Tableau, Raccords, Monde 3D,
+         Séquences, Diagnostic), les cartes et le journal s'effacent au lieu de
+         recouvrir, semi-transparents, ce qu'on est en train de lire. */
+      body.donnees #hud, body.donnees #bandeau { display: none !important; }
+      /* … sauf le journal ouvert exprès au bouton : c'est la console d'erreurs,
+         elle doit rester joignable depuis n'importe quel onglet. Le journal
+         ouvert TOUT SEUL par une erreur, lui, reste effacé — le compteur rouge de
+         l'en-tête suffit à prévenir sans recouvrir ce qu'on lit. */
+      body.donnees #bandeau.ouvert { display: block !important; }
+
+      /* ── Fenêtre étroite (le panneau de prévisualisation fait ~800 px) ──────
+         La colonne de droite passe sous la scène, et les cartes de mesure aussi :
+         elles reprennent leur place dans le flux, entre les deux. Plus rien ne
+         flotte, donc plus rien ne se chevauche. */
+      @media (max-width: 900px) {
+        main { flex-direction: column; }
+        #vue { flex: 0 0 min(42vh, 340px); }
+        aside { flex: 1 1 auto; border-left: none; border-top: 1px solid var(--bord); }
+        #hud {
+          position: static; z-index: auto; width: auto; max-width: none;
+          flex: 0 0 auto; flex-direction: row; flex-wrap: wrap;
+          padding: 8px 10px; background: var(--fond2); border-bottom: 1px solid var(--bord);
+        }
+        .carte { flex: 1 1 250px; background: var(--fond3); }
+      }
     </style>
   </head>
 
@@ -223,38 +287,43 @@
 
     <main>
       <section id="vue">
-        <div id="hud">
-          <!-- LA règle d'acceptation, en tête et en gros : « si les animations ne
-               s'emboîtent pas comme il faut (idle, anim, idle), on vire ». -->
-          <div class="carte v-inconnu" id="carteVerdict">
-            <h2>Emboîtement idle → anim → idle (seuil 10 cm)</h2>
-            <div class="enorme" id="valVerdict">—</div>
-            <div class="petit" id="detVerdict">lance « Analyser les raccords » ou clique un clip</div>
-            <div class="petit" id="detVerdict2"></div>
-          </div>
-          <div class="carte">
-            <h2>Pieds — glissement horizontal</h2>
-            <div class="gros"><span class="pastille" id="pastPieds"></span><span id="valPieds">—</span></div>
-            <div class="petit" id="detPieds">gauche — · droite — · dérive hanches —</div>
-            <div class="petit" id="posPieds">position monde : —</div>
-          </div>
-          <div class="carte">
-            <h2>Orientation — lacet du buste / axe caméra (+Z)</h2>
-            <div class="gros"><span class="pastille" id="pastLacet"></span><span id="valLacet">—</span></div>
-            <div class="petit" id="detLacet">repos : —</div>
-          </div>
-          <div class="carte">
-            <h2>Vitesse angulaire max (°/s)</h2>
-            <div class="gros"><span class="pastille" id="pastVit"></span><span id="valVit">—</span></div>
-            <div class="petit" id="detVit">jambes — · bras — · mains — · tête —</div>
-          </div>
-          <div class="carte">
-            <h2>Lecture</h2>
-            <div class="petit" id="detLecture">aucun clip</div>
-          </div>
-        </div>
         <div id="bandeau"></div>
       </section>
+
+      <!-- Les cartes de mesure vivent EN DEHORS de la scène dans le DOM : en
+           fenêtre large le CSS les remet en surimpression au-dessus d'elle, en
+           fenêtre étroite elles se rangent dessous. Elles ne recouvrent jamais la
+           colonne de droite, et le JS les efface sur les onglets de données. -->
+      <div id="hud">
+        <!-- LA règle d'acceptation, en tête et en gros : « si les animations ne
+             s'emboîtent pas comme il faut (idle, anim, idle), on vire ». -->
+        <div class="carte v-inconnu" id="carteVerdict">
+          <h2>Emboîtement idle → anim → idle (seuil 10 cm)</h2>
+          <div class="enorme" id="valVerdict">—</div>
+          <div class="petit" id="detVerdict">lance « Analyser les raccords » ou clique un clip</div>
+          <div class="petit" id="detVerdict2"></div>
+        </div>
+        <div class="carte">
+          <h2>Pieds — glissement horizontal</h2>
+          <div class="gros"><span class="pastille" id="pastPieds"></span><span id="valPieds">—</span></div>
+          <div class="petit" id="detPieds">gauche — · droite — · dérive hanches —</div>
+          <div class="petit" id="posPieds">position monde : —</div>
+        </div>
+        <div class="carte">
+          <h2>Orientation — lacet du buste / axe caméra (+Z)</h2>
+          <div class="gros"><span class="pastille" id="pastLacet"></span><span id="valLacet">—</span></div>
+          <div class="petit" id="detLacet">repos : —</div>
+        </div>
+        <div class="carte">
+          <h2>Vitesse angulaire max (°/s)</h2>
+          <div class="gros"><span class="pastille" id="pastVit"></span><span id="valVit">—</span></div>
+          <div class="petit" id="detVit">jambes — · bras — · mains — · tête —</div>
+        </div>
+        <div class="carte">
+          <h2>Lecture</h2>
+          <div class="petit" id="detLecture">aucun clip</div>
+        </div>
+      </div>
 
       <aside>
         <div id="onglets">
@@ -366,6 +435,17 @@
           </div>
           <div id="tableau"></div>
         </div>
+
+        <!-- Bandeau de résultat. Il ne reste pas ici : le JS le déplace dans
+             l'onglet où se trouve l'utilisateur (progression), puis au-dessus du
+             tableau (fin d'analyse). Voir poserAnnonce(). -->
+        <div id="annonce" hidden>
+          <span id="annonceTitre"></span>
+          <span id="annonceDetail" class="detail"></span>
+          <button id="annonceVoir" type="button" hidden>voir le tableau →</button>
+          <button id="annonceFermer" type="button" title="fermer ce bandeau" aria-label="fermer">×</button>
+          <div id="jaugeAnnonce"><i id="barreAnnonce"></i></div>
+        </div>
       </aside>
     </main>
 
@@ -400,13 +480,26 @@
         if (e instanceof Error) return `${e.message}${e.stack ? '\n' + e.stack.split('\n')[1] : ''}`
         return String(e)
       }
+      /**
+       * Étape de dépouillement isolée : une fiche qui casse ne doit pas empêcher
+       * l'utilisateur de voir le résultat de son analyse. L'erreur va au journal,
+       * la suite continue.
+       */
+      function sansCasser(quoi, fn) {
+        try { fn() } catch (e) { journal(`${quoi} : ${texteErreur(e)}`, 'err') }
+      }
       window.addEventListener('error', (e) => journal(`erreur : ${e.message} (${e.filename}:${e.lineno})`, 'err'))
       window.addEventListener('unhandledrejection', (e) => journal(`promesse rejetée : ${texteErreur(e.reason)}`, 'err'))
       const consoleErreur = console.error.bind(console)
       const consoleAvert = console.warn.bind(console)
       console.error = (...a) => { journal('console.error : ' + a.map(String).join(' '), 'err'); consoleErreur(...a) }
       console.warn = (...a) => { journal('console.warn : ' + a.map(String).join(' '), 'warn'); consoleAvert(...a) }
-      document.getElementById('btnJournal').onclick = () => bandeau.classList.toggle('visible')
+      document.getElementById('btnJournal').onclick = () => {
+        // « ouvert » = ouvert à la main : ce journal-là se montre sur tous les
+        // onglets, y compris ceux où le CSS efface les surimpressions.
+        const ouvert = bandeau.classList.toggle('visible')
+        bandeau.classList.toggle('ouvert', ouvert)
+      }
 
       // ── Modules ES (import map → node_modules du projet) ───────────────────
       let THREE, GLTFLoader, OrbitControls, VRMLoaderPlugin, VRMUtils
@@ -1080,6 +1173,7 @@
         if (!cibles.length) { journal('aucun clip lisible à analyser', 'err'); return }
         balayageEnCours = true
         arreterBalayage = false
+        ouvrirCampagne()
         el('btnRaccords').disabled = true
         el('btnBalayage').disabled = true
         el('btnStopBalayage').disabled = false
@@ -1091,6 +1185,9 @@
           if (arreterBalayage) break
           el('etatClips').textContent = `analyse ${faits + 1}/${cibles.length} — ${nomClip(url)}`
           el('progres').style.width = `${((faits + 1) / cibles.length) * 100}%`
+          // Le bandeau suit l'utilisateur d'onglet en onglet : la progression est
+          // visible même s'il ne reste pas devant la grille de clips.
+          annoncerProgres(`Analyse des raccords ${faits + 1}/${cibles.length}`, nomClip(url), (faits + 1) / cibles.length)
           analyser(url)
           faits++
           majBouton(url)
@@ -1102,18 +1199,27 @@
         el('btnRaccords').disabled = false
         el('btnBalayage').disabled = false
         el('btnStopBalayage').disabled = true
-        construireLignes()
-        dessinerTableau()
-        majFicheRaccords()
-        majFicheMonde()
-        analyserSequences()
+        // Chaque étape du dépouillement est isolée : avant, une fiche qui levait
+        // une exception ici emportait la bascule vers le tableau avec elle, et
+        // l'utilisateur restait devant la grille sans rien voir venir.
+        sansCasser('tableau', () => { construireLignes(); dessinerTableau() })
+        sansCasser('fiche raccords', majFicheRaccords)
+        sansCasser('fiche monde 3D', majFicheMonde)
+        sansCasser('séquences', analyserSequences)
         const parV = {}
         for (const a of analyses.values()) parV[a.verdict] = (parV[a.verdict] ?? 0) + 1
         const resume = Object.entries(parV).map(([k, v]) => `${v} ${k}`).join(' · ')
-        el('etatClips').textContent = `analyse terminée : ${faits} clips — ${resume}`
+        const interrompue = arreterBalayage
+        el('etatClips').textContent = interrompue
+          ? `analyse interrompue à ${faits}/${cibles.length} — ${resume}`
+          : `analyse terminée : ${faits} clips — ${resume}`
         el('etatTableau').textContent = `${analyses.size} clips analysés · socle affiché : ${socleAffiche}`
         journal(`analyse des raccords : ${faits} clips — ${resume}`)
-        basculerOnglet('pTableau')
+        annoncerFin(
+          interrompue ? `Analyse interrompue — ${faits} clips` : `Analyse terminée — ${faits} clips`,
+          resume,
+          interrompue,
+        )
       }
 
       // ── Séquences ─────────────────────────────────────────────────────────
@@ -1934,6 +2040,7 @@
         if (!vrm) { journal('aucun modèle chargé — passe impossible', 'err'); return }
         balayageEnCours = true
         arreterBalayage = false
+        ouvrirCampagne()
         el('btnBalayage').disabled = true
         el('btnRaccords').disabled = true
         el('btnStopBalayage').disabled = false
@@ -1950,6 +2057,7 @@
           const url = urlsClips[i]
           el('etatClips').textContent = `passe en direct ${i + 1}/${urlsClips.length} — ${nomClip(url)}`
           el('progres').style.width = `${((i + 1) / urlsClips.length) * 100}%`
+          annoncerProgres(`Passe en direct ${i + 1}/${urlsClips.length}`, nomClip(url), (i + 1) / urlsClips.length)
           const ok = await jouer(url, { mesureSeule: true })
           if (!ok) continue
           await attendreBanc(DUREE_BALAYAGE)
@@ -1975,11 +2083,19 @@
         el('etatClips').textContent = arreterBalayage
           ? `passe en direct interrompue à ${direct.size}/${urlsClips.length}`
           : `passe en direct terminée : ${direct.size} clips`
+        sansCasser('tableau', () => { construireLignes(direct); dessinerTableau() })
         el('etatTableau').textContent =
           `${lignes.length} clips · ${direct.size} mesurés en direct (${DUREE_BALAYAGE} s, 1×) · socle affiché : ${socleAffiche}`
-        construireLignes(direct)
-        dessinerTableau()
-        basculerOnglet('pTableau')
+        // Une passe sans le moindre clip mesuré n'a rien à montrer : on n'emmène
+        // personne au tableau pour rien, on se contente d'effacer le bandeau.
+        if (!direct.size) { fermerAnnonce(); return }
+        annoncerFin(
+          arreterBalayage
+            ? `Passe en direct interrompue — ${direct.size} clips`
+            : `Passe en direct terminée — ${direct.size} clips`,
+          `${DUREE_BALAYAGE} s par clip, 1× · socle ${socleAffiche}`,
+          arreterBalayage,
+        )
       }
       el('btnRaccords').onclick = () => analyserTout().catch((e) => journal(`analyse : ${texteErreur(e)}`, 'err'))
       el('btnBalayage').onclick = () => balayer().catch((e) => journal(`passe : ${texteErreur(e)}`, 'err'))
@@ -2116,7 +2232,7 @@
         const tbody = document.createElement('tbody')
         for (const r of triees) {
           const ligne = document.createElement('tr')
-          ligne.onclick = () => { basculerOnglet('pClips'); selectionner(r.url); jouer(r.url).catch((e) => journal(texteErreur(e), 'err')) }
+          ligne.onclick = () => { basculerOnglet('pClips', true); selectionner(r.url); jouer(r.url).catch((e) => journal(texteErreur(e), 'err')) }
           for (const c of COLONNES) {
             const td = document.createElement('td')
             td.textContent = c.fmt(r)
@@ -2173,9 +2289,30 @@
       }
 
       // ── Onglets ───────────────────────────────────────────────────────────
-      function basculerOnglet(id) {
+      let ongletActif = 'pClips'
+      // L'utilisateur a-t-il changé d'onglet de lui-même pendant l'analyse en
+      // cours ? Si oui, on ne le téléportera pas au tableau à la fin.
+      let ongletChoisiPendant = false
+
+      /** Onglets qui remplissent l'écran de données : la scène y passe au second
+       *  plan, ses cartes de mesure n'ont donc rien à faire par-dessus. */
+      const ONGLETS_DONNEES = new Set(['pTableau', 'pRaccords', 'pMonde', 'pSequences', 'pDiagnostic'])
+
+      /** Les mesures appartiennent à la vue scène : visibles sur Clips et Décors,
+       *  effacées partout où l'on vient lire des données. */
+      function majVisibiliteHud() {
+        document.body.classList.toggle('donnees', ONGLETS_DONNEES.has(ongletActif))
+      }
+
+      function basculerOnglet(id, parUtilisateur = false) {
+        if (parUtilisateur && balayageEnCours) ongletChoisiPendant = true
+        ongletActif = id
         for (const b of document.querySelectorAll('#onglets button')) b.classList.toggle('actif', b.dataset.panneau === id)
         for (const p of document.querySelectorAll('.panneau')) p.classList.toggle('actif', p.id === id)
+        majVisibiliteHud()
+        // Le bandeau de progression suit l'utilisateur : s'il change d'onglet
+        // pendant l'analyse, il emporte le compteur avec lui.
+        if (balayageEnCours && !el('annonce').hidden) poserAnnonce(id)
         // Les fiches parlent du clip courant : elles doivent être à jour au moment
         // où on les regarde, pas seulement au moment où le clip a changé.
         if (id === 'pRaccords') majFicheRaccords()
@@ -2183,7 +2320,75 @@
         else if (id === 'pDiagnostic') majFicheDiagnostic().catch((e) => journal(`diagnostic : ${texteErreur(e)}`, 'warn'))
         else if (id === 'pSequences') majFicheSequence()
       }
-      for (const b of document.querySelectorAll('#onglets button')) b.onclick = () => basculerOnglet(b.dataset.panneau)
+      for (const b of document.querySelectorAll('#onglets button')) b.onclick = () => basculerOnglet(b.dataset.panneau, true)
+      majVisibiliteHud()
+
+      // ── Bandeau de résultat ───────────────────────────────────────────────
+      // Le bouton « Analyser les raccords » remplissait le tableau sans y emmener
+      // personne : on restait devant la grille de clips en croyant qu'il ne
+      // s'était rien passé. Désormais le résultat vient à l'utilisateur.
+
+      /** Range le bandeau en tête de l'onglet visé — au-dessus du tableau pour
+       *  l'onglet Tableau, tout en haut du panneau ailleurs. */
+      function poserAnnonce(id) {
+        const panneau = document.getElementById(id)
+        const boite = el('annonce')
+        if (!panneau || !boite || boite.parentElement === panneau) return
+        // Onglet Tableau : juste au-dessus du tableau, sous sa barre d'outils.
+        panneau.insertBefore(boite, id === 'pTableau' ? el('tableau') : panneau.firstChild)
+        panneau.scrollTop = 0
+      }
+
+      function fermerAnnonce() {
+        el('annonce').hidden = true
+        el('annonceVoir').hidden = true
+      }
+
+      /** Début d'une campagne (analyse ou passe) : on repart d'un bandeau propre. */
+      function ouvrirCampagne() {
+        ongletChoisiPendant = false
+        fermerAnnonce()
+        el('progres').style.width = '0%'
+      }
+
+      /** Progression, dans l'onglet où l'utilisateur se trouve à cet instant. */
+      function annoncerProgres(titre, detail, fraction) {
+        const boite = el('annonce')
+        boite.classList.remove('fini')
+        el('annonceTitre').textContent = titre
+        el('annonceDetail').textContent = detail ?? ''
+        el('annonceVoir').hidden = true
+        el('jaugeAnnonce').hidden = false
+        const f = Math.min(1, Math.max(0, Number(fraction) || 0))
+        el('barreAnnonce').style.width = `${Math.round(f * 100)}%`
+        if (boite.hidden) boite.hidden = false
+        poserAnnonce(ongletActif)
+      }
+
+      /**
+       * Fin de campagne. On bascule sur l'onglet Tableau — c'est là que les
+       * verdicts sont lisibles et triables. Sauf si l'utilisateur a choisi lui-même
+       * un autre onglet entre-temps (ou a arrêté la passe) : on ne le téléporte
+       * pas, on lui pose le bandeau sous les yeux avec un lien vers le tableau.
+       */
+      function annoncerFin(titre, detail, rester = false) {
+        const boite = el('annonce')
+        boite.hidden = false
+        boite.classList.add('fini')
+        el('annonceTitre').textContent = titre
+        el('annonceDetail').textContent = detail ?? ''
+        el('jaugeAnnonce').hidden = true
+        if (!rester && !ongletChoisiPendant) basculerOnglet('pTableau')
+        poserAnnonce(ongletActif)
+        el('annonceVoir').hidden = ongletActif === 'pTableau'
+      }
+
+      el('annonceVoir').onclick = () => {
+        basculerOnglet('pTableau')
+        poserAnnonce('pTableau')
+        el('annonceVoir').hidden = true
+      }
+      el('annonceFermer').onclick = fermerAnnonce
 
       // ── Décors ────────────────────────────────────────────────────────────
       let envRoot = null

@@ -227,7 +227,8 @@ disent *si ça se voit*. Un poignet à 40° ne se remarque pas ; un pied à 40 c
 ## Où il s'affiche
 
 - **carte en haut de la scène** : le verdict en gros, avec les deux écarts et le
-  fondu simulé ;
+  fondu simulé (visible sur les onglets *Clips* et *Décors* — voir « Le reste de
+  la page ») ;
 - **liseré gauche de chaque clip** dans la grille, avec `entrée / sortie` en cm ;
 - **onglet Raccords** : le détail complet du clip courant ;
 - **colonne VERDICT** du tableau, triable, et exportée en TSV.
@@ -426,9 +427,27 @@ les transitions à l'œil, pas à mesurer.
 - **Onglet Tableau** : toutes les grandeurs, triable par clic sur un en-tête,
   copiable en TSV, cliquable pour rejouer un clip. Le bouton **élargir** donne au
   tableau la largeur qu'il mérite (une trentaine de colonnes).
+- **Le résultat vient à toi.** Pendant l'*analyse des raccords* comme pendant la
+  *passe en direct*, un bandeau de progression (`n/total` + jauge) s'installe en
+  tête de l'onglet où tu te trouves, et **te suit** si tu changes d'onglet. À la
+  fin, la page **bascule sur l'onglet Tableau** et pose au-dessus du tableau un
+  bandeau vert « Analyse terminée — N clips » avec le décompte des verdicts.
+  Exception : si tu as changé d'onglet **toi-même** pendant l'analyse (ou si tu
+  l'as arrêtée), on ne te téléporte pas — le bandeau s'affiche là où tu es, avec
+  un bouton *voir le tableau →*. La croix le ferme.
+- **Les cartes de mesure appartiennent à la vue scène.** Elles sont visibles sur
+  *Clips* et *Décors*, **effacées** sur *Tableau*, *Raccords*, *Monde 3D*,
+  *Séquences* et *Diagnostic* : ces onglets-là remplissent l'écran de données, une
+  surimpression semi-transparente n'y masquerait que ce qu'on est venu lire. Elles
+  ne débordent jamais sur la colonne de droite, même en mode *élargir* (elles
+  rétrécissent), et en **fenêtre étroite** (< 900 px, la largeur d'un panneau de
+  prévisualisation) toute la page se réorganise en colonne : scène en haut, cartes
+  de mesure en bandeau **sous** la scène, onglets et panneaux dessous.
 - **Journal** en bas de la scène : toute exception, tout `console.warn` /
   `console.error`, avec un compteur rouge dans l'en-tête. Si la page semble vide,
-  c'est là qu'il faut regarder d'abord.
+  c'est là qu'il faut regarder d'abord. Ouvert **au bouton**, il se montre sur
+  n'importe quel onglet ; ouvert tout seul par une erreur, il reste effacé sur les
+  onglets de données — c'est le compteur rouge de l'en-tête qui prévient.
 
 ---
 
