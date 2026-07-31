@@ -13,11 +13,15 @@
  * humanoïde normalisé de @pixiv/three-vrm par le projet Hanami, 2026.
  * L'ensemble est redistribué sous AGPL-3.0.
  *
- * LA TABLE DES LIMITES ARTICULAIRES HUMAINES d'Overte, os par os, appliquée en
- * BOUT DE CHAÎNE : après le mixer, l'IK et tout layering, juste avant
- * vrm.update(). Aucune pose affichée ne peut violer l'enveloppe humaine, quel
- * que soit le modèle et quelle que soit la source (clip, IK, mélange) — les
- * limites sont des ANGLES, indépendants des proportions.
+ * LA TABLE DES LIMITES ARTICULAIRES HUMAINES d'Overte, os par os, appliquée
+ * JUSTE APRÈS LE MIXER (cf. vrmStage.tick()) : toute pose issue d'un clip ou
+ * d'un mélange est ramenée dans l'enveloppe humaine avant que les couches
+ * suivantes ne travaillent. Celles-ci n'en sortent pas par leurs propres
+ * moyens : l'IK des jambes est une charnière par construction, le regard se
+ * borne avec cette même table (constraintForBone), l'idle n'ajoute que des
+ * micro-offsets de respiration. Quel que soit le modèle et quelle que soit la
+ * source (clip, IK, mélange), les limites sont des ANGLES, indépendants des
+ * proportions.
  *
  * Adaptations au rig VRM normalisé, toutes délibérées :
  *  - dans le rig normalisé de three-vrm, la pose de repos de chaque os est
@@ -697,9 +701,10 @@ function constraintFor(bone: VRMHumanBoneName): RotationConstraint | null {
 
 export interface JointLimits {
   /**
-   * Borne TOUTES les rotations contraintes, sur les os normalisés, telles que
-   * la frame les affiche. À appeler après le mixer, l'IK et tout layering,
-   * avant vrm.update(). Rend le nombre d'os réellement modifiés.
+   * Borne TOUTES les rotations contraintes, sur les os normalisés. À appeler
+   * juste après le mixer, avant les couches qui restent dans l'enveloppe par
+   * elles-mêmes (IK charnière, regard borné par la même table) — c'est le
+   * point d'appel réel de vrmStage.tick(). Rend le nombre d'os modifiés.
    */
   apply(): number
   /** À appeler à toute discontinuité voulue (changement de modèle, téléportation). */
