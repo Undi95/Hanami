@@ -1467,6 +1467,12 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // encore dans sa pose de repos — donc pieds au sol par convention VRM,
       // ce dont dépend tout le calcul du point « semelle ».
       legIk = createLegIk(vrm, avatarGroup)
+      // Le TRAJET appartenait à l'ancien corps : un personnage assis dont on
+      // change le modèle laisserait le nouveau flotter à hauteur d'assise, dans
+      // une pièce peut-être identique (le rechargement du décor n'est pas
+      // garanti d'arriver, ni d'arriver après). Fondu nul : les clips du
+      // nouveau modèle ne sont pas encore là.
+      wander?.home(0)
       lastFrame = { vrm, h: height }
       frameCamera(vrm, height)
       // Les .vrma partent APRÈS le cadrage, sans être attendues : l'avatar est
