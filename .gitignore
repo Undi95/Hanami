@@ -27,6 +27,13 @@ portraits/*
 # livrés avec l'app pour que tout le monde ait la même scène. Ne pas les ignorer,
 # et ne pas ajouter de règle par extension (*.vrma, *.glb…) qui les masquerait.
 
+# Sorties du diagnostic d'animations (devtools/) : des centaines de PNG et de
+# fiches, ~150 Mo, entièrement régénérables par « node devtools/diagnostic/diagnostic.mjs
+# --lot ». Un chemin de DOSSIER, pas une règle par extension (cf. ci-dessus).
+# Le reste de devtools/ est suivi, notes-visuelles.json compris : c'est le
+# commentaire écrit à la main devant les images, il ne se régénère pas.
+devtools/diagnostic-out/
+
 *.log
 .env
 .env.*

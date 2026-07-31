@@ -1,0 +1,2436 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Banc d'essai — animations VRM (Hanami)</title>
+
+    <!-- Les builds ESM de three-vrm* importent « three » en bare specifier :
+         l'import map les résout vers les node_modules du projet, servis par
+         serve.mjs. Une seule instance de three pour tout le monde. -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/node_modules/three/build/three.module.js",
+          "three/": "/node_modules/three/",
+          "@pixiv/three-vrm": "/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js",
+          "@pixiv/three-vrm-animation": "/node_modules/@pixiv/three-vrm-animation/lib/three-vrm-animation.module.js"
+        }
+      }
+    </script>
+
+    <style>
+      :root {
+        --fond: #101116;
+        --fond2: #171922;
+        --fond3: #1f222d;
+        --bord: #2c3140;
+        --texte: #e6e8ef;
+        --doux: #99a0b3;
+        --accent: #7cc4ff;
+        --ok: #4ade80;
+        --alerte: #fbbf24;
+        --rouge: #f87171;
+        --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background: var(--fond);
+        color: var(--texte);
+        font: 14px/1.45 system-ui, "Segoe UI", sans-serif;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        background: var(--fond2);
+        border-bottom: 1px solid var(--bord);
+        flex: 0 0 auto;
+        flex-wrap: wrap;
+      }
+      header h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 600; }
+      header .etiquette { color: var(--doux); font-size: 12px; }
+      main { flex: 1 1 auto; display: flex; min-height: 0; }
+      #vue { position: relative; flex: 1 1 auto; min-width: 0; background: #0c0d11; }
+      #vue canvas { display: block; width: 100%; height: 100%; }
+
+      /* ── Mesures en surimpression ───────────────────────────────────────── */
+      #hud {
+        position: absolute; top: 10px; left: 10px;
+        display: flex; flex-direction: column; gap: 6px;
+        pointer-events: none;
+      }
+      .carte {
+        background: rgba(16, 17, 22, 0.82);
+        border: 1px solid var(--bord);
+        border-radius: 8px;
+        padding: 7px 10px;
+        min-width: 300px;
+        max-width: 420px;
+      }
+      .carte h2 {
+        margin: 0 0 2px; font-size: 10.5px; letter-spacing: 0.09em;
+        text-transform: uppercase; color: var(--doux); font-weight: 600;
+      }
+      .gros { font: 600 21px/1.15 var(--mono); }
+      .petit { font: 12px/1.4 var(--mono); color: var(--doux); }
+      .pastille {
+        display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+        background: var(--ok); margin-right: 6px; vertical-align: 1px;
+      }
+      .pastille.alerte { background: var(--alerte); }
+      .pastille.rouge { background: var(--rouge); box-shadow: 0 0 8px var(--rouge); }
+      .val-ok { color: var(--ok); }
+      .val-alerte { color: var(--alerte); }
+      .val-rouge { color: var(--rouge); }
+
+      #bandeau {
+        position: absolute; bottom: 0; left: 0; right: 0;
+        background: rgba(12, 13, 17, 0.92);
+        border-top: 1px solid var(--bord);
+        font: 12px/1.5 var(--mono);
+        max-height: 34%; overflow: auto; padding: 6px 10px; display: none;
+      }
+      #bandeau.visible { display: block; }
+      #bandeau .err { color: var(--rouge); }
+      #bandeau .warn { color: var(--alerte); }
+      #bandeau .info { color: var(--doux); }
+
+      /* ── Colonne de droite ──────────────────────────────────────────────── */
+      aside {
+        flex: 0 0 400px; display: flex; flex-direction: column;
+        background: var(--fond2); border-left: 1px solid var(--bord); min-height: 0;
+      }
+      /* Le tableau récapitulatif a une vingtaine de colonnes : il lui faut la place. */
+      body.large aside { flex: 0 0 min(78vw, 1500px); }
+      #onglets { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--bord); flex: 0 0 auto; }
+      #onglets button {
+        flex: 1 0 auto; padding: 9px 7px; background: none; border: none;
+        color: var(--doux); font: inherit; cursor: pointer; border-bottom: 2px solid transparent;
+        white-space: nowrap;
+      }
+      #onglets button.actif { color: var(--texte); border-bottom-color: var(--accent); background: var(--fond3); }
+      .panneau { display: none; overflow: auto; padding: 10px; flex: 1 1 auto; min-height: 0; }
+      .panneau.actif { display: block; }
+
+      .ligne { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+      label { color: var(--doux); font-size: 12px; }
+      select, button, input[type="text"] {
+        background: var(--fond3); color: var(--texte); border: 1px solid var(--bord);
+        border-radius: 6px; padding: 5px 8px; font: inherit;
+      }
+      select { color-scheme: dark; max-width: 100%; }
+      button { cursor: pointer; }
+      button:hover:not(:disabled) { border-color: var(--accent); }
+      button:disabled { opacity: 0.45; cursor: default; }
+      button.actif { border-color: var(--accent); color: var(--accent); }
+      button.primaire { background: #24405c; border-color: #37648f; }
+
+      .grilleClips { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+      .grilleClips .clip {
+        text-align: left; padding: 5px 7px; line-height: 1.25; overflow: hidden; position: relative;
+      }
+      .grilleClips .clip.actif { border-color: var(--accent); background: #223349; }
+      .grilleClips .clip .nom { display: block; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .grilleClips .clip .duree { display: block; font: 11px var(--mono); color: var(--doux); }
+      .grilleClips .clip.rate { border-color: var(--rouge); }
+      /* Le verdict est le premier chose qu'on doit voir : liseré épais à gauche. */
+      .grilleClips .clip[data-verdict] { border-left-width: 4px; }
+      .grilleClips .clip .vd { font: 10px var(--mono); letter-spacing: 0.04em; }
+
+      .titreDomaine {
+        display: flex; align-items: baseline; gap: 8px; margin: 12px 0 5px;
+        font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--doux);
+      }
+      .titreDomaine:first-child { margin-top: 0; }
+      .titreDomaine b { color: var(--texte); letter-spacing: 0; text-transform: none; font-size: 13px; }
+      .titreDomaine .poids { font: 11px var(--mono); margin-left: auto; text-transform: none; letter-spacing: 0; }
+
+      /* ── Verdict de la règle d'acceptation ─────────────────────────────────
+         « Si les animations ne s'emboîtent pas (idle, anim, idle), on vire. »
+         C'est LE chiffre qui décide : il doit sauter aux yeux, partout. */
+      .v-excellent { color: #34d399; border-color: #34d399 !important; }
+      .v-passe { color: var(--ok); border-color: #2f7d51 !important; }
+      .v-limite { color: var(--alerte); border-color: var(--alerte) !important; }
+      .v-echoue { color: var(--rouge); border-color: var(--rouge) !important; }
+      .v-inconnu { color: var(--doux); }
+      td.v-echoue, td.v-limite { font-weight: 700; }
+      #carteVerdict { border-width: 2px; }
+      #carteVerdict.v-echoue { background: rgba(70, 18, 18, 0.86); }
+      #carteVerdict.v-limite { background: rgba(66, 48, 8, 0.86); }
+      #carteVerdict.v-excellent, #carteVerdict.v-passe { background: rgba(12, 40, 25, 0.86); }
+      .enorme { font: 700 27px/1.1 var(--mono); letter-spacing: 0.02em; }
+
+      .fiche { font: 12px/1.5 var(--mono); }
+      .fiche .lg { display: flex; gap: 6px; }
+      .fiche .lg span:first-child { color: var(--doux); flex: 0 0 46%; }
+      .fiche h3 {
+        margin: 12px 0 4px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--doux); font-weight: 600;
+      }
+      .fiche h3:first-child { margin-top: 0; }
+      .accord { color: var(--ok); }
+      .desaccord { color: var(--rouge); font-weight: 600; }
+      .reserve { color: var(--alerte); }
+      /* Diagnostic : les PNG du devtools sont clairs, on les pose sur blanc. */
+      #pDiagnostic a.imgDiag { display: block; margin: 6px 0 12px; }
+      #pDiagnostic a.imgDiag img {
+        max-width: 100%; height: auto; display: block;
+        background: #fff; border: 1px solid var(--bord); border-radius: 4px;
+      }
+      #pDiagnostic .legendeImg { font-size: 11px; color: var(--texte2, #9aa4b2); margin: 8px 0 2px; }
+      #pDiagnostic details { margin: 8px 0; }
+      #pDiagnostic details summary { cursor: pointer; color: var(--accent); }
+      .puce { margin: 3px 0 3px 12px; }
+
+      table { width: 100%; border-collapse: collapse; font: 11.5px/1.35 var(--mono); }
+      th, td { padding: 3px 4px; border-bottom: 1px solid var(--bord); text-align: right; white-space: nowrap; }
+      th { position: sticky; top: 0; background: var(--fond3); cursor: pointer; user-select: none; font-weight: 600; }
+      th:first-child, td:first-child { text-align: left; }
+      tbody tr:hover { background: #222633; cursor: pointer; }
+      .legende { color: var(--doux); font-size: 11.5px; margin-top: 8px; }
+      .note { color: var(--doux); font-size: 12px; margin: 4px 0 10px; }
+      hr { border: none; border-top: 1px solid var(--bord); margin: 10px 0; }
+      .cle { color: var(--doux); }
+      .barre { height: 4px; background: var(--fond3); border-radius: 2px; overflow: hidden; margin-top: 6px; }
+      .barre i { display: block; height: 100%; background: var(--accent); width: 0; }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <h1>Banc d'essai — animations VRM</h1>
+      <label for="selModele">modèle</label>
+      <select id="selModele"></select>
+      <label for="selCadrage">cadrage</label>
+      <select id="selCadrage">
+        <option value="corps">corps entier</option>
+        <option value="buste">buste (comme l'app)</option>
+        <option value="piece">pièce entière</option>
+      </select>
+      <button id="vueFace" title="caméra de face (axe de l'app)">face</button>
+      <button id="vueCote">côté</button>
+      <button id="vueDessus" title="vue de dessus : la meilleure pour juger le glissement">dessus</button>
+      <button id="btnReperes" class="actif" title="grille, axe +Z, empreintes">repères</button>
+      <span class="etiquette" id="etatGeneral">initialisation…</span>
+      <button id="btnJournal" style="margin-left:auto">journal <span id="cptErreurs"></span></button>
+    </header>
+
+    <main>
+      <section id="vue">
+        <div id="hud">
+          <!-- LA règle d'acceptation, en tête et en gros : « si les animations ne
+               s'emboîtent pas comme il faut (idle, anim, idle), on vire ». -->
+          <div class="carte v-inconnu" id="carteVerdict">
+            <h2>Emboîtement idle → anim → idle (seuil 10 cm)</h2>
+            <div class="enorme" id="valVerdict">—</div>
+            <div class="petit" id="detVerdict">lance « Analyser les raccords » ou clique un clip</div>
+            <div class="petit" id="detVerdict2"></div>
+          </div>
+          <div class="carte">
+            <h2>Pieds — glissement horizontal</h2>
+            <div class="gros"><span class="pastille" id="pastPieds"></span><span id="valPieds">—</span></div>
+            <div class="petit" id="detPieds">gauche — · droite — · dérive hanches —</div>
+            <div class="petit" id="posPieds">position monde : —</div>
+          </div>
+          <div class="carte">
+            <h2>Orientation — lacet du buste / axe caméra (+Z)</h2>
+            <div class="gros"><span class="pastille" id="pastLacet"></span><span id="valLacet">—</span></div>
+            <div class="petit" id="detLacet">repos : —</div>
+          </div>
+          <div class="carte">
+            <h2>Vitesse angulaire max (°/s)</h2>
+            <div class="gros"><span class="pastille" id="pastVit"></span><span id="valVit">—</span></div>
+            <div class="petit" id="detVit">jambes — · bras — · mains — · tête —</div>
+          </div>
+          <div class="carte">
+            <h2>Lecture</h2>
+            <div class="petit" id="detLecture">aucun clip</div>
+          </div>
+        </div>
+        <div id="bandeau"></div>
+      </section>
+
+      <aside>
+        <div id="onglets">
+          <button data-panneau="pClips" class="actif">Clips</button>
+          <button data-panneau="pRaccords">Raccords</button>
+          <button data-panneau="pMonde">Monde 3D</button>
+          <button data-panneau="pDiagnostic" title="fiche biomécanique + planches PNG générées par devtools/diagnostic/diagnostic.mjs">Diagnostic</button>
+          <button data-panneau="pSequences">Séquences</button>
+          <button data-panneau="pDecors">Décors</button>
+          <button data-panneau="pTableau">Tableau</button>
+        </div>
+
+        <div class="panneau actif" id="pClips">
+          <div class="ligne">
+            <button id="btnPause">‖ pause</button>
+            <label>vitesse</label>
+            <button class="vit" data-v="0.25">0,25×</button>
+            <button class="vit" data-v="0.5">0,5×</button>
+            <button class="vit actif" data-v="1">1×</button>
+            <button id="btnRaz" title="remet les maximums à zéro">RàZ mesures</button>
+          </div>
+          <div class="ligne">
+            <label><input type="checkbox" id="chkIdle" /> jouer depuis l'idle (idle → clip → idle, en fondu)</label>
+          </div>
+          <div class="ligne">
+            <label for="selSocle">socle de référence</label>
+            <select id="selSocle"></select>
+            <label for="selDomaine">domaine</label>
+            <select id="selDomaine">
+              <option value="tous">les deux</option>
+              <option value="face">face à face</option>
+              <option value="monde">monde 3D</option>
+            </select>
+          </div>
+          <div class="ligne">
+            <button id="btnRaccords" class="primaire" title="statique + simulation des fondus : quelques secondes, aucune lecture">Analyser les raccords</button>
+            <button id="btnBalayage" title="joue chaque clip 3 s : ajoute les mesures en direct">+ passe en direct (3 s / clip)</button>
+            <button id="btnStopBalayage" disabled>arrêter</button>
+          </div>
+          <div class="barre"><i id="progres"></i></div>
+          <div class="note" id="etatClips">chargement de la liste…</div>
+          <div id="clips"></div>
+          <div class="legende">
+            <b>Verdict</b> = liseré gauche de chaque clip, d'après l'écart d'emboîtement en
+            centimètres : ≤ 2 excellent, ≤ 7 passe, ≤ 10 limite, <b>&gt; 10 échoue</b>.
+            Il faut avoir lancé « Analyser les raccords » pour qu'il s'affiche.<br />
+            Dans la scène : la <b>flèche verte</b> montre le +Z, c'est-à-dire la direction
+            « face à la caméra ». Chaque <b>anneau au sol</b> marque la position de départ d'un
+            pied et son rayon vaut exactement le seuil de 3 cm ; le <b>point</b> de la même
+            couleur suit le pied. Un point qui sort de son anneau, c'est un pied qui patine —
+            la vue « dessus » est la plus parlante pour ça.
+          </div>
+        </div>
+
+        <div class="panneau" id="pRaccords">
+          <div class="note" id="etatRaccords">Choisis un clip, puis « Analyser les raccords ».</div>
+          <div id="ficheRaccords" class="fiche"></div>
+        </div>
+
+        <div class="panneau" id="pMonde">
+          <div class="note" id="etatMonde">Choisis un clip du domaine <code>world-</code>.</div>
+          <div id="ficheMonde" class="fiche"></div>
+        </div>
+
+        <div class="panneau" id="pDiagnostic">
+          <div class="note" id="etatDiagnostic">chargement de l'inventaire…</div>
+          <div id="ficheDiagnostic" class="fiche"></div>
+        </div>
+
+        <div class="panneau" id="pSequences">
+          <div class="ligne">
+            <select id="selSequence"></select>
+            <button id="btnJouerSeq" class="primaire">jouer en boucle</button>
+            <button id="btnStopSeq" disabled>arrêter</button>
+          </div>
+          <div class="note" id="etatSequence">
+            Les enchaînements que l'app fera. L'écart est mesuré à chaque <b>jointure</b> :
+            dernière image du clip sortant contre première image du clip entrant. Si le clip
+            sortant boucle, il sera quitté à une phase quelconque — on juge donc sur le
+            <b>pire</b> cas du cycle, pas sur la moyenne.
+          </div>
+          <div id="ficheSequence" class="fiche"></div>
+        </div>
+
+        <div class="panneau" id="pDecors">
+          <div class="ligne">
+            <label for="selDecor">décor</label>
+            <select id="selDecor"></select>
+            <button id="btnDecor">charger</button>
+            <button id="btnSansDecor">retirer</button>
+          </div>
+          <div class="note" id="etatDecor">aucun décor chargé.</div>
+          <div id="mesuresDecor" class="petit"></div>
+          <hr />
+          <div class="note">
+            Le décor est posé comme dans l'app : le personnage reste à l'origine du monde,
+            c'est la pièce qui se déplace pour amener son point d'accueil sous ses pieds.
+            Le sidecar <code>&lt;décor&gt;.json</code> (<code>scale</code>, <code>rotationY</code>,
+            <code>spawn</code>, <code>exposure</code>) est appliqué s'il existe ; son absence est
+            le cas normal et ne produit aucune erreur.
+          </div>
+        </div>
+
+        <div class="panneau" id="pTableau">
+          <div class="ligne">
+            <button id="btnCsv">copier en TSV</button>
+            <button id="btnLarge" title="élargit le panneau : le tableau a une vingtaine de colonnes">élargir</button>
+            <span class="etiquette" id="etatTableau">aucune analyse effectuée</span>
+          </div>
+          <div id="tableau"></div>
+        </div>
+      </aside>
+    </main>
+
+    <script type="module">
+      // ════════════════════════════════════════════════════════════════════════
+      // Banc d'essai visuel des 43 clips .vrma du projet Hanami.
+      // Réglages de scène repris de client/src/scene/vrmStage.ts pour que ce que
+      // l'on juge ici ressemble à ce que l'app affichera.
+      // ════════════════════════════════════════════════════════════════════════
+
+      // ── Journal visible : TOUTE exception doit finir à l'écran ──────────────
+      const bandeau = document.getElementById('bandeau')
+      const cptErreurs = document.getElementById('cptErreurs')
+      let nbErreurs = 0
+
+      function journal(message, genre = 'info') {
+        const ligne = document.createElement('div')
+        ligne.className = genre
+        const h = new Date().toLocaleTimeString('fr-FR')
+        ligne.textContent = `${h}  ${message}`
+        bandeau.appendChild(ligne)
+        bandeau.scrollTop = bandeau.scrollHeight
+        while (bandeau.childElementCount > 300) bandeau.removeChild(bandeau.firstChild)
+        if (genre === 'err') {
+          nbErreurs++
+          cptErreurs.textContent = `(${nbErreurs})`
+          cptErreurs.style.color = 'var(--rouge)'
+          bandeau.classList.add('visible')
+        }
+      }
+      function texteErreur(e) {
+        if (e instanceof Error) return `${e.message}${e.stack ? '\n' + e.stack.split('\n')[1] : ''}`
+        return String(e)
+      }
+      window.addEventListener('error', (e) => journal(`erreur : ${e.message} (${e.filename}:${e.lineno})`, 'err'))
+      window.addEventListener('unhandledrejection', (e) => journal(`promesse rejetée : ${texteErreur(e.reason)}`, 'err'))
+      const consoleErreur = console.error.bind(console)
+      const consoleAvert = console.warn.bind(console)
+      console.error = (...a) => { journal('console.error : ' + a.map(String).join(' '), 'err'); consoleErreur(...a) }
+      console.warn = (...a) => { journal('console.warn : ' + a.map(String).join(' '), 'warn'); consoleAvert(...a) }
+      document.getElementById('btnJournal').onclick = () => bandeau.classList.toggle('visible')
+
+      // ── Modules ES (import map → node_modules du projet) ───────────────────
+      let THREE, GLTFLoader, OrbitControls, VRMLoaderPlugin, VRMUtils
+      let VRMAnimationLoaderPlugin, VRMLookAtQuaternionProxy, createVRMAnimationClip
+      let M // ./mesures.mjs — LE noyau de mesure, partagé avec la sonde headless
+      try {
+        THREE = await import('three')
+        ;({ GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js'))
+        ;({ OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js'))
+        ;({ VRMLoaderPlugin, VRMUtils } = await import('@pixiv/three-vrm'))
+        ;({ VRMAnimationLoaderPlugin, VRMLookAtQuaternionProxy, createVRMAnimationClip } = await import(
+          '@pixiv/three-vrm-animation'
+        ))
+        // Rien de la logique de mesure ne vit dans cette page : elle est dans
+        // ./mesures.mjs, que `node sonde.mjs` importe à l'identique. C'est ainsi
+        // que les chiffres affichés ici se vérifient depuis un terminal.
+        M = await import('./mesures.mjs')
+        journal(`modules chargés — three r${THREE.REVISION}, noyau de mesure ./mesures.mjs`)
+      } catch (e) {
+        journal(`IMPOSSIBLE DE CHARGER LES MODULES : ${texteErreur(e)}`, 'err')
+        journal('vérifie que serve.mjs tourne et que /node_modules/three/build/three.module.js répond', 'err')
+        throw e
+      }
+
+      // ── Seuils d'alerte (voir LISEZMOI.md) ────────────────────────────────
+      const SEUIL_GLISSEMENT = 0.03 // m — au-delà, « les pieds patinent »
+      const SEUIL_GLISSEMENT_ROUGE = 0.08
+      const SEUIL_DERIVE = 0.05 // m — le personnage quitte sa place
+      const SEUIL_LACET = 15 // ° — il commence à tourner le dos à la caméra
+      const SEUIL_LACET_ROUGE = 30
+      const SEUIL_VITESSE = 500 // °/s — geste très vif
+      const SEUIL_VITESSE_ROUGE = 1000 // °/s — quasi certainement une aberration
+      const DUREE_BALAYAGE = 3 // s par clip pendant la passe en direct
+
+      // Éclairage et cadrage : constantes de vrmStage.ts.
+      const KEY_LIGHT_SOLO = 2.2, FILL_LIGHT_SOLO = 0.6
+      const KEY_LIGHT_ENV = 1.1, FILL_LIGHT_ENV = 0.35
+      const ENV_MIN_HEIGHT = 1.5, ENV_MAX_HEIGHT = 12, ENV_TARGET_HEIGHT = 2.6
+      const DEG2RAD = Math.PI / 180
+      const REST_POSE_Z = [
+        ['leftUpperArm', 1.25], ['rightUpperArm', -1.25],
+        ['leftLowerArm', 0.12], ['rightLowerArm', -0.12],
+      ]
+      // Les constantes du lecteur viennent du noyau partagé, pas d'une copie ici.
+      const GESTURE_FADE = M.GESTURE_FADE, GESTURE_RETURN = M.GESTURE_RETURN
+
+      // Groupes d'os pour la vitesse angulaire.
+      const GROUPES = {
+        jambes: ['leftUpperLeg','rightUpperLeg','leftLowerLeg','rightLowerLeg','leftFoot','rightFoot','leftToes','rightToes'],
+        bras: ['leftShoulder','rightShoulder','leftUpperArm','rightUpperArm','leftLowerArm','rightLowerArm'],
+        mains: ['leftHand','rightHand'],
+        tête: ['neck','head'],
+      }
+      /** Clip de déplacement : une grande amplitude de pied y est NORMALE.
+       *  Déduit du NOM (les allures, le saut, les départs / arrêts du monde 3D) —
+       *  aucune liste de fichiers en dur, l'autre agent en ajoute et en retire. */
+      const estLocomotion = (slug) =>
+        /^world-(walk|jump|turn)/.test(slug) || /^(walk|jog|sprint|swim|crouch-walk|jump)/.test(slug)
+
+      // ── Scène ─────────────────────────────────────────────────────────────
+      const conteneur = document.getElementById('vue')
+      const renderer = new THREE.WebGLRenderer({ antialias: true })
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      renderer.outputColorSpace = THREE.SRGBColorSpace
+      conteneur.appendChild(renderer.domElement)
+
+      const scene = new THREE.Scene()
+      scene.background = new THREE.Color(0x14161d) // fond neutre (l'app le laisse au CSS)
+      const avatarGroup = new THREE.Group()
+      const envGroup = new THREE.Group()
+      const reperes = new THREE.Group()
+      scene.add(avatarGroup, envGroup, reperes)
+
+      // Même optique que l'app (fov 30) ; plans et distances élargis, c'est un
+      // banc d'inspection : on doit pouvoir reculer pour voir la pièce.
+      const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 300)
+      camera.position.set(0, 1.35, 1.8)
+
+      const keyLight = new THREE.DirectionalLight(0xffffff, KEY_LIGHT_SOLO)
+      keyLight.position.set(0.3, 1.6, 1.2)
+      scene.add(keyLight)
+      const fillLight = new THREE.HemisphereLight(0xffffff, 0x8890a0, FILL_LIGHT_SOLO)
+      scene.add(fillLight)
+
+      const controls = new OrbitControls(camera, renderer.domElement)
+      controls.enableDamping = true
+      controls.minDistance = 0.2
+      controls.maxDistance = 40
+      controls.target.set(0, 1.25, 0)
+
+      // Repères : grille au sol, axe +Z (« face à la caméra »), empreintes de départ.
+      const grille = new THREE.GridHelper(6, 60, 0x3a4152, 0x232936)
+      reperes.add(grille)
+      const axeZ = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0.005, 0), 0.7, 0x4ade80, 0.12, 0.07)
+      reperes.add(axeZ)
+      // Empreintes : le RAYON de l'anneau EST le seuil d'alerte (3 cm). Un pied
+      // dont le point sort de son anneau, c'est un pied qui patine — visible à
+      // l'œil, surtout depuis la vue de dessus.
+      function marqueSol(couleur, geometrie) {
+        const m = new THREE.Mesh(
+          geometrie,
+          new THREE.MeshBasicMaterial({ color: couleur, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthTest: false }),
+        )
+        m.rotation.x = -Math.PI / 2
+        m.position.y = 0.004
+        m.renderOrder = 2
+        m.visible = false
+        reperes.add(m)
+        return m
+      }
+      const empreinteG = marqueSol(0x7cc4ff, new THREE.RingGeometry(SEUIL_GLISSEMENT - 0.002, SEUIL_GLISSEMENT + 0.002, 40))
+      const empreinteD = marqueSol(0xfbbf24, new THREE.RingGeometry(SEUIL_GLISSEMENT - 0.002, SEUIL_GLISSEMENT + 0.002, 40))
+      const pointG = marqueSol(0x7cc4ff, new THREE.CircleGeometry(0.012, 16))
+      const pointD = marqueSol(0xfbbf24, new THREE.CircleGeometry(0.012, 16))
+
+      function redimensionner() {
+        const w = Math.max(1, conteneur.clientWidth)
+        const h = Math.max(1, conteneur.clientHeight)
+        renderer.setSize(w, h, false)
+        camera.aspect = w / h
+        camera.updateProjectionMatrix()
+      }
+      redimensionner()
+      new ResizeObserver(redimensionner).observe(conteneur)
+
+      // ── Loaders (un par nature de fichier, comme dans l'app) ───────────────
+      const vrmLoader = new GLTFLoader()
+      vrmLoader.register((p) => new VRMLoaderPlugin(p))
+      const vrmaLoader = new GLTFLoader()
+      vrmaLoader.register((p) => new VRMAnimationLoaderPlugin(p))
+      const envLoader = new GLTFLoader()
+
+      // ── État ──────────────────────────────────────────────────────────────
+      let vrm = null
+      let hauteurModele = 1.6
+      let mixer = null
+      const animCache = new Map() // url → VRMAnimation | null  (indépendant du modèle)
+      const clipCache = new Map() // url → AnimationClip        (lié au VRM courant)
+      const actions = new Map() // url → AnimationAction        (lié au mixer courant)
+      const durees = new Map() // url → secondes
+      let urlsClips = []
+      let urlIdle = null
+      let clipCourant = null
+      let actionCourante = null
+      let actionClip = null
+      let actionIdle = null
+      let phase = 'vide' // vide | clip | idle | retour
+      let enLecture = true
+      let vitesse = 1
+      let depuisIdle = false
+      let cycleJeton = 0
+      let balayageEnCours = false
+      let arreterBalayage = false
+      let lignes = [] // résultats de la passe : une entrée par clip, indexée par nom
+      let triColonne = 'verdict'
+      let triSens = -1
+      let filtreDomaine = 'tous'
+
+      // ── Analyse des raccords (le noyau partagé fait le calcul) ─────────────
+      let rig = null // adaptateur de rig pour ./mesures.mjs
+      let socles = new Map() // nom → pose de référence (idle, idle-talking…)
+      let urlsSocles = new Map() // nom → url
+      let socleAffiche = 'idle' // celui dont le verdict pilote le liseré
+      const analyses = new Map() // nom de clip → résultat d'analyse
+      let worldJson = null
+      let hanchesRepos = NaN
+      let echelleWorld = NaN
+      const tailles = new Map() // url → octets (content-length)
+      let seqEnCours = null
+
+      // Os suivis pour les mesures.
+      let osFeuilles = [] // {nom, node, groupe} — os normalisés (ce que le clip écrit)
+      let piedG = null, piedD = null, hanches = null // os BRUTS : vraies positions monde
+      let brasG = null, brasD = null // pour l'avant du personnage (géométrique)
+      let lacetRepos = 0
+
+      // ── Mesures ───────────────────────────────────────────────────────────
+      const V1 = new THREE.Vector3(), V2 = new THREE.Vector3(), V3 = new THREE.Vector3()
+      let mesure = null
+      let armer = false
+
+      function nouvelleMesure() {
+        const groupes = {}
+        for (const g of Object.keys(GROUPES)) groupes[g] = { cur: 0, max: 0 }
+        return {
+          baseG: new THREE.Vector3(), baseD: new THREE.Vector3(), baseH: new THREE.Vector3(),
+          posG: new THREE.Vector3(), posD: new THREE.Vector3(),
+          glisseG: 0, glisseD: 0, glisseMax: 0,
+          derive: 0, deriveMax: 0,
+          lacet: 0, lacetMax: 0,
+          piedBas: 0,
+          groupes, pic: { deg: 0, os: '—' },
+          prevQ: new Map(), prete: false,
+        }
+      }
+
+      /** Avant du personnage, déduit de la GÉOMÉTRIE (épaules) : indépendant de
+       *  la version VRM et des conventions d'axes du rig. */
+      function avant(out) {
+        if (!brasG || !brasD) return out.set(0, 0, 1)
+        brasG.getWorldPosition(V1)
+        brasD.getWorldPosition(V2)
+        V3.copy(V2).sub(V1) // vecteur gauche → droite
+        V3.y = 0
+        if (V3.lengthSq() < 1e-8) return out.set(0, 0, 1)
+        V3.normalize()
+        return out.set(0, 1, 0).cross(V3).normalize() // haut × côté = avant
+      }
+
+      function lacetActuel() {
+        const f = avant(new THREE.Vector3())
+        return THREE.MathUtils.radToDeg(Math.atan2(f.x, f.z))
+      }
+
+      function ecart180(deg) {
+        let d = deg % 360
+        if (d > 180) d -= 360
+        if (d < -180) d += 360
+        return d
+      }
+
+      function capterBase(m) {
+        piedG?.getWorldPosition(m.baseG)
+        piedD?.getWorldPosition(m.baseD)
+        hanches?.getWorldPosition(m.baseH)
+        for (const os of osFeuilles) m.prevQ.set(os.nom, os.node.quaternion.clone())
+        m.piedBas = Math.min(m.baseG.y, m.baseD.y)
+        empreinteG.position.set(m.baseG.x, 0.004, m.baseG.z)
+        empreinteD.position.set(m.baseD.x, 0.004, m.baseD.z)
+        // Le groupe « repères » porte la visibilité d'ensemble : ici on active
+        // simplement les marques, elles suivront l'interrupteur.
+        empreinteG.visible = empreinteD.visible = pointG.visible = pointD.visible = true
+        m.prete = true
+      }
+
+      function horizontal(a, b) {
+        const dx = a.x - b.x
+        const dz = a.z - b.z
+        return Math.sqrt(dx * dx + dz * dz)
+      }
+
+      function majMesure(m, dt, sauterVitesse) {
+        // (a) pieds — le point au sol suit la position courante, l'anneau reste
+        // sur la position de départ : le glissement se LIT dans la scène.
+        if (piedG) {
+          piedG.getWorldPosition(V1)
+          m.posG.copy(V1)
+          m.glisseG = horizontal(V1, m.baseG)
+          m.piedBas = Math.min(m.piedBas, V1.y)
+          pointG.position.set(V1.x, 0.005, V1.z)
+        }
+        if (piedD) {
+          piedD.getWorldPosition(V2)
+          m.posD.copy(V2)
+          m.glisseD = horizontal(V2, m.baseD)
+          m.piedBas = Math.min(m.piedBas, V2.y)
+          pointD.position.set(V2.x, 0.005, V2.z)
+        }
+        m.glisseMax = Math.max(m.glisseMax, m.glisseG, m.glisseD)
+        if (hanches) {
+          hanches.getWorldPosition(V3)
+          m.derive = horizontal(V3, m.baseH)
+          m.deriveMax = Math.max(m.deriveMax, m.derive)
+        }
+        // (b) orientation
+        m.lacet = ecart180(lacetActuel() - lacetRepos)
+        m.lacetMax = Math.max(m.lacetMax, Math.abs(m.lacet))
+        // (c) vitesse angulaire par groupe (quaternion LOCAL : la donnée du clip)
+        for (const g of Object.keys(m.groupes)) m.groupes[g].cur = 0
+        if (!sauterVitesse && dt > 1e-4) {
+          for (const os of osFeuilles) {
+            const prev = m.prevQ.get(os.nom)
+            const q = os.node.quaternion
+            const d = Math.min(1, Math.abs(prev.dot(q)))
+            const vit = THREE.MathUtils.radToDeg(2 * Math.acos(d)) / dt
+            prev.copy(q)
+            if (os.groupe) {
+              const bloc = m.groupes[os.groupe]
+              if (vit > bloc.cur) bloc.cur = vit
+              if (vit > bloc.max) bloc.max = vit
+            }
+            if (vit > m.pic.deg) { m.pic.deg = vit; m.pic.os = os.nom }
+          }
+        } else {
+          for (const os of osFeuilles) m.prevQ.get(os.nom)?.copy(os.node.quaternion)
+        }
+      }
+
+      // ── Affichage des mesures ─────────────────────────────────────────────
+      const el = (id) => document.getElementById(id)
+      function classeSeuil(v, alerte, rouge) {
+        return v >= rouge ? 'rouge' : v >= alerte ? 'alerte' : 'ok'
+      }
+      function cm(m) { return (m * 100).toFixed(1) }
+
+      let dernierHud = 0
+      function majHud(force) {
+        const t = performance.now()
+        if (!force && t - dernierHud < 120) return
+        dernierHud = t
+        const m = mesure
+        if (!m || !m.prete) {
+          el('valPieds').textContent = '—'
+          el('valLacet').textContent = '—'
+          el('valVit').textContent = '—'
+          el('posPieds').textContent = 'position monde : —'
+          return
+        }
+        const xyz = (v) => `(${v.x.toFixed(3)} ${v.y.toFixed(3)} ${v.z.toFixed(3)})`
+        el('posPieds').textContent = `position monde  G ${xyz(m.posG)}  D ${xyz(m.posD)}`
+        const cg = classeSeuil(m.glisseMax, SEUIL_GLISSEMENT, SEUIL_GLISSEMENT_ROUGE)
+        el('pastPieds').className = 'pastille ' + (cg === 'ok' ? '' : cg)
+        el('valPieds').innerHTML = `<span class="val-${cg}">${cm(m.glisseMax)} cm</span> max`
+        el('detPieds').textContent =
+          `gauche ${cm(m.glisseG)} · droite ${cm(m.glisseD)} · dérive hanches ${cm(m.deriveMax)} cm · pied le plus bas ${cm(m.piedBas)} cm`
+        const cl = classeSeuil(m.lacetMax, SEUIL_LACET, SEUIL_LACET_ROUGE)
+        el('pastLacet').className = 'pastille ' + (cl === 'ok' ? '' : cl)
+        el('valLacet').innerHTML = `<span class="val-${cl}">${m.lacet.toFixed(1)}°</span> · max ${m.lacetMax.toFixed(1)}°`
+        el('detLacet').textContent = `orientation au repos : ${lacetRepos.toFixed(1)}° du +Z · signe + = tourne vers sa gauche`
+        const pic = m.pic.deg
+        const cv = classeSeuil(pic, SEUIL_VITESSE, SEUIL_VITESSE_ROUGE)
+        el('pastVit').className = 'pastille ' + (cv === 'ok' ? '' : cv)
+        el('valVit').innerHTML = `<span class="val-${cv}">${pic.toFixed(0)}</span> °/s — ${m.pic.os}`
+        el('detVit').textContent = Object.entries(m.groupes)
+          .map(([g, b]) => `${g} ${b.max.toFixed(0)}`)
+          .join(' · ')
+      }
+
+      let fps = 0, framesFps = 0, tFps = performance.now()
+      function majLecture() {
+        const nom = clipCourant ? nomClip(clipCourant) : 'aucun clip'
+        const a = actionClip
+        const t = a ? a.time : 0
+        const d = a ? a.getClip().duration : 0
+        el('detLecture').textContent =
+          `${nom} · ${t.toFixed(2)} / ${d.toFixed(2)} s · ${vitesse}× · ${enLecture ? 'lecture' : 'PAUSE'}` +
+          ` · phase ${phase} · ${fps} i/s`
+      }
+
+      // ── Boucle ────────────────────────────────────────────────────────────
+      const horloge = new THREE.Clock()
+      let tempsBanc = 0 // n'avance pas en pause : c'est lui qui pilote les minuteries
+      const minuteries = []
+      function apres(sec, fn) { minuteries.push({ at: tempsBanc + sec, fn }) }
+      function purgerMinuteries() { minuteries.length = 0 }
+      let tempsActionPrec = 0
+      let sauterVitesse = 0
+
+      function boucle() {
+        requestAnimationFrame(boucle)
+        let dt = Math.min(horloge.getDelta(), 0.1)
+        if (!enLecture) dt = 0
+        if (dt > 0) {
+          tempsBanc += dt
+          for (let i = minuteries.length - 1; i >= 0; i--) {
+            if (minuteries[i].at <= tempsBanc) {
+              const fn = minuteries[i].fn
+              minuteries.splice(i, 1)
+              try { fn() } catch (e) { journal(`minuterie : ${texteErreur(e)}`, 'err') }
+            }
+          }
+          mixer?.update(dt)
+          vrm?.update(dt)
+        }
+        if (vrm) {
+          scene.updateMatrixWorld(true)
+          if (armer) {
+            armer = false
+            // Un clip très court peut s'achever avant la fin du fondu d'entrée :
+            // dans ce cas il n'y a plus rien à mesurer, on n'arme pas.
+            if (phase === 'clip') { mesure = nouvelleMesure(); capterBase(mesure) }
+          } else if (mesure && dt > 0 && phase === 'clip') {
+            // Une action qui reboucle fait un saut de pose : la vitesse angulaire
+            // de cette frame-là est un artefact, on la jette.
+            let saut = sauterVitesse > 0
+            if (actionClip) {
+              if (actionClip.time < tempsActionPrec - 1e-6) saut = true
+              tempsActionPrec = actionClip.time
+            }
+            if (sauterVitesse > 0) sauterVitesse--
+            // Vitesse exprimée en temps de CLIP (÷ vitesse de lecture) : les
+            // chiffres ne changent donc pas quand on ralentit pour observer.
+            majMesure(mesure, dt * vitesse, saut)
+          }
+        }
+        controls.update()
+        renderer.render(scene, camera)
+        framesFps++
+        const now = performance.now()
+        if (now - tFps > 500) { fps = Math.round((framesFps * 1000) / (now - tFps)); framesFps = 0; tFps = now }
+        majHud(false)
+        majLecture()
+      }
+
+      // ── Chargement du modèle ──────────────────────────────────────────────
+      function normaliserEchelle(v) {
+        const box = new THREE.Box3().setFromObject(v.scene)
+        const brut = Math.max(box.max.y - box.min.y, 1e-6)
+        if (brut >= 0.5 && brut <= 3) return brut
+        journal(`modèle de ${brut.toFixed(3)} m hors [0,5 ; 3] — remis à 1,6 m`, 'warn')
+        v.scene.scale.multiplyScalar(1.6 / brut)
+        v.scene.updateMatrixWorld(true)
+        return 1.6
+      }
+
+      function libererAnimations() {
+        if (mixer) {
+          mixer.stopAllAction()
+          if (vrm) mixer.uncacheRoot(vrm.scene)
+          mixer = null
+        }
+        actions.clear()
+        clipCache.clear()
+        // Les clips, les échantillonneurs, les poses de socle et les écarts en
+        // centimètres sont TOUS liés à l'instance de VRM : changer de modèle les
+        // invalide en bloc. Garder un seul de ces caches serait un faux résultat.
+        echCache.clear()
+        socles.clear()
+        analyses.clear()
+        sequences = []
+        lignes = []
+        actionCourante = actionClip = actionIdle = null
+        phase = 'vide'
+        mesure = null
+        arreterSequence()
+        purgerMinuteries()
+        cycleJeton++
+      }
+
+      async function chargerModele(url) {
+        el('etatGeneral').textContent = `chargement du modèle…`
+        try {
+          libererAnimations()
+          if (vrm) { avatarGroup.remove(vrm.scene); VRMUtils.deepDispose(vrm.scene); vrm = null }
+          const gltf = await vrmLoader.loadAsync(url)
+          const v = gltf.userData.vrm
+          if (!v) throw new Error(`fichier sans données VRM : ${url}`)
+          VRMUtils.removeUnnecessaryVertices(gltf.scene)
+          VRMUtils.combineSkeletons(gltf.scene)
+          VRMUtils.rotateVRM0(v) // VRM 0.x : retournés pour faire face au +Z
+          // Pose de repos anti T-pose, comme l'app.
+          for (const [nom, z] of REST_POSE_Z) {
+            const n = v.humanoid.getNormalizedBoneNode(nom)
+            if (n) n.rotation.z = z
+          }
+          // Proxy de regard : sans lui, createVRMAnimationClip avertit en console.
+          if (v.lookAt) {
+            const proxy = new VRMLookAtQuaternionProxy(v.lookAt)
+            proxy.name = 'VRMLookAtQuaternionProxy'
+            v.scene.add(proxy)
+          }
+          avatarGroup.add(v.scene)
+          vrm = v
+          hauteurModele = normaliserEchelle(v)
+          scene.updateMatrixWorld(true)
+
+          // Os de mesure.
+          osFeuilles = []
+          const groupeDe = {}
+          for (const [g, noms] of Object.entries(GROUPES)) for (const n of noms) groupeDe[n] = g
+          for (const nom of Object.keys(v.humanoid.humanBones)) {
+            const node = v.humanoid.getNormalizedBoneNode(nom)
+            if (node) osFeuilles.push({ nom, node, groupe: groupeDe[nom] || null })
+          }
+          piedG = v.humanoid.getRawBoneNode('leftFoot')
+          piedD = v.humanoid.getRawBoneNode('rightFoot')
+          hanches = v.humanoid.getRawBoneNode('hips')
+          brasG = v.humanoid.getRawBoneNode('leftShoulder') || v.humanoid.getRawBoneNode('leftUpperArm')
+          brasD = v.humanoid.getRawBoneNode('rightShoulder') || v.humanoid.getRawBoneNode('rightUpperArm')
+          lacetRepos = lacetActuel()
+
+          // ── Adaptateur de rig pour ./mesures.mjs ──────────────────────────
+          //
+          // `reposQ` est capturé ICI, après REST_POSE_Z et avant toute création
+          // d'action : c'est exactement la valeur que PropertyMixer restaurera
+          // quand le poids d'une liaison tombera. Un os que le socle n'anime pas
+          // (les doigts, les yeux) repart donc vers CETTE pose, pas vers l'identité
+          // — et c'est bien elle qu'il faut prendre comme référence.
+          rig = construireRig(v)
+          hanchesRepos = M.hanchesAuRepos(THREE, rig)
+          echelleWorld = hanchesRepos / M.HANCHES_RIG_MESURE
+          socles.clear()
+          analyses.clear() // les écarts en cm dépendent du modèle : tout est à refaire
+          lignes = []
+
+          mixer = new THREE.AnimationMixer(v.scene)
+          mixer.addEventListener('finished', (e) => {
+            if (e.action === actionCourante && phase === 'clip' && depuisIdle && actionIdle) {
+              fondreVers(actionIdle, GESTURE_RETURN)
+              phase = 'retour' // la mesure se gèle : on ne mesure que la phase « clip »
+            }
+          })
+          cadrer(el('selCadrage').value)
+          const manquants = ['leftFoot', 'rightFoot', 'hips'].filter((n) => !v.humanoid.getRawBoneNode(n))
+          journal(
+            `modèle chargé : ${decodeURIComponent(url.split('/').pop())} — VRM ${v.meta?.metaVersion ?? '?'}, ` +
+              `${hauteurModele.toFixed(3)} m, ${osFeuilles.length} os humanoïdes, repos à ${lacetRepos.toFixed(1)}° du +Z` +
+              (manquants.length ? ` — OS MANQUANTS : ${manquants.join(', ')}` : ''),
+          )
+          if (Math.abs(ecart180(lacetRepos)) > 10) {
+            journal(`le modèle ne fait PAS face au +Z au repos (${lacetRepos.toFixed(1)}°) — les lacets sont mesurés relativement à ce repos`, 'warn')
+          }
+          journal(
+            `hanches au repos : ${hanchesRepos.toFixed(4)} m → facteur d'échelle world.json ` +
+              `${echelleWorld.toFixed(4)} (rig de mesure : ${M.HANCHES_RIG_MESURE} m)`,
+          )
+          el('etatGeneral').textContent = `${decodeURIComponent(url.split('/').pop())} · ${hauteurModele.toFixed(2)} m · hanches ${hanchesRepos.toFixed(3)} m`
+          // Les clips sont liés à l'instance de VRM : le socle d'idle est reconstruit
+          // pour le nouveau modèle (les VRMAnimation, eux, restent en cache).
+          if (urlIdle) actionIdle = await actionPour(urlIdle)
+          construireGrilleClips()
+          dessinerTableau()
+          if (clipCourant) await jouer(clipCourant) // même clip, nouveau modèle
+          majMesureDecor()
+        } catch (e) {
+          journal(`chargement du modèle : ${texteErreur(e)}`, 'err')
+          el('etatGeneral').textContent = 'échec du chargement du modèle'
+        }
+      }
+
+      /**
+       * Construit l'adaptateur de rig attendu par ./mesures.mjs. C'est le SEUL
+       * point de contact entre le noyau de mesure et le VRM chargé : la sonde
+       * headless en fournit un autre (rig factice, ou squelette monté à la main)
+       * et obtient les mêmes chiffres avec le même code.
+       */
+      function construireRig(v) {
+        const nb = v.humanoid.normalizedHumanBones
+        const osTous = Object.keys(nb)
+        const noeudOs = new Map()
+        const reposQ = new Map()
+        for (const os of osTous) {
+          const n = nb[os].node
+          noeudOs.set(n.name, os) // createVRMAnimationClip nomme ses pistes ainsi
+          reposQ.set(os, n.quaternion.clone())
+        }
+        return {
+          osTous, noeudOs, reposQ,
+          reposHips: nb.hips.node.position.clone(),
+          scene: v.scene,
+          noeudNorm: (os) => nb[os]?.node ?? null,
+          noeudBrut: (os) => v.humanoid.getRawBoneNode(os),
+          majHumanoide: () => { v.humanoid.update(); v.scene.updateWorldMatrix(false, true) },
+        }
+      }
+
+      // ════════════════════════════════════════════════════════════════════════
+      // LA RÈGLE D'ACCEPTATION, MESURÉE
+      //
+      // « Si les animations ne s'emboîtent pas comme il faut (idle, anim, idle),
+      // on vire. » Tout le calcul est dans ./mesures.mjs ; ici on ne fait que
+      // fournir les clips, appeler, et afficher.
+      //
+      // Aucune lecture n'est nécessaire : l'analyse échantillonne les clips par
+      // leurs interpolants et simule les fondus sur un mixer temporaire. Elle
+      // écrit donc dans les os du modèle — d'où le couple sauver / restaurer.
+      // ════════════════════════════════════════════════════════════════════════
+
+      /**
+       * Rendre la main au navigateur entre deux clips, SANS dépendre du rendu.
+       * `requestAnimationFrame` ne se déclenche pas dans un onglet caché et
+       * `setTimeout` y est bridé à une seconde : une analyse de 44 clips s'y
+       * arrêterait net, ou prendrait une minute. Un MessageChannel, lui, n'est ni
+       * l'un ni l'autre — l'analyse va donc au bout même si on change d'onglet.
+       */
+      const rendreLaMain = (() => {
+        const canal = new MessageChannel()
+        const attente = []
+        canal.port1.onmessage = () => attente.shift()?.()
+        return () => new Promise((r) => { attente.push(r); canal.port2.postMessage(0) })
+      })()
+
+      const echCache = new Map() // url → échantillonneur (lié au VRM courant)
+
+      function echantillonneurPour(url) {
+        if (echCache.has(url)) return echCache.get(url)
+        const clip = clipPour(url)
+        if (!clip || !rig) return null
+        const e = M.echantillonneur(THREE, rig, clip)
+        echCache.set(url, e)
+        return e
+      }
+
+      /** Pose de référence d'un socle (moyenne sur un tour de boucle). */
+      function socleRef(nom) {
+        if (socles.has(nom)) return socles.get(nom)
+        const url = urlsSocles.get(nom)
+        const e = url && echantillonneurPour(url)
+        if (!e) return null
+        const snap = M.sauverPose(THREE, rig)
+        try {
+          const ref = M.poseReference(THREE, rig, e.ech, e.duree)
+          socles.set(nom, ref)
+          journal(
+            `socle ${nom} : ${ref.duree.toFixed(2)} s, ${ref.osAnimes.size}/${rig.osTous.length} os animés, ` +
+              `dispersion max ${ref.dispersionMaxDeg}° autour de la pose moyenne`,
+          )
+          return ref
+        } finally { M.restaurerPose(rig, snap) }
+      }
+
+      const boucleAttendue = (nom) =>
+        worldJson?.clips?.[nom]?.boucle ?? /^(idle|idle-2|idle-3|idle-talking|world-.*-(idle|loop|talking)(-\d+)?)$/.test(nom)
+
+      /**
+       * Analyse complète d'un clip : écart d'entrée et de sortie contre CHAQUE
+       * socle, verdict, simulation des fondus, couture de boucle, et — pour le
+       * domaine monde 3D — les grandeurs de cycle confrontées à world.json.
+       */
+      function analyser(url) {
+        const nom = nomClip(url)
+        const e = echantillonneurPour(url)
+        if (!e) return null
+        const snap = M.sauverPose(THREE, rig)
+        try {
+          const r = {
+            nom, url, domaine: M.domaine(nom), famille: M.familleDeduite(nom),
+            duree: e.duree, osAnimes: e.osAnimes.size, aTranslation: e.aTranslation,
+            octets: tailles.get(url) ?? NaN, loco: estLocomotion(nom), raccords: {},
+          }
+          const pE = e.ech(0)
+          // LE PIÈGE : à t = durée, LoopRepeat a déjà rebouclé et rend la PREMIÈRE
+          // image — l'écart de sortie serait faussement nul. D'où le − EPS.
+          const pS = e.ech(Math.max(0, e.duree - M.EPS))
+          for (const nomSocle of urlsSocles.keys()) {
+            const ref = socleRef(nomSocle)
+            if (!ref) continue
+            const entree = M.ecart(THREE, rig, pE, ref)
+            const sortie = M.ecart(THREE, rig, pS, ref)
+            r.raccords[nomSocle] = {
+              entree: { ...entree, phaseSocle: M.ecartParPhase(THREE, rig, pE, ref) },
+              sortie: { ...sortie, phaseSocle: M.ecartParPhase(THREE, rig, pS, ref) },
+              verdict: M.pireVerdict(entree.verdict, sortie.verdict),
+            }
+          }
+          r.verdict = M.pireVerdict(...Object.values(r.raccords).map((x) => x.verdict))
+
+          // Simulation du fondu réel : le socle ne peut pas se fondre vers lui-même.
+          const urlSocle = urlsSocles.get('idle') ?? [...urlsSocles.values()][0]
+          const clipSocle = urlSocle ? clipPour(urlSocle) : null
+          const clipGeste = clipPour(url)
+          if (clipSocle && clipGeste && clipSocle !== clipGeste) {
+            r.sim = M.simulerFondu(THREE, rig, clipGeste, clipSocle)
+          } else r.sim = null
+
+          if (boucleAttendue(nom)) r.boucle = M.coutureBoucle(THREE, rig, e.ech, e.duree)
+          if (r.domaine === 'monde') {
+            r.cycle = M.mesurerCycle(THREE, rig, e.ech, e.duree, hanchesRepos)
+            r.monde = M.confronterWorld(worldJson?.clips?.[nom] ?? null, r.cycle, echelleWorld)
+            const annonce = worldJson?.clips?.[nom]?.tailleOctets
+            if (annonce != null && isFinite(r.octets) && annonce !== r.octets) {
+              r.monde.desaccords.push(
+                `taille du fichier : world.json annonce ${annonce} o, le fichier en fait ${r.octets} — le clip a changé depuis`,
+              )
+            }
+          }
+          analyses.set(nom, r)
+          return r
+        } catch (err) {
+          journal(`analyse de ${nom} : ${texteErreur(err)}`, 'err')
+          return null
+        } finally { M.restaurerPose(rig, snap) }
+      }
+
+      /** L'analyse, sur tous les clips visibles. Rend la main entre chaque clip. */
+      async function analyserTout() {
+        if (!vrm || !rig) { journal('aucun modèle chargé — analyse impossible', 'err'); return }
+        // Un clip est analysable dès que son VRMAnimation est en cache — celui-ci
+        // ne dépend pas du modèle, contrairement au clip et aux mesures.
+        const cibles = urlsClips.filter((u) => animCache.get(u))
+        if (!cibles.length) { journal('aucun clip lisible à analyser', 'err'); return }
+        balayageEnCours = true
+        arreterBalayage = false
+        el('btnRaccords').disabled = true
+        el('btnBalayage').disabled = true
+        el('btnStopBalayage').disabled = false
+        const memoLecture = enLecture
+        enLecture = false // le mixer ne doit pas écraser les poses en cours d'analyse
+        const snap = M.sauverPose(THREE, rig)
+        let faits = 0
+        for (const url of cibles) {
+          if (arreterBalayage) break
+          el('etatClips').textContent = `analyse ${faits + 1}/${cibles.length} — ${nomClip(url)}`
+          el('progres').style.width = `${((faits + 1) / cibles.length) * 100}%`
+          analyser(url)
+          faits++
+          majBouton(url)
+          await rendreLaMain()
+        }
+        M.restaurerPose(rig, snap)
+        enLecture = memoLecture
+        balayageEnCours = false
+        el('btnRaccords').disabled = false
+        el('btnBalayage').disabled = false
+        el('btnStopBalayage').disabled = true
+        construireLignes()
+        dessinerTableau()
+        majFicheRaccords()
+        majFicheMonde()
+        analyserSequences()
+        const parV = {}
+        for (const a of analyses.values()) parV[a.verdict] = (parV[a.verdict] ?? 0) + 1
+        const resume = Object.entries(parV).map(([k, v]) => `${v} ${k}`).join(' · ')
+        el('etatClips').textContent = `analyse terminée : ${faits} clips — ${resume}`
+        el('etatTableau').textContent = `${analyses.size} clips analysés · socle affiché : ${socleAffiche}`
+        journal(`analyse des raccords : ${faits} clips — ${resume}`)
+        basculerOnglet('pTableau')
+      }
+
+      // ── Séquences ─────────────────────────────────────────────────────────
+      let sequences = [] // résultats, une entrée par séquence de M.SEQUENCES
+
+      function analyserSequences() {
+        if (!rig) return
+        const snap = M.sauverPose(THREE, rig)
+        try {
+          sequences = M.SEQUENCES.map((seq) => {
+            const dispo = seq.etapes.filter((s) => {
+              const u = urlsClips.find((x) => nomClip(x) === s)
+              return u && echantillonneurPour(u)
+            })
+            const manquants = seq.etapes.filter((s) => !dispo.includes(s))
+            if (dispo.length < 2) return { nom: seq.nom, etapes: dispo, manquants, jonctions: [], verdict: 'inconnu' }
+            const pieces = dispo.map((s) => {
+              const u = urlsClips.find((x) => nomClip(x) === s)
+              const e = echantillonneurPour(u)
+              return { slug: s, url: u, ech: e.ech, duree: e.duree, boucle: boucleAttendue(s) }
+            })
+            const jonctions = []
+            for (let i = 0; i < pieces.length - 1; i++) {
+              jonctions.push(M.mesurerJonction(THREE, rig, pieces[i], pieces[i + 1]))
+            }
+            return {
+              nom: seq.nom, etapes: dispo, manquants, jonctions, pieces,
+              verdict: M.pireVerdict(...jonctions.map((j) => j.verdict)),
+            }
+          })
+        } catch (e) {
+          journal(`analyse des séquences : ${texteErreur(e)}`, 'err')
+        } finally { M.restaurerPose(rig, snap) }
+        majSelSequence()
+        majFicheSequence()
+      }
+
+      // ── Cadrages ──────────────────────────────────────────────────────────
+      function cadrer(mode) {
+        const h = hauteurModele
+        if (mode === 'buste') {
+          // Reprise exacte de frameCamera (vrmStage.ts).
+          const tete = vrm?.humanoid.getNormalizedBoneNode('head')
+          const p = new THREE.Vector3(0, h * (1.35 / 1.6), 0)
+          if (tete) tete.getWorldPosition(p)
+          const d = Math.min(2.5 * h, Math.max(0.375 * h, p.y * 1.4))
+          controls.target.set(p.x, p.y - 0.12, p.z)
+          camera.position.set(p.x, controls.target.y, d)
+        } else if (mode === 'piece') {
+          const r = envMetrics ? envMetrics.radius : 3
+          controls.target.set(0, Math.min(1.6, h), 0)
+          camera.position.set(0, h * 1.1, Math.max(2.5, r * 1.6))
+        } else {
+          // Corps entier : de quoi voir les pieds, c'est là que tout se joue.
+          controls.target.set(0, h * 0.5, 0)
+          camera.position.set(0, h * 0.62, h * 2.1)
+        }
+        camera.updateProjectionMatrix()
+        controls.update()
+      }
+      el('selCadrage').onchange = () => cadrer(el('selCadrage').value)
+      el('vueFace').onclick = () => { const d = camera.position.distanceTo(controls.target); camera.position.set(controls.target.x, controls.target.y, controls.target.z + d); controls.update() }
+      el('vueCote').onclick = () => { const d = camera.position.distanceTo(controls.target); camera.position.set(controls.target.x + d, controls.target.y, controls.target.z); controls.update() }
+      el('vueDessus').onclick = () => { const d = camera.position.distanceTo(controls.target); camera.position.set(controls.target.x, controls.target.y + d, controls.target.z + 0.001); controls.update() }
+      el('btnReperes').onclick = () => {
+        reperes.visible = !reperes.visible
+        el('btnReperes').classList.toggle('actif', reperes.visible)
+      }
+
+      // ── Clips ─────────────────────────────────────────────────────────────
+      function nomClip(url) { return decodeURIComponent(url.split('/').pop()).replace(/\.vrma$/i, '') }
+
+      async function chargerAnimation(url) {
+        if (animCache.has(url)) return animCache.get(url)
+        let anim = null
+        try {
+          const gltf = await vrmaLoader.loadAsync(url)
+          anim = gltf.userData.vrmAnimations?.[0] ?? null
+          if (!anim) journal(`${nomClip(url)} : aucune animation VRM dans le fichier`, 'err')
+        } catch (e) {
+          journal(`${nomClip(url)} : illisible — ${texteErreur(e)}`, 'err')
+        }
+        animCache.set(url, anim)
+        return anim
+      }
+
+      /**
+       * AnimationClip lié au VRM courant, construit à la demande.
+       * Le `VRMAnimation` (animCache) ne dépend pas du modèle et survit à un
+       * changement ; le clip, lui, est lié à CE VRM et doit être reconstruit.
+       * Synchrone dès que l'animation est en cache — c'est ce qui permet à
+       * l'analyse de fonctionner après un changement de modèle sans tout
+       * re-télécharger.
+       */
+      function clipPour(url) {
+        const dejaLa = clipCache.get(url)
+        if (dejaLa) return dejaLa
+        const anim = animCache.get(url)
+        if (!anim || !vrm) return null
+        const clip = createVRMAnimationClip(anim, vrm)
+        clip.name = nomClip(url)
+        clipCache.set(url, clip)
+        durees.set(url, clip.duration)
+        return clip
+      }
+
+      async function actionPour(url) {
+        if (!vrm || !mixer) throw new Error('aucun modèle chargé')
+        if (actions.has(url)) return actions.get(url)
+        const anim = await chargerAnimation(url)
+        if (!anim) return null
+        const clip = clipPour(url)
+        if (!clip) return null
+        majBouton(url)
+        const action = mixer.clipAction(clip)
+        actions.set(url, action)
+        return action
+      }
+
+      function fondreVers(suivante, duree) {
+        const prec = actionCourante
+        if (prec === suivante) return
+        suivante.enabled = true
+        suivante.setEffectiveWeight(1)
+        suivante.play()
+        if (prec) suivante.crossFadeFrom(prec, duree, false)
+        actionCourante = suivante
+      }
+
+      /** Lecture directe : le clip seul, en boucle, poids 1 tout de suite —
+       *  c'est le mode de MESURE (aucun fondu ne pollue les chiffres). */
+      function demarrerDirect(action) {
+        mixer.stopAllAction()
+        action.reset()
+        action.setLoop(THREE.LoopRepeat, Infinity)
+        action.clampWhenFinished = false
+        action.setEffectiveWeight(1)
+        action.timeScale = 1
+        action.play()
+        actionCourante = action
+        phase = 'clip'
+      }
+
+      async function jouer(url, options = {}) {
+        clipCourant = url
+        majSelection()
+        majVerdictHud()
+        cycleJeton++
+        purgerMinuteries()
+        const action = await actionPour(url)
+        if (!action) { el('etatClips').textContent = `${nomClip(url)} : clip illisible.` ; return false }
+        actionClip = action
+        mixer.timeScale = vitesse
+        tempsActionPrec = 0
+        sauterVitesse = 1
+        if (depuisIdle && actionIdle && !options.mesureSeule) {
+          lancerCycleIdle(url, cycleJeton)
+        } else {
+          demarrerDirect(action)
+          armer = true // la base des mesures est prise à la 1re frame jouée
+        }
+        enLecture = true
+        el('btnPause').textContent = '‖ pause'
+        return true
+      }
+
+      /** idle → clip (une fois) → idle, puis on recommence : le comportement de
+       *  l'app, en boucle pour pouvoir observer. */
+      function lancerCycleIdle(url, jeton) {
+        const action = actions.get(url)
+        mixer.stopAllAction()
+        actionCourante = null
+        actionIdle.reset()
+        actionIdle.setLoop(THREE.LoopRepeat, Infinity)
+        actionIdle.setEffectiveWeight(1)
+        actionIdle.play()
+        actionCourante = actionIdle
+        phase = 'idle'
+        mesure = null
+        apres(0.9, () => {
+          if (jeton !== cycleJeton) return
+          action.reset()
+          action.setLoop(THREE.LoopOnce, 1)
+          action.clampWhenFinished = false
+          fondreVers(action, GESTURE_FADE)
+          phase = 'clip'
+          // Mesure armée à la FIN du fondu : le mélange idle+clip n'est pas le clip.
+          apres(GESTURE_FADE, () => { if (jeton === cycleJeton) { armer = true; sauterVitesse = 1 } })
+          const d = action.getClip().duration
+          apres(GESTURE_FADE + d + GESTURE_RETURN + 1.1, () => {
+            if (jeton === cycleJeton && depuisIdle) lancerCycleIdle(url, jeton)
+          })
+        })
+      }
+
+      function majSelection() {
+        for (const b of document.querySelectorAll('.grilleClips .clip')) {
+          b.classList.toggle('actif', b.dataset.url === clipCourant)
+        }
+      }
+      function majBouton(url) {
+        const b = document.querySelector(`.grilleClips .clip[data-url="${CSS.escape(url)}"]`)
+        if (!b) return
+        const d = durees.get(url)
+        const anim = animCache.get(url)
+        const a = analyses.get(nomClip(url))
+        const r = a?.raccords?.[socleAffiche] ?? a?.raccords?.idle
+        b.querySelector('.duree').textContent =
+          d !== undefined ? `${d.toFixed(2)} s${isFinite(a?.octets) ? ` · ${Math.round(a.octets / 1024)} ko` : ''}` : anim === null ? 'illisible' : '…'
+        const vd = b.querySelector('.vd')
+        for (const c of ['v-excellent', 'v-passe', 'v-limite', 'v-echoue', 'v-inconnu']) b.classList.remove(c)
+        if (a && r) {
+          b.dataset.verdict = a.verdict
+          b.classList.add(M.VERDICTS[a.verdict]?.classe ?? 'v-inconnu')
+          vd.className = 'vd ' + (M.VERDICTS[a.verdict]?.classe ?? 'v-inconnu')
+          vd.textContent = `${M.VERDICTS[a.verdict]?.texte ?? '?'} · E ${r.entree.maxCm} / S ${r.sortie.maxCm} cm`
+        } else {
+          delete b.dataset.verdict
+          vd.className = 'vd'
+          vd.textContent = ''
+        }
+        b.classList.toggle('rate', animCache.has(url) && animCache.get(url) === null)
+      }
+
+      const fmtOctets = (n) => (!isFinite(n) ? '?' : n >= 1048576 ? `${(n / 1048576).toFixed(2)} Mo` : `${Math.round(n / 1024)} ko`)
+
+      /**
+       * La grille, en DEUX GROUPES : « face à face » (sans préfixe) et « monde 3D »
+       * (préfixe `world-`). La frontière tient dans le nom du fichier, et le poids
+       * total de chaque domaine est affiché : le chargement paresseux du domaine
+       * `world-` est une optimisation voulue, autant la rendre visible.
+       */
+      function construireGrilleClips() {
+        const boite = el('clips')
+        boite.textContent = ''
+        const groupes = [
+          { cle: 'face', titre: 'face à face', note: 'sans préfixe — repos et gestes, chargés en mode conversation' },
+          { cle: 'monde', titre: 'monde 3D', note: 'préfixe world- — jamais joués en face à face' },
+        ]
+        for (const g of groupes) {
+          const urls = urlsClips.filter((u) => M.domaine(nomClip(u)) === g.cle)
+          if (!urls.length) continue
+          if (filtreDomaine !== 'tous' && filtreDomaine !== g.cle) continue
+          const connus = urls.filter((u) => tailles.has(u))
+          const poids = connus.reduce((s, u) => s + tailles.get(u), 0)
+          const t = document.createElement('div')
+          t.className = 'titreDomaine'
+          const b1 = document.createElement('b')
+          b1.textContent = g.titre
+          const s1 = document.createElement('span')
+          s1.textContent = `${urls.length} clips`
+          const s2 = document.createElement('span')
+          s2.className = 'poids'
+          s2.textContent = connus.length === urls.length
+            ? fmtOctets(poids)
+            : `${fmtOctets(poids)} sur ${connus.length}/${urls.length}`
+          s2.title = g.note
+          t.append(b1, s1, s2)
+          boite.appendChild(t)
+          const grille = document.createElement('div')
+          grille.className = 'grilleClips'
+          for (const url of urls) {
+            const b = document.createElement('button')
+            b.className = 'clip'
+            b.dataset.url = url
+            const n = document.createElement('span')
+            n.className = 'nom'
+            n.textContent = nomClip(url) + (estLocomotion(nomClip(url)) ? ' †' : '')
+            const d = document.createElement('span')
+            d.className = 'duree'
+            d.textContent = '…'
+            const v = document.createElement('span')
+            v.className = 'vd'
+            b.append(n, d, v)
+            b.onclick = () => {
+              if (balayageEnCours) return
+              selectionner(url)
+              jouer(url).catch((e) => journal(`${nomClip(url)} : ${texteErreur(e)}`, 'err'))
+            }
+            grille.appendChild(b)
+          }
+          boite.appendChild(grille)
+        }
+        for (const url of urlsClips) majBouton(url)
+        majSelection()
+      }
+
+      /** Clic sur un clip : il devient celui dont les fiches parlent. */
+      function selectionner(url) {
+        clipCourant = url
+        if (rig && !analyses.has(nomClip(url)) && animCache.get(url)) {
+          const snap = M.sauverPose(THREE, rig)
+          const memo = enLecture
+          enLecture = false
+          analyser(url)
+          enLecture = memo
+          M.restaurerPose(rig, snap)
+          majBouton(url)
+        }
+        majVerdictHud()
+        majFicheRaccords()
+        majFicheMonde()
+        // La fiche diagnostic lit des fichiers : on ne la rafraîchit que si on la regarde.
+        if (document.getElementById('pDiagnostic').classList.contains('actif')) {
+          majFicheDiagnostic().catch((e) => journal(`diagnostic : ${texteErreur(e)}`, 'warn'))
+        }
+      }
+
+      /** Poids réel de chaque fichier, lu dans l'en-tête (aucun octet téléchargé). */
+      async function prechargerTailles() {
+        const file = [...urlsClips]
+        async function ouvrier() {
+          while (file.length) {
+            const url = file.shift()
+            try {
+              const res = await fetch(url, { method: 'HEAD' })
+              const n = Number(res.headers.get('content-length'))
+              if (res.ok && isFinite(n) && n > 0) tailles.set(url, n)
+            } catch { /* poids inconnu : on affiche « ? », rien de grave */ }
+          }
+        }
+        await Promise.all([ouvrier(), ouvrier(), ouvrier(), ouvrier()])
+        construireGrilleClips()
+      }
+
+      /** Durées : on précharge tout en tâche de fond, deux fichiers à la fois. */
+      async function prechargerDurees() {
+        let faits = 0
+        const file = [...urlsClips]
+        async function ouvrier() {
+          while (file.length) {
+            const url = file.shift()
+            if (!durees.has(url)) {
+              const anim = await chargerAnimation(url)
+              if (anim && vrm) {
+                try { await actionPour(url) } catch (e) { journal(`${nomClip(url)} : ${texteErreur(e)}`, 'err') }
+              } else if (anim) {
+                durees.set(url, anim.duration)
+              }
+            }
+            faits++
+            el('etatClips').textContent = `durées : ${faits}/${urlsClips.length}`
+            majBouton(url)
+          }
+        }
+        await Promise.all([ouvrier(), ouvrier()])
+        el('etatClips').textContent =
+          `${urlsClips.length} clips · † clip de déplacement (glissement élevé normal) · ` +
+          `« Analyser les raccords » pour les verdicts`
+      }
+
+      // ════════════════════════════════════════════════════════════════════════
+      // Affichage des raccords
+      // ════════════════════════════════════════════════════════════════════════
+
+      const classeV = (v) => M.VERDICTS[v]?.classe ?? 'v-inconnu'
+      const texteV = (v) => M.VERDICTS[v]?.texte ?? 'non analysé'
+
+      /** Le verdict, en gros, dans la scène. C'est lui qui décide du sort du clip. */
+      function majVerdictHud() {
+        const carte = el('carteVerdict')
+        for (const c of ['v-excellent', 'v-passe', 'v-limite', 'v-echoue', 'v-inconnu']) carte.classList.remove(c)
+        const a = clipCourant ? analyses.get(nomClip(clipCourant)) : null
+        if (!a) {
+          carte.classList.add('v-inconnu')
+          el('valVerdict').textContent = '—'
+          el('detVerdict').textContent = clipCourant
+            ? `${nomClip(clipCourant)} — pas encore analysé`
+            : 'lance « Analyser les raccords » ou clique un clip'
+          el('detVerdict2').textContent = ''
+          return
+        }
+        carte.classList.add(classeV(a.verdict))
+        const r = a.raccords[socleAffiche] ?? a.raccords.idle
+        el('valVerdict').textContent = `${texteV(a.verdict).toUpperCase()} — ${Math.max(r.entree.maxCm, r.sortie.maxCm)} cm`
+        el('detVerdict').textContent =
+          `${a.nom} vs ${socleAffiche} · entrée ${r.entree.maxCm} cm (${r.entree.maxDeg}° ${r.entree.osMax ?? '—'})` +
+          ` · sortie ${r.sortie.maxCm} cm (${r.sortie.maxDeg}° ${r.sortie.osMax ?? '—'})`
+        const autres = Object.entries(a.raccords)
+          .filter(([n]) => n !== socleAffiche)
+          .map(([n, x]) => `${n} ${Math.max(x.entree.maxCm, x.sortie.maxCm)} cm (${texteV(x.verdict)})`)
+        const s = a.sim
+        el('detVerdict2').textContent =
+          (autres.length ? autres.join(' · ') + ' · ' : '') +
+          (s ? `fondu de sortie ${s.sortie.deg} °/s vs clip p95 ${s.clip.p95} → ×${s.ratioSortieP95}` : '')
+      }
+
+      // Petites fabriques de DOM : aucun innerHTML avec des données mesurées.
+      function ligneFiche(cle, valeur, classe) {
+        const d = document.createElement('div')
+        d.className = 'lg'
+        const a = document.createElement('span')
+        a.textContent = cle
+        const b = document.createElement('span')
+        b.textContent = valeur
+        if (classe) b.className = classe
+        d.append(a, b)
+        return d
+      }
+      function titreFiche(t) {
+        const h = document.createElement('h3')
+        h.textContent = t
+        return h
+      }
+      function puce(t, classe) {
+        const d = document.createElement('div')
+        d.className = 'puce' + (classe ? ' ' + classe : '')
+        d.textContent = '• ' + t
+        return d
+      }
+
+      function majFicheRaccords() {
+        const boite = el('ficheRaccords')
+        boite.textContent = ''
+        const a = clipCourant ? analyses.get(nomClip(clipCourant)) : null
+        if (!a) {
+          el('etatRaccords').textContent = clipCourant
+            ? `${nomClip(clipCourant)} : pas encore analysé — « Analyser les raccords ».`
+            : 'Choisis un clip, puis « Analyser les raccords ».'
+          return
+        }
+        el('etatRaccords').textContent =
+          `${a.nom} — ${a.domaine === 'monde' ? 'monde 3D' : 'face à face'} · ${a.duree.toFixed(2)} s · ` +
+          `${a.osAnimes} os animés · ${fmtOctets(a.octets)}`
+        const grand = document.createElement('div')
+        grand.className = 'enorme ' + classeV(a.verdict)
+        grand.textContent = texteV(a.verdict).toUpperCase()
+        boite.appendChild(grand)
+        boite.appendChild(ligneFiche(
+          'règle',
+          `écart ≤ ${M.SEUIL_EXCELLENT_CM} excellent, ≤ ${M.SEUIL_PASSE_CM} passe, ≤ ${M.SEUIL_ECHEC_CM} limite, > ${M.SEUIL_ECHEC_CM} cm ÉCHOUE`,
+        ))
+
+        for (const [nomSocle, r] of Object.entries(a.raccords)) {
+          boite.appendChild(titreFiche(`contre le socle « ${nomSocle} » — ${texteV(r.verdict)}`))
+          for (const [quoi, x, duree] of [['entrée', r.entree, GESTURE_FADE], ['sortie', r.sortie, GESTURE_RETURN]]) {
+            boite.appendChild(ligneFiche(
+              `${quoi} (fondu ${duree} s)`,
+              `${x.maxCm} cm — ${x.osCm ?? '—'}`,
+              classeV(M.verdict(x.maxCm)),
+            ))
+            boite.appendChild(ligneFiche(`  écart angulaire max`, `${x.maxDeg}° — ${x.osMax ?? '—'}`))
+            boite.appendChild(ligneFiche(`  jambes / haut du corps`, `${x.moyJambesDeg}° (max ${x.maxJambeDeg}° ${x.osJambe ?? '—'}) / ${x.moyHautDeg}°`))
+            boite.appendChild(ligneFiche(`  pied le plus écarté`, `${x.piedCm} cm`))
+            boite.appendChild(ligneFiche(`  Δ hauteur des hanches`, `${x.hipsDyCm} cm`))
+            boite.appendChild(ligneFiche(
+              `  selon la phase du socle`,
+              `${x.phaseSocle.min}° à ${x.phaseSocle.max}° (la mesure est prise sur la pose MOYENNE du socle)`,
+            ))
+            boite.appendChild(ligneFiche(`  vitesse implicite du fondu`, `${Math.round(x.maxDeg / duree)} °/s · ${Math.round(x.maxCm / duree)} cm/s`))
+          }
+        }
+
+        if (a.sim) {
+          const s = a.sim
+          boite.appendChild(titreFiche('fondu simulé vs clip — la transition est-elle plus violente ?'))
+          boite.appendChild(ligneFiche('pic pendant le clip', `${s.clip.deg} °/s max · ${s.clip.p95} p95 · ${s.clip.med} médiane`))
+          boite.appendChild(ligneFiche(
+            'pic pendant le fondu d’entrée',
+            `${s.entree.deg} °/s (${s.entree.osDeg ?? '—'}) → ×${s.ratioEntreeP95} du p95`,
+            s.ratioEntreeP95 > 1 ? 'desaccord' : 'accord',
+          ))
+          boite.appendChild(ligneFiche(
+            'pic pendant le fondu de sortie',
+            `${s.sortie.deg} °/s (${s.sortie.osDeg ?? '—'}) → ×${s.ratioSortieP95} du p95`,
+            s.ratioSortieP95 > 1 ? 'desaccord' : 'accord',
+          ))
+          boite.appendChild(ligneFiche('socle seul, pour comparaison', `${s.socle.deg} °/s`))
+          boite.appendChild(ligneFiche(
+            'contrôle croisé (parcours réel)',
+            `${s.sortie.parcoursCm} cm sur ${s.osParcours ?? s.sortie.osParcours ?? '—'} — à comparer à l’écart de sortie ci-dessus`,
+          ))
+          boite.appendChild(ligneFiche('somme des poids (doit valoir 1)', String(s.sommePoidsMin)))
+          if (s.ratioSortieP95 > 1 || s.ratioEntreeP95 > 1) {
+            boite.appendChild(puce('le raccord est plus violent que l’animation : l’œil le lira comme une secousse.', 'desaccord'))
+          }
+        }
+
+        if (a.boucle) {
+          boite.appendChild(titreFiche('couture de boucle (dernière image ↔ première)'))
+          boite.appendChild(ligneFiche('écart de pose', `${a.boucle.maxCm} cm · ${a.boucle.maxDeg}° — ${a.boucle.osMax ?? '—'}`,
+            classeV(M.verdict(a.boucle.maxCm))))
+          boite.appendChild(ligneFiche('discontinuité de vitesse', `${a.boucle.discontVitDegS} °/s — ${a.boucle.osDiscont ?? '—'}`))
+          boite.appendChild(puce('une boucle peut être parfaite en pose et donner un coup de fouet si la vitesse saute.'))
+        }
+      }
+
+      function majFicheMonde() {
+        const boite = el('ficheMonde')
+        boite.textContent = ''
+        const a = clipCourant ? analyses.get(nomClip(clipCourant)) : null
+        const enTete = isFinite(echelleWorld)
+          ? `hanches au repos du modèle ${hanchesRepos.toFixed(4)} m ÷ ${M.HANCHES_RIG_MESURE} m du rig de mesure = facteur ×${echelleWorld.toFixed(4)}`
+          : 'aucun modèle chargé'
+        if (!a || a.domaine !== 'monde') {
+          el('etatMonde').textContent = `${enTete} — choisis un clip du domaine world-.`
+          return
+        }
+        if (!a.cycle) { el('etatMonde').textContent = `${a.nom} : pas encore analysé.`; return }
+        el('etatMonde').textContent = `${a.nom} · ${enTete}`
+        const m = a.monde ?? {}
+        boite.appendChild(titreFiche('world.json'))
+        if (m.absentDeWorldJson) {
+          boite.appendChild(puce('ce clip n’est PAS dans world.json : le code n’aura ni sa vitesse ni sa hauteur d’assise.', 'desaccord'))
+        } else {
+          boite.appendChild(ligneFiche('rôle', String(m.role ?? '—')))
+          boite.appendChild(ligneFiche('famille · boucle', `${m.famille ?? '—'} · ${m.boucle ? 'oui' : 'non'}`))
+          boite.appendChild(ligneFiche('durée annoncée / mesurée', `${m.dureeAnnonceeS} s / ${a.duree.toFixed(4)} s`))
+          if (m.enchaine) boite.appendChild(ligneFiche('enchaîne', `depuis ${m.enchaine.depuis} vers ${m.enchaine.vers}`))
+          if (m.coutureBoucleDeg != null) boite.appendChild(ligneFiche('couture annoncée', `${m.coutureBoucleDeg}°`))
+          if (m.raccordVitesse) {
+            boite.appendChild(ligneFiche('raccord de vitesse annoncé',
+              `avant ${m.raccordVitesse.avantDegS} → après ${m.raccordVitesse.apresDegS} °/s (saut ${m.raccordVitesse.sautDegS})`))
+          }
+        }
+
+        boite.appendChild(titreFiche('mesuré sur CE modèle'))
+        const c = a.cycle
+        boite.appendChild(ligneFiche('hauteur du bassin (fraction)', `${c.hanchesFraction.min} à ${c.hanchesFraction.max} · moyenne ${c.hanchesFraction.moy}`))
+        boite.appendChild(ligneFiche('  début / fin', `${c.hanchesFraction.debut} / ${c.hanchesFraction.fin}`))
+        boite.appendChild(ligneFiche('hauteur du bassin (mètres)', `${c.hanchesM.min} à ${c.hanchesM.max} m`))
+        boite.appendChild(ligneFiche('pieds (y min / max)', `${c.piedYCm[0]} / ${c.piedYCm[1]} cm`))
+        boite.appendChild(ligneFiche('distance par cycle', `${c.distanceParCycleM} à ${c.distanceParCycleLargeM} m (prudent → large)`))
+        boite.appendChild(ligneFiche('vitesse', `${c.vitesseMS} à ${c.vitesseLargeMS} m/s · latérale ${c.vitesseLateraleMS}`))
+        boite.appendChild(ligneFiche('rotation par cycle', `${c.angleParCycleDeg}° (indicatif) · lacet du bassin ${c.lacetBassinDeg}°`))
+        boite.appendChild(ligneFiche('déplacement horizontal', `${c.deplacementM.horizontal} m (x ${c.deplacementM.x}, z ${c.deplacementM.z})`))
+
+        if (!m.absentDeWorldJson) {
+          boite.appendChild(titreFiche('confrontation — annoncé × facteur contre mesuré'))
+          for (const [cle, v] of Object.entries(m.controles ?? {})) {
+            if (!v) continue
+            const mes = v.mesure ?? `${v.mesureBasse}…${v.mesureHaute}`
+            boite.appendChild(ligneFiche(
+              cle,
+              `${v.annonce} → attendu ${v.attendu} · mesuré ${mes} (${v.ecartPct > 0 ? '+' : ''}${v.ecartPct} %)`,
+              v.accord ? 'accord' : v.fiable === false ? 'reserve' : 'desaccord',
+            ))
+          }
+          if (m.coherenceInterne) {
+            boite.appendChild(ligneFiche(
+              'cohérence interne de world.json',
+              `distance ÷ durée = ${m.coherenceInterne.vitesseImpliciteMS} m/s, vitesseMS annonce ${m.coherenceInterne.vitesseAnnonceeMS} (${m.coherenceInterne.ecartPct > 0 ? '+' : ''}${m.coherenceInterne.ecartPct} %)`,
+              m.coherenceInterne.coherent ? 'accord' : 'desaccord',
+            ))
+          }
+          for (const d of m.desaccords ?? []) boite.appendChild(puce(d, 'desaccord'))
+          for (const d of m.reserves ?? []) boite.appendChild(puce(d, 'reserve'))
+          if (!(m.desaccords ?? []).length && !(m.reserves ?? []).length) {
+            boite.appendChild(puce('toutes les affirmations de world.json tiennent sur ce modèle.', 'accord'))
+          }
+        }
+        boite.appendChild(titreFiche('à savoir'))
+        boite.appendChild(puce('les FRACTIONS se comparent telles quelles (c’est tout leur intérêt) ; seuls les mètres et les m/s passent par le facteur d’échelle.'))
+        boite.appendChild(puce('un cycle refermé ne porte plus sa rotation : l’angle par cycle d’un pivot est INDICATIF, le banc ne peut pas le trancher.'))
+      }
+
+      // ════════════════════════════════════════════════════════════════════════
+      // Diagnostic biomécanique (devtools) — la page ne calcule RIEN ici : elle
+      // affiche ce que ../diagnostic/diagnostic.mjs a écrit dans
+      // devtools/diagnostic-out/, servi ici sous /diagnostic/ (fiche.json + 5 PNG
+      // par clip, index.json, RAPPORT.md). Régénération, depuis la racine du dépôt :
+      //   node devtools/diagnostic/diagnostic.mjs --lot        (tout)
+      //   node devtools/diagnostic/diagnostic.mjs world-walk   (un clip)
+      // Les mesures des raccords (onglet Raccords) disent si un clip S'EMBOÎTE ;
+      // cette fiche-ci dit s'il est PLAUSIBLE, et les planches le MONTRENT.
+      // ════════════════════════════════════════════════════════════════════════
+
+      let diagInventaire // undefined = jamais demandé · null = absent · sinon objet
+      async function chargerDiagInventaire(force) {
+        if (diagInventaire !== undefined && !force) return diagInventaire
+        try {
+          const res = await fetch('/diagnostic/index.json')
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const idx = await res.json()
+          diagInventaire = { meta: idx, parSlug: new Map(idx.clips.filter((c) => !c.extra).map((c) => [c.slug, c])) }
+        } catch (e) {
+          diagInventaire = null
+          journal(`diagnostic : pas d'inventaire (${texteErreur(e)})`, 'warn')
+        }
+        return diagInventaire
+      }
+
+      const DIAG_IMAGES = [
+        ['planche-profil.png', 'planche contact — PROFIL (la vue reine pour marche et assise)'],
+        ['planche-face.png', 'planche contact — FACE (symétrie, écartement des pieds)'],
+        ['planche-dessus.png', 'planche contact — DESSUS (torsion du tronc, chemin au sol)'],
+        ['traces.png', 'traces — trajectoires pieds/mains/bassin/tête, carrés noirs = pied au sol'],
+        ['phase.png', 'bande de phase — appuis G/D, bassin, semelles (rouge = sous le sol), à-coups'],
+      ]
+      const classeJuge = (v) => (v === 'bon' ? 'v-passe' : v === 'limite' ? 'v-limite' : v === 'defaut' ? 'v-echoue' : 'v-inconnu')
+      const texteJuge = (v) => (v === 'bon' ? 'bon' : v === 'limite' ? 'limite' : v === 'defaut' ? 'DÉFAUT' : v)
+
+      function lienDiag(href, texte, classe) {
+        const a = document.createElement('a')
+        a.href = href
+        a.target = '_blank'
+        a.rel = 'noopener'
+        a.textContent = texte
+        if (classe) a.className = classe
+        return a
+      }
+
+      async function majFicheDiagnostic() {
+        const boite = el('ficheDiagnostic')
+        const etat = el('etatDiagnostic')
+        const inv = await chargerDiagInventaire()
+        boite.textContent = ''
+        if (!inv) {
+          etat.textContent =
+            'aucun diagnostic sur le disque — lance « node devtools/diagnostic/diagnostic.mjs --lot » '
+            + '(fiche + 5 images par clip, quelques minutes), puis rouvre cet onglet.'
+          return
+        }
+        // En-tête : inventaire + lien vers le rapport maître.
+        etat.textContent = ''
+        const meta = inv.meta
+        etat.append(
+          `${meta.clips.length} clips diagnostiqués sur ${meta.rig?.nom ?? '?'} — `,
+          lienDiag('/diagnostic/RAPPORT.md', 'RAPPORT.md (l’index complet)'),
+          ' · verdict = pire critère : bon / limite (= regarder l’image) / DÉFAUT',
+        )
+        if (!clipCourant) { boite.appendChild(puce('choisis un clip dans l’onglet Clips.')); return }
+        const slug = nomClip(clipCourant)
+        const entree = inv.parSlug.get(slug)
+        if (!entree) {
+          boite.appendChild(puce(`« ${slug} » n’a pas (encore) de diagnostic : node devtools/diagnostic/diagnostic.mjs ${slug}`, 'reserve'))
+          return
+        }
+        let fiche = null
+        try {
+          const res = await fetch(`/diagnostic/${entree.dossier}/fiche.json`)
+          if (res.ok) fiche = await res.json()
+        } catch { /* la fiche peut manquer si une génération a été interrompue */ }
+
+        const grand = document.createElement('div')
+        grand.className = 'enorme ' + classeJuge(entree.verdict)
+        grand.textContent = texteJuge(entree.verdict).toUpperCase()
+        boite.appendChild(grand)
+        boite.appendChild(ligneFiche('clip', `${entree.id} · ${entree.famille} · ${entree.duree.toFixed(2)} s${entree.boucle ? ' · boucle' : ''}`))
+        boite.appendChild(ligneFiche('critères applicables', `${entree.bons} bons · ${entree.limites} limites · ${entree.defauts} défauts`))
+        if (fiche?.rendu) {
+          boite.appendChild(ligneFiche(
+            'semelle / levée / bassin',
+            `pénétration max ${(-(fiche.rendu.penetration) * 100).toFixed(1)} cm · levée ${(fiche.rendu.leveeMax * 100).toFixed(1)} cm · bassin ${(fiche.rendu.bassin.min * 100).toFixed(1)}–${(fiche.rendu.bassin.max * 100).toFixed(1)} cm`,
+            fiche.rendu.penetration < -0.02 ? 'desaccord' : undefined,
+          ))
+        }
+
+        const diags = fiche?.diagnostics ?? (entree.resume ? [{ verdict: entree.verdict, phrase: entree.resume }] : [])
+        boite.appendChild(titreFiche('ce qu’on verrait à l’écran'))
+        if (diags.length) for (const d of diags) boite.appendChild(puce(d.phrase, d.verdict === 'defaut' ? 'desaccord' : 'reserve'))
+        else boite.appendChild(puce('rien à signaler : tous les critères applicables sont dans les clous.', 'accord'))
+        if (entree.note) {
+          boite.appendChild(titreFiche('vu sur les images (note humaine)'))
+          boite.appendChild(puce(entree.note))
+        }
+
+        boite.appendChild(titreFiche('les images'))
+        for (const [nomImg, legende] of DIAG_IMAGES) {
+          if (fiche && Array.isArray(fiche.images) && !fiche.images.includes(nomImg)) continue
+          const url = `/diagnostic/${entree.dossier}/${nomImg}`
+          const cap = document.createElement('div')
+          cap.className = 'legendeImg'
+          cap.textContent = legende + ' — clic = plein format'
+          const a = lienDiag(url, '', 'imgDiag')
+          const img = document.createElement('img')
+          img.loading = 'lazy'
+          img.src = url
+          img.alt = `${slug} — ${nomImg}`
+          img.onerror = () => { cap.textContent = `${legende} — image absente (régénérer : diagnostic.mjs ${slug})`; a.remove() }
+          a.appendChild(img)
+          boite.append(cap, a)
+        }
+
+        if (fiche) {
+          const det = document.createElement('details')
+          const som = document.createElement('summary')
+          som.textContent = `les ${fiche.criteres.length} critères, un par un`
+          det.appendChild(som)
+          for (const c of fiche.criteres) {
+            det.appendChild(ligneFiche(
+              c.libelle,
+              `${c.mesure} — attendu : ${c.attendu}`,
+              c.verdict === 'defaut' ? 'desaccord' : c.verdict === 'limite' ? 'reserve' : c.verdict === 'bon' ? 'accord' : undefined,
+            ))
+          }
+          boite.appendChild(det)
+          const pied = document.createElement('div')
+          pied.className = 'legendeImg'
+          pied.append('fiche complète (frises ASCII comprises) : ', lienDiag(`/diagnostic/${entree.dossier}/fiche.md`, 'fiche.md'))
+          boite.appendChild(pied)
+        }
+      }
+
+      // ── Séquences : affichage et lecture ──────────────────────────────────
+      function majSelSequence() {
+        const sel = el('selSequence')
+        const memo = sel.value
+        sel.textContent = ''
+        for (const s of sequences) {
+          const o = document.createElement('option')
+          o.value = s.nom
+          o.textContent = `${s.nom} — ${s.etapes.join(' → ')}`
+          sel.appendChild(o)
+        }
+        if (memo && sequences.some((s) => s.nom === memo)) sel.value = memo
+        sel.onchange = majFicheSequence
+      }
+
+      function majFicheSequence() {
+        const boite = el('ficheSequence')
+        boite.textContent = ''
+        const s = sequences.find((x) => x.nom === el('selSequence').value) ?? sequences[0]
+        if (!s) { boite.appendChild(puce('lance « Analyser les raccords » pour mesurer les séquences.')); return }
+        const grand = document.createElement('div')
+        grand.className = 'enorme ' + classeV(s.verdict)
+        grand.textContent = `${s.nom} — ${texteV(s.verdict).toUpperCase()}`
+        boite.appendChild(grand)
+        boite.appendChild(ligneFiche('enchaînement', s.etapes.join(' → ')))
+        if (s.manquants.length) boite.appendChild(puce(`clips absents, étapes sautées : ${s.manquants.join(', ')}`, 'desaccord'))
+        boite.appendChild(titreFiche('jointures'))
+        for (const j of s.jonctions) {
+          boite.appendChild(ligneFiche(
+            `${j.de} → ${j.vers}`,
+            `${j.pireCm} cm — ${j.osPire ?? '—'} · ${j.pireDeg}° ${j.osPireDeg ?? '—'}`,
+            classeV(j.verdict),
+          ))
+          if (j.aBoucle) {
+            boite.appendChild(ligneFiche(
+              '  sur tout le cycle sortant',
+              `pire ${j.pireCm} (à t=${j.tPire} s) · moyenne ${j.moyenneCm} · meilleur ${j.meilleurCm} cm, sur ${j.phases} phases`,
+            ))
+          }
+        }
+        boite.appendChild(titreFiche('à savoir'))
+        boite.appendChild(puce('le clip sortant qui boucle est quitté à une phase quelconque : on juge sur le PIRE cas du cycle, jamais sur la moyenne.'))
+        boite.appendChild(puce('l’app enchaîne par fondu croisé : un écart de pose de 40 cm franchi en 0,3 s se voit comme un saut, pas comme un mouvement.'))
+      }
+
+      /** Joue la séquence en boucle, pour la juger à l'œil. */
+      function jouerSequence() {
+        const s = sequences.find((x) => x.nom === el('selSequence').value) ?? sequences[0]
+        if (!s || !s.pieces || s.pieces.length < 2) { journal('séquence incomplète : rien à jouer', 'warn'); return }
+        arreterSequence()
+        seqEnCours = { seq: s, i: 0, jeton: ++cycleJeton }
+        el('btnJouerSeq').disabled = true
+        el('btnStopSeq').disabled = false
+        depuisIdle = false
+        el('chkIdle').checked = false
+        etapeSequence()
+      }
+      function arreterSequence() {
+        if (!seqEnCours) return
+        seqEnCours = null
+        purgerMinuteries()
+        el('btnJouerSeq').disabled = false
+        el('btnStopSeq').disabled = true
+      }
+      async function etapeSequence() {
+        if (!seqEnCours) return
+        const { seq, jeton } = seqEnCours
+        const p = seq.pieces[seqEnCours.i % seq.pieces.length]
+        const action = await actionPour(p.url)
+        if (!action || !seqEnCours || seqEnCours.jeton !== jeton) return
+        clipCourant = p.url
+        majSelection()
+        majVerdictHud()
+        actionClip = action
+        action.reset()
+        // Un clip qui boucle tourne un tour et demi avant qu'on le quitte : c'est
+        // là que la jointure se juge, à une phase quelconque du cycle.
+        action.setLoop(p.boucle ? THREE.LoopRepeat : THREE.LoopOnce, p.boucle ? Infinity : 1)
+        action.clampWhenFinished = true
+        fondreVers(action, GESTURE_FADE)
+        phase = 'clip'
+        mesure = null
+        // Un clip qui boucle est tenu quelques secondes — assez pour être quitté à
+        // une phase quelconque du cycle, pas assez pour rendre la séquence
+        // interminable (idle fait 10 s, sit-idle 13 s : les tenir en entier
+        // n'apprendrait rien de plus sur la jointure).
+        const tenue = p.boucle ? Math.min(3.5, Math.max(1.2, p.duree * 1.5)) : p.duree
+        el('etatSequence').textContent =
+          `séquence « ${seq.nom} » : ${seqEnCours.i % seq.pieces.length + 1}/${seq.pieces.length} — ${p.slug}` +
+          `${p.boucle ? ` (boucle, tenue ${tenue.toFixed(1)} s)` : ''}`
+        apres(tenue, () => {
+          if (!seqEnCours || seqEnCours.jeton !== jeton) return
+          seqEnCours.i++
+          etapeSequence().catch((e) => journal(`séquence : ${texteErreur(e)}`, 'err'))
+        })
+      }
+      el('btnJouerSeq').onclick = () => jouerSequence()
+      el('btnStopSeq').onclick = () => { arreterSequence(); if (clipCourant) jouer(clipCourant).catch(() => {}) }
+
+      // ── Contrôles de lecture ──────────────────────────────────────────────
+      el('btnPause').onclick = () => {
+        enLecture = !enLecture
+        el('btnPause').textContent = enLecture ? '‖ pause' : '▶ lecture'
+      }
+      for (const b of document.querySelectorAll('.vit')) {
+        b.onclick = () => {
+          vitesse = Number(b.dataset.v)
+          if (mixer) mixer.timeScale = vitesse
+          for (const o of document.querySelectorAll('.vit')) o.classList.toggle('actif', o === b)
+        }
+      }
+      el('btnRaz').onclick = () => { if (vrm) armer = true }
+      el('chkIdle').onchange = () => {
+        depuisIdle = el('chkIdle').checked
+        if (clipCourant) jouer(clipCourant).catch((e) => journal(texteErreur(e), 'err'))
+      }
+
+      // ── Passe en direct (3 s par clip) ────────────────────────────────────
+      function attendreBanc(sec) {
+        return new Promise((resolve) => apres(sec, resolve))
+      }
+
+      async function balayer() {
+        if (!vrm) { journal('aucun modèle chargé — passe impossible', 'err'); return }
+        balayageEnCours = true
+        arreterBalayage = false
+        el('btnBalayage').disabled = true
+        el('btnRaccords').disabled = true
+        el('btnStopBalayage').disabled = false
+        // La pause arrêterait le temps du banc, donc la passe elle-même.
+        el('btnPause').disabled = true
+        const memoIdle = depuisIdle
+        depuisIdle = false // mesures pures : pas de fondu dans les chiffres
+        el('chkIdle').checked = false
+        arreterSequence()
+        enLecture = true
+        const direct = new Map()
+        for (let i = 0; i < urlsClips.length; i++) {
+          if (arreterBalayage) break
+          const url = urlsClips[i]
+          el('etatClips').textContent = `passe en direct ${i + 1}/${urlsClips.length} — ${nomClip(url)}`
+          el('progres').style.width = `${((i + 1) / urlsClips.length) * 100}%`
+          const ok = await jouer(url, { mesureSeule: true })
+          if (!ok) continue
+          await attendreBanc(DUREE_BALAYAGE)
+          const m = mesure
+          if (m) {
+            direct.set(nomClip(url), {
+              glisse: m.glisseMax, derive: m.deriveMax, lacet: m.lacetMax,
+              jambes: m.groupes.jambes.max, bras: m.groupes.bras.max,
+              mains: m.groupes.mains.max, 'tête': m.groupes['tête'].max,
+              pic: m.pic.deg, os: m.pic.os, piedBas: m.piedBas,
+            })
+          }
+          construireLignes(direct)
+          dessinerTableau()
+        }
+        depuisIdle = memoIdle
+        el('chkIdle').checked = memoIdle
+        balayageEnCours = false
+        el('btnBalayage').disabled = false
+        el('btnRaccords').disabled = false
+        el('btnStopBalayage').disabled = true
+        el('btnPause').disabled = false
+        el('etatClips').textContent = arreterBalayage
+          ? `passe en direct interrompue à ${direct.size}/${urlsClips.length}`
+          : `passe en direct terminée : ${direct.size} clips`
+        el('etatTableau').textContent =
+          `${lignes.length} clips · ${direct.size} mesurés en direct (${DUREE_BALAYAGE} s, 1×) · socle affiché : ${socleAffiche}`
+        construireLignes(direct)
+        dessinerTableau()
+        basculerOnglet('pTableau')
+      }
+      el('btnRaccords').onclick = () => analyserTout().catch((e) => journal(`analyse : ${texteErreur(e)}`, 'err'))
+      el('btnBalayage').onclick = () => balayer().catch((e) => journal(`passe : ${texteErreur(e)}`, 'err'))
+      el('btnStopBalayage').onclick = () => { arreterBalayage = true }
+
+      /**
+       * Une ligne de tableau par clip : l'analyse des raccords (statique + fondu
+       * simulé) et, si une passe en direct a eu lieu, ses trois mesures.
+       */
+      const mesuresDirectes = new Map()
+      function construireLignes(direct) {
+        if (direct) for (const [k, v] of direct) mesuresDirectes.set(k, v)
+        lignes = []
+        for (const url of urlsClips) {
+          const nom = nomClip(url)
+          if (filtreDomaine !== 'tous' && M.domaine(nom) !== filtreDomaine) continue
+          const a = analyses.get(nom)
+          const d = mesuresDirectes.get(nom) ?? {}
+          const r = a?.raccords?.[socleAffiche] ?? a?.raccords?.idle
+          const t = a?.raccords?.['idle-talking']
+          const ctrlV = a?.monde?.controles?.vitesseMS
+          const ctrlH = a?.monde?.controles?.['hanchesFraction.min']
+          lignes.push({
+            nom, url, domaine: M.domaine(nom), famille: a?.famille ?? M.familleDeduite(nom),
+            loco: estLocomotion(nom),
+            verdict: a?.verdict ?? 'inconnu',
+            rang: M.VERDICTS[a?.verdict]?.rang ?? -1,
+            duree: durees.get(url) ?? NaN,
+            octets: tailles.get(url) ?? NaN,
+            entreeCm: r ? r.entree.maxCm : NaN, entreeDeg: r ? r.entree.maxDeg : NaN, entreeOs: r?.entree.osMax ?? '—',
+            sortieCm: r ? r.sortie.maxCm : NaN, sortieDeg: r ? r.sortie.maxDeg : NaN, sortieOs: r?.sortie.osMax ?? '—',
+            osCm: r?.sortie.osCm ?? '—',
+            talkEntreeCm: t ? t.entree.maxCm : NaN, talkSortieCm: t ? t.sortie.maxCm : NaN,
+            fonduEntree: a?.sim ? a.sim.entree.deg : NaN,
+            fonduSortie: a?.sim ? a.sim.sortie.deg : NaN,
+            clipP95: a?.sim ? a.sim.clip.p95 : NaN,
+            ratioSortie: a?.sim ? a.sim.ratioSortieP95 : NaN,
+            coutureCm: a?.boucle ? a.boucle.maxCm : NaN,
+            coutureVit: a?.boucle ? a.boucle.discontVitDegS : NaN,
+            vMes: a?.cycle ? a.cycle.vitesseMS : NaN,
+            vAnnonce: ctrlV ? ctrlV.attendu : NaN,
+            vEcart: ctrlV ? ctrlV.ecartPct : NaN,
+            hMes: a?.cycle ? a.cycle.hanchesFraction.min : NaN,
+            hAnnonce: ctrlH ? ctrlH.annonce : NaN,
+            desaccords: (a?.monde?.desaccords ?? []).length,
+            glisse: d.glisse ?? NaN, derive: d.derive ?? NaN, lacet: d.lacet ?? NaN,
+            jambes: d.jambes ?? NaN, bras: d.bras ?? NaN, mains: d.mains ?? NaN,
+            'tête': d['tête'] ?? NaN, pic: d.pic ?? NaN, os: d.os ?? '—', piedBas: d.piedBas ?? NaN,
+          })
+        }
+      }
+
+      const n1 = (x) => (isFinite(x) ? x.toFixed(1) : '—')
+      const n2 = (x) => (isFinite(x) ? x.toFixed(2) : '—')
+      const n3 = (x) => (isFinite(x) ? x.toFixed(3) : '—')
+      const n0 = (x) => (isFinite(x) ? x.toFixed(0) : '—')
+
+      const COLONNES = [
+        { cle: 'nom', titre: 'clip', fmt: (r) => r.nom + (r.loco ? ' †' : '') },
+        { cle: 'domaine', titre: 'domaine', fmt: (r) => (r.domaine === 'monde' ? 'monde 3D' : 'face') },
+        { cle: 'famille', titre: 'famille', fmt: (r) => r.famille },
+        // ── LE VERDICT : la règle d'acceptation, en premier après l'identité ──
+        { cle: 'rang', titre: 'VERDICT', fmt: (r) => texteV(r.verdict), classe: (r) => classeV(r.verdict) },
+        { cle: 'entreeCm', titre: 'entrée cm', fmt: (r) => n1(r.entreeCm), classe: (r) => classeV(M.verdict(r.entreeCm)) },
+        { cle: 'sortieCm', titre: 'sortie cm', fmt: (r) => n1(r.sortieCm), classe: (r) => classeV(M.verdict(r.sortieCm)) },
+        { cle: 'entreeDeg', titre: 'entrée °', fmt: (r) => n1(r.entreeDeg) },
+        { cle: 'sortieDeg', titre: 'sortie °', fmt: (r) => n1(r.sortieDeg) },
+        { cle: 'osCm', titre: 'os de sortie', fmt: (r) => r.osCm },
+        { cle: 'talkEntreeCm', titre: 'talk E cm', fmt: (r) => n1(r.talkEntreeCm), classe: (r) => classeV(M.verdict(r.talkEntreeCm)) },
+        { cle: 'talkSortieCm', titre: 'talk S cm', fmt: (r) => n1(r.talkSortieCm), classe: (r) => classeV(M.verdict(r.talkSortieCm)) },
+        { cle: 'fonduSortie', titre: 'fondu °/s', fmt: (r) => n0(r.fonduSortie) },
+        { cle: 'clipP95', titre: 'clip p95', fmt: (r) => n0(r.clipP95) },
+        { cle: 'ratioSortie', titre: 'fondu/clip', fmt: (r) => n2(r.ratioSortie),
+          classe: (r) => (isFinite(r.ratioSortie) && r.ratioSortie > 1 ? 'v-echoue' : '') },
+        { cle: 'coutureCm', titre: 'couture cm', fmt: (r) => n2(r.coutureCm) },
+        { cle: 'coutureVit', titre: 'couture °/s', fmt: (r) => n0(r.coutureVit) },
+        { cle: 'duree', titre: 'durée', fmt: (r) => n2(r.duree) },
+        { cle: 'octets', titre: 'ko', fmt: (r) => (isFinite(r.octets) ? String(Math.round(r.octets / 1024)) : '—') },
+        // ── world.json : l'affirmation contre la mesure ───────────────────────
+        { cle: 'vMes', titre: 'v mes. m/s', fmt: (r) => n3(r.vMes) },
+        { cle: 'vAnnonce', titre: 'v attendue', fmt: (r) => n3(r.vAnnonce) },
+        { cle: 'vEcart', titre: 'v écart %', fmt: (r) => n1(r.vEcart),
+          classe: (r) => (isFinite(r.vEcart) && Math.abs(r.vEcart) > 10 ? 'v-echoue' : '') },
+        { cle: 'hMes', titre: 'hanches mes.', fmt: (r) => n3(r.hMes) },
+        { cle: 'hAnnonce', titre: 'hanches ann.', fmt: (r) => n3(r.hAnnonce) },
+        { cle: 'desaccords', titre: 'désaccords', fmt: (r) => (r.domaine === 'monde' ? String(r.desaccords) : '—'),
+          classe: (r) => (r.desaccords > 0 ? 'v-echoue' : '') },
+        // ── mesures en direct (vides sans passe en direct) ────────────────────
+        // Une valeur absente ne se colorie pas : `classeSeuil(NaN, …)` rendrait
+        // « ok », et un tiret vert se lit comme un feu vert.
+        { cle: 'glisse', titre: 'pieds cm', fmt: (r) => (isFinite(r.glisse) ? cm(r.glisse) : '—'),
+          classe: (r) => (r.loco || !isFinite(r.glisse) ? '' : 'val-' + classeSeuil(r.glisse, SEUIL_GLISSEMENT, SEUIL_GLISSEMENT_ROUGE)) },
+        { cle: 'derive', titre: 'dérive cm', fmt: (r) => (isFinite(r.derive) ? cm(r.derive) : '—'),
+          classe: (r) => (r.loco || !isFinite(r.derive) ? '' : 'val-' + classeSeuil(r.derive, SEUIL_DERIVE, SEUIL_DERIVE * 3)) },
+        { cle: 'lacet', titre: 'lacet °', fmt: (r) => n1(r.lacet),
+          classe: (r) => (isFinite(r.lacet) ? 'val-' + classeSeuil(r.lacet, SEUIL_LACET, SEUIL_LACET_ROUGE) : '') },
+        { cle: 'jambes', titre: 'jambes', fmt: (r) => n0(r.jambes),
+          classe: (r) => (isFinite(r.jambes) ? 'val-' + classeSeuil(r.jambes, SEUIL_VITESSE, SEUIL_VITESSE_ROUGE) : '') },
+        { cle: 'bras', titre: 'bras', fmt: (r) => n0(r.bras),
+          classe: (r) => (isFinite(r.bras) ? 'val-' + classeSeuil(r.bras, SEUIL_VITESSE, SEUIL_VITESSE_ROUGE) : '') },
+        { cle: 'mains', titre: 'mains', fmt: (r) => n0(r.mains),
+          classe: (r) => (isFinite(r.mains) ? 'val-' + classeSeuil(r.mains, SEUIL_VITESSE, SEUIL_VITESSE_ROUGE) : '') },
+        { cle: 'tête', titre: 'tête', fmt: (r) => n0(r['tête']),
+          classe: (r) => (isFinite(r['tête']) ? 'val-' + classeSeuil(r['tête'], SEUIL_VITESSE, SEUIL_VITESSE_ROUGE) : '') },
+        { cle: 'pic', titre: 'pic °/s', fmt: (r) => n0(r.pic),
+          classe: (r) => (isFinite(r.pic) ? 'val-' + classeSeuil(r.pic, SEUIL_VITESSE, SEUIL_VITESSE_ROUGE) : '') },
+        { cle: 'os', titre: 'os du pic', fmt: (r) => r.os },
+      ]
+
+      function dessinerTableau() {
+        const boite = el('tableau')
+        boite.textContent = ''
+        if (!lignes.length) {
+          boite.appendChild(puce('Lance « Analyser les raccords » pour remplir ce tableau (« + passe en direct » ajoute les trois mesures jouées).'))
+          return
+        }
+        const triees = [...lignes].sort((a, b) => {
+          const x = a[triColonne], y = b[triColonne]
+          if (typeof x === 'string' || typeof y === 'string') return String(x).localeCompare(String(y)) * triSens
+          const nx = isFinite(x) ? x : -Infinity, ny = isFinite(y) ? y : -Infinity
+          if (nx !== ny) return (nx - ny) * triSens
+          return a.nom.localeCompare(b.nom)
+        })
+        const t = document.createElement('table')
+        const thead = document.createElement('thead')
+        const tr = document.createElement('tr')
+        for (const c of COLONNES) {
+          const th = document.createElement('th')
+          th.textContent = c.titre + (triColonne === c.cle ? (triSens > 0 ? ' ▲' : ' ▼') : '')
+          th.onclick = () => { if (triColonne === c.cle) triSens = -triSens; else { triColonne = c.cle; triSens = c.cle === 'nom' ? 1 : -1 } dessinerTableau() }
+          tr.appendChild(th)
+        }
+        thead.appendChild(tr)
+        const tbody = document.createElement('tbody')
+        for (const r of triees) {
+          const ligne = document.createElement('tr')
+          ligne.onclick = () => { basculerOnglet('pClips'); selectionner(r.url); jouer(r.url).catch((e) => journal(texteErreur(e), 'err')) }
+          for (const c of COLONNES) {
+            const td = document.createElement('td')
+            td.textContent = c.fmt(r)
+            if (c.classe) td.className = c.classe(r)
+            ligne.appendChild(td)
+          }
+          tbody.appendChild(ligne)
+        }
+        t.append(thead, tbody)
+        boite.appendChild(t)
+        const lg = document.createElement('div')
+        lg.className = 'legende'
+        const parV = {}
+        for (const r of lignes) parV[r.verdict] = (parV[r.verdict] ?? 0) + 1
+        for (const t2 of [
+          `VERDICT : la règle « idle → anim → idle ». Écart d'emboîtement max (entrée ou sortie, contre tous les socles) : ` +
+            `≤ ${M.SEUIL_EXCELLENT_CM} excellent · ≤ ${M.SEUIL_PASSE_CM} passe · ≤ ${M.SEUIL_ECHEC_CM} limite · > ${M.SEUIL_ECHEC_CM} cm ÉCHOUE.`,
+          `bilan : ${Object.entries(parV).map(([k, v]) => `${v} ${texteV(k)}`).join(' · ')}.`,
+          `entrée / sortie cm = distance parcourue par l'os le plus concerné, en position monde, entre l'extrémité du clip et la pose ` +
+            `moyenne du socle « ${socleAffiche} » ; talk E/S = les mêmes contre idle-talking (le socle vers lequel les gestes reviennent réellement).`,
+          `fondu °/s = pic de vitesse angulaire pendant le fondu de retour simulé · clip p95 = 95e centile pendant le clip · ` +
+            `fondu/clip > 1 = la transition est plus violente que l'animation, l'œil y voit une secousse.`,
+          `v mes. / v attendue = vitesse d'allure que le banc mesure, contre celle de world.json mise à l'échelle par ×${isFinite(echelleWorld) ? echelleWorld.toFixed(4) : '?'} ; ` +
+            `hanches mes. / ann. = fraction de la hauteur de hanches au repos (les fractions ne se mettent PAS à l'échelle).`,
+          `† clip de déplacement : une grande amplitude de pied y est normale (pas d'alerte sur les colonnes en direct).`,
+          `pieds / dérive / lacet / jambes-bras-mains-tête ne sont remplis qu'après « + passe en direct ». ` +
+            `Seuils : pieds ${SEUIL_GLISSEMENT * 100}/${SEUIL_GLISSEMENT_ROUGE * 100} cm, lacet ${SEUIL_LACET}/${SEUIL_LACET_ROUGE}°, ` +
+            `vitesse ${SEUIL_VITESSE}/${SEUIL_VITESSE_ROUGE} °/s.`,
+        ]) {
+          const d = document.createElement('div')
+          d.textContent = t2
+          lg.appendChild(d)
+        }
+        boite.appendChild(lg)
+      }
+
+      el('btnCsv').onclick = async () => {
+        const entete = COLONNES.map((c) => c.titre).join('\t')
+        const triees = [...lignes].sort((a, b) => {
+          const x = a[triColonne], y = b[triColonne]
+          if (typeof x === 'string' || typeof y === 'string') return String(x).localeCompare(String(y)) * triSens
+          const nx = isFinite(x) ? x : -Infinity, ny = isFinite(y) ? y : -Infinity
+          if (nx !== ny) return (nx - ny) * triSens
+          return a.nom.localeCompare(b.nom)
+        })
+        const corps = triees.map((r) => COLONNES.map((c) => c.fmt(r)).join('\t')).join('\n')
+        try { await navigator.clipboard.writeText(entete + '\n' + corps); el('etatTableau').textContent = `tableau copié (TSV, ${triees.length} lignes)` }
+        catch (e) { journal(`copie impossible : ${texteErreur(e)}`, 'warn') }
+      }
+      el('btnLarge').onclick = () => {
+        document.body.classList.toggle('large')
+        el('btnLarge').classList.toggle('actif', document.body.classList.contains('large'))
+        el('btnLarge').textContent = document.body.classList.contains('large') ? 'rétrécir' : 'élargir'
+      }
+
+      // ── Onglets ───────────────────────────────────────────────────────────
+      function basculerOnglet(id) {
+        for (const b of document.querySelectorAll('#onglets button')) b.classList.toggle('actif', b.dataset.panneau === id)
+        for (const p of document.querySelectorAll('.panneau')) p.classList.toggle('actif', p.id === id)
+        // Les fiches parlent du clip courant : elles doivent être à jour au moment
+        // où on les regarde, pas seulement au moment où le clip a changé.
+        if (id === 'pRaccords') majFicheRaccords()
+        else if (id === 'pMonde') majFicheMonde()
+        else if (id === 'pDiagnostic') majFicheDiagnostic().catch((e) => journal(`diagnostic : ${texteErreur(e)}`, 'warn'))
+        else if (id === 'pSequences') majFicheSequence()
+      }
+      for (const b of document.querySelectorAll('#onglets button')) b.onclick = () => basculerOnglet(b.dataset.panneau)
+
+      // ── Décors ────────────────────────────────────────────────────────────
+      let envRoot = null
+      let envMetrics = null
+      let envExposure = 1
+      let envTaille = null
+      let envPlacement = {}
+
+      function nombreDans(v, min, max) {
+        return typeof v === 'number' && isFinite(v) && v >= min && v <= max ? v : undefined
+      }
+      function lirePlacement(brut) {
+        if (!brut || typeof brut !== 'object' || Array.isArray(brut)) return {}
+        const o = brut, out = {}
+        const s = nombreDans(o.scale, 0.01, 100); if (s !== undefined) out.scale = s
+        const r = nombreDans(o.rotationY, -3600, 3600); if (r !== undefined) out.rotationY = r
+        const e = nombreDans(o.exposure, 0.1, 5); if (e !== undefined) out.exposure = e
+        if (Array.isArray(o.spawn) && o.spawn.length === 3) {
+          const t = o.spawn.map((n) => nombreDans(n, -1000, 1000))
+          if (t.every((n) => n !== undefined)) out.spawn = t
+        }
+        return out
+      }
+      async function chargerSidecar(url) {
+        const jsonUrl = url.replace(/\.(glb|gltf)$/i, '.json')
+        if (jsonUrl === url) return { present: false, placement: {} }
+        try {
+          const res = await fetch(jsonUrl)
+          if (!res.ok) return { present: false, placement: {} }
+          return { present: true, placement: lirePlacement(await res.json()) }
+        } catch { return { present: false, placement: {} } }
+      }
+
+      function regimeLumiere() {
+        const avec = envRoot !== null
+        keyLight.intensity = (avec ? KEY_LIGHT_ENV : KEY_LIGHT_SOLO) * envExposure
+        fillLight.intensity = (avec ? FILL_LIGHT_ENV : FILL_LIGHT_SOLO) * envExposure
+      }
+      function retirerDecor() {
+        if (envRoot) { envGroup.remove(envRoot); VRMUtils.deepDispose(envRoot); envRoot = null }
+        envMetrics = null; envTaille = null; envExposure = 1; envPlacement = {}
+        envGroup.position.set(0, 0, 0); envGroup.rotation.set(0, 0, 0); envGroup.scale.setScalar(1)
+        regimeLumiere()
+        el('etatDecor').textContent = 'aucun décor chargé.'
+        majMesureDecor()
+      }
+      el('btnSansDecor').onclick = retirerDecor
+
+      function poserDecor(root, placement) {
+        envGroup.position.set(0, 0, 0)
+        envGroup.rotation.set(0, (placement.rotationY ?? 0) * DEG2RAD, 0)
+        envGroup.scale.setScalar(placement.scale ?? 1)
+        envGroup.updateMatrixWorld(true)
+        let box = new THREE.Box3().setFromObject(root)
+        const brut = Math.max(box.getSize(new THREE.Vector3()).y, 1e-6)
+        let corrige = 0
+        if (placement.scale === undefined && (brut < ENV_MIN_HEIGHT || brut > ENV_MAX_HEIGHT)) {
+          corrige = ENV_TARGET_HEIGHT / brut
+          envGroup.scale.multiplyScalar(corrige)
+          envGroup.updateMatrixWorld(true)
+          box = new THREE.Box3().setFromObject(root)
+          journal(`décor de ${brut.toFixed(2)} m hors [${ENV_MIN_HEIGHT} ; ${ENV_MAX_HEIGHT}] — remis à ${ENV_TARGET_HEIGHT} m (×${corrige.toFixed(4)})`, 'warn')
+        }
+        const taille = box.getSize(new THREE.Vector3())
+        const [sx, sy, sz] = placement.spawn ?? [0, 0, 0]
+        envGroup.position.set(-sx, -(box.min.y + sy), -sz)
+        envMetrics = { radius: Math.max(taille.length() / 2, 0.5), height: Math.max(taille.y, 0.5) }
+        envTaille = { x: taille.x, y: taille.y, z: taille.z, solAvant: box.min.y, echelleAuto: corrige }
+      }
+
+      async function chargerDecor(url) {
+        el('etatDecor').textContent = 'chargement du décor…'
+        try {
+          const [gltf, sidecar] = await Promise.all([envLoader.loadAsync(url), chargerSidecar(url)])
+          retirerDecor()
+          envRoot = gltf.scene
+          envPlacement = sidecar.placement
+          envExposure = sidecar.placement.exposure ?? 1
+          envGroup.add(envRoot)
+          poserDecor(envRoot, sidecar.placement)
+          regimeLumiere()
+          camera.far = Math.max(300, 4 * envMetrics.radius)
+          camera.updateProjectionMatrix()
+          el('etatDecor').textContent =
+            `${decodeURIComponent(url.split('/').pop())} — sidecar ${sidecar.present ? 'appliqué : ' + JSON.stringify(sidecar.placement) : 'absent (placement automatique)'}`
+          journal(`décor chargé : ${decodeURIComponent(url.split('/').pop())}`)
+          majMesureDecor()
+        } catch (e) {
+          const msg = /draco|meshopt|ktx2|basis/i.test(texteErreur(e))
+            ? 'décor compressé (Draco / meshopt / KTX2) — non pris en charge, réexporte sans compression'
+            : texteErreur(e)
+          journal(`décor : ${msg}`, 'err')
+          el('etatDecor').textContent = `échec : ${msg}`
+        }
+      }
+      el('btnDecor').onclick = () => { const u = el('selDecor').value; if (u) chargerDecor(u) }
+
+      function majMesureDecor() {
+        const boite = el('mesuresDecor')
+        const lignesTexte = []
+        lignesTexte.push(`personnage : ${hauteurModele.toFixed(3)} m`)
+        if (envTaille) {
+          lignesTexte.push(`pièce mesurée : ${envTaille.x.toFixed(2)} × ${envTaille.z.toFixed(2)} m au sol, ${envTaille.y.toFixed(2)} m de haut`)
+          lignesTexte.push(`rapport hauteur pièce / personnage : ${(envTaille.y / hauteurModele).toFixed(2)} (2 à 2,5 = plausible)`)
+          if (envTaille.echelleAuto) lignesTexte.push(`échelle automatique appliquée : ×${envTaille.echelleAuto.toFixed(4)}`)
+          lignesTexte.push(`sol du décor amené à y = 0 (pieds du personnage)`)
+          if (piedG && piedD) {
+            piedG.getWorldPosition(V1); piedD.getWorldPosition(V2)
+            lignesTexte.push(`pieds à y = ${(Math.min(V1.y, V2.y) * 100).toFixed(1)} cm`)
+          }
+        } else lignesTexte.push('pas de décor : rien à mesurer.')
+        boite.textContent = ''
+        for (const t of lignesTexte) { const d = document.createElement('div'); d.textContent = t; boite.appendChild(d) }
+      }
+
+      // ── Listes (API du projet, via le proxy) ──────────────────────────────
+      async function json(url) {
+        const res = await fetch(url)
+        if (!res.ok) {
+          let detail = ''
+          try { detail = (await res.json()).error ?? '' } catch { /* corps non JSON */ }
+          throw new Error(`${url} → HTTP ${res.status}${detail ? ' — ' + detail : ''}`)
+        }
+        return res.json()
+      }
+
+      async function initialiser() {
+        // Modèles
+        try {
+          const { models } = await json('/api/vrm-models')
+          const sel = el('selModele')
+          sel.textContent = ''
+          for (const m of models) {
+            const o = document.createElement('option')
+            o.value = m
+            o.textContent = decodeURIComponent(m.split('/').pop())
+            sel.appendChild(o)
+          }
+          sel.onchange = () => chargerModele(sel.value)
+          if (!models.length) { journal('aucun .vrm dans le dossier vrm/ du projet', 'err'); el('etatGeneral').textContent = 'aucun modèle' }
+          else await chargerModele(models[0])
+        } catch (e) {
+          journal(`liste des modèles : ${texteErreur(e)}`, 'err')
+          el('etatGeneral').textContent = 'API injoignable — le serveur du projet (7788) tourne-t-il ?'
+        }
+        // Décors
+        try {
+          const { environments } = await json('/api/environments')
+          const sel = el('selDecor')
+          sel.textContent = ''
+          for (const d of environments) {
+            const o = document.createElement('option')
+            o.value = d
+            o.textContent = decodeURIComponent(d.split('/').pop())
+            sel.appendChild(o)
+          }
+          if (!environments.length) el('etatDecor').textContent = 'aucun .glb dans environments/.'
+        } catch (e) { journal(`liste des décors : ${texteErreur(e)}`, 'err') }
+        // world.json : les grandeurs que le nom de fichier ne peut pas porter.
+        // Son absence n'est pas une erreur — le banc mesure quand même, il ne peut
+        // simplement plus confronter.
+        try {
+          worldJson = await json('/vrma/world.json')
+          const n = Object.keys(worldJson.clips ?? {}).length
+          journal(`world.json : ${n} clips décrits, rig de mesure ${worldJson.rigDeMesure?.hanchesAuReposM ?? '?'} m`)
+        } catch (e) {
+          worldJson = null
+          journal(`world.json indisponible (${texteErreur(e)}) — les affirmations du monde 3D ne seront pas confrontées`, 'warn')
+        }
+        // Clips
+        try {
+          const { animations } = await json('/api/vrm-animations')
+          urlsClips = animations
+          urlIdle = animations.find((u) => nomClip(u) === 'idle') ?? null
+          // Socles de référence : le nom du fichier suffit à les désigner, et l'on
+          // mesure contre TOUS — un geste revient vers celui qui tourne à ce
+          // moment-là, et c'est `idle-talking` pendant qu'une réponse s'écrit.
+          urlsSocles = new Map()
+          for (const nomSocle of ['idle', 'idle-talking']) {
+            const u = animations.find((x) => nomClip(x) === nomSocle)
+            if (u) urlsSocles.set(nomSocle, u)
+          }
+          if (!urlsSocles.size) journal('aucun socle (ni idle ni idle-talking) : la règle d’acceptation ne peut pas être évaluée', 'err')
+          const sel = el('selSocle')
+          sel.textContent = ''
+          for (const nomSocle of urlsSocles.keys()) {
+            const o = document.createElement('option')
+            o.value = nomSocle
+            o.textContent = nomSocle
+            sel.appendChild(o)
+          }
+          socleAffiche = urlsSocles.has('idle') ? 'idle' : [...urlsSocles.keys()][0] ?? 'idle'
+          sel.value = socleAffiche
+          sel.onchange = () => {
+            socleAffiche = sel.value
+            for (const u of urlsClips) majBouton(u)
+            construireLignes(); dessinerTableau(); majVerdictHud(); majFicheRaccords()
+          }
+          construireGrilleClips()
+          el('etatClips').textContent = `${animations.length} clips — chargement des durées…`
+          if (!urlIdle) {
+            el('chkIdle').disabled = true
+            journal('idle.vrma absent : le mode « depuis l\'idle » est indisponible', 'warn')
+          }
+          prechargerTailles() // en tâche de fond : rien n'en dépend
+          await prechargerDurees()
+          if (urlIdle && vrm) actionIdle = actions.get(urlIdle) ?? (await actionPour(urlIdle))
+        } catch (e) {
+          journal(`liste des animations : ${texteErreur(e)}`, 'err')
+          el('etatClips').textContent = 'liste des animations injoignable.'
+        }
+        el('selDomaine').onchange = () => {
+          filtreDomaine = el('selDomaine').value
+          construireGrilleClips(); construireLignes(); dessinerTableau()
+        }
+        dessinerTableau()
+        majMesureDecor()
+      }
+
+      // ── Prise console ─────────────────────────────────────────────────────
+      // Un banc de diagnostic doit pouvoir être interrogé autrement qu'à l'œil :
+      // `banc.analyses.get('world-walk')` rend l'objet complet, `banc.lignes()`
+      // le tableau tel qu'il est exporté, `banc.sequences()` les jointures.
+      // C'est aussi ce qui permet de comparer la page à `node sonde.mjs` ligne à
+      // ligne. Lecture seule côté données ; les fonctions sont celles de la page.
+      window.banc = {
+        analyses,
+        lignes: () => lignes,
+        sequences: () => sequences,
+        socles: () => socles,
+        rig: () => rig,
+        worldJson: () => worldJson,
+        echelleWorld: () => echelleWorld,
+        hanchesRepos: () => hanchesRepos,
+        analyser,
+        analyserTout,
+        construireLignes,
+        dessinerTableau,
+        mesures: M,
+      }
+
+      boucle()
+      initialiser().catch((e) => journal(`initialisation : ${texteErreur(e)}`, 'err'))
+      journal(
+        'banc prêt — clique un clip pour le jouer et l’analyser ; « Analyser les raccords » juge tous les clips ' +
+          'contre la règle « idle → anim → idle » (seuil ' + M.SEUIL_ECHEC_CM + ' cm).',
+      )
+    </script>
+  </body>
+</html>
