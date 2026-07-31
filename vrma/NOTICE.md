@@ -562,8 +562,8 @@ not in the file. A believable jump needs code, not clips.*
 
 ## 4. Répartition / breakdown
 
-109 fichiers `.vrma`, 18,82 Mo — 19,26 Mo avec `world.json`, `transitions.json` et
-les deux documents :
+109 fichiers `.vrma`, **18,82 Mo** — un peu plus de 19,2 Mo avec `world.json`,
+`transitions.json` et les deux documents :
 
 | Source | Licence | Fichiers | Domaine |
 | --- | --- | --- | --- |
