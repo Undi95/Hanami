@@ -45,6 +45,8 @@ import { createWander } from './wander'
 import type { Wander, WanderHost } from './wander'
 import { createLegIk } from './legIk'
 import type { FootMode, LegIk } from './legIk'
+import { createJointLimits } from './jointLimits'
+import type { JointLimits } from './jointLimits'
 import { fetchSceneMap } from './sceneMap'
 import type { SceneMap } from './sceneMap'
 
@@ -596,6 +598,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // ses segments sur le squelette en place). null = modèle sans os de jambes
   // complets : la scène marche, sans correction d'assiette.
   let legIk: LegIk | null = null
+  // Limites articulaires humaines (table d'Overte, cf. jointLimits.ts) :
+  // TOUTE pose sortie du mixer est bornée à l'enveloppe humaine avant que
+  // l'IK, l'idle et le rendu ne la voient. Mesuré : 3,5 µs par image pour les
+  // 17 os, et 0 retouche au-delà de 0,9° sur les 52 clips chargés — la table
+  // n'existe que pour l'impossible (retargeting sur un modèle exotique,
+  // mélange qui part en vrille), pas pour restyler la bibliothèque.
+  let jointLimits: JointLimits | null = null
   // Carte du décor en place (`<décor>.scene.json`). null = pas d'analyse : le
   // décor reste un fond, exactement comme aujourd'hui.
   let sceneMap: SceneMap | null = null
@@ -754,6 +763,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     currentVrm = null
     lastFrame = null
     legIk = null // ses os appartiennent au modèle qu'on vient de jeter
+    jointLimits = null // idem — la table est liée aux nœuds normalisés du modèle
     posedBones.clear()
     idle.setExpressionTable(new Map()) // plus de modèle : aucune expression pilotable
   }
@@ -1339,6 +1349,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // plus, et le laisser à ses coordonnées d'avant le poserait au hasard dans
     // la suivante — ou dans le vide s'il n'y en a pas.
     wander?.home()
+    // Téléportation = discontinuité : l'historique de frontière de twist des
+    // limites articulaires ne doit pas contaminer la pose suivante
+    // (l'équivalent du clearIKJointLimitHistory d'Overte).
+    jointLimits?.clearHistory()
     envGroup.position.set(0, 0, 0)
     envGroup.rotation.set(0, 0, 0)
     envGroup.scale.setScalar(1)
@@ -1468,6 +1482,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // encore dans sa pose de repos — donc pieds au sol par convention VRM,
       // ce dont dépend tout le calcul du point « semelle ».
       legIk = createLegIk(vrm, avatarGroup)
+      jointLimits = createJointLimits(vrm)
       // Le TRAJET appartenait à l'ancien corps : un personnage assis dont on
       // change le modèle laisserait le nouveau flotter à hauteur d'assise, dans
       // une pièce peut-être identique (le rechargement du décor n'est pas
@@ -1509,6 +1524,12 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // ceux de CETTE image, et leur somme vaut 1 quand il accumule.
       advanceFade(delta)
       mixer.update(delta)
+      // LIMITES ARTICULAIRES (table d'Overte) : la pose du mixer est bornée à
+      // l'enveloppe humaine ICI, avant toute autre couche — la re-capture des
+      // bases de l'idle et l'IK des jambes travaillent donc sur une pose déjà
+      // saine, et l'IK n'est jamais défait par un clamp après coup (son genou
+      // est une charnière PAR CONSTRUCTION, il ne peut pas violer la table).
+      jointLimits?.apply()
       for (const bone of posedBones.values()) bone.base.copy(bone.node.rotation)
       // Cinématique inverse : le clip a donné l'allure, on corrige l'assiette.
       // APRÈS le mixer (elle lit la pose qu'il vient d'écrire) et AVANT l'idle,
@@ -1638,6 +1659,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       onceThen = null
       gaitAction = null
       footMode = 'planted'
+      jointLimits?.clearHistory() // retour à l'origine = discontinuité, même règle
       avatarGroup.position.set(0, 0, 0)
       avatarGroup.rotation.y = 0
       syncBase(BASE_FADE)
