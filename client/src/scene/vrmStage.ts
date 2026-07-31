@@ -49,6 +49,7 @@ import type { FootMode, LegIk } from './legIk'
 import { createJointLimits } from './jointLimits'
 import type { JointLimits } from './jointLimits'
 import { CriticallyDampedSpringPoseHelper } from './overteMath'
+import { createGaze } from './gaze'
 import { fetchSceneMap } from './sceneMap'
 import type { SceneMap } from './sceneMap'
 
@@ -542,6 +543,18 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   let loadGeneration = 0
   let disposed = false
 
+  // ── Regard (portage Overte, cf. gaze.ts) ──────────────────────────────────
+  // Les yeux suivent une CIBLE DU MONDE pilotée par le comportement de
+  // conversation (bouche/yeux, saccades, retargetage au clignement) ; la tête
+  // assiste au-delà du cône de 25°, sauf pendant une émotion. L'idle reste
+  // seul maître du clignement — le regard ne fait que lui en demander.
+  const gaze = createGaze({
+    blinkAmount: () => idle.blinkAmount(),
+    requestBlink: (slow) => idle.requestBlink(slow),
+    emotionActive: () => idle.emotionActive(),
+  })
+  scene.add(gaze.target)
+
   // ── Animations .vrma ──────────────────────────────────────────────────────
   // RÈGLE FONDATRICE : la somme des poids d'action vaut EXACTEMENT 1 à chaque
   // image, et tous les fondus vont d'un clip À UN AUTRE, jamais d'un clip vers
@@ -807,15 +820,19 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   }
 
   /**
-   * Regard : en scène vivante, les YEUX suivent la caméra — c'est vrm.update qui
-   * applique la cible, dans les limites que le modèle déclare (jamais de nuque
-   * tordue : le lookAt VRM ne pilote que les yeux, et borné). Où que le
-   * personnage soit dans la pièce, il vous regarde. En face à face : cible nulle,
-   * comportement d'avant à l'octet près — la caméra est déjà pile en face.
+   * Regard : les YEUX suivent la cible du système de regard porté d'Overte
+   * (gaze.ts) — un point du monde qui vit autour de la caméra : bouche et yeux
+   * de l'interlocuteur selon la table de conversation, saccades, retargetage
+   * pendant le clignement. C'est vrm.update qui applique la cible aux os des
+   * yeux, dans les limites que le MODÈLE déclare (jamais de nuque tordue par
+   * les yeux). Dans les deux modes : en face à face, c'est ce qui remplace le
+   * regard fixe ; en scène vivante, où que le personnage soit, il vous
+   * regarde — la tête assiste au-delà du cône de 25°, le corps (wander) fait
+   * le reste.
    */
   function applyGaze(): void {
     if (!currentVrm?.lookAt) return
-    currentVrm.lookAt.target = interactive ? camera : null
+    currentVrm.lookAt.target = gaze.target
   }
 
   /** Une action de socle boucle sans fin — elle n'émettra donc jamais 'finished'. */
@@ -1497,6 +1514,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       currentVrm = vrm
       applyGaze()
       idle.reset()
+      gaze.reset()
       idle.setExpressionTable(resolveExpressions(vrm.expressionManager))
       const height = normalizeScale(vrm)
       // L'IK se mesure ICI : le modèle est en place, à son échelle finale, et
@@ -1586,6 +1604,11 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // une .vrma qui porterait des pistes de visage est surchargée sur ces canaux.
     // Arbitrage voulu — le visage appartient au LLM, le corps à l'animation.
     idle.update(delta, currentVrm, posedBones)
+    // Le REGARD passe APRÈS l'idle (qui vient d'écrire tête et cou depuis ses
+    // bases : les deltas du regard ne peuvent pas s'accumuler) et AVANT
+    // vrm.update (qui applique la cible aux yeux). Ses rotations de cou et de
+    // tête sont bornées par la même table de limites que tout le reste.
+    gaze.update(delta, currentVrm, camera, talking)
     if (currentVrm) currentVrm.update(delta)
     controls.update()
     renderer.render(scene, camera)

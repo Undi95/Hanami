@@ -35,6 +35,13 @@ export class IdleAnimator {
   private nextBlinkAt = 1 + Math.random() * 3
   private blinkElapsed = -1 // < 0 : pas de clignement en cours
   private doubleBlink = false
+  /**
+   * Étirement de la durée du clignement en cours : 1 = normal, 2 = demi-vitesse.
+   * Le clignement de RETARGETAGE du regard (cf. gaze.ts, porté de Head.cpp:128
+   * d'Overte) est joué à demi-vitesse — c'est pendant qu'il est fermé que la
+   * cible du regard se déplace, et il faut laisser le temps au déplacement.
+   */
+  private blinkScale = 1
 
   // Émotion
   private emotion: Emotion = 'neutral'
@@ -73,9 +80,47 @@ export class IdleAnimator {
     this.speaking = speaking
   }
 
+  // ── Prises offertes au regard (gaze.ts) — l'idle reste maître du clignement ──
+
+  /**
+   * Enveloppe BRUTE du clignement en cours (0 ouvert → 1 fermé → 0), avant
+   * l'atténuation par l'émotion. C'est le signal de synchronisation du
+   * retargetage du regard : « la cible ne se déplace que pendant que l'œil est
+   * fermé » (Head::setLookAtPosition, Overte).
+   */
+  blinkAmount(): number {
+    if (this.blinkElapsed < 0) return 0
+    const p = this.blinkElapsed / (BLINK_DURATION * this.blinkScale)
+    if (p >= 1) return 0
+    const v = p < 0.5 ? p * 2 : (1 - p) * 2
+    return Math.min(1, Math.max(0, v))
+  }
+
+  /**
+   * Déclenche un clignement maintenant, si aucun n'est en cours. `slow` : joué
+   * à demi-vitesse (le clignement de retargetage du regard). Sans effet
+   * pendant un clignement — le regard réessaie à l'image suivante.
+   */
+  requestBlink(slow = false): void {
+    if (this.blinkElapsed >= 0) return
+    this.blinkElapsed = 0
+    this.blinkScale = slow ? 2 : 1
+  }
+
+  /**
+   * Une émotion tient le visage — règle d'Overte : « pendant une émotion, on
+   * coupe l'IK de tête ». Lu par le regard à chaque image.
+   */
+  emotionActive(): boolean {
+    if (this.emotion !== 'neutral') return true
+    for (const name of EMOTION_EXPRESSIONS) if (this.weights[name] > 0.05) return true
+    return false
+  }
+
   /** À appeler au chargement d'un nouveau modèle : repart d'un visage neutre. */
   reset(): void {
     this.blinkElapsed = -1
+    this.blinkScale = 1
     this.doubleBlink = false
     this.nextBlinkAt = this.t + 1 + Math.random() * 3
     this.mouth = 0
@@ -146,10 +191,11 @@ export class IdleAnimator {
   private updateBlink(manager: VRMExpressionManager, dt: number): void {
     if (this.blinkElapsed >= 0) {
       this.blinkElapsed += dt
-      const p = this.blinkElapsed / BLINK_DURATION
+      const p = this.blinkElapsed / (BLINK_DURATION * this.blinkScale)
       if (p >= 1) {
         this.setExpr(manager, 'blink', 0)
         this.blinkElapsed = -1
+        this.blinkScale = 1
         if (this.doubleBlink) {
           this.doubleBlink = false
           this.nextBlinkAt = this.t + 0.15 // second clignement rapproché
