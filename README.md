@@ -210,6 +210,7 @@ backgrounds/           # your background images
 portraits/             # 2D portraits from imported cards (avatar without a VRM)
 environments/          # 3D rooms (.glb) and their optional placement sidecars
 vrma/                  # humanoid animations (.vrma) — freely licensed, shipped with the app
+vrma/extra/            # converted clips that were not kept — never loaded (see vrma/README.md)
 client/                # React front-end (Vite)
 server/                # Express server + API
 shared/                # types shared by client and server
@@ -224,7 +225,8 @@ no licence obliges us to name**, because a credit that is hidden honours nobody.
 
 ### Animations
 
-- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **107 of the 109 clips**, and by
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **107 of the 109 clips** in the
+  active library (plus the 19 spare clips in `vrma/extra/`, also all Overte), and by
   far the primary source: **the whole face-to-face mode** — five idle animations, four "talking"
   idles, and nineteen gestures (`neutral`, `happy` ×3, `sad`, `angry` ×2, `relaxed` ×2, `nod` ×5,
   `shake`, `think` ×2, `raise-hand` ×2) — plus all of the 3D scene's locomotion, held gestures and

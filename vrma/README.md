@@ -131,6 +131,80 @@ L'assise est le **miroir complet** du monde debout, refait clip par clip par
 Overte, et c'était jusqu'ici le plus gros gisement inexploité du pack : la
 bibliothèque n'avait **aucune** émote assise.
 
+## `extra/` — les clips convertis et non retenus
+
+Le sous-dossier [`extra/`](extra) contient **19 clips** (5,22 Mo) issus de la même
+passe de conversion que les autres : mêmes outils, mêmes corrections, même
+validation à l'aller-retour, mêmes crédits (voir [`NOTICE.md`](NOTICE.md) §1). Ils
+n'ont simplement pas leur place dans la bibliothèque active. Ils sont livrés quand
+même parce qu'un clip converti puis écarté ne coûte que son poids sur le disque, et
+parce que le jugement qui l'a écarté peut se rediscuter.
+
+**L'app ne les télécharge jamais.** `/api/vrm-animations` liste le contenu de
+`vrma/` **à plat** — un `readdir` sans récursion, filtré sur `.vrma`. Un fichier
+rangé dans `extra/` n'apparaît donc dans aucun catalogue, et le lecteur ne le
+demande jamais. Le serveur le servirait si on lui en donnait l'URL ; rien ne la lui
+donne. Le poids d'`extra/` est un poids de dépôt, pas un poids de chargement.
+
+La colonne « raccord » est la mesure de la [règle d'acceptation](#la-règle-dacceptation-chiffrée) :
+le pire écart, en centimètres, entre les bords du clip et la pose des socles `idle`
+et `idle-talking`. Seuil d'échec : 10 cm.
+
+| Fichier | Pourquoi il est ici | Raccord |
+| --- | --- | --- |
+| `idle-talking-2.vrma` | repos parlant — les bras finissent loin du socle | 39,5 cm |
+| `raise-hand.passe-complete.vrma` | lever de main, **passe complète** (intro + maintien + sortie) : c'est le clip que le domaine `world-` livre découpé en `world-raise-hand-in` / `-hold` / `-out` | 18,8 cm |
+| `point.vrma` | pointage, passe complète — même histoire, livré découpé en `world-point-…` | 15,7 cm |
+| `happy-6.vrma` | quatrième applaudissement | 14,9 cm |
+| `idle-talking-3.vrma` | repos parlant, dépasse le seuil de peu | 11,2 cm |
+| `idle-talking-4.vrma` | repos parlant | 8,8 cm |
+| `happy-5.vrma` | applaudissement | 8,7 cm |
+| `neutral-2.vrma` | hochement de tête lent | 8,1 cm |
+| `relaxed-3.vrma` | remuement sur place | 7,6 cm |
+| `cand-idle-fenetre.vrma` | `idle` reconverti sur la fenêtre **déclarée** par le graphe (1→300) au lieu du découpage retenu — quasi identique au fichier livré | 5,0 cm |
+| `cand-idle-2-fenetre.vrma` | idem pour `idle-2` (1→902) | 5,0 cm |
+| `cand-idle-3-fenetre.vrma` | idem pour `idle-3`, mais la fenêtre déclarée fait **26,63 s** là où le fichier livré n'en garde qu'une sous-boucle de 13,33 s : celui-ci est réellement différent | 5,2 cm |
+| `cand-idle-talking-fenetre.vrma` | idem pour `idle-talking` (1→215) | 5,5 cm |
+| `world-jump-start.vrma`, `world-jump-air.vrma`, `world-jump-land.vrma`, `world-jump-run-start.vrma`, `world-jump-run-land.vrma` | les cinq temps du saut. Chez Overte la phase aérienne n'est pas une animation mais des **poses fixes mélangées par la vitesse verticale** du moteur physique, et la hauteur du saut vit dans la simulation, pas dans le fichier : sans ce code, ils ne se tiennent pas (cf. [`NOTICE.md`](NOTICE.md) §3) | — |
+| `world-afk-texting.vrma` | personnage qui pianote sur son téléphone. **Orphelin du graphe** : `afk_texting.fbx` n'est référencé par aucun nœud, Overte lui-même ne le joue jamais | — |
+
+Les quatre clips entre 7,6 et 8,8 cm passent le seuil mais sortent de la fourchette
+des 28 clips retenus (4,1 à 8,0 cm) : ils attendent un jugement à l'œil, que la
+mesure ne peut pas rendre.
+
+**Six clips convertis ne sont pas ici, et c'est voulu** : les versions brutes de
+`world-sit-point`, `world-sit-raise-hand-2` et des quatre `world-walk-stop-…`
+d'avant leurs corrections géométriques (bassin et jambes rendus aux clips assis,
+ancrage des arrêts sur leurs voisines). Le dossier porte déjà ces six clips dans
+leur version corrigée, sous le même nom ; la version brute a les jambes en pose de
+bind — debout sous un corps assis — ou les pieds non ancrés. Ce n'est pas une
+variante, c'est un état antérieur.
+
+### Activer un de ces clips
+
+1. **Déplacer** le fichier de `vrma/extra/` vers la racine de `vrma/`.
+2. **Le renommer** selon la [convention ci-dessus](#convention-de-nommage) — le nom
+   fait office de configuration, et tout nom hors convention est ignoré.
+3. **Recharger la page.** Le catalogue est reconstruit à partir des fichiers
+   réellement présents ; le serveur n'a pas besoin d'être redémarré.
+
+`happy-5`, `happy-6`, `idle-talking-2` à `-4`, `neutral-2` et `relaxed-3` portent
+déjà un nom conforme et un numéro libre : ils se déplacent tels quels, et **les
+trous de numérotation sont sans effet**. Les autres demandent un nom :
+
+| Fichier d'`extra/` | Nom à lui donner à la racine |
+| --- | --- |
+| `cand-idle-fenetre`, `cand-idle-2-fenetre`, `cand-idle-3-fenetre` | `idle-8`, `idle-9`… — ou le nom du clip qu'ils reconvertissent, pour le remplacer. `idle-5` et `idle-6` sont libres mais déjà employés sous `world-idle-alt1` / `-alt2` : les réutiliser prête à confusion |
+| `cand-idle-talking-fenetre` | `idle-talking-8`, ou `idle-talking` pour remplacer le livré |
+| `raise-hand.passe-complete` | `raise-hand-3` ; ou `raise-hand` pour remplacer l'intro seule qui est livrée. Le suffixe `.passe-complete` n'existe que pour éviter la collision de noms dans `extra/`, il ne veut rien dire pour le lecteur |
+| `point` | aucun rôle `point` n'existe dans le vocabulaire du face à face : sous ce nom le clip reste ignoré. À verser dans un rôle voisin, ou à laisser au domaine `world-`, qui le livre déjà découpé |
+| les cinq `world-jump-*`, `world-afk-texting` | le préfixe `world-` suffit à les faire entrer dans le domaine monde 3D, mais le moteur de scène ne les enchaînera pas sans entrée correspondante dans [`world.json`](world.json) |
+
+Ces clips ont été écartés **sur mesure**, pas au hasard. Au-dessus de 10 cm, le
+raccord socle → geste → socle se voit : le corps est tiré et les pieds glissent sans
+pas. C'est exactement ce que la règle protège, et c'est ce qu'on accepte de perdre en
+en activant un.
+
 ## `world.json` — ce que le nom ne peut pas dire
 
 Un nom de fichier ne peut pas porter une vitesse. [`world.json`](world.json)
@@ -207,7 +281,9 @@ fichier, les avis de licence et les mentions à conserver sont dans
 - **Overte** — **Apache 2.0** : **107 clips sur 109**, soit tout le domaine face à
   face (28 clips : neuf socles, dix-neuf gestes) et tout le domaine monde 3D sauf
   les deux transitions assises (79 clips). `transitions.json` vient de la même
-  source et de la même licence.
+  source et de la même licence. Les **19 clips de `extra/`** viennent eux aussi
+  d'Overte, sous la même licence — ils portent donc les mêmes obligations, qu'ils
+  soient joués ou non.
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, domaine public :
   les deux transitions assises, la seule famille qu'Overte n'a pas.
 
@@ -348,6 +424,80 @@ The seated world is a **complete mirror** of the standing one, rebuilt clip by c
 by Overte, and it was until now the pack's largest untapped seam: the library had
 **no** seated emote at all.
 
+## `extra/` — the converted clips that were not kept
+
+The [`extra/`](extra) subfolder holds **19 clips** (5.22 MB) from the same
+conversion pass as the others: same tools, same fixes, same round-trip validation,
+same credits (see [`NOTICE.md`](NOTICE.md) §1). They simply have no place in the
+active library. They ship anyway, because a clip that was converted and then set
+aside costs nothing but its bytes on disk, and because the judgement that set it
+aside can be revisited.
+
+**The app never downloads them.** `/api/vrm-animations` lists `vrma/` **flat** — a
+`readdir` with no recursion, filtered on `.vrma`. A file sitting in `extra/`
+therefore appears in no catalogue, and the player never asks for it. The server
+would serve it if given the URL; nothing gives it the URL. The weight of `extra/`
+is repository weight, not download weight.
+
+The "seam" column is the [acceptance rule](#the-acceptance-rule-in-numbers)
+measurement: the worst gap, in centimetres, between the clip's edges and the rest
+pose of the `idle` and `idle-talking` bases. Failure threshold: 10 cm.
+
+| File | Why it is here | Seam |
+| --- | --- | --- |
+| `idle-talking-2.vrma` | talking idle — the arms end up far from the base pose | 39.5 cm |
+| `raise-hand.passe-complete.vrma` | raised hand, **whole pass** (intro + hold + outro): this is the clip the `world-` domain ships split into `world-raise-hand-in` / `-hold` / `-out` | 18.8 cm |
+| `point.vrma` | pointing, whole pass — same story, shipped split as `world-point-…` | 15.7 cm |
+| `happy-6.vrma` | a fourth clap | 14.9 cm |
+| `idle-talking-3.vrma` | talking idle, just over the threshold | 11.2 cm |
+| `idle-talking-4.vrma` | talking idle | 8.8 cm |
+| `happy-5.vrma` | clap | 8.7 cm |
+| `neutral-2.vrma` | slow head nod | 8.1 cm |
+| `relaxed-3.vrma` | in-place fidget | 7.6 cm |
+| `cand-idle-fenetre.vrma` | `idle` re-converted on the window the graph **declares** (1→300) instead of the trim that was kept — near-identical to the shipped file | 5.0 cm |
+| `cand-idle-2-fenetre.vrma` | same for `idle-2` (1→902) | 5.0 cm |
+| `cand-idle-3-fenetre.vrma` | same for `idle-3`, but the declared window runs **26.63 s** where the shipped file keeps only a 13.33 s sub-loop: this one really is different | 5.2 cm |
+| `cand-idle-talking-fenetre.vrma` | same for `idle-talking` (1→215) | 5.5 cm |
+| `world-jump-start.vrma`, `world-jump-air.vrma`, `world-jump-land.vrma`, `world-jump-run-start.vrma`, `world-jump-run-land.vrma` | the five beats of a jump. In Overte the airborne phase is not an animation but **fixed poses blended by the physics engine's vertical speed**, and the jump height lives in the simulation, not in the file: without that code they do not stand up (see [`NOTICE.md`](NOTICE.md) §3) | — |
+| `world-afk-texting.vrma` | character tapping at a phone. **Orphaned in the graph**: `afk_texting.fbx` is referenced by no node, Overte itself never plays it | — |
+
+The four clips between 7.6 and 8.8 cm clear the threshold but fall outside the
+range of the 28 clips that were kept (4.1 to 8.0 cm): they are waiting on a
+judgement by eye, which the measurement cannot deliver.
+
+**Six converted clips are deliberately not here**: the raw versions of
+`world-sit-point`, `world-sit-raise-hand-2` and the four `world-walk-stop-…`, from
+before their geometric fixes (hips and legs given back to the seated clips, stops
+anchored onto their neighbours). The folder already carries those six clips in
+their corrected version, under the same name; the raw version has its legs in the
+bind pose — standing, under a seated body — or its feet unanchored. That is not a
+variant, it is an earlier state.
+
+### Enabling one of these clips
+
+1. **Move** the file from `vrma/extra/` to the root of `vrma/`.
+2. **Rename it** according to the [convention above](#naming-convention) — the name
+   IS the configuration, and any name outside the convention is ignored.
+3. **Reload the page.** The catalogue is rebuilt from the files actually present;
+   the server does not need restarting.
+
+`happy-5`, `happy-6`, `idle-talking-2` to `-4`, `neutral-2` and `relaxed-3` already
+carry a conforming name and a free number: they move as they are, and **gaps in the
+numbering have no effect**. The others need a name:
+
+| File in `extra/` | Name to give it at the root |
+| --- | --- |
+| `cand-idle-fenetre`, `cand-idle-2-fenetre`, `cand-idle-3-fenetre` | `idle-8`, `idle-9`… — or the name of the clip they re-convert, to replace it. `idle-5` and `idle-6` are free but already used as `world-idle-alt1` / `-alt2`: reusing them invites confusion |
+| `cand-idle-talking-fenetre` | `idle-talking-8`, or `idle-talking` to replace the shipped one |
+| `raise-hand.passe-complete` | `raise-hand-3`; or `raise-hand` to replace the intro-only clip that ships. The `.passe-complete` suffix exists only to avoid a name collision inside `extra/`, it means nothing to the player |
+| `point` | there is no `point` role in the face-to-face vocabulary: under that name the clip stays ignored. Fold it into a neighbouring role, or leave it to the `world-` domain, which already ships it split |
+| the five `world-jump-*`, `world-afk-texting` | the `world-` prefix is enough to place them in the 3D-world domain, but the scene engine will not sequence them without a matching entry in [`world.json`](world.json) |
+
+These clips were set aside **on a measurement**, not at random. Above 10 cm the
+base → gesture → base seam shows: the body is dragged and the feet slide without a
+step. That is exactly what the rule protects, and what you accept losing by
+enabling one.
+
 ## `world.json` — what a name cannot say
 
 A file name cannot carry a speed. [`world.json`](world.json) therefore records,
@@ -421,7 +571,9 @@ read before any redistribution:
 - **Overte** — **Apache 2.0**: **107 clips out of 109** — the whole face-to-face
   domain (28 clips: nine base poses, nineteen gestures) and the whole 3D-world
   domain except the two seated transitions (79 clips). `transitions.json` comes
-  from the same source under the same licence.
+  from the same source under the same licence. The **19 clips in `extra/`** also
+  come from Overte under the same licence — they carry the same obligations,
+  whether or not they are ever played.
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, public domain: the
   two seated transitions, the one family Overte does not have.
 
