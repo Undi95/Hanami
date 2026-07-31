@@ -153,6 +153,14 @@ npm start
 
 The server listens on port `7788` by default; set the `PORT` environment variable to change it.
 
+### Developer tools
+
+`devtools/` holds the animation test bench used to pick and tune the `.vrma` clips: it replays them
+on a real model, measures how they join up with the idle pose, and renders contact sheets that show
+what a clip actually looks like. Start it with the app running — double-click
+`devtools/LANCER-LE-BANC.cmd` on Windows, or `node devtools/anim-lab/serve.mjs` elsewhere — then
+open <http://localhost:7799>. Details in [`devtools/LISEZMOI.md`](devtools/LISEZMOI.md) (French).
+
 ## Settings
 
 Three tabs, one single form — switching tabs neither loses nor saves anything:
@@ -224,6 +232,7 @@ server/                # Express server + API
 shared/                # types shared by client and server
 docs/                  # remote access and mobile guides
 scripts/               # mock-llm (fake OpenAI-compatible backend)
+devtools/              # animation test bench and biomechanical diagnosis (not part of the app)
 ```
 
 ## Credits

@@ -162,6 +162,15 @@ npm start
 Le serveur écoute sur le port `7788` par défaut ; la variable d'environnement `PORT` permet
 d'en changer.
 
+### Outils de mise au point
+
+`devtools/` contient le banc d'essai des animations, celui qui a servi à choisir et régler les
+`.vrma` : il rejoue les clips sur un vrai modèle, mesure comment ils s'emboîtent avec l'idle, et
+sort des planches d'images qui montrent ce qu'un clip fait vraiment. À lancer pendant que l'app
+tourne — double-clic sur `devtools/LANCER-LE-BANC.cmd` sous Windows, `node
+devtools/anim-lab/serve.mjs` ailleurs — puis <http://localhost:7799>. Le détail est dans
+[`devtools/LISEZMOI.md`](devtools/LISEZMOI.md).
+
 ## Réglages
 
 Trois onglets, un seul formulaire — changer d'onglet ne perd rien et n'enregistre rien :
@@ -235,6 +244,7 @@ server/                # serveur Express + API
 shared/                # types partagés client/serveur
 docs/                  # guides d'accès distant et mobile
 scripts/               # mock-llm (faux backend compatible OpenAI)
+devtools/              # banc d'essai des animations + diagnostic biomécanique (hors app)
 ```
 
 ## Crédits
