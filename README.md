@@ -256,6 +256,16 @@ no licence obliges us to name**, because a credit that is hidden honours nobody.
   at High Fidelity, and that animator's care is what shows — the fingers are animated, the poses
   join up with each other, and the loops close. Copyright High Fidelity (2013-2019), Vircadia
   contributors (2019-2021), Overte e.V. (2022-2026).
+
+  Hanami also takes from Overte, **ported to TypeScript**, the heart of its character-animation
+  engine: the two-bone inverse kinematics and the knee pole vector, the table of human joint limits
+  (per-bone swing/twist constraints), the gaze system — saccades, target moved only while the eye is
+  closed, the conversation probability table —, the relaxed-hand and fist pose sets, and the math
+  toolbox that carries it all. The files concerned keep the original copyright notice and the
+  modification statement required by Apache-2.0 §4(b); the full record is in
+  [`NOTICE.md`](NOTICE.md). Original authors of the ported code: Anthony J. Thibault, Andrew
+  Meadows, Angus Antley, Luis Cuenca, Howard Stearns, Seth Alves, Stephen Birarda, Mark Peng.
+  Without them this engine would not exist.
 - **[Quaternius](https://quaternius.com)**, *Universal Animation Library* — *CC0 1.0*, public
   domain, **no attribution required**: we give it anyway. Two clips, the one family Overte does not
   have: sitting down and standing up. Both ends of each were anchored onto the neighbouring poses so
