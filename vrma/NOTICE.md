@@ -316,6 +316,36 @@ of gap); they were given the seated leg posture of `world-sit-idle`, constant
 (source dispersion 0–0.2°). Gap after the graft: 5.4 and 5.5 cm, peak angular speed
 unchanged.*
 
+**Deux autres avaient perdu autre chose, et ça n'avait pas été vu.**
+`sitting_idle_once_shakelegs.fbx` (→ `world-sit-legs`) n'a **aucune piste
+d'épaule**, et `settle_sitturnright_to_sitidle.fbx` (→ `world-sit-turn-right-end`)
+n'en a ni sur les épaules, ni sur `spine`, `chest`, `upperChest`, `neck` — six os
+majeurs sur vingt. Même mécanique que ci-dessus : ces os restaient à la pose de
+repos du rig, épaules **ouvertes comme debout**, sous un corps assis. La signature
+est reconnaissable — l'écart au maintien assis ne varie pas d'une image à l'autre :
+**11,6 cm constants** sur les 138 images de `world-sit-legs`, portés par
+`rightShoulder` (21,6°). Les deux épaules de `world-sit-legs` ont reçu la pose
+moyenne de `world-sit-idle`, constante, comme les sept ci-dessus. Les six os de
+`world-sit-turn-right-end` ne pouvaient pas l'être : c'est un *settle*, il part
+tourné et arrive au maintien — ils reçoivent donc la pose de `world-sit-turn-right`
+à sa phase de sortie (2,367 s) puis rejoignent `world-sit-idle` en `smoothstep` sur
+la durée du clip (parcours 0,4 à 15,1° selon l'os), ce qui est très exactement ce
+que le clip est censé montrer : le buste se détord. Écart après greffe et ancrage :
+**0 cm** pour les deux. Pic de vitesse angulaire inchangé (49 et 170 °/s).
+
+*Two more had lost something else, and it had gone unnoticed.
+`sitting_idle_once_shakelegs.fbx` has no shoulder track at all, and
+`settle_sitturnright_to_sitidle.fbx` has none on the shoulders, `spine`, `chest`,
+`upperChest` or `neck` — six major bones out of twenty. Same mechanism: those bones
+stayed at the rig's rest pose, shoulders open as if standing, under a seated body.
+The signature is recognisable — the gap does not vary from frame to frame: 11.6 cm
+constant across all 138 frames of `world-sit-legs`. Its two shoulders were given the
+constant mean pose of `world-sit-idle`. The six bones of `world-sit-turn-right-end`
+could not be: it is a settle, so they were given the pose of `world-sit-turn-right`
+at its exit phase (2.367 s) then smoothstepped back to `world-sit-idle` over the
+clip — the torso untwisting, which is what the clip is meant to show. Gap after
+graft and anchoring: 0 cm for both, peak angular speed unchanged (49 and 170 °/s).*
+
 ### Ancrage des quatre nouveaux arrêts / anchoring of the four new stops
 
 `settle_to_idle` était déjà **ancré** sur le cycle de marche à la passe v5 ; ses
@@ -383,6 +413,52 @@ every cut window of `idle_to_walk.fbx` failed to get below 19.5 cm. The seams go
 from 34.8 / 57.5 / 3.2 cm to 0 / 0 / 0 cm, provided the code honours the phases
 recorded in `world.json`.*
 
+### Ancrage des deux fins de pivot assis et d'une intro / anchoring the two seated pivot settles and one intro
+
+Même passe, même mesure, trois clips de plus.
+
+Les deux **fins de pivot assis** (`settle_sitturnleft_to_sitidle.fbx`,
+`settle_sitturnright_to_sitidle.fbx`) sortent d'un CYCLE de rotation, et un cycle
+quitté n'importe quand tombe loin d'un settle figé : 35,9 et 43,3 cm à la pire
+phase. Contrairement à la marche, **le balayage seul ne suffisait pas** — 10,4 et
+27,5 cm à la meilleure phase, parce que le cycle gauche tient l'avant-bras à ~36°
+de l'amorce du settle à *toutes* ses phases (35,5 à 35,8° sur les 199), et parce
+que le settle droit n'avait pas de buste (voir ci-dessus). Les phases mesurées —
+**1,100 s** (image 33) et **2,367 s** (image 71) — sont donc devenues un contrat
+dans `world.json`, *et* les premières images ont été ancrées dessus. Corrections
+35,8° (`leftLowerArm`, fenêtre 0,80 s, longue pour que le parcours reste sous le
+pic du clip) et 32,8° (`leftLowerLeg`, 0,30 s) ; les extrémités assises sont
+ancrées sur `world-sit-idle` (5,3° et 1,8°). Jointures : **35,9 → 0** et
+**43,3 → 0 cm** en amont, **0,4 → 0** et **14,5 → 0 cm** en aval. Pic de vitesse :
+64 → 77 °/s pour le gauche (2,6°/image, sous le seuil de visibilité), inchangé pour
+le droit.
+
+L'**intro de « lever la main »** (`emote_raisehand01_all.fbx`, images 1→18) partait
+main déjà haute : 13,6 cm depuis `idle`, à la pire des 300 phases du socle. Ici
+**aucun contrat de phase n'est légitime** — un geste se déclenche quand l'intention
+arrive, pas quand le socle passe au bon endroit ; faire attendre le geste jusqu'à
+10 s serait un défaut pire que le raccord. Le bord amont vise donc la pose
+**moyenne** d'`idle` (correction 30,3° sur `rightLowerArm`, fenêtre 0,25 s), le bord
+aval `world-raise-hand-hold` à t = 0 (4,6°, 0,20 s) : **13,6 → 1,6 cm** au pire des
+300 phases, 0,2 au mieux, et 2,6 → 0 cm vers le maintien. Pic de vitesse inchangé
+(936 °/s).
+
+Dans les trois cas, les **os terminaux** — `head`, les deux mains, les deux orteils —
+sont exclus de l'ancrage : leur rotation propre ne déplace aucun os mesuré (la
+position d'une main vient de son avant-bras, les doigts sont hors mesure), donc
+l'ancrage n'y gagne rien et y ajoute une secousse.
+
+*The two seated pivot settles leave a rotation CYCLE, and unlike the walk the phase
+sweep alone was not enough (10.4 and 27.5 cm at the best phase). The measured phases
+— 1.100 s and 2.367 s — were written into `world.json` as a contract AND the first
+frames anchored onto them; the seated ends were anchored onto `world-sit-idle`.
+Seams: 35.9 → 0 and 43.3 → 0 cm upstream, 0.4 → 0 and 14.5 → 0 cm downstream. The
+raise-hand intro started with the hand already high (13.6 cm from `idle` at the
+worst of 300 phases); no phase contract is legitimate for a gesture, which fires
+when the intent arrives, so its upstream edge was anchored onto the MEAN pose of
+`idle` — 13.6 → 1.6 cm at the worst phase. Terminal bones (head, hands, toes) are
+excluded from the anchoring in all three: their own rotation moves no measured bone.*
+
 Pose de repos imposée. Les FBX assis d'Overte portent la pose **assise** dans la
 transformation locale de leurs nœuds (mesuré : `sitting_idle.fbx` a ses hanches de
 repos à 0,5916 m contre 1,0167 m pour `idle.fbx`) — un FBX d'animation sans maillage
@@ -406,6 +482,27 @@ contre 0,541, pied gauche 19 cm plus en arrière). Les neuf os du bas du corps e
 hauteur du bassin reçoivent donc la posture constante de `world-sit-idle` (écart
 retiré : jusqu'à 21,2° sur le pied droit) ; le geste de parole reste entier dans le
 buste, les bras, les mains et la tête.
+
+**Ce verrouillage n'a pas suffi pour `world-sit-talking-2`** : il traitait le bas du
+corps, et ce qui restait était en haut — 13,8 cm au maintien assis, portés par la
+main droite. Le clip **boucle**, or une boucle n'a pas de « début » : la sienne
+s'ouvrait à 13,8 cm quand son image 21 n'en était qu'à 7,1. Sa phase de départ a
+donc été décalée de 21 images (0,700 s) — le nouveau raccord est un intervalle
+*intérieur* du clip d'origine, donc exact par construction : couture 0 cm, 0,01°, et
+le saut de vitesse y tombe de 68 à 32 °/s. Les deux bords sont ensuite ancrés sur la
+pose moyenne de `world-sit-idle` (correction 18,5° sur `rightLowerArm`, fenêtre
+0,40 s), **os terminaux exclus** : le poignet gauche était à 129° du socle, l'ancrer
+aurait rejoué une secousse de 639 °/s à chaque tour de boucle pour zéro centimètre
+gagné. Écart final **0 cm**, pic de vitesse inchangé (269 °/s).
+
+*The lower-body lock was not enough for `world-sit-talking-2`: it addressed the legs,
+and what was left was up top — 13.8 cm, carried by the right hand. The clip loops,
+and a loop has no "start": its frame 21 sat 7.1 cm from the seated hold where frame 0
+sat 13.8. Its start phase was shifted by 21 frames (0.700 s) — an interior interval,
+so the seam stays exact (0 cm, 0.01°, speed jump 68 → 32 °/s) — then both edges were
+anchored onto the mean pose of `world-sit-idle`, terminal bones excluded (the left
+wrist was 129° away; anchoring it would have replayed a 639 °/s jolt every cycle for
+nothing). Final gap 0 cm, peak speed unchanged.*
 
 ### Passe biomécanique / biomechanical pass
 

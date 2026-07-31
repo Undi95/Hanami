@@ -15,7 +15,7 @@ préfixe du nom suffit à les distinguer** :
 | Domaine | Nom | Contenu | Poids |
 | --- | --- | --- | --- |
 | **face à face** | pas de préfixe | l'avatar debout devant l'utilisateur qui discute : repos, repos en train de parler, gestes d'émotion | 30 fichiers, 7,69 Mo |
-| **monde 3D** | préfixe `world-` | la scène interactive où le personnage marche, divague, s'assoit et réagit : allures, départs et arrêts, virages, changements de posture, gestes tenus, tout le vocabulaire assis | 81 fichiers, 11,89 Mo |
+| **monde 3D** | préfixe `world-` | la scène interactive où le personnage marche, divague, s'assoit et réagit : allures, départs et arrêts, virages, changements de posture, gestes tenus, tout le vocabulaire assis | 81 fichiers, 11,91 Mo |
 
 Le face à face est **sévère** : on n'y ajoute un geste que s'il est utile, agréable
 et crédible pour quelqu'un qui discute assis. On enrichit ce qui existe (une
@@ -73,7 +73,7 @@ en tire respectivement quatre et sept, toutes les 10 à 30 s pour le repos et 7 
 Le monde 3D est **généreux** : la scène a besoin de matière, et ces clips ne sont
 jamais joués en face à face.
 
-**Le chargement paresseux est voulu.** En mode face à face, les 11,89 Mo du domaine
+**Le chargement paresseux est voulu.** En mode face à face, les 11,91 Mo du domaine
 `world-` n'ont aucune raison d'être téléchargés — c'est précisément pourquoi la
 frontière tient dans le nom du fichier et pas dans un fichier de configuration.
 
@@ -269,6 +269,34 @@ par image, échantillon à `durée − 1e-4`).
 | `world-turn-right` | le genou gauche pliait à 58° hors du plan de la jambe pendant le croisement. Le tibia est ramené dans le plan de la cuisse par une torsion autour de l'axe fémoral (qui ne touche pas la flexion) | charnière **58° → 29°**, dans l'enveloppe de `world-turn-left` (31°), qui est sain. Verdict du banc : **défaut → bon** |
 | `shake` | ne se lisait pas comme un « non » : **un seul** balayage de 56°. La fenêtre déclarée par le graphe d'Overte (images 1→72) est déjà le fichier entier, et le seul autre « non » debout de la source (`thoughtfulheadshake`) ne fait lui aussi qu'un balayage — il n'y avait rien de plus à aller chercher. Le balayage central est donc **rejoué en miroir temporel**, avec les points de retournement pris aux extrêmes du lacet, là où la vitesse est nulle ; puis l'amplitude est ramenée à celle de `world-sit-shake`, le « non » assis d'Overte | **0,5 → 1,5** aller-retour · amplitude **56° → 39°** · durée 2,30 → 3,63 s · **les deux poses de bord sont bit à bit celles d'origine**, donc le raccord au socle ne bouge pas |
 | `happy-2` | à-coup de poignet de 1000 °/s à t = 0,3 s (un raccord de clés mal interpolé), et un second à 818 °/s à t = 0,7 s. Lissage laplacien local sur les quaternions, à poids nul aux bords de la fenêtre | vitesse de pointe **1000 → 688 °/s** · hors fenêtre le fichier est inchangé, **bords compris** |
+| `world-sit-legs` | le clip n'a **aucune piste d'épaule** : elles restaient ouvertes comme debout sous un corps assis, et l'écart au maintien assis valait **11,6 cm constants sur les 138 images**, porté par `rightShoulder` (21,6°). Ce n'était pas les chevilles croisées, c'était ça. Les deux épaules reçoivent la pose moyenne de `world-sit-idle`, constante — la greffe déjà appliquée aux sept assis privés de bassin — puis les deux bords sont ancrés sur ce même socle | **11,6 → 0 cm** · pic de vitesse **inchangé** (49 °/s) |
+| `world-sit-talking-2` | c'est une **boucle**, et une boucle n'a pas de « début » : celle-ci s'ouvrait à 13,8 cm du maintien assis quand son image 21 n'en était qu'à 7,1. Sa phase de départ est décalée de 21 images (0,700 s) — le nouveau raccord est un intervalle *intérieur* du clip, donc exact par construction — puis les deux bords sont ancrés sur `world-sit-idle` | **13,8 → 0 cm** · couture **0 cm**, saut de vitesse **68 → 32 °/s** · pic **inchangé** (269 °/s) |
+| `world-raise-hand-in` | la main partait déjà haut : **13,6 cm** entre `idle` et la première image, à la pire des 300 phases du socle. Un geste se déclenche quand l'intention arrive, pas quand le socle veut bien — pas de contrat de phase possible ici, donc le bord amont est ancré sur la pose **moyenne** d'`idle` et le bord aval sur `world-raise-hand-hold` à t = 0 | **13,6 → 1,6 cm** au pire des 300 phases (0,2 au mieux) · sortie **2,6 → 0 cm** · pic **inchangé** (936 °/s) |
+| `world-sit-turn-left-end` | fin de pivot assis : **35,9 cm** à la pire phase du cycle amont, 10,4 à la meilleure. Aucune phase ne sauvait le raccord — le cycle tient l'avant-bras gauche à ~36° de l'amorce du settle à *toutes* ses phases. La première image est donc ancrée sur `world-sit-turn-left` à **t = 1,100 s** (fenêtre 0,80 s, pour que le parcours reste sous le pic du clip) et la dernière sur `world-sit-idle` ; la phase devient un **contrat** dans `world.json` | **35,9 → 0 cm** en amont, **0,4 → 0 cm** en aval · pic 64 → 77 °/s (2,6°/image, sous le seuil de visibilité) |
+| `world-sit-turn-right-end` | même défaut, en pire (**43,3 cm**), plus un défaut à part : le FBX source n'a **aucune piste** sur `spine`, `chest`, `upperChest`, `neck` ni les deux épaules — 6 os majeurs sur 20 remis debout sous un corps assis, soit **16,4 cm de résidu qu'aucun ancrage ne pouvait toucher**, faute de piste à corriger. Les six sont greffés : pose du cycle à sa phase de sortie, puis retour vers `world-sit-idle` en smoothstep sur la durée du clip — le buste se détord, ce que le settle est censé montrer. Ancrage et contrat de phase (t = 2,367 s) comme son symétrique | **43,3 → 0 cm** en amont, **14,5 → 0 cm** en aval · `osAnimes` **14 → 20** · pic de vitesse **inchangé** (170 °/s) |
+
+**Les cinq dernières lignes sont une même passe**, celle qui solde les cinq défauts
+que le banc refondu laissait sur 111 clips. Trois choix la gouvernent, et ils se
+généralisent :
+
+1. **Un os sans piste retombe à la pose de REPOS du rig** — debout, épaules
+   ouvertes. Sur un clip assis c'est *lui*, pas le geste, qui décide du verdict :
+   `world-sit-legs` et `world-sit-turn-right-end` mesuraient un défaut d'épaules et
+   de buste, pas un défaut de mouvement. La mesure le dit sans ambiguïté : l'écart
+   est alors **constant sur toute la durée du clip**.
+2. **Les os terminaux sont exclus de l'ancrage** (`head`, les deux mains, les deux
+   orteils) : leur rotation propre ne déplace **aucun** os mesuré — la position d'une
+   main vient de son avant-bras, celle d'un orteil de son pied, et les doigts sont
+   hors mesure. Les ancrer ne gagne pas un centimètre et ajoute une secousse ; dans
+   une boucle, une secousse rejouée à chaque tour. Sur `world-sit-talking-2` l'écart
+   était de 129° au poignet gauche : les ancrer aurait porté le pic de 269 à
+   **639 °/s** pour zéro centimètre gagné.
+3. **Un contrat de phase ne se décrète pas, il se mesure — et il ne s'applique pas
+   partout.** Il vaut pour un cycle que le code peut *choisir* de quitter au bon
+   moment (allures, pivots) ; il ne vaut pas pour un socle qu'un geste interrompt
+   quand l'intention arrive (`world-raise-hand-in` vise donc la pose moyenne d'`idle`,
+   pas une de ses phases).
+
 
 **`world-walk-slow` a été examiné et laissé tel quel.** Ses pieds ne décollent que
 de 2,6 cm et c'est l'allure de la déambulation autonome, mais les deux issues
@@ -296,12 +324,14 @@ le code a besoin :
 - **transitions assises** : ces clips sont eux aussi joués **sur place** ; le
   déplacement horizontal (26,7 cm) dont le personnage s'écarte du siège en se
   levant est consigné là, à reporter sur sa position.
-- **transitions, `enchaine`** : d'où vient le clip, où il va, et — pour la marche —
-  **à quelle phase du cycle entrer et sortir**. Les extrémités des transitions sont
-  ancrées sur les poses voisines : la dernière image de `world-walk-start` *est* la
-  pose de `world-walk` à 0,200 s, la première de `world-walk-stop` *est* celle de
-  `world-walk` à 0. Respecter ces phases donne un raccord nul ; les ignorer redonne
-  jusqu'à 46 cm d'écart.
+- **transitions, `enchaine`** : d'où vient le clip, où il va, et — pour la marche
+  **et les deux pivots assis** — **à quelle phase du cycle entrer et sortir**. Les
+  extrémités des transitions sont ancrées sur les poses voisines : la dernière image
+  de `world-walk-start` *est* la pose de `world-walk` à 0,200 s, la première de
+  `world-walk-stop` *est* celle de `world-walk` à 0, la première de
+  `world-sit-turn-left-end` *est* celle de `world-sit-turn-left` à 1,100 s et celle
+  de `world-sit-turn-right-end` celle de son cycle à 2,367 s. Respecter ces phases
+  donne un raccord nul ; les ignorer redonne jusqu'à 46 cm d'écart.
 - **`phasesDeRaccord`** : la même chose pour les six cycles, à la racine du fichier —
   meilleure image d'entrée, meilleure image de sortie, et l'écart en centimètres que
   chacune laisse. Un cycle n'a pas de « début » : c'est le code qui choisit où y
@@ -387,7 +417,7 @@ prefix alone tells them apart**:
 | Domain | Name | Contents | Weight |
 | --- | --- | --- | --- |
 | **face to face** | no prefix | the avatar standing in front of the user, talking: idles, talking idles, emotion gestures | 30 files, 7.69 MB |
-| **3D world** | `world-` prefix | the interactive scene where the character walks, wanders, sits down and reacts: gaits, starts and stops, turns, posture changes, held gestures, the whole seated vocabulary | 81 files, 11.89 MB |
+| **3D world** | `world-` prefix | the interactive scene where the character walks, wanders, sits down and reacts: gaits, starts and stops, turns, posture changes, held gestures, the whole seated vocabulary | 81 files, 11.91 MB |
 
 Face to face is **strict**: a gesture only earns its place if it is useful,
 pleasant and believable for someone having a conversation. Enrich what exists (a
@@ -444,7 +474,7 @@ Overte draws from four and seven respectively, every 10–30 s for the idle and
 The 3D world is **generous**: the scene needs material, and these clips are never
 played face to face.
 
-**Lazy loading is intended.** In face-to-face mode, the 11.89 MB of the `world-`
+**Lazy loading is intended.** In face-to-face mode, the 11.91 MB of the `world-`
 domain have no reason to be downloaded — which is exactly why the boundary lives
 in the file name rather than in a config file.
 
@@ -637,6 +667,33 @@ sample at `duration − 1e-4`).
 | `world-turn-right` | the left knee bent 58° out of the plane of the leg during the crossover. The shin is brought back into the thigh's plane by a twist about the femoral axis (which does not touch flexion) | hinge **58° → 29°**, inside the envelope of `world-turn-left` (31°), which is healthy. Bench verdict: **defect → good** |
 | `shake` | did not read as a "no": **one single** 56° sweep. The window Overte's graph declares (frames 1→72) is already the whole file, and the only other standing "no" in the source (`thoughtfulheadshake`) is a single sweep too — there was nothing more to fetch. The central sweep is therefore **replayed as a time mirror**, with the turning points taken at the yaw extremes where the speed is zero; then the amplitude is brought down to that of `world-sit-shake`, Overte's own seated "no" | **0.5 → 1.5** round trips · amplitude **56° → 39°** · duration 2.30 → 3.63 s · **both edge poses are bit-for-bit the originals**, so the seam to the idle does not move |
 | `happy-2` | a 1000 °/s wrist jolt at t = 0.3 s (a badly interpolated key join), and a second at 818 °/s at t = 0.7 s. Local Laplacian smoothing on the quaternions, with zero weight at the window edges | peak speed **1000 → 688 °/s** · outside the window the file is unchanged, **edges included** |
+| `world-sit-legs` | the clip has **no shoulder track at all**: the shoulders stayed open as if standing, under a seated body, and the gap to the seated hold was **11.6 cm constant across all 138 frames**, carried by `rightShoulder` (21.6°). It was never the crossed ankles. Both shoulders were given the mean pose of `world-sit-idle`, constant — the same graft the seven hipless seated clips got — then both edges anchored onto that same hold | **11.6 → 0 cm** · peak speed **unchanged** (49 °/s) |
+| `world-sit-talking-2` | it is a **loop**, and a loop has no "start": this one opened 13.8 cm away from the seated hold when its frame 21 was only 7.1 away. Its start phase is shifted by 21 frames (0.700 s) — the new seam is an *interior* interval of the clip, hence exact by construction — then both edges anchored onto `world-sit-idle` | **13.8 → 0 cm** · seam **0 cm**, speed jump **68 → 32 °/s** · peak **unchanged** (269 °/s) |
+| `world-raise-hand-in` | the hand already started high: **13.6 cm** between `idle` and the first frame, at the worst of the idle's 300 phases. A gesture fires when the intent arrives, not when the idle is ready — no phase contract is possible here, so the upstream edge is anchored onto the **mean** pose of `idle` and the downstream edge onto `world-raise-hand-hold` at t = 0 | **13.6 → 1.6 cm** at the worst of 300 phases (0.2 at best) · exit **2.6 → 0 cm** · peak **unchanged** (936 °/s) |
+| `world-sit-turn-left-end` | seated pivot settle: **35.9 cm** at the worst phase of the upstream cycle, 10.4 at the best. No phase saved the seam — the cycle holds the left forearm ~36° away from the settle's opening at *every* phase. The first frame is therefore anchored onto `world-sit-turn-left` at **t = 1.100 s** (0.80 s window, so the travel stays under the clip's own peak) and the last onto `world-sit-idle`; the phase becomes a **contract** in `world.json` | **35.9 → 0 cm** upstream, **0.4 → 0 cm** downstream · peak 64 → 77 °/s (2.6°/frame, below visibility) |
+| `world-sit-turn-right-end` | same defect, worse (**43.3 cm**), plus one of its own: the source FBX has **no track at all** on `spine`, `chest`, `upperChest`, `neck` or either shoulder — 6 major bones out of 20 put back standing under a seated body, i.e. **16.4 cm of residue no anchoring could touch**, there being no track to correct. All six were grafted: the cycle's pose at its exit phase, then a smoothstep back to `world-sit-idle` over the clip's duration — the torso untwists, which is what a settle is meant to show. Anchoring and phase contract (t = 2.367 s) as for its mirror | **43.3 → 0 cm** upstream, **14.5 → 0 cm** downstream · `osAnimes` **14 → 20** · peak speed **unchanged** (170 °/s) |
+
+**The last five rows are one single pass** — the one that clears the five defects the
+reworked bench still found across 111 clips. Three choices govern it, and they
+generalise:
+
+1. **A bone with no track falls back to the rig's REST pose** — standing, shoulders
+   open. On a seated clip *that*, not the gesture, decides the verdict:
+   `world-sit-legs` and `world-sit-turn-right-end` were measuring a shoulder and torso
+   defect, not a motion defect. The measurement says so unambiguously: the gap is then
+   **constant over the whole clip**.
+2. **Terminal bones are excluded from the anchoring** (`head`, both hands, both toes):
+   their own rotation moves **no** measured bone — a hand's position comes from its
+   forearm, a toe's from its foot, and fingers are out of the measurement. Anchoring
+   them gains nothing and adds a jolt; inside a loop, a jolt replayed every cycle. On
+   `world-sit-talking-2` the left wrist was 129° away: anchoring it would have taken
+   the peak from 269 to **639 °/s** for zero centimetre gained.
+3. **A phase contract is measured, not decreed — and it does not apply everywhere.**
+   It holds for a cycle the code can *choose* when to leave (gaits, pivots); it does
+   not hold for an idle a gesture interrupts whenever the intent arrives
+   (`world-raise-hand-in` therefore targets the mean pose of `idle`, not one of its
+   phases).
+
 
 **`world-walk-slow` was examined and left alone.** Its feet only clear the ground by
 2.6 cm and it is the gait of the autonomous wander, but both proposed exits fail on
@@ -663,11 +720,13 @@ for each 3D-world clip, the measured quantities the code needs:
   displacement (26.7 cm) by which the character moves away from the seat when
   standing up is recorded there, to be applied to its position.
 - **transitions, `enchaine`**: where the clip comes from, where it goes, and — for
-  walking — **at which phase of the cycle to enter and leave it**. The ends of the
-  transitions are anchored onto the neighbouring poses: the last frame of
-  `world-walk-start` *is* the pose of `world-walk` at 0.200 s, the first frame of
-  `world-walk-stop` *is* the pose of `world-walk` at 0. Honour those phases and the
-  seam is nil; ignore them and it goes back up to 46 cm.
+  walking **and the two seated pivots** — **at which phase of the cycle to enter and
+  leave it**. The ends of the transitions are anchored onto the neighbouring poses:
+  the last frame of `world-walk-start` *is* the pose of `world-walk` at 0.200 s, the
+  first frame of `world-walk-stop` *is* the pose of `world-walk` at 0, the first
+  frame of `world-sit-turn-left-end` *is* that of `world-sit-turn-left` at 1.100 s,
+  and that of `world-sit-turn-right-end` its own cycle's at 2.367 s. Honour those
+  phases and the seam is nil; ignore them and it goes back up to 46 cm.
 - **`phasesDeRaccord`**: the same for all six cycles, at the root of the file — best
   entry frame, best exit frame, and the gap in centimetres each one leaves. A cycle
   has no "beginning": the code chooses where to enter it and where to leave it, and

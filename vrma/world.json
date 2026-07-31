@@ -455,13 +455,19 @@
         "vers": "world-sit-turn-left-end",
         "imageOptimale": 33,
         "tS": 1.1,
-        "ecartCm": 15.2,
+        "ecartCm": 0,
         "os": "leftHand",
-        "ecartPireCm": 46.6,
+        "ecartPireCm": 30.4,
         "toleranceTS": [
           1.033,
-          1.967
-        ]
+          1.2
+        ],
+        "ecartAuxBornesCm": [
+          2.5,
+          2.1
+        ],
+        "rigDesCm": "reference-2.vrm, hanches au repos 0,9045 m — le rig par défaut de la sonde. Les écarts en cm de ce bloc y sont mesurés tels quels ; ils suivent la taille du modèle.",
+        "commentaire": "le raccord nul n'est pas un hasard : la première image de world-sit-turn-left-end a été ancrée sur cette phase-là. Le balayage seul plafonnait à 13,2 cm — le cycle tient l'avant-bras gauche à ~36° de l'amorce du settle à TOUTE phase (35,5 à 35,8° sur les 199)."
       }
     },
     "world-sit-turn-right": {
@@ -470,13 +476,19 @@
         "vers": "world-sit-turn-right-end",
         "imageOptimale": 71,
         "tS": 2.367,
-        "ecartCm": 34.9,
+        "ecartCm": 0,
         "os": "leftToes",
-        "ecartPireCm": 54.5,
+        "ecartPireCm": 18.7,
         "toleranceTS": [
           2.333,
           2.433
-        ]
+        ],
+        "ecartAuxBornesCm": [
+          1.3,
+          1.5
+        ],
+        "rigDesCm": "reference-2.vrm, hanches au repos 0,9045 m — le rig par défaut de la sonde. Les écarts en cm de ce bloc y sont mesurés tels quels ; ils suivent la taille du modèle.",
+        "commentaire": "idem : ancrage sur cette phase. Le balayage seul plafonnait à 32,6 cm, dont 16,4 de résidu incompressible — le settle n'avait aucune piste de buste (voir ses retouches)."
       }
     }
   },
@@ -678,7 +690,7 @@
       "osAnimes": 29,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 1.8,
-      "tailleOctets": 90680,
+      "tailleOctets": 90684,
       "hanchesFraction": {
         "min": 0.9908,
         "max": 0.9963,
@@ -936,19 +948,29 @@
       "osAnimes": 48,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 53.3,
-      "tailleOctets": 248852,
+      "tailleOctets": 250632,
       "hanchesFraction": {
         "min": 0.5409,
         "max": 0.5409,
         "debut": 0.5409,
         "fin": 0.5409
       },
-      "coutureBoucleDeg": 0,
+      "assise": {
+        "hanchesFraction": 0.541,
+        "raccordAWorldSitIdleCm": 0.3,
+        "verdict": "excellent"
+      },
+      "retouches": [
+        "phase de départ décalée de 21 images (0,700 s) sur une période de 196 : un cycle n'a pas de « début », et celui-ci passait à 17 cm du maintien assis à l'image 0 pour 8,8 cm à l'image 21 (rig de la sonde, hanches 0,9045 m ; 13,8 et 7,1 sur EtalonChibi). La couture reste exacte par construction — le nouveau raccord est un intervalle INTÉRIEUR du clip d'origine (0 cm, 0,01°), et le saut de vitesse y tombe de 68 à 32 °/s",
+        "les deux extrémités ancrées sur la pose moyenne de world-sit-idle (correction max 18,5° sur rightLowerArm, fenêtre 0,40 s)",
+        "os terminaux (head, mains, orteils) exclus de l'ancrage : dans une BOUCLE, ancrer le poignet gauche à 129° du socle aurait rejoué une secousse de 639 °/s à chaque tour, pour zéro centimètre gagné (la rotation propre d'un os terminal ne déplace aucun os mesuré). Pic de vitesse inchangé : 269 °/s"
+      ],
+      "coutureBoucleDeg": 0.01,
       "raccordVitesse": {
         "avantDegS": 0,
-        "apresDegS": 11,
-        "sautDegS": 11,
-        "moyenneDegS": 15
+        "apresDegS": 32,
+        "sautDegS": 32,
+        "moyenneDegS": 40
       }
     },
     "world-sit-look": {
@@ -1518,18 +1540,23 @@
       "osAnimes": 33,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 10.6,
-      "tailleOctets": 80924,
+      "tailleOctets": 85592,
       "enchaine": {
         "depuis": "idle",
         "vers": "world-raise-hand-hold",
-        "commentaire": "intro. Écart idle → ce clip : 16,5 à 18,7 cm — la main part déjà haut. Fondu d’entrée long, ou passer par world-point-in."
+        "commentaire": "intro, ANCRÉE sur ses deux voisines : la première image est la pose moyenne d'idle, la dernière celle de world-raise-hand-hold à t=0. Aucun contrat de phase ici — un geste se déclenche quand l'intention arrive, pas quand le socle veut bien : c'est justement pourquoi le bord amont vise la pose MOYENNE d'idle. Écart après ancrage : 2,0 cm au pire des 300 phases d'idle (0,2 au mieux), 0 cm vers le maintien — rig de la sonde, hanches 0,9045 m ; 1,6 cm sur EtalonChibi, contre 13,6 avant."
       },
       "hanchesFraction": {
         "min": 0.9955,
         "max": 1,
-        "debut": 1,
+        "debut": 0.9955,
         "fin": 0.9956
       },
+      "retouches": [
+        "extrémité amont ancrée sur la pose moyenne d'idle (correction max 30,3° sur rightLowerArm, bassin −0,4 cm, fenêtre 0,25 s)",
+        "extrémité aval ancrée sur world-raise-hand-hold à t=0 (correction max 4,6° sur rightLowerArm, fenêtre 0,20 s)",
+        "pic de vitesse inchangé : 936 °/s"
+      ],
       "vitesseAngulaireMaxDegS": 936
     },
     "world-raise-hand-out": {
@@ -2041,21 +2068,26 @@
         "fenetreImages": "1→140"
       },
       "dureeS": 4.6,
-      "osAnimes": 18,
+      "osAnimes": 20,
       "doigtsAnimes": false,
       "amplitudeDoigtsDeg": 0,
-      "tailleOctets": 119480,
+      "tailleOctets": 121860,
       "hanchesFraction": {
         "min": 0.5408,
         "max": 0.5414,
         "debut": 0.5409,
-        "fin": 0.541
+        "fin": 0.5409
       },
       "assise": {
         "hanchesFraction": 0.541,
-        "raccordAWorldSitIdleCm": 15.9,
-        "verdict": "echoue"
+        "raccordAWorldSitIdleCm": 0.1,
+        "verdict": "excellent"
       },
+      "retouches": [
+        "deux os greffés (leftShoulder, rightShoulder) : le FBX source n'a aucune piste dessus, les épaules restaient donc OUVERTES comme debout sous un corps assis. Le défaut ne venait pas des chevilles croisées mais de là — l'écart au maintien assis valait 15,9 cm CONSTANTS sur les 138 images (14,4 sur le rig de la sonde, 11,6 sur EtalonChibi), porté par rightShoulder (21,6°). Qu'il ne bouge PAS d'une image à l'autre est la signature d'une pose fausse, pas d'un geste qui dérive. Elles reçoivent la pose moyenne de world-sit-idle, constante (la posture assise d'Overte l'est), comme les sept assis privés de bassin",
+        "les deux extrémités ancrées sur la pose moyenne de world-sit-idle (correction max 5,8° sur leftUpperArm, fenêtre 0,30 s)",
+        "os terminaux (head, mains, orteils) exclus de l'ancrage : leur rotation propre ne déplace aucun os mesuré. Pic de vitesse inchangé : 49 °/s"
+      ],
       "vitesseAngulaireMaxDegS": 49
     },
     "world-sit-look-2": {
@@ -2509,11 +2541,17 @@
       "osAnimes": 20,
       "doigtsAnimes": false,
       "amplitudeDoigtsDeg": 0,
-      "tailleOctets": 86884,
+      "tailleOctets": 88096,
       "enchaine": {
         "depuis": "world-sit-turn-left",
         "vers": "world-sit-idle",
-        "commentaire": "sortie dédiée du pivot assis. 0,6 cm vers world-sit-idle ; la jointure amont dépend de la phase (15,2 cm au mieux, 46,6 au pire)."
+        "phaseSortieCibleS": 1.1,
+        "phaseSortieToleranceS": [
+          1.033,
+          1.2
+        ],
+        "phaseSortieEcartCm": 0,
+        "commentaire": "sortie dédiée du pivot assis. CONTRAT : world-sit-turn-left est un CYCLE, il se quitte à t = 1,100 s (image 33 sur 199) — la première image de ce clip EST la pose du cycle à cette phase. Écart mesuré 0 cm à 1,100 s, ≤ 2,5 cm de 1,033 à 1,200, et jusqu'à 30,4 cm à l'opposé du cycle (rig de la sonde, hanches 0,9045 m — les cm suivent la taille du modèle). Quitter le cycle n'importe quand redonne le défaut."
       },
       "hanchesFraction": {
         "min": 0.5409,
@@ -2523,10 +2561,16 @@
       },
       "assise": {
         "hanchesFraction": 0.541,
-        "raccordAWorldSitIdleCm": 20,
-        "verdict": "echoue"
+        "raccordAWorldSitIdleCm": 34.1,
+        "verdict": "sans objet",
+        "commentaire": "PIVOT : ce clip commence TOURNÉ, sur la pose du cycle à sa phase de sortie — son écart au socle contient la rotation et ne juge pas le clip (cf. _lisezMoi). Ce qui le juge, ce sont ses deux jointures : 0 cm en amont au contrat de phase, 0,3 cm en aval vers world-sit-idle."
       },
-      "vitesseAngulaireMaxDegS": 64
+      "retouches": [
+        "extrémité amont ancrée sur world-sit-turn-left à t=1,100 s (correction max 35,8° sur leftLowerArm, fenêtre 0,80 s)",
+        "extrémité aval ancrée sur world-sit-idle à t=0 (correction max 5,3° sur neck, fenêtre 0,30 s)",
+        "os terminaux (head, mains, orteils) exclus de l'ancrage : leur rotation propre ne déplace aucun os mesuré"
+      ],
+      "vitesseAngulaireMaxDegS": 77
     },
     "world-sit-turn-right": {
       "role": "assis, pivote vers la droite",
@@ -2574,14 +2618,20 @@
         "fenetreImages": "1→45"
       },
       "dureeS": 1.47,
-      "osAnimes": 14,
+      "osAnimes": 20,
       "doigtsAnimes": false,
       "amplitudeDoigtsDeg": 0,
-      "tailleOctets": 78284,
+      "tailleOctets": 88156,
       "enchaine": {
         "depuis": "world-sit-turn-right",
         "vers": "world-sit-idle",
-        "commentaire": "sortie dédiée du pivot assis. 19,1 cm vers world-sit-idle — nettement moins propre que son symétrique ; la jointure amont va de 34,9 à 54,5 cm."
+        "phaseSortieCibleS": 2.367,
+        "phaseSortieToleranceS": [
+          2.333,
+          2.433
+        ],
+        "phaseSortieEcartCm": 0,
+        "commentaire": "sortie dédiée du pivot assis. CONTRAT : world-sit-turn-right se quitte à t = 2,367 s (image 71 sur 199) — la première image de ce clip EST la pose du cycle à cette phase. Écart mesuré 0 cm à 2,367 s, ≤ 1,5 cm de 2,333 à 2,433, et jusqu'à 18,7 cm à l'opposé du cycle (rig de la sonde, hanches 0,9045 m — les cm suivent la taille du modèle)."
       },
       "hanchesFraction": {
         "min": 0.5409,
@@ -2591,9 +2641,16 @@
       },
       "assise": {
         "hanchesFraction": 0.541,
-        "raccordAWorldSitIdleCm": 20.1,
-        "verdict": "echoue"
+        "raccordAWorldSitIdleCm": 41.4,
+        "verdict": "sans objet",
+        "commentaire": "PIVOT : ce clip commence TOURNÉ, sur la pose du cycle à sa phase de sortie — son écart au socle contient la rotation et ne juge pas le clip (cf. _lisezMoi). Ce qui le juge, ce sont ses deux jointures : 0 cm en amont au contrat de phase, 0,5 cm en aval vers world-sit-idle."
       },
+      "retouches": [
+        "six os greffés (spine, chest, upperChest, neck, leftShoulder, rightShoulder) : le FBX source n'a AUCUNE piste dessus, et le lecteur les remettait debout sous un corps assis — 16,4 cm de résidu qu'aucun ancrage ne pouvait toucher. Ils reçoivent la pose de world-sit-turn-right à t=2,367 s puis rejoignent world-sit-idle en smoothstep sur la durée du clip (parcours 0,4 à 15,1° selon l'os) : c'est le buste qui se détord, ce que le settle est censé montrer",
+        "extrémité amont ancrée sur world-sit-turn-right à t=2,367 s (correction max 32,8° sur leftLowerLeg, fenêtre 0,30 s)",
+        "extrémité aval ancrée sur world-sit-idle à t=0 (correction max 1,8° sur rightLowerLeg, fenêtre 0,30 s)",
+        "os terminaux (head, mains, orteils) exclus de l'ancrage : leur rotation propre ne déplace aucun os mesuré"
+      ],
       "vitesseAngulaireMaxDegS": 170
     },
     "world-step-left": {
@@ -2916,7 +2973,7 @@
       "osAnimes": 22,
       "doigtsAnimes": false,
       "amplitudeDoigtsDeg": 0,
-      "tailleOctets": 77916,
+      "tailleOctets": 77920,
       "hanchesFraction": {
         "min": 0.9755,
         "max": 1.0378,
