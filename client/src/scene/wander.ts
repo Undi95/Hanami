@@ -14,6 +14,7 @@
 // rapport de 1,59 — une constante en mètres ferait patiner l'une et courir
 // l'autre. C'est exactement la convention de vrma/world.json.
 import type { Seat } from './sceneMap' // type seul — sceneMap est pur lui aussi
+import type { Waypoint } from './pathfind' // idem
 
 // ── Constantes mesurées ─────────────────────────────────────────────────────
 /** Pivots : vitesse angulaire des clips, `deplacement.vitesseRotationDegS`. */
@@ -134,6 +135,33 @@ const PATH_STEP = 0.15
  */
 const MAX_WALK_S = 15
 
+// ── Itinéraires ─────────────────────────────────────────────────────────────
+// Un trajet n'est plus une ligne droite mais une SUITE de segments droits, dont
+// les étapes viennent de la recherche de chemin (host.path, cf. pathfind.ts).
+// Rien d'autre ne change : chaque segment reste un départ, un cycle de marche
+// entré à sa phase, un arrêt sur la couture. C'est le même enchaînement que les
+// deux segments d'un trajet d'assise, généralisé à N.
+/**
+ * Étape considérée atteinte en deçà de cette distance (fraction des hanches).
+ * Un segment se termine à un nombre ENTIER de foulées : il ne tombe jamais pile
+ * sur son étape, il la dépasse ou s'arrête juste avant. Sans cette tolérance, le
+ * moteur redemanderait un pas de vingt centimètres — que la plus courte des
+ * foulées (41 cm en flânerie) ne sait pas faire.
+ */
+const WAYPOINT_REACH_FRAC = 0.35
+/**
+ * Segments accordés EN PLUS des étapes de l'itinéraire. Ils paient les reprises :
+ * un segment raccourci devant un obstacle laisse son étape en place et la revise
+ * au suivant. Sans ce crédit, une seule reprise coûterait la fin du chemin.
+ */
+const ROUTE_SPARE_LEGS = 3
+/**
+ * Plafond dur du nombre de segments d'un trajet. Le chemin le plus tortueux des
+ * trois décors en demande cinq ; au-delà, c'est une carte étrange, et un
+ * personnage qui arpente la pièce pendant deux minutes ne se rattrape pas.
+ */
+const ROUTE_MAX_LEGS = 12
+
 // ── Assise ──────────────────────────────────────────────────────────────────
 // Tous les chiffres viennent de vrma/world.json, mesurés sur le rig d'Overte
 // (1,0167 m de hanches) — d'où les divisions : on convertit en fraction de
@@ -191,6 +219,17 @@ const HOME_ODDS = 1 / 3
 const SEAT_ODDS = 1 / 3
 /** Essais de tirage d'une destination avant d'abandonner, en silence. */
 const ROAM_TRIES = 10
+/**
+ * Détour toléré par une destination SPONTANÉE, en multiple de la distance à vol
+ * d'oiseau. La recherche de chemin rend joignables des points qui ne l'étaient
+ * pas — mais un pas de deux mètres qui devient une traversée de pièce n'est plus
+ * une flânerie, c'est une expédition. Au-delà, on retire une autre destination :
+ * le tirage reste celui d'avant (0,8 à 4 hanches autour de soi), donc la
+ * déambulation ne se met pas soudain à viser le fond de la salle.
+ * Les clics de l'utilisateur et les assises, eux, ne sont jamais plafonnés :
+ * elles ont été VOULUES.
+ */
+const ROAM_DETOUR_MAX = 1.8
 
 function rand(min: number, max: number): number {
   return min + Math.random() * (max - min)
@@ -251,6 +290,13 @@ export interface WanderHost {
   floorAt(x: number, z: number): number | null
   /** Le gabarit tient-il debout ici ? (disque de `radius`, dénivelé depuis `fromY`) */
   canStand(x: number, z: number, radius: number, fromY?: number): boolean
+  /**
+   * Itinéraire par les allées jusqu'à (toX, toZ) : les étapes à enchaîner, la
+   * dernière étant l'arrivée — ou null s'il n'existe aucun chemin au gabarit.
+   * APPELÉ À LA DEMANDE (un clic, une assise, une déambulation), jamais par
+   * image, et seulement quand la ligne droite ne passe pas.
+   */
+  path(fromX: number, fromZ: number, toX: number, toZ: number, radius: number): Waypoint[] | null
   /** Rayon du gabarit (m) tel que l'analyse du décor l'a employé. */
   bodyRadius(): number
   /** Un clip de TRANSITION (départ, arrêt, assise) tient-il l'écran ? */
@@ -343,6 +389,13 @@ export function createWander(host: WanderHost): Wander {
   let wantStop = false
   /** Temps passé à marcher sur le trajet en cours (s) — plafonné par MAX_WALK_S. */
   let walked = 0
+  /**
+   * Étapes qu'il RESTE à enchaîner, la dernière étant la destination. Vide : le
+   * trajet en cours est une ligne droite, exactement comme avant ce chantier.
+   */
+  let route: Waypoint[] = []
+  /** Segments de marche encore accordés à l'itinéraire (garde-fou). */
+  let routeLegs = 0
   /** Temps restant (s) avant le prochain déplacement spontané. */
   let restTimer = rand(REST_MIN_S, REST_MAX_S)
   /** Horloge interne (s, cumul des deltas) — sert aux fenêtres d'attention. */
@@ -501,6 +554,90 @@ export function createWander(host: WanderHost): Wander {
     return false
   }
 
+  /**
+   * Prépare le segment suivant de l'itinéraire, et le retire de la liste dès
+   * qu'il y arrive.
+   *
+   * On vise l'étape la PLUS LOINTAINE dont la ligne droite est libre : les coins
+   * trop serrés pour une foulée se fondent alors dans le segment suivant, au
+   * lieu d'exiger un pas de vingt centimètres que la marche ne sait pas faire.
+   * Seule l'étape immédiate a le droit d'être approchée par un segment
+   * raccourci (c'est le comportement de toujours devant un obstacle) — et dans
+   * ce cas elle RESTE en tête de liste, pour être revisée au segment d'après.
+   */
+  function nextLeg(seatLeg: boolean): boolean {
+    if (routeLegs <= 0) {
+      route.length = 0
+      return false
+    }
+    const radius = host.bodyRadius()
+    const tail = seatLeg ? MANEUVER_M : 0
+    const head = host.canStand(p.x, p.z, radius) ? 0 : MANEUVER_M
+    const reach = WAYPOINT_REACH_FRAC * host.hips()
+    // Les étapes déjà derrière soi ne comptent plus : le dernier pas a pu les
+    // dépasser (un segment fait un nombre entier de foulées, pas la distance
+    // demandée). On garde toujours la destination, elle.
+    while (route.length > 1 && Math.hypot(route[0].x - p.x, route[0].z - p.z) < reach) route.shift()
+    for (let i = route.length - 1; i >= 0; i--) {
+      const w = route[i]
+      // Sauter une étape ne se fait que par une vraie ligne de vue : sans cette
+      // garde, `planWalk` accepterait un bout de chemin raccourci DANS la
+      // mauvaise direction et l'on perdrait le coin qu'il fallait contourner.
+      if (i > 0 && !pathClear(p.x, p.z, w.x, w.z, radius, tail, head)) continue
+      if (!planWalk(w.x, w.z, seatLeg)) continue
+      route.splice(0, Math.hypot(destX - w.x, destZ - w.z) < reach ? i + 1 : i)
+      routeLegs--
+      return true
+    }
+    route.length = 0
+    return false
+  }
+
+  /**
+   * Ouvre un trajet vers (x, z) et prépare son premier segment. Rend false sans
+   * rien engager s'il n'ouvre pas.
+   *
+   * LA LIGNE DROITE D'ABORD, et c'est LE point de ce chantier : si la vue porte
+   * jusqu'à la destination, on plane un segment unique et rien d'autre — pas de
+   * recherche, pas d'étapes, pas de reprise. Un trajet dégagé se comporte donc
+   * exactement comme avant, au centimètre et à l'image près : c'est le même
+   * `planWalk` appelé au même moment avec les mêmes arguments. La recherche de
+   * chemin n'existe que pour ce qui, hier, n'aboutissait pas.
+   *
+   * Même chose quand aucun chemin n'existe (destination murée, hors carte) : on
+   * retombe sur le segment droit, que le moteur raccourcira devant l'obstacle —
+   * c'est-à-dire qu'il fera ce qu'il faisait déjà.
+   *
+   * `maxLen` borne la LONGUEUR DU CHEMIN (pas la distance à vol d'oiseau) : la
+   * déambulation s'en sert pour refuser les détours qui changeraient sa flânerie
+   * en traversée de pièce.
+   */
+  function startRoute(x: number, z: number, seatLeg = false, maxLen = Infinity): boolean {
+    route.length = 0
+    routeLegs = 0
+    const radius = host.bodyRadius()
+    const tail = seatLeg ? MANEUVER_M : 0
+    const head = host.canStand(p.x, p.z, radius) ? 0 : MANEUVER_M
+    const pts = pathClear(p.x, p.z, x, z, radius, tail, head)
+      ? null
+      : host.path(p.x, p.z, x, z, radius)
+    if (!pts) return Math.hypot(x - p.x, z - p.z) <= maxLen && planWalk(x, z, seatLeg)
+    let len = 0
+    let cx = p.x
+    let cz = p.z
+    for (const w of pts) {
+      len += Math.hypot(w.x - cx, w.z - cz)
+      cx = w.x
+      cz = w.z
+    }
+    if (len > maxLen) return false
+    route = pts
+    routeLegs = Math.min(pts.length + ROUTE_SPARE_LEGS, ROUTE_MAX_LEGS)
+    if (nextLeg(seatLeg)) return true
+    route.length = 0
+    return false
+  }
+
   /** Démarre la marche préparée : pivot d'alignement si l'écart de cap est franc. */
   function beginWalk(): void {
     walked = 0
@@ -540,24 +677,38 @@ export function createWander(host: WanderHost): Wander {
   }
 
   /**
-   * Fin d'un segment de marche. Sans trajet d'assise : repos. Avec : on enchaîne
-   * si le point de pré-assise est à portée, on remarche s'il reste des segments,
-   * et sinon on abandonne EN SILENCE — une assise devenue inaccessible n'est pas
+   * Fin d'un segment de marche — LA COUTURE ENTRE DEUX SEGMENTS. Il reste des
+   * étapes : on repart, avec les mêmes règles que le premier segment (pivot si
+   * le cap change franchement, entrée dans le cycle à sa phase, sortie sur la
+   * couture). Sans trajet d'assise et sans étape : repos. Avec : on enchaîne si
+   * le point de pré-assise est à portée, on remarche s'il reste des segments, et
+   * sinon on abandonne EN SILENCE — une assise devenue inaccessible n'est pas
    * une panne, le personnage reste simplement debout où il est.
    */
   function endLeg(): void {
     if (!seatRun) {
+      if (route.length > 0 && nextLeg(false)) {
+        beginWalk()
+        return
+      }
       state = 'rest'
       return
     }
+    // Arriver PRIME sur l'itinéraire : quand la dernière étape tombe déjà dans
+    // la zone de pré-assise, un segment de plus ne ferait que piétiner.
     const near = Math.hypot(seatRun.standX - p.x, seatRun.standZ - p.z)
     if (near <= Math.max(SEAT_NEAR_FRAC * host.hips(), 0.45)) {
       startPivot(seatRun.yaw, 'seatAlign')
       return
     }
-    // Le point de pré-assise d'abord, la case d'approche de l'analyse ensuite —
-    // le MÊME repli que tryGoSit, et pour la même raison : le point théorique
-    // frôle le meuble, il peut être hors sol connu, la case d'approche jamais.
+    if (route.length > 0 && nextLeg(true)) {
+      beginWalk()
+      return
+    }
+    // L'itinéraire épuisé, restent les derniers centimètres : le point de
+    // pré-assise d'abord, la case d'approche de l'analyse ensuite — le MÊME
+    // repli que tryGoSit, et pour la même raison : le point théorique frôle le
+    // meuble, il peut être hors sol connu, la case d'approche jamais.
     if (
       seatRun.legsLeft > 0 &&
       (planWalk(seatRun.standX, seatRun.standZ, true) || planWalk(seatRun.apprX, seatRun.apprZ, true))
@@ -663,11 +814,13 @@ export function createWander(host: WanderHost): Wander {
       startPivot(run.yaw, 'seatAlign')
       return true
     }
-    // Sinon, marcher vers le point de pré-assise ; s'il est injoignable en
-    // ligne droite, vers la case d'approche donnée par l'analyse (les segments
-    // suivants s'occuperont du reste, cf. endLeg — même repli).
+    // Sinon, un itinéraire vers le point de pré-assise ; s'il est injoignable,
+    // vers la case d'approche donnée par l'analyse (les segments suivants
+    // s'occuperont du reste, cf. endLeg — même repli). L'itinéraire dégénère en
+    // ligne droite dès que la vue porte : les assises déjà prenables le restent
+    // par le chemin exact d'avant.
     const walkable =
-      planWalk(run.standX, run.standZ, true) || planWalk(run.apprX, run.apprZ, true)
+      startRoute(run.standX, run.standZ, true) || startRoute(run.apprX, run.apprZ, true)
     if (!walkable) return false
     seatRun = run
     beginWalk()
@@ -779,14 +932,18 @@ export function createWander(host: WanderHost): Wander {
         }
       }
     }
-    if (Math.random() < HOME_ODDS && Math.hypot(p.x, p.z) > 0.3 && planWalk(0, 0)) {
+    // Le retour à l'accueil et les points tirés autour de soi passent par la
+    // MÊME porte que les clics — mais avec un plafond de détour : le tirage ne
+    // change pas (0,8 à 4 hanches), donc la pondération non plus.
+    const home = Math.hypot(p.x, p.z)
+    if (Math.random() < HOME_ODDS && home > 0.3 && startRoute(0, 0, false, home * ROAM_DETOUR_MAX)) {
       beginWalk()
       return
     }
     for (let i = 0; i < ROAM_TRIES; i++) {
       const a = Math.random() * Math.PI * 2
       const d = rand(ROAM_MIN_FRAC, ROAM_MAX_FRAC) * h
-      if (planWalk(p.x + Math.sin(a) * d, p.z + Math.cos(a) * d)) {
+      if (startRoute(p.x + Math.sin(a) * d, p.z + Math.cos(a) * d, false, d * ROAM_DETOUR_MAX)) {
         beginWalk()
         return
       }
@@ -1013,7 +1170,7 @@ export function createWander(host: WanderHost): Wander {
           if (afterStand) {
             const dest = afterStand
             afterStand = null
-            if (planWalk(dest.x, dest.z)) beginWalk()
+            if (startRoute(dest.x, dest.z)) beginWalk()
           }
         }
         break
@@ -1040,7 +1197,7 @@ export function createWander(host: WanderHost): Wander {
       // « cliquer pour y aller » sourd une fois sur deux. beginWalk pose son
       // propre pivot d'alignement par-dessus, les états s'enchaînent déjà.
       if (state !== 'rest' && state !== 'pivot') return false
-      if (!planWalk(x, z)) return false
+      if (!startRoute(x, z)) return false
       beginWalk()
       return true
     },
@@ -1070,6 +1227,8 @@ export function createWander(host: WanderHost): Wander {
       seatRun = null
       slide = null
       afterStand = null
+      route.length = 0
+      routeLegs = 0
       restTimer = rand(REST_MIN_S, REST_MAX_S)
       host.feet('planted')
       host.gait(null, fade)

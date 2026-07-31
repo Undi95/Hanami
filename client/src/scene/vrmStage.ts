@@ -990,6 +990,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     userBusy: () => camGrabbed || performance.now() - camReleasedAt < USER_CAMERA_GRACE_MS,
     floorAt: (x, z) => sceneMap?.floorAt(x, z) ?? null,
     canStand: (x, z, radius, fromY) => sceneMap?.canStand(x, z, radius, fromY) ?? false,
+    path: (fx, fz, tx, tz, radius) => sceneMap?.path(fx, fz, tx, tz, radius) ?? null,
     bodyRadius: () => sceneMap?.body.radius ?? 0.25,
     transitioning: () => onceThen !== null,
     onceProgress: () => {
