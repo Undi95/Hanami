@@ -39,6 +39,14 @@ const TURN_FADE = 0.3
  * recaler, et c'est le défaut le plus fatigant qu'on puisse produire.
  */
 const FACE_DEADZONE = 12 * (Math.PI / 180)
+/**
+ * ATTENTION (un clic sur le personnage) : pendant quelques secondes, la zone
+ * morte se resserre — il se met bien en face, là où d'habitude un petit écart
+ * le laisse indifférent. C'est toute la différence entre « il m'a vu » et
+ * « il traîne par là », sans un seul effet ajouté.
+ */
+const ATTENTIVE_S = 6
+const ATTENTIVE_DEADZONE = 3 * (Math.PI / 180)
 
 // ── Marche ──────────────────────────────────────────────────────────────────
 // LA VITESSE N'EST PAS ICI. Elle est LUE sur l'animation, image par image
@@ -309,6 +317,12 @@ export interface Wander {
   busy(): boolean
   /** Est-il assis (ou en train de s'asseoir) ? */
   seated(): boolean
+  /**
+   * On vient de cliquer sur lui : quelques secondes d'ATTENTION — au repos, il
+   * se met bien en face de la caméra au lieu de rester vaguement tourné. Sans
+   * effet s'il est occupé (marche, assise) : on ne coupe pas ce qu'il fait.
+   */
+  poke(): void
   /** Ramène le personnage au point d'accueil, sans clip. `fade` : fondu du retour au socle. */
   home(fade?: number): void
 }
@@ -331,6 +345,10 @@ export function createWander(host: WanderHost): Wander {
   let walked = 0
   /** Temps restant (s) avant le prochain déplacement spontané. */
   let restTimer = rand(REST_MIN_S, REST_MAX_S)
+  /** Horloge interne (s, cumul des deltas) — sert aux fenêtres d'attention. */
+  let now = 0
+  /** Jusqu'à quand le clic sur le personnage resserre la zone morte. */
+  let attentiveUntil = -Infinity
   const step = { x: 0, z: 0 }
 
   /**
@@ -339,10 +357,16 @@ export function createWander(host: WanderHost): Wander {
    * géométrie à chaque image n'apporterait que des occasions de divergence.
    */
   interface SeatRun {
-    sitX: number // où le BASSIN se pose (bord de la nappe côté approche)
+    sitX: number // où le BASSIN se pose (bord de la nappe côté du regard)
     sitZ: number
-    standX: number // point de pré-assise : sitPoint + recul de world-sit-enter
+    standX: number // point de pré-assise THÉORIQUE : sitPoint + recul de world-sit-enter
     standZ: number
+    // Où il se tenait VRAIMENT au moment de s'asseoir (figé par beginSitDown) :
+    // c'est LÀ que le lever le ramène. Le point théorique peut être hors grille
+    // (il frôle le meuble par construction) — on ne se relève jamais vers un
+    // point que personne n'a validé, on se relève d'où l'on est venu.
+    outX: number
+    outZ: number
     yaw: number // cap assis (radians)
     seatedY: number // altitude du GROUPE une fois assis (bassin sur l'assise réelle)
     groundY: number // altitude du sol sous les pieds — la cible de l'IK 'reach'
@@ -563,6 +587,8 @@ export function createWander(host: WanderHost): Wander {
       sitZ,
       standX,
       standZ,
+      outX: standX,
+      outZ: standZ,
       yaw,
       seatedY: seat.y + (SEAT_GAP_FRAC - SIT_HIPS_FRAC) * h,
       groundY,
@@ -594,6 +620,12 @@ export function createWander(host: WanderHost): Wander {
       state = 'rest'
       return
     }
+    // La stance RÉELLE de départ : le point du lever, et le sol des pieds. Le
+    // sol est relu ici — il est forcément connu (on a marché jusqu'ici).
+    run.outX = p.x
+    run.outZ = p.z
+    const g = host.floorAt(p.x, p.z)
+    if (g !== null) run.groundY = g
     slide = { fx: p.x, fy: run.groundY, fz: p.z, tx: run.sitX, ty: run.seatedY, tz: run.sitZ }
     host.feet('reach')
     // La dernière image de world-sit-enter EST world-sit-idle à t = 0 (ancrée) :
@@ -610,7 +642,7 @@ export function createWander(host: WanderHost): Wander {
       state = 'rest'
       return
     }
-    slide = { fx: run.sitX, fy: run.seatedY, fz: run.sitZ, tx: run.standX, ty: run.groundY, tz: run.standZ }
+    slide = { fx: run.sitX, fy: run.seatedY, fz: run.sitZ, tx: run.outX, ty: run.groundY, tz: run.outZ }
     host.once('sit-exit', SIT_FADE, null, AFTER_STOP_FADE)
     state = 'sitUp'
   }
@@ -714,10 +746,14 @@ export function createWander(host: WanderHost): Wander {
   }
 
   function update(delta: number): void {
+    now += delta
     switch (state) {
       case 'rest': {
-        // On ne bouge pas la scène sous la main de l'utilisateur.
-        if (host.userBusy()) break
+        const attentive = now < attentiveUntil
+        // On ne bouge pas la scène sous la main de l'utilisateur — SAUF pendant
+        // l'attention : le clic qui la déclenche vient de compter comme un geste
+        // de caméra, attendre la grâce tuerait toute la réactivité.
+        if (host.userBusy() && !attentive) break
         // Le minuteur ne court PAS pendant qu'une réponse s'écrit : il ne partira
         // jamais au milieu d'une phrase.
         if (!host.speaking()) restTimer -= delta
@@ -729,7 +765,7 @@ export function createWander(host: WanderHost): Wander {
           startPivot(want, 'pivot')
           break
         }
-        if (Math.abs(d) >= FACE_DEADZONE) {
+        if (Math.abs(d) >= (attentive ? ATTENTIVE_DEADZONE : FACE_DEADZONE)) {
           // Glissement silencieux : le corps se recale sans lever un pied.
           p.yaw += Math.sign(d) * Math.min(Math.abs(d), TURN_GLIDE_RATE * delta)
           break
@@ -934,6 +970,9 @@ export function createWander(host: WanderHost): Wander {
     goSit(seat): boolean {
       if (state !== 'rest') return false
       return tryGoSit(seat)
+    },
+    poke(): void {
+      if (state === 'rest' || state === 'pivot') attentiveUntil = now + ATTENTIVE_S
     },
     /**
      * Retour au point d'accueil. Les clips en place sont rendus au socle avec ce

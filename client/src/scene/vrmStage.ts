@@ -12,9 +12,11 @@ import {
   MOUSE,
   Object3D,
   PerspectiveCamera,
+  Raycaster,
   Scene,
   SRGBColorSpace,
   TOUCH,
+  Vector2,
   Vector3,
   WebGLRenderer,
 } from 'three'
@@ -293,6 +295,14 @@ const POSTURE_PREFIXES = ['pose-', 'sit-'] as const
  */
 const WORLD_PREFIX = 'world-'
 
+/**
+ * Radical du clip d'ACQUIESCEMENT — la réaction au clic sur le personnage en
+ * scène vivante. `nod.vrma` existe déjà dans vrma/ (domaine face à face) mais
+ * n'était rattaché à aucun rôle : il n'est téléchargé QUE quand la scène
+ * vivante l'est, avec les clips `world-`.
+ */
+const REACTION_STEM = 'nod'
+
 /** Rôles reconnus dans vrma/, en URLs de fichiers. */
 interface VrmaCatalog {
   idle: string[] // socle en boucle — SANS LUI, aucune animation n'est jouée
@@ -300,6 +310,7 @@ interface VrmaCatalog {
   gestures: Map<Emotion, string[]> // joué une fois, puis retour au socle
   postures: Map<string, string[]> // remplace le socle (setPosture)
   world: Map<string, string[]> // domaine `world-`, clé = radical SANS le préfixe
+  reactions: string[] // acquiescement au clic (REACTION_STEM), scène vivante seule
 }
 
 function pushInto<K>(map: Map<K, string[]>, key: K, url: string): void {
@@ -320,6 +331,7 @@ function catalogFromUrls(urls: readonly string[]): VrmaCatalog {
     gestures: new Map(),
     postures: new Map(),
     world: new Map(),
+    reactions: [],
   }
   for (const url of urls) {
     const file = decodeURIComponent(url.split('/').pop() ?? '')
@@ -329,6 +341,7 @@ function catalogFromUrls(urls: readonly string[]): VrmaCatalog {
       .replace(/-\d+$/, '')
     if (stem === 'idle') cat.idle.push(url)
     else if (stem === TALKING_STEM) cat.talking.push(url)
+    else if (stem === REACTION_STEM) cat.reactions.push(url)
     else if ((EMOTIONS as readonly string[]).includes(stem)) pushInto(cat.gestures, stem as Emotion, url)
     // Le domaine `world-` se teste AVANT les postures : `world-sit-idle`
     // commence par `world-`, pas par `sit-`. C'est cet ordre manquant qui rendait
@@ -368,7 +381,9 @@ const WORLD_NEEDED: readonly string[] = [
 
 function worldUrlsNeeded(cat: VrmaCatalog, on: boolean): string[] {
   if (!on) return []
-  return WORLD_NEEDED.flatMap((name) => cat.world.get(name) ?? [])
+  // L'acquiescement au clic part avec le domaine `world-` : c'est une réaction
+  // de la scène vivante, le face à face n'en télécharge pas un octet.
+  return [...WORLD_NEEDED.flatMap((name) => cat.world.get(name) ?? []), ...cat.reactions]
 }
 
 // Loader SÉPARÉ de celui du VRM et de celui du décor : une .vrma n'est ni un
@@ -656,6 +671,67 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   }
   renderer.domElement.addEventListener('dblclick', onDblClick)
 
+  // ── Interactions au clic (scène vivante) ──────────────────────────────────
+  // Un lancer de rayon À L'ÉVÉNEMENT DE CLIC uniquement, jamais en continu —
+  // intersecter la géométrie du décor par image est interdit par l'architecture.
+  // Le geste principal (glisser = pan) reste intact : un clic n'est retenu que
+  // si le pointeur n'a pas bougé de plus de 6 px entre l'appui et le relâché.
+  // Sobre : aucun curseur qui change, aucun marqueur posé au sol.
+  const raycaster = new Raycaster()
+  const ndc = new Vector2()
+  let downX = 0
+  let downY = 0
+  function onPointerDown(e: PointerEvent): void {
+    downX = e.clientX
+    downY = e.clientY
+  }
+  function onSceneClick(e: MouseEvent): void {
+    if (!interactive || !wander || !currentVrm) return
+    if (e.detail > 1) return // deuxième clic d'un double : le double-clic recadre
+    const moved = (e.clientX - downX) ** 2 + (e.clientY - downY) ** 2
+    if (moved > 36) return // c'était un glisser de caméra, pas un clic
+    const rect = renderer.domElement.getBoundingClientRect()
+    if (rect.width < 1 || rect.height < 1) return
+    ndc.set(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    raycaster.setFromCamera(ndc, camera)
+    // Le personnage d'abord : lui cliquer dessus prime sur le sol derrière lui.
+    const onAvatar = raycaster.intersectObject(currentVrm.scene, true)
+    const onEnv = envRoot ? raycaster.intersectObject(envRoot, true) : []
+    const dAvatar = onAvatar.length > 0 ? onAvatar[0].distance : Infinity
+    const dEnv = onEnv.length > 0 ? onEnv[0].distance : Infinity
+    if (dAvatar < dEnv) {
+      // Les yeux suivent déjà la caméra : il acquiesce (debout, au repos) et se
+      // met bien en face quelques secondes. Assis ou en mouvement, les gardes de
+      // playReaction et poke laissent l'attention aux seuls yeux.
+      playReaction()
+      wander.poke()
+      return
+    }
+    if (dEnv === Infinity || !sceneMap) return
+    const hit = onEnv[0].point
+    // Une ASSISE visée ? La nappe à hauteur du point cliqué : il va s'y asseoir.
+    for (const seat of sceneMap.seats) {
+      if (Math.abs(hit.y - seat.y) > 0.3) continue
+      const b = seat.bounds
+      const inSheet = b
+        ? hit.x >= b[0] - 0.08 && hit.x <= b[2] + 0.08 && hit.z >= b[1] - 0.08 && hit.z <= b[3] + 0.08
+        : Math.hypot(hit.x - seat.center[0], hit.z - seat.center[1]) < 0.45
+      if (!inSheet) continue
+      wander.goSit(seat)
+      return
+    }
+    // Sinon, le SOL — seulement si le point cliqué en est un (praticable et à
+    // sa hauteur) : cliquer un mur ou une table n'envoie personne dedans.
+    const floor = sceneMap.floorAt(hit.x, hit.z)
+    if (floor === null || Math.abs(floor - hit.y) > 0.35) return
+    wander.goTo(hit.x, hit.z)
+  }
+  renderer.domElement.addEventListener('pointerdown', onPointerDown)
+  renderer.domElement.addEventListener('click', onSceneClick)
+
   // ── Taille : canvas 100 % du container (ResizeObserver + resize fenêtre) ──
   function resize(): void {
     const w = Math.max(1, container.clientWidth)
@@ -707,6 +783,18 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const proxy = new VRMLookAtQuaternionProxy(vrm.lookAt)
     proxy.name = 'VRMLookAtQuaternionProxy' // sans nom, l'avertissement revient
     vrm.scene.add(proxy)
+  }
+
+  /**
+   * Regard : en scène vivante, les YEUX suivent la caméra — c'est vrm.update qui
+   * applique la cible, dans les limites que le modèle déclare (jamais de nuque
+   * tordue : le lookAt VRM ne pilote que les yeux, et borné). Où que le
+   * personnage soit dans la pièce, il vous regarde. En face à face : cible nulle,
+   * comportement d'avant à l'octet près — la caméra est déjà pile en face.
+   */
+  function applyGaze(): void {
+    if (!currentVrm?.lookAt) return
+    currentVrm.lookAt.target = interactive ? camera : null
   }
 
   /** Une action de socle boucle sans fin — elle n'émettra donc jamais 'finished'. */
@@ -985,6 +1073,21 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     action.clampWhenFinished = true
     // Un geste pendant un geste enchaîne depuis l'action COURANTE, pas depuis le
     // socle — sinon la transition passerait par une pose que personne ne voit.
+    fadeTo(action, GESTURE_FADE)
+  }
+
+  /**
+   * Acquiescement au clic sur le personnage : un hochement de tête, joué une
+   * fois comme un geste d'émotion. Mêmes gardes que playGesture — jamais
+   * par-dessus une allure, une posture assise ou une transition.
+   */
+  function playReaction(): void {
+    if (!mixer || gaitAction || onceThen) return
+    const action = pickAction(catalog?.reactions)
+    if (!action) return
+    action.reset()
+    action.setLoop(LoopOnce, 1)
+    action.clampWhenFinished = true
     fadeTo(action, GESTURE_FADE)
   }
 
@@ -1356,6 +1459,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       addLookAtProxy(vrm)
       avatarGroup.add(vrm.scene)
       currentVrm = vrm
+      applyGaze()
       idle.reset()
       idle.setExpressionTable(resolveExpressions(vrm.expressionManager))
       const height = normalizeScale(vrm)
@@ -1507,6 +1611,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     setInteractive(on: boolean): void {
       if (on === interactive) return
       interactive = on
+      applyGaze()
       if (on) {
         wander = createWander(wanderHost)
         // Les clips `world-` n'étaient pas téléchargés : on reconstruit le
@@ -1573,6 +1678,8 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       window.removeEventListener('resize', resize)
       observer.disconnect()
       renderer.domElement.removeEventListener('dblclick', onDblClick)
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown)
+      renderer.domElement.removeEventListener('click', onSceneClick)
       controls.dispose()
       unloadCurrent()
       // Le décor part AVANT le renderer : c'est lui qui porte le contexte WebGL

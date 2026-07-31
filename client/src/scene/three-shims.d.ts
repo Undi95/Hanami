@@ -36,6 +36,13 @@ declare module 'three' {
     applyQuaternion(q: Quaternion): this
   }
 
+  export class Vector2 {
+    x: number
+    y: number
+    constructor(x?: number, y?: number)
+    set(x: number, y: number): this
+  }
+
   export class Box3 {
     min: Vector3
     max: Vector3
@@ -43,6 +50,24 @@ declare module 'three' {
     setFromObject(object: Object3D, precise?: boolean): this
     getSize(target: Vector3): Vector3
     getCenter(target: Vector3): Vector3
+  }
+
+  /** Impact d'un lancer de rayon (Raycaster.intersectObject), trié par distance. */
+  export interface Intersection {
+    distance: number
+    point: Vector3
+    object: Object3D
+  }
+
+  // Lancer de rayon — UNIQUEMENT à l'événement de clic, jamais dans la boucle :
+  // intersecter un décor de 200 000 triangles par image est exactement le genre
+  // de calcul que l'architecture interdit à l'exécution.
+  export class Raycaster {
+    constructor()
+    near: number
+    far: number
+    setFromCamera(coords: Vector2, camera: Camera): void
+    intersectObject(object: Object3D, recursive?: boolean): Intersection[]
   }
 
   export class Euler {
