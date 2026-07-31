@@ -63,11 +63,41 @@ interface Leg {
   sole: Vector3
 }
 
+/** Déplacement au sol dépeint par l'animation, dans le repère du personnage. */
+export interface Stride {
+  /** Latéral (droite du personnage négative), m. */
+  x: number
+  /** Vers l'avant, m. */
+  z: number
+}
+
 export interface LegIk {
   /** À appeler AVANT mixer.update : rend aux jambes la pose que le clip leur avait donnée. */
   beforeMixer(): void
   /** À appeler APRÈS mixer.update : mémorise la pose du clip, avant correction. */
   afterMixer(): void
+  /**
+   * ODOMÉTRIE : de combien le sol a-t-il défilé sous les pieds depuis l'appel
+   * précédent, d'après l'animation elle-même ?
+   *
+   * C'est le contraire de la manière habituelle. Plutôt que d'imposer au clip une
+   * vitesse lue dans un fichier — qui ne vaut que pour le rig sur lequel elle a
+   * été mesurée —, on LIT le déplacement que les pieds dépeignent sur CE modèle,
+   * à CETTE image. Le patinage devient nul par construction, pour tout clip et
+   * tout modèle, y compris pendant les fondus (les deux clips se mélangent, le
+   * sol défile au mélange) et pendant les transitions de départ et d'arrêt, dont
+   * personne n'a jamais mesuré le profil.
+   *
+   * Le chiffre qui justifie ça : `world-walk-slow` dépeint 0,4928 · h par cycle
+   * sur le rig de mesure de vrma/world.json, mais 0,5265 · h sur Sakura — 7 %
+   * d'écart, soit 2,6 cm de glissement par cycle avec une vitesse imposée. Les
+   * proportions de jambes ne se transportent pas d'un modèle à l'autre, seule la
+   * hauteur de hanches le fait.
+   *
+   * Rend `false` (et laisse `out` intact) tant qu'aucun appui n'est assez bas
+   * pour être crédible — pendant un saut, par exemple.
+   */
+  stride(out: Stride): boolean
   /**
    * Corrige les deux jambes. `groundAt` rend l'altitude du sol sous un point du
    * monde (null = sol inconnu : la jambe est laissée telle quelle).
@@ -111,7 +141,7 @@ function clamp(v: number, min: number, max: number): number {
  * (normalizeScale a pu remettre un modèle exporté en centimètres à 1,6 m). Elles
  * sont ensuite constantes : l'animation n'écrit que des rotations.
  */
-export function createLegIk(vrm: VRM): LegIk | null {
+export function createLegIk(vrm: VRM, root: Object3D): LegIk | null {
   const node = (name: string): Object3D | null =>
     vrm.humanoid.getNormalizedBoneNode(name as VRMHumanBoneName)
   const legs: Leg[] = []
@@ -154,6 +184,29 @@ export function createLegIk(vrm: VRM): LegIk | null {
     return y * vrm.scene.scale.y
   })()
 
+  // ── Odométrie ─────────────────────────────────────────────────────────────
+  // Position LOCALE (repère du personnage) de chaque semelle à l'image
+  // précédente, et poids d'appui associé. Le repère local est ce qui rend le
+  // calcul juste quand le personnage tourne : une rotation ne bouge pas un point
+  // exprimé dans son propre repère, donc elle ne compte pas comme un pas.
+  const prevSole: Vector3[] = legs.map(() => new Vector3())
+  const nowSole: Vector3[] = legs.map(() => new Vector3())
+  let prevValid = false
+  /**
+   * Bande de contact, RELATIVE au pied le plus bas — et c'est tout le sujet.
+   *
+   * Une bande absolue (« sous 4 cm du sol, ça porte ») paraît naturelle et ne
+   * marche pas : `world-walk-slow` est un traînement de pieds, sa semelle en
+   * balancement ne monte qu'à 3,8 % de la hauteur de hanches. Les DEUX pieds
+   * tombaient donc dans la bande pendant tout le cycle, l'odométrie rendait la
+   * moyenne de l'appui (qui recule) et du balancement (qui avance) — soit la
+   * MOITIÉ de la vitesse réelle. Mesuré : 1,06 m parcouru au lieu de 1,86, et
+   * 5 mm de glissement du pied d'appui par image, exactement la moitié de la
+   * foulée. Comparer les deux pieds ENTRE EUX rend le critère indifférent à la
+   * garde au sol du clip, qui varie du simple au triple d'une allure à l'autre.
+   */
+  const contactBand = 0.02 * hipsRest
+
   return {
     hipsRest,
     legLength: legs[0].thigh + legs[0].shin,
@@ -162,6 +215,40 @@ export function createLegIk(vrm: VRM): LegIk | null {
     },
     afterMixer(): void {
       for (let i = 0; i < bones.length; i++) base[i].copy(bones[i].quaternion)
+    },
+    stride(out): boolean {
+      let low = Infinity
+      for (let i = 0; i < legs.length; i++) {
+        const leg = legs[i]
+        leg.ankle.updateWorldMatrix(true, false)
+        leg.ankle.localToWorld(vTmp.copy(leg.sole))
+        root.worldToLocal(vTmp)
+        nowSole[i].copy(vTmp)
+        if (vTmp.y < low) low = vTmp.y
+      }
+      let wx = 0
+      let wz = 0
+      let sum = 0
+      for (let i = 0; i < legs.length; i++) {
+        // Poids d'appui : plein pour le pied le plus bas, décroissant pour
+        // l'autre selon son avance sur lui. Le mélange évite le à-coup du
+        // changement d'appui, qu'un choix franc produirait à chaque foulée.
+        const w = clamp(1 - (nowSole[i].y - low) / contactBand, 0, 1)
+        if (prevValid && w > 0) {
+          wx += (prevSole[i].x - nowSole[i].x) * w
+          wz += (prevSole[i].z - nowSole[i].z) * w
+          sum += w
+        }
+      }
+      const had = prevValid && sum > 1e-6
+      for (let i = 0; i < legs.length; i++) prevSole[i].copy(nowSole[i])
+      prevValid = true
+      if (!had) return false
+      // Le sol défile à l'OPPOSÉ du pied qui le tient : c'est déjà le signe
+      // ci-dessus (précédent − courant).
+      out.x = wx / sum
+      out.z = wz / sum
+      return true
     },
     apply(mode, groundAt): number {
       let fixed = 0

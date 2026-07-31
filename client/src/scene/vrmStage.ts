@@ -351,7 +351,14 @@ function catalogFromUrls(urls: readonly string[]): VrmaCatalog {
  * liste totale de buildAnimations est identique à l'octet près à celle d'avant
  * la scène vivante. C'est la garantie du « éteint = comme aujourd'hui ».
  */
-const WORLD_NEEDED: readonly string[] = ['turn-left', 'turn-right']
+const WORLD_NEEDED: readonly string[] = [
+  'turn-left',
+  'turn-right',
+  'walk-slow',
+  'walk',
+  'walk-start',
+  'walk-stop',
+]
 
 function worldUrlsNeeded(cat: VrmaCatalog, on: boolean): string[] {
   if (!on) return []
@@ -573,6 +580,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   let sceneMap: SceneMap | null = null
   // Ce que les pieds doivent faire à cette image (cf. legIk.FootMode).
   let footMode: FootMode = 'planted'
+  // Déplacement au sol dépeint par l'animation à cette image, relevé UNE FOIS
+  // par tour de boucle (cf. legIk.stride) et lu par le comportement.
+  const strideBuf = { x: 0, z: 0 }
+  let strideOk = false
   // Instant (ms) du dernier geste de caméra de l'utilisateur, et geste en cours.
   // On ne déplace pas la scène sous sa main : le personnage attend qu'il ait
   // lâché, plus une seconde de grâce.
@@ -810,11 +821,19 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    * Socle d'ALLURE (marche, pivot) : il remplace le socle courant tant qu'il est
    * posé, et `desiredBase` le fait primer sur tout le reste. null = rendre les
    * jambes au socle normal.
+   *
+   * `phase` pose le temps du clip À L'ENTRÉE, et c'est par là que tout le
+   * contrat de raccord tient : un cycle de marche repris à une phase quelconque
+   * tombe jusqu'à 46 cm de la pose d'arrêt, repris sur sa couture il tombe à 0.
    */
-  function setGait(name: string | null, fade: number): void {
+  function setGait(name: string | null, fade: number, phase?: number): void {
     const next = name ? asBase(worldAction(name)) : null
     if (next === gaitAction) return
     gaitAction = next
+    if (next && phase !== undefined) {
+      next.reset()
+      next.time = phase
+    }
     syncBase(fade)
   }
 
@@ -859,13 +878,27 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       bodyGround = ground
     },
     gait: setGait,
-    once(name, fadeIn, then, fadeThen) {
-      playOnce(name, fadeIn, then, fadeThen)
+    gaitTime: () => (gaitAction ? gaitAction.time : -1),
+    once(name, fadeIn, then, fadeThen, thenPhase) {
+      playOnce(name, fadeIn, then, fadeThen, thenPhase)
     },
     has: (name) => worldAction(name) !== null,
+    // La foulée est MESURÉE UNE FOIS PAR IMAGE dans la boucle de rendu, pas ici :
+    // l'odométrie compare deux images consécutives, et un appelant qui la
+    // consulterait deux fois (ou pas du tout) fausserait la comparaison.
+    stride: (out) => {
+      out.x = strideBuf.x
+      out.z = strideBuf.z
+      return strideOk
+    },
     speaking: () => talking,
     camYaw: cameraYawFrom,
     userBusy: () => camGrabbed || performance.now() - camReleasedAt < USER_CAMERA_GRACE_MS,
+    floorAt: (x, z) => sceneMap?.floorAt(x, z) ?? null,
+    canStand: (x, z, radius, fromY) => sceneMap?.canStand(x, z, radius, fromY) ?? false,
+    bodyRadius: () => sceneMap?.body.radius ?? 0.25,
+    transitioning: () => onceThen !== null,
+    mapped: () => sceneMap !== null,
   }
 
   /**
@@ -873,15 +906,21 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    * s'asseoir), suivi de `then`. La file est à un seul cran — une transition ne
    * se met jamais en attente d'une autre, elle est remplacée.
    */
-  let onceThen: { name: string | null; fade: number } | null = null
+  let onceThen: { name: string | null; fade: number; phase?: number } | null = null
 
-  function playOnce(name: string, fadeIn: number, then: string | null, fadeThen: number): void {
+  function playOnce(
+    name: string,
+    fadeIn: number,
+    then: string | null,
+    fadeThen: number,
+    thenPhase?: number,
+  ): void {
     const action = worldAction(name)
     if (!action) {
       // Clip absent : on saute la transition et on va droit à sa suite, plutôt
       // que de rester figé dans un état qui n'arrivera jamais.
       onceThen = null
-      setGait(then, fadeIn)
+      setGait(then, fadeIn, thenPhase)
       return
     }
     action.reset()
@@ -890,7 +929,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // L'allure courante cesse d'être le socle : c'est la transition qui tient
     // l'écran, et `onceThen` dit ce qui la suit.
     gaitAction = null
-    onceThen = { name: then, fade: fadeThen }
+    onceThen = { name: then, fade: fadeThen, phase: thenPhase }
     fadeTo(action, fadeIn)
   }
 
@@ -998,6 +1037,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
         const step = onceThen
         onceThen = null
         gaitAction = step.name ? asBase(worldAction(step.name)) : null
+        if (gaitAction && step.phase !== undefined) {
+          gaitAction.reset()
+          gaitAction.time = step.phase
+        }
         baseAction = desiredBase()
         if (baseAction) fadeTo(baseAction, step.fade)
         return
@@ -1294,7 +1337,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // L'IK se mesure ICI : le modèle est en place, à son échelle finale, et
       // encore dans sa pose de repos — donc pieds au sol par convention VRM,
       // ce dont dépend tout le calcul du point « semelle ».
-      legIk = createLegIk(vrm)
+      legIk = createLegIk(vrm, avatarGroup)
       lastFrame = { vrm, h: height }
       frameCamera(vrm, height)
       // Les .vrma partent APRÈS le cadrage, sans être attendues : l'avatar est
@@ -1314,10 +1357,6 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   function tick(): void {
     rafId = requestAnimationFrame(tick)
     const delta = Math.min(clock.getDelta(), 0.1)
-    // DÉCISION et PLACEMENT, avant le mixer : un changement d'état (pivot,
-    // départ, arrêt) doit peser sur les poids de CETTE image, pas de la suivante.
-    // Scène vivante éteinte : `wander` est null, la ligne ne fait rien.
-    wander?.update(delta)
     if (mixer) {
       // Arbitrage animation ↔ idle. IdleAnimator écrit `base + offset` sur ses
       // 9 os à chaque frame : tel quel, il écraserait l'animation. La base DEVIENT
@@ -1341,6 +1380,19 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // rencontrent sur aucun os.
       if (interactive && legIk) {
         legIk.afterMixer()
+        // 1. ODOMÉTRIE : de combien le sol a défilé sous les pieds à CETTE image.
+        strideOk = legIk.stride(strideBuf)
+        // 2. DÉCISION ET PLACEMENT, avec ce relevé-là. L'ordre n'est pas
+        //    indifférent : décider AVANT le mixer semble plus naturel (l'état
+        //    pèse alors sur les poids de l'image courante), mais le comportement
+        //    y consomme la foulée de l'image PRÉCÉDENTE — un retard d'une image
+        //    qui laisse le pied d'appui glisser. Mesuré sur les 12 modèles :
+        //    0,6 mm de glissement médian par image avant, 0,0 mm après. Ce qu'on
+        //    paie à la place est un retard d'une image sur le DÉPART d'un fondu,
+        //    soit 16 ms que personne ne voit.
+        wander?.update(delta)
+        // 3. CORRECTION D'ASSIETTE, une fois le corps posé : elle vise le sol
+        //    sous les pieds, donc elle a besoin de la position définitive.
         legIk.apply(footMode, groundAt)
       }
       // Le squelette porte maintenant la pose du socle, et RIEN d'autre : c'est
