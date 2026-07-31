@@ -1010,6 +1010,22 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   /** Altitude du sol sous le personnage, tenue à jour par le comportement. */
   let bodyGround = 0
 
+  /**
+   * Le corps vient de SAUTER d'un point à un autre : la physique des cheveux
+   * doit être purgée à la fin de l'image (cf. tick).
+   *
+   * Un springbone dont le groupe ne déclare pas de `center` est simulé en espace
+   * MONDE : il garde d'une image à l'autre la position monde de sa pointe. Un
+   * placement instantané — spawn dans une pièce, retour à l'accueil, arrivée
+   * d'un nouveau modèle dans un groupe déjà déplacé — lui fait donc franchir
+   * plusieurs mètres en une image, ce que la physique lit comme une vélocité
+   * gigantesque : la chevelure part à l'horizontale et met une seconde à
+   * retomber. 9 des 94 modèles du dossier sont dans ce cas ; les 85 autres
+   * déclarent un center (leur physique tourne dans le repère d'un os) et ne
+   * voient jamais le déplacement du corps.
+   */
+  let springSettle = false
+
   /** Le contrat que la scène offre au comportement (cf. wander.ts). */
   const wanderHost: WanderHost = {
     hips: hipsRest,
@@ -1024,6 +1040,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
         Math.hypot(x - avatarGroup.position.x, z - avatarGroup.position.z) > 0.5 * hipsRest()
       if (footMode === 'reach' || jump) bodySpring.teleport(springPose)
       else bodySpring.update(springPose, frameDelta)
+      if (jump) springSettle = true // même saut, même purge (cf. springSettle)
       avatarGroup.position.set(x, springPose.trans.y, z)
       avatarGroup.rotation.y = yaw
       bodyGround = ground
@@ -1520,6 +1537,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       applyRestPose(vrm)
       addLookAtProxy(vrm)
       avatarGroup.add(vrm.scene)
+      // Les springbones ont pris leur état initial pendant le chargement, modèle
+      // à l'origine ; le groupe qui les accueille, lui, est peut-être au fond de
+      // la pièce. Même saut que les autres, même purge.
+      springSettle = true
       currentVrm = vrm
       applyGaze()
       idle.reset()
@@ -1625,7 +1646,18 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // vrm.update (qui applique la cible aux yeux). Ses rotations de cou et de
     // tête sont bornées par la même table de limites que tout le reste.
     gaze.update(delta, currentVrm, camera, talking)
-    if (currentVrm) currentVrm.update(delta)
+    if (currentVrm) {
+      currentVrm.update(delta)
+      // La purge de la physique des cheveux se fait ICI, après vrm.update :
+      // celui-ci vient de remettre à jour les matrices monde de toute la chaîne
+      // des springbones, ce dont `reset` a besoin pour ré-asseoir les pointes
+      // sur la pose de repos. L'image se rend avec des cheveux au repos, et la
+      // simulation repart d'un état sain à l'image suivante.
+      if (springSettle) {
+        springSettle = false
+        currentVrm.springBoneManager?.reset()
+      }
+    }
     controls.update()
     renderer.render(scene, camera)
   }
@@ -1725,6 +1757,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       jointLimits?.clearHistory() // retour à l'origine = discontinuité, même règle
       avatarGroup.position.set(0, 0, 0)
       avatarGroup.rotation.y = 0
+      springSettle = true // retour à l'origine = saut (cf. springSettle)
       syncBase(BASE_FADE)
       reframePending = true
     },

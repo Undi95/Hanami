@@ -140,6 +140,8 @@ const vCamRight = new Vector3()
 const vCamUp = new Vector3()
 const vDir = new Vector3()
 const vFwd = new Vector3()
+const vSide = new Vector3()
+const UNIT_Y = new Vector3(0, 1, 0)
 const qTmp = new Quaternion()
 const qTmp2 = new Quaternion()
 const qCam = new Quaternion()
@@ -179,6 +181,47 @@ export function createGaze(hooks: GazeHooks): Gaze {
   // une nuque au-delà de l'humain, quelle que soit la cible.
   const neckLimit: RotationConstraint | null = constraintForBone('neck')
   const headLimit: RotationConstraint | null = constraintForBone('head')
+  // L'AVANT DE LA TÊTE, dans le repère des os NORMALISÉS. Ce n'est PAS toujours
+  // +Z, et c'était le bug : les os normalisés de three-vrm sont bâtis dans
+  // l'espace PROPRE du modèle (VRMHumanoidRig les crée sans rotation, à partir
+  // des positions monde au chargement), et un VRM 0.x y regarde le −Z — c'est
+  // exactement la raison d'être de VRMUtils.rotateVRM0, qui retourne vrm.scene
+  // et emmène la racine du rig avec elle. Sur les 94 modèles du dossier, 89
+  // sont en 0.x : croire la convention +Z donnait un avant de tête à 180° du
+  // vrai, et setFromUnitVectors sur deux vecteurs opposés rend une rotation d'un
+  // demi-tour autour d'un axe DÉGÉNÉRÉ — ici presque l'axe latéral, puisque la
+  // caméra du cadrage par défaut est 12 cm SOUS la tête. D'où la nuque
+  // renversée en butée, mesurée à +70,6° d'élévation.
+  // Mesuré, jamais supposé : up × (épaule droite − épaule gauche) est l'avant
+  // géométrique du personnage, il ne dépend d'aucune convention de format.
+  let faceVrm: VRM | null = null
+  const faceAxis = new Vector3(0, 0, 1)
+
+  function measureFaceAxis(vrm: VRM): void {
+    faceAxis.set(0, 0, 1)
+    const head = vrm.humanoid.getNormalizedBoneNode('head')
+    if (!head) return
+    head.updateWorldMatrix(true, false)
+    head.getWorldQuaternion(qTmp)
+    vFwd.set(0, 0, 1).applyQuaternion(qTmp) // ce que le code CROIT être l'avant
+    const left = vrm.humanoid.getNormalizedBoneNode('leftUpperArm')
+    const right = vrm.humanoid.getNormalizedBoneNode('rightUpperArm')
+    if (left && right) {
+      left.updateWorldMatrix(true, false)
+      right.updateWorldMatrix(true, false)
+      left.getWorldPosition(vDir)
+      right.getWorldPosition(vSide)
+      vSide.sub(vDir)
+      vSide.y = 0
+      if (vSide.lengthSq() > 1e-8) {
+        vDir.crossVectors(UNIT_Y, vSide.normalize()).normalize() // l'avant réel
+        faceAxis.z = vDir.dot(vFwd) < 0 ? -1 : 1
+        return
+      }
+    }
+    // Repli sans épaules : la convention du format, qui dit la même chose.
+    if (vrm.meta?.metaVersion === '0') faceAxis.z = -1
+  }
 
   function pickMode(speaking: boolean): void {
     let roll = Math.random()
@@ -216,6 +259,7 @@ export function createGaze(hooks: GazeHooks): Gaze {
     postTalkBlink = -1
     neckLimit?.clearHistory()
     headLimit?.clearHistory()
+    faceVrm = null // nouveau modèle : l'avant se remesure
     pickMode(false)
   }
 
@@ -223,6 +267,10 @@ export function createGaze(hooks: GazeHooks): Gaze {
     if (!vrm || dt <= 0) return
     const head = vrm.humanoid.getNormalizedBoneNode('head')
     if (!head) return
+    if (vrm !== faceVrm) {
+      faceVrm = vrm
+      measureFaceAxis(vrm)
+    }
     head.updateWorldMatrix(true, false)
     head.getWorldPosition(vEye)
 
@@ -302,7 +350,7 @@ export function createGaze(hooks: GazeHooks): Gaze {
     // la tête doit tourner. En deçà, elle suit mollement (la nuance §3.1 :
     // le plus lent quand on parle). Pendant une émotion : coupée.
     head.getWorldQuaternion(qTmp)
-    vFwd.set(0, 0, 1).applyQuaternion(qTmp)
+    vFwd.copy(faceAxis).applyQuaternion(qTmp)
     vDir.copy(target.position).sub(vEye).normalize()
     const eyeAngle = angleBetween(vFwd, vDir)
     const emotion = hooks.emotionActive()
