@@ -85,6 +85,15 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
 - 🏠 **Décor 3D** : une pièce `.glb` de `environments/`, posée autour de l'avatar à la place du fond
   2D — choisie par personnage, avec un sidecar `.json` optionnel pour l'échelle, la rotation, le
   point d'accueil et l'exposition. Interrupteur dans *Réglages > Apparence > Scène*.
+- 🚶 **Scène vivante** : le personnage occupe la pièce — il se tourne vers vous, s'y déplace de
+  lui-même, s'assoit sur ce qu'il y trouve, et répond assis si vous lui écrivez à ce moment-là. Un
+  clic sur le sol l'y envoie, un clic sur un siège l'y assoit, un clic sur lui le fait acquiescer ;
+  ses yeux suivent la caméra. Tout décor déposé dans `environments/` est **mesuré automatiquement à
+  l'import** (sol praticable, obstacles, assises — voir
+  [`environments/README.md`](environments/README.md)) : aucune préparation manuelle, et une
+  cinématique inverse pose les pieds sur le sol réel et le bassin sur l'assise réelle, quelle que
+  soit sa hauteur. Réservé au grand écran ; interrupteur dans *Réglages > Apparence > Scène*,
+  éteint par défaut.
 - 🎬 **Mode visual novel** : scène en plein écran, boîte de dialogue avec étiquette de nom, heure de
   la réplique, titre de la conversation et jauge de contexte dans sa bande basse, boîte
   redimensionnable (poignée dans le coin haut-gauche, double-clic pour réinitialiser) et icônes des

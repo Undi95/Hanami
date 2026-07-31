@@ -80,6 +80,14 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
 - 🏠 **3D environment**: a `.glb` room from `environments/`, placed around the avatar instead of the
   2D background — chosen per character, with an optional `.json` sidecar for scale, rotation, spawn
   point and exposure. Switch in *Settings > Appearance > Scene*.
+- 🚶 **Living scene**: the character inhabits the room — turning to face you, walking around on its
+  own, sitting on whatever it finds, and replying seated if you write at that moment. A click on the
+  floor sends it there, a click on a seat makes it sit, a click on the character makes it nod; its
+  eyes follow the camera. Any environment dropped into `environments/` is **measured automatically on
+  import** (walkable floor, obstacles, seats — see
+  [`environments/README.md`](environments/README.md)): no manual preparation, and inverse kinematics
+  puts the feet on the real floor and the pelvis on the real seat, whatever its height. Large
+  screens only; switch in *Settings > Appearance > Scene*, off by default.
 - 🎬 **Visual novel mode**: full-screen scene, a dialogue box with a namebox, the time of the line,
   the conversation title and the context gauge in its lower band, a resizable box (grip in the
   top-left corner, double-click to reset) and the menu icons in a column in the top-right corner.
