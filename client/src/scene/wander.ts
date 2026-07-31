@@ -116,6 +116,80 @@ const GAIT_WALK: GaitPlan = {
 
 /** Au-delà de cette distance, la flânerie devient ridicule : on marche. */
 const WALK_OVER_STROLL_M = 2.6
+
+// ── CHANGER D'ALLURE EN MARCHANT — mesuré, PAS branché ─────────────────────
+//
+// Aujourd'hui l'allure est choisie UNE FOIS par segment, dans planWalk, et ne
+// change plus jusqu'à l'arrêt. Deux segments consécutifs sont séparés par un
+// arrêt complet (`walk-stop` → socle → `walk-start`) : une allure qui change
+// d'un segment à l'autre ne se voit donc pas. Il n'y a, à ce jour, AUCUN défaut
+// d'allure à corriger dans ce fichier — et c'est pour ça que rien de ce bloc
+// n'est appelé.
+//
+// Ce qui suit est la mesure faite pour le jour où l'on voudra accélérer ou
+// ralentir SANS s'arrêter. Elle est consignée ici, à l'endroit où la décision se
+// prendra, pour que personne n'ait à la refaire.
+//
+// CE QUI A ÉTÉ MESURÉ (sonde du banc, rig reference-2.vrm, hanches
+// 0,9045 m ; écart de pose du pire os majeur, en cm) :
+//
+//                            bascule brute   MEILLEURE paire   verrou de phase
+//                            (B repris à 0)  de phases         (pire φ du fondu)
+//   walk-slow → walk              24,1            6,4                29,1
+//   walk      → walk-slow         42,0            6,4                29,1
+//   walk      → walk-fast         47,7            3,9                12,9
+//   walk-slow → walk-fast         21,7            6,4                34,0
+//
+// TROIS CONCLUSIONS, dans l'ordre où elles comptent :
+//
+// 1. Le contrat de phase suffit. Sortir du cycle courant à une phase précise et
+//    entrer dans le suivant à une autre — exactement ce que `host.gait(clip,
+//    fondu, phase)` sait déjà faire, exactement le mécanisme de `walk-start` et
+//    `walk-stop` — ramène le changement d'allure à 3,9–6,4 cm, donc SOUS le
+//    seuil « passe » de 7 cm du projet. Les paires mesurées sont dans
+//    `changeInto` ci-dessous.
+// 2. `omega = vitesse / distanceParCycle` est une TAUTOLOGIE ici. world.json
+//    impose sa propre cohérence interne — « distanceParCycleM ÷ dureeS redonne
+//    exactement vitesseMS » — donc omega vaut 1 / dureeS, et la phase normalisée
+//    d'un cycle est simplement t / durationS. Ce fichier la calcule déjà (voir
+//    le reste de cycle dans le cas 'walking'). Il n'y a pas de grandeur à
+//    ajouter, seulement un champ déjà présent à relire : `durationS`.
+// 3. Le MÉLANGE de deux allures à phase verrouillée ne peut pas s'écrire ici, et
+//    ce n'est pas une question de courage. Il demande DEUX actions d'allure
+//    jouées ensemble, dont le code règle le `time` et le poids à chaque image —
+//    c'est-à-dire vrmStage, pas ce fichier. Le contrat `WanderHost` n'expose
+//    qu'un socle d'allure à la fois (`gait`) et son temps en lecture
+//    (`gaitTime`). Tant que le contrat ne change pas, ce bloc reste une note.
+//
+// L'HYSTÉRÉSIS attend la même chose. Un seuil sans hystérésis n'oscille que s'il
+// est relu en boucle ; celui-ci est lu une fois par segment. Les deux bornes
+// ci-dessous sont donc DÉCLARÉES et pas branchées : elles n'auront de sens qu'au
+// jour où l'allure se rejugera par image, et les brancher aujourd'hui
+// changerait le choix d'allure de certains segments — donc les empreintes du
+// banc de trajets — pour corriger un défaut qui n'existe pas encore.
+/**
+ * Bornes d'un futur choix d'allure PAR IMAGE. Monter demande de dépasser
+ * `WALK_UP_M`, redescendre de repasser sous `WALK_DOWN_M` : l'écart entre les
+ * deux est la zone morte qui empêche un pas d'osciller entre deux allures. La
+ * borne haute est le seuil actuel ; la borne basse lui laisse 1,20 m de marge,
+ * un peu moins qu'une foulée de marche franche (1,42 m sur le rig de mesure) :
+ * il faut avoir déjà « rendu » un pas entier pour avoir le droit de ralentir.
+ * PAS BRANCHÉ — voir le bloc ci-dessus.
+ */
+export const GAIT_HYSTERESIS_M = { up: WALK_OVER_STROLL_M, down: WALK_OVER_STROLL_M - 1.2 }
+/**
+ * Changement d'allure SANS arrêt : pour chaque couple, la phase (s) à laquelle
+ * quitter l'allure de départ, celle à laquelle entrer dans l'autre, et l'écart
+ * de pose que ce couple laisse (cm, rig de la sonde — les cm suivent la taille
+ * du modèle). Mesuré en balayant les 30 × 39 couples de phases des deux cycles.
+ * PAS BRANCHÉ — voir le bloc ci-dessus.
+ */
+export const GAIT_CHANGE_PHASES: Record<string, { exitS: number; enterS: number; ecartCm: number }> = {
+  'walk-slow>walk': { exitS: 0, enterS: 0.933, ecartCm: 6.4 },
+  'walk>walk-slow': { exitS: 0.933, enterS: 0, ecartCm: 6.4 },
+  'walk>walk-fast': { exitS: 0.733, enterS: 0.6, ecartCm: 3.9 },
+  'walk-slow>walk-fast': { exitS: 1.2, enterS: 0.8, ecartCm: 6.4 },
+}
 /** Fondus des transitions de marche. */
 const WALK_FADE = 0.4
 const STOP_FADE = 0.35
