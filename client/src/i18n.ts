@@ -196,6 +196,8 @@ const FR = {
   askGreetingWritten: 'Écrit',
   askGreetingGenerated: 'Généré',
   systemPrompt: 'Prompt système',
+  systemPromptCreateHint:
+    'Le caractère du personnage. Écrivez-le maintenant : en accueil « généré » ou « demander », le modèle ouvre la conversation dès la création. Laissé vide, un prompt par défaut est écrit.',
   deleteCharacterWarn: 'Supprimer ce personnage supprime aussi tous ses chats et sa mémoire.',
   deleteCharacterArmed:
     'Dernière chance : cette action supprime le personnage, ses chats et sa mémoire. Irréversible.',
@@ -528,6 +530,8 @@ const EN: Record<Key, string> = {
   askGreetingWritten: 'Written',
   askGreetingGenerated: 'Generated',
   systemPrompt: 'System prompt',
+  systemPromptCreateHint:
+    'Who the character is. Write it now: with the “generated” or “ask” greeting, the model opens the conversation the moment the character is created. Left empty, a default prompt is written.',
   deleteCharacterWarn: 'Deleting this character also deletes all of its chats and its memory.',
   deleteCharacterArmed: 'Last chance: this deletes the character, its chats and its memory. There is no undo.',
   deleteCharacter: 'Delete character',

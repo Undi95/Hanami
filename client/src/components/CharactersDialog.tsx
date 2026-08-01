@@ -333,6 +333,9 @@ export default function CharactersDialog({
           greeting: form.greeting,
           greetings,
           greetingMode: form.greetingMode,
+          // Vide = le serveur écrit son prompt par défaut. Ce n'est PAS un repli
+          // silencieux : le champ est proposé, ne rien y mettre est un choix.
+          ...(form.systemPrompt.trim() ? { systemPrompt: form.systemPrompt } : {}),
         })
         onCreated(c)
         backToList()
@@ -656,18 +659,25 @@ export default function CharactersDialog({
               </div>
             </>
           )}
+          {/* Prompt système : présent DÈS LA CRÉATION, pas seulement à l'édition.
+              Un personnage en accueil « généré » (ou « demander ») ouvre la
+              conversation à la seconde où il est créé : sans ce champ ici, le
+              modèle parlerait sous le prompt par défaut, et ce premier message —
+              celui qui donne le ton — serait perdu. Laissé vide à la création,
+              le serveur écrit son prompt par défaut, comme avant. */}
+          <div className="field">
+            <label htmlFor="char-prompt">{t('systemPrompt')}</label>
+            <textarea
+              id="char-prompt"
+              className="mono"
+              value={form.systemPrompt}
+              onChange={(e) => set('systemPrompt', e.target.value)}
+              spellCheck={false}
+            />
+            {view.kind === 'create' && <span className="hint">{t('systemPromptCreateHint')}</span>}
+          </div>
           {view.kind === 'edit' && (
             <>
-              <div className="field">
-                <label htmlFor="char-prompt">{t('systemPrompt')}</label>
-                <textarea
-                  id="char-prompt"
-                  className="mono"
-                  value={form.systemPrompt}
-                  onChange={(e) => set('systemPrompt', e.target.value)}
-                  spellCheck={false}
-                />
-              </div>
               <div className="danger-zone">
                 <p className="warn-text">{armed ? t('deleteCharacterArmed') : t('deleteCharacterWarn')}</p>
                 <button className="btn danger" onClick={() => remove().catch((e) => console.error('[characters]', e))} disabled={busy}>

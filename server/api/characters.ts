@@ -75,6 +75,12 @@ charactersRouter.post('/api/characters', (req, res) => {
       greetings: greetingsOf(body.greetings),
       greetingMode: greetingModeOf(body.greetingMode),
       theme: typeof body.theme === 'string' ? body.theme : undefined,
+      // Prompt système dès la création : sans lui, un personnage en accueil
+      // « généré » ouvre la conversation AVANT qu'on ait pu lui écrire son
+      // caractère — le modèle parle alors sous le prompt par défaut, et le
+      // premier message est perdu pour toujours. Champ absent = prompt par
+      // défaut (storage), un '' explicite reste un choix de l'appelant.
+      systemPrompt: typeof body.systemPrompt === 'string' ? body.systemPrompt : undefined,
     })
     res.json(character)
   } catch (e) {

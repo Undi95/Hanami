@@ -207,6 +207,8 @@ export function createCharacter(input: {
   greetings?: string[]
   greetingMode?: GreetingMode
   theme?: string
+  /** Absent = prompt par défaut écrit par le serveur (à partir du nom). */
+  systemPrompt?: string
 }): Promise<CharacterFull> {
   return req('POST', '/api/characters', input)
 }
