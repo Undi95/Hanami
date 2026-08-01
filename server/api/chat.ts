@@ -659,6 +659,11 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     // AJOUTÉE, rien n'est écrasé.
     if (mode === 'regenerate' && regenBase) {
       const base = regenBase
+      // Génération VIDE (budget de sortie parti dans le raisonnement, coupure
+      // nette) : aucune variante à ajouter — la réponse en place reste, et rien
+      // n'est réécrit. Sans ce garde-fou, une variante vide deviendrait la
+      // variante affichée et masquerait une bonne réponse derrière une flèche.
+      if (assistantText.length === 0) return base
       let saved: ChatMessage = message
       rewriteChatMessages(characterId, chatId, (msgs) => {
         const lastMsg = msgs[msgs.length - 1]
