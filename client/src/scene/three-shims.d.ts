@@ -121,6 +121,13 @@ declare module 'three' {
     multiply(m: Matrix4): this
     multiplyMatrices(a: Matrix4, b: Matrix4): this
     determinant(): number
+    /**
+     * Sépare translation / rotation / échelle. C'est ce que fait
+     * `getWorldQuaternion`, MOINS la remontée de chaîne : quand on sait la
+     * matrice monde déjà fraîche (un ancêtre qu'on vient de parcourir), c'est
+     * la même valeur pour un parcours de moins (cf. gaze.ts).
+     */
+    decompose(position: Vector3, quaternion: Quaternion, scale: Vector3): this
   }
 
   export class Object3D {

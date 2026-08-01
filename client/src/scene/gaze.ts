@@ -37,6 +37,32 @@
  *    parole on alterne les yeux (30/30), fixations de 0,2 à 2 s, petits
  *    décalages en lacet — le micro-va-et-vient qui rend un regard vivant.
  *
+ * LE RENONCEMENT — ce que le premier portage n'avait PAS repris, et qui
+ * manquait. Chez Overte la tête ne se dévisse jamais, pour deux raisons que la
+ * fiche 02 avait notées sans les porter :
+ *  - `MyAvatar::updateHeadLookAt` vise par `aimToBlendValues(aimVector,
+ *    getWorldOrientation())` : la direction visée est projetée sur les axes X
+ *    et Y DU CORPS, jamais sur le monde, et la composante avant/arrière est
+ *    JETÉE. Une cible droit derrière rend donc (0, 0) — la pose CENTRE de la
+ *    grille d'aim offsets, c'est-à-dire aucune rotation de tête. Leur tête
+ *    renonce, continûment, à mesure que la cible passe derrière le buste ;
+ *  - `automaticLookAt.js::getHeadConfortAngle` (ligne 795) RAMÈNE la cible de
+ *    la tête vers l'avant du corps de `min(90°, écart) × 20/90`, soit jusqu'à
+ *    20°, et seulement pour la tête — les yeux gardent la vraie cible.
+ * Ni cône explicite, ni hystérésis chez eux : leur repli est continu parce que
+ * leur amplitude était PLAFONNÉE PAR CONSTRUCTION (9 poses d'animateur). Notre
+ * assistance étant procédurale et non bornée, il faut la borner en clair :
+ *  1. un CÔNE D'ATTEIGNABILITÉ tête-buste (lacet et tangage) ;
+ *  2. le renoncement à HYSTÉRÉSIS — on lâche à 65°, on ne reprend qu'à 50°,
+ *     par fondu vers la pose du clip ; les yeux, qui vont plus loin, ont leur
+ *     propre seuil sur l'avant RÉEL de la tête ;
+ *  3. un PLAFOND DE VITESSE angulaire — une tête qui suit tourne lentement,
+ *     les mouvements rapides sont l'affaire des yeux (saccades).
+ * Le 20° de `getHeadConfortAngle` n'est délibérément PAS porté : il fait rater
+ * la cible en permanence, ce que le banc de regard mesure justement comme un
+ * défaut (cf. fix c5d90d4), et le cône ci-dessus rend le même service sans
+ * biaiser le face-à-face.
+ *
  * Les DEUX règles de production conservées telles quelles :
  *  - « la cible du regard ne se déplace que pendant que l'œil est fermé » :
  *    au-delà de 20° d'écart (MIN_BLINK_ANGLE 0,35 rad), on demande un
@@ -73,6 +99,82 @@ const BLINK_AFTER_TALKING = 0.25
 const RETARGET_TIMEOUT = 0.4
 /** Fondu de la coupure d'IK de tête à l'émotion (s). */
 const HEAD_CUT_FADE = 0.2
+
+// ── Le cône d'atteignabilité, et son hystérésis ─────────────────────────────
+//
+// LACET TÊTE-BUSTE. Trois nombres se recoupent :
+//  - l'anatomie : la rotation axiale du rachis cervical va jusqu'à ~80°, mais
+//    au-delà de 60-70° on recrute le tronc — c'est la zone où un cou tenu
+//    devient une grimace ;
+//  - la table d'Overte, déjà portée dans jointLimits : le lacet, dans le rig
+//    normalisé, est le TWIST de la tête (±30°) plus celui du cou (±22,5°),
+//    soit ±52,5° réellement délivrables ;
+//  - la répartition d'Overte : la chaîne ne délivre que 69,75 % du delta
+//    demandé (0,45 + 0,45 × 0,55), donc la demande qui SATURE la table vaut
+//    52,5 / 0,6975 ≈ 75°.
+// D'où 65° pour lâcher : dans la zone inconfortable de l'anatomie, et encore
+// sous les 75° qui plaqueraient le cou contre sa butée pendant le suivi. Et
+// 50° pour reprendre : la demande n'y coûte que ~35° de lacet réel, très à
+// l'aise. Les 15° d'écart sont l'hystérésis — pas de va-et-vient à la frontière.
+const HEAD_REACH_YAW_OUT = 65 * DEG
+const HEAD_REACH_YAW_IN = 50 * DEG
+/**
+ * TANGAGE. Flexion/extension cervicale fonctionnelle ≈ 45-50° ; la table donne
+ * 30° (cou) + 60° (tête) d'enveloppe antérieure, jamais atteints ici puisque la
+ * caméra du cadrage par défaut n'est qu'à 12 cm sous la tête. Ce seuil ne joue
+ * que sur une caméra franchement en surplomb ou au ras du sol.
+ * NOTE : lacet et tangage sont bornés SÉPARÉMENT, pas par un cône elliptique —
+ * la même approximation qu'Overte assume dans `updateEyeJoint` (« TODO: use
+ * swing twist decomposition constraint instead »).
+ */
+const HEAD_REACH_PITCH_OUT = 45 * DEG
+const HEAD_REACH_PITCH_IN = 35 * DEG
+/**
+ * EN LOCOMOTION, le cône se resserre : quand le buste travaille (il contre-
+ * tourne à chaque pas), une tête qui tient 65° de décalage lit comme un
+ * torticolis. 45° est le coup d'œil par-dessus l'épaule d'un marcheur. C'est la
+ * même politique que les gardes existantes de playReaction et wander.poke, qui
+ * refusent déjà de répondre du corps en plein déplacement et « laissent
+ * l'attention aux seuls yeux » — et c'est l'esprit de Rig.cpp:2160, où Overte
+ * COUPE l'IK de tête pendant une réaction ou en position assise (« TODO: make
+ * this smooth » — ici, c'est fondu).
+ */
+const WALK_REACH_YAW_OUT = 45 * DEG
+const WALK_REACH_YAW_IN = 32 * DEG
+/** Fondus du renoncement (lent : on ne claque pas) et de la reprise (s). */
+const REACH_RELEASE_FADE = 0.45
+const REACH_CAPTURE_FADE = 0.3
+/**
+ * Les YEUX vont plus loin que la tête, et renoncent aussi. Le seuil se mesure
+ * sur l'avant RÉEL de la tête — celui d'APRÈS l'assistance et ses butées, pas
+ * celui du clip — parce que c'est lui qui dit ce qu'il reste à faire à l'œil.
+ * 55° : la limite mécanique du globe oculaire (au-delà, un humain tourne la
+ * tête, il ne roule pas l'œil). Au-delà l'œil resterait plaqué en butée : le
+ * fondu le ramène vers l'axe de la tête.
+ */
+const EYE_REACH_OUT = 55 * DEG
+const EYE_REACH_IN = 45 * DEG
+const EYE_REACH_FADE = 0.25
+/**
+ * PLAFOND DE VITESSE de la tête en suivi (rad/s). Une tête qui suit une cible
+ * tourne lentement — 120 à 180 °/s en suivi confortable ; le rapide, ce sont
+ * les saccades, et elles sont déjà l'affaire des yeux (`Head::simulate`).
+ * Le plafond porte sur le DELTA, dont la chaîne ne délivre que `CHAIN_SHARE`.
+ */
+const HEAD_TRACK_RATE = 160 * DEG
+const CHAIN_SHARE = ANGLE_DISTRIBUTION_FACTOR + ANGLE_DISTRIBUTION_FACTOR * (1 - ANGLE_DISTRIBUTION_FACTOR)
+const MAX_DELTA_RATE = HEAD_TRACK_RATE / CHAIN_SHARE
+/**
+ * LOCOMOTION, mesurée et jamais déclarée : la vitesse monde de la tête, lissée.
+ * Seuils Schmitt (0,30 / 0,15 m/s) très au-dessus du ballant de respiration de
+ * l'idle (~0,01 m/s) et bien sous une marche (~0,9 m/s). Au-delà de 6 m/s ce
+ * n'est plus une marche mais un saut de scène (chargement, replacement du
+ * groupe) : on le jette au lieu de le lisser.
+ */
+const WALK_SPEED_IN = 0.3
+const WALK_SPEED_OUT = 0.15
+const WALK_SPEED_SMOOTH = 0.15
+const TELEPORT_SPEED = 6
 
 /**
  * La table d'`automaticLookAt` (§3.2), réduite à UN interlocuteur : les modes
@@ -141,10 +243,30 @@ const vCamUp = new Vector3()
 const vDir = new Vector3()
 const vFwd = new Vector3()
 const vSide = new Vector3()
+const vBustFwd = new Vector3()
+const vBustRight = new Vector3()
+const vBustUp = new Vector3()
+/** Rebuts de `Matrix4.decompose` : on ne veut que le quaternion. */
+const vTrash1 = new Vector3()
+const vTrash2 = new Vector3()
 const UNIT_Y = new Vector3(0, 1, 0)
 const qTmp = new Quaternion()
 const qTmp2 = new Quaternion()
 const qCam = new Quaternion()
+const qBust = new Quaternion()
+const qAim = new Quaternion()
+const qPrev = new Quaternion()
+/** L'identité, JAMAIS écrite — origine des fondus de renoncement. */
+const Q_IDENT = new Quaternion()
+
+function clamp1(v: number): number {
+  return v < -1 ? -1 : v > 1 ? 1 : v
+}
+
+/** Produit scalaire de deux quaternions (les shims maison n'exposent pas `.dot`). */
+function dotQuat(a: Quaternion, b: Quaternion): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w
+}
 
 function rand(min: number, max: number): number {
   return min + Math.random() * (max - min)
@@ -196,9 +318,38 @@ export function createGaze(hooks: GazeHooks): Gaze {
   // géométrique du personnage, il ne dépend d'aucune convention de format.
   let faceVrm: VRM | null = null
   const faceAxis = new Vector3(0, 0, 1)
+  /**
+   * LE BUSTE — la référence du cône d'atteignabilité. Overte vise dans le
+   * repère du CORPS (`aimToBlendValues(…, getWorldOrientation())`) et non dans
+   * le monde : c'est ce qui fait qu'un avatar qui s'éloigne ne se dévisse pas.
+   * On prend l'os porteur des épaules (upperChest → chest → spine → hips), et
+   * pas les hanches d'office : c'est le buste qui tourne quand on se retourne,
+   * et c'est de lui que la nuque mesure son débattement. Ses matrices monde
+   * sont fraîches sans frais — il est sur le chemin de parents que
+   * `head.updateWorldMatrix(true, false)` vient de remonter.
+   */
+  let bustNode: Object3D | null = null
+  // Renoncement de la tête : état du déclencheur à hystérésis et son fondu.
+  let reaching = true
+  let reach = 1
+  let reachPrimed = false
+  // Renoncement des yeux, sur l'avant RÉEL de la tête.
+  let eyeReaching = true
+  let eyeReach = 1
+  let eyeReachPrimed = false
+  // Locomotion mesurée : vitesse monde de la tête, lissée, et son verdict.
+  const lastEye = new Vector3()
+  let lastEyeValid = false
+  let bodySpeed = 0
+  let walking = false
 
   function measureFaceAxis(vrm: VRM): void {
     faceAxis.set(0, 0, 1)
+    bustNode =
+      vrm.humanoid.getNormalizedBoneNode('upperChest') ??
+      vrm.humanoid.getNormalizedBoneNode('chest') ??
+      vrm.humanoid.getNormalizedBoneNode('spine') ??
+      vrm.humanoid.getNormalizedBoneNode('hips')
     const head = vrm.humanoid.getNormalizedBoneNode('head')
     if (!head) return
     head.updateWorldMatrix(true, false)
@@ -259,7 +410,19 @@ export function createGaze(hooks: GazeHooks): Gaze {
     postTalkBlink = -1
     neckLimit?.clearHistory()
     headLimit?.clearHistory()
-    faceVrm = null // nouveau modèle : l'avant se remesure
+    faceVrm = null // nouveau modèle : l'avant et le buste se remesurent
+    // Le renoncement repart NEUF : les deux fondus s'amorceront sur le verdict
+    // de la première image (aucune tête qui commence à suivre puis se ravise),
+    // et la vitesse mesurée oublie le saut de position du chargement.
+    reaching = true
+    reach = 1
+    reachPrimed = false
+    eyeReaching = true
+    eyeReach = 1
+    eyeReachPrimed = false
+    lastEyeValid = false
+    bodySpeed = 0
+    walking = false
     pickMode(false)
   }
 
@@ -273,6 +436,19 @@ export function createGaze(hooks: GazeHooks): Gaze {
     }
     head.updateWorldMatrix(true, false)
     head.getWorldPosition(vEye)
+
+    // ── locomotion : MESURÉE, jamais déclarée ─────────────────────────────
+    // Rien ne dit au regard que le personnage marche, et rien ne devrait avoir
+    // à le lui dire : la vitesse monde de sa tête suffit, et elle est vraie
+    // quelle que soit la source du déplacement (allure, transition, décor).
+    if (lastEyeValid) {
+      const v = vEye.distanceTo(lastEye) / dt
+      if (v < TELEPORT_SPEED) bodySpeed += (v - bodySpeed) * (1 - Math.pow(0.5, dt / WALK_SPEED_SMOOTH))
+      else bodySpeed = 0
+    }
+    lastEye.copy(vEye)
+    lastEyeValid = true
+    walking = bodySpeed > (walking ? WALK_SPEED_OUT : WALK_SPEED_IN)
 
     // ── comportement : le point du visage visé, et sa fixation ────────────
     fixationLeft -= dt
@@ -345,6 +521,41 @@ export function createGaze(hooks: GazeHooks): Gaze {
     // distance (Head::getEyeRotation — angulairement constante).
     target.position.copy(vEye).addScaledVector(appliedDir, appliedDist).addScaledVector(saccade, appliedDist)
 
+    // ── ATTEIGNABILITÉ : le cône de la tête PAR RAPPORT AU BUSTE ──────────
+    // La question n'est pas « où est la cible dans le monde » mais « de combien
+    // la nuque devrait-elle se dévisser » — donc tout se mesure dans le repère
+    // du buste, comme Overte vise dans le repère du corps. L'avant du buste est
+    // le même ±Z que celui de la tête (les os NORMALISÉS partagent le repère du
+    // modèle, cf. measureFaceAxis) ; sa droite est alors ∓X, puisqu'un corps
+    // qui regarde +Z, Y en haut, a sa main droite vers −X.
+    // `decompose` et non `getWorldQuaternion` : le buste est un ANCÊTRE de la
+    // tête, sa matrice monde vient d'être rafraîchie par le
+    // `head.updateWorldMatrix(true, false)` ci-dessus — refaire remonter la
+    // chaîne serait payer deux fois le même parcours, à chaque image.
+    ;(bustNode ?? head).matrixWorld.decompose(vTrash1, qBust, vTrash2)
+    vBustFwd.copy(faceAxis).applyQuaternion(qBust)
+    vBustRight.set(-faceAxis.z, 0, 0).applyQuaternion(qBust)
+    vBustUp.set(0, 1, 0).applyQuaternion(qBust)
+    // On juge la direction APPLIQUÉE — celle que le regard s'est engagé à
+    // suivre — et non la cible instantanée : les saccades et le retargetage en
+    // attente ne doivent pas faire clignoter le verdict.
+    const yaw = Math.atan2(appliedDir.dot(vBustRight), appliedDir.dot(vBustFwd))
+    const pitch = Math.asin(clamp1(appliedDir.dot(vBustUp)))
+    // LE DÉCLENCHEUR À HYSTÉRÉSIS tient en une ligne : engagé, on tolère
+    // jusqu'au seuil LARGE ; renoncé, on ne revient qu'au seuil ÉTROIT.
+    const yawOut = walking ? WALK_REACH_YAW_OUT : HEAD_REACH_YAW_OUT
+    const yawIn = walking ? WALK_REACH_YAW_IN : HEAD_REACH_YAW_IN
+    reaching =
+      Math.abs(yaw) <= (reaching ? yawOut : yawIn) &&
+      Math.abs(pitch) <= (reaching ? HEAD_REACH_PITCH_OUT : HEAD_REACH_PITCH_IN)
+    const wantReach = reaching ? 1 : 0
+    if (reachPrimed) {
+      reach += (wantReach - reach) * Math.min(1, dt / (reaching ? REACH_CAPTURE_FADE : REACH_RELEASE_FADE))
+    } else {
+      reach = wantReach
+      reachPrimed = true
+    }
+
     // ── assistance de la TÊTE ─────────────────────────────────────────────
     // Angle œil-dans-tête demandé : au-delà du cône de 25°, l'œil sature et
     // la tête doit tourner. En deçà, elle suit mollement (la nuance §3.1 :
@@ -357,12 +568,16 @@ export function createGaze(hooks: GazeHooks): Gaze {
     const wantWeight = emotion ? 0 : 1
     const wf = Math.min(1, dt / HEAD_CUT_FADE)
     headWeight += (wantWeight - headWeight) * wf
-    // vitesse : rapide quand l'œil sature, lente sinon ou en parole
-    const speed = speaking
-      ? MIN_LOOKAT_HEAD_MIX_ALPHA
-      : eyeAngle > MAX_EYE_ANGLE
-        ? MAX_LOOKAT_HEAD_MIX_ALPHA
-        : MIN_LOOKAT_HEAD_MIX_ALPHA
+    // vitesse : rapide quand l'œil sature, lente sinon, en parole — ou en
+    // marche : la nuance §3.1 d'automaticLookAt est « le plus lent quand on
+    // parle ou qu'on ne regarde nulle part », et un corps en déplacement est
+    // exactement le cas où l'on n'engage personne.
+    const speed =
+      speaking || walking
+        ? MIN_LOOKAT_HEAD_MIX_ALPHA
+        : eyeAngle > MAX_EYE_ANGLE
+          ? MAX_LOOKAT_HEAD_MIX_ALPHA
+          : MIN_LOOKAT_HEAD_MIX_ALPHA
     const mix = Math.min(1, speed * dt * 60)
     // cible du delta : amener l'avant de la tête vers la cible, décalage de
     // tête de la table compris (offsetHead : ±1-5° de lacet)
@@ -371,8 +586,23 @@ export function createGaze(hooks: GazeHooks): Gaze {
       vDesired.applyAxisAngle(vCamUp.set(0, 1, 0), yawOffsetDeg * DEG)
     }
     qTmp2.setFromUnitVectors(vFwd, vDesired)
+    // LE RENONCEMENT : la demande elle-même s'efface vers l'identité, qui est
+    // la pose du CLIP (vFwd a été lu après l'idle, avant tout delta de regard).
+    // Renoncer, ici, c'est littéralement ne plus rien demander — la tête rend
+    // l'animation au lieu de rester plaquée contre une butée. À `reach` = 1 le
+    // slerp rend `qTmp2` exactement : le face-à-face ne voit rien passer — et
+    // ne paie même pas le slerp, qui est court-circuité au poids plein.
+    if (reach >= 1) qAim.copy(qTmp2)
+    else safeMixQuat(Q_IDENT, qTmp2, reach, qAim)
     // le delta lissé rejoint le delta voulu (slerp sûr), puis s'atténue au poids
-    safeMixQuat(headDelta, qTmp2, mix, headDelta)
+    qPrev.copy(headDelta)
+    safeMixQuat(headDelta, qAim, mix, headDelta)
+    // PLAFOND DE VITESSE. `mix` est une FRACTION de l'écart comblée par image :
+    // sur un grand écart elle produit une vitesse énorme (0,08 × 180° à 60 i/s
+    // = 864 °/s de delta). On borne donc le pas ANGULAIRE réel.
+    const step = 2 * Math.acos(Math.min(1, Math.abs(dotQuat(qPrev, headDelta))))
+    const maxStep = MAX_DELTA_RATE * dt
+    if (step > maxStep) safeMixQuat(qPrev, headDelta, maxStep / step, headDelta)
     if (headWeight < 0.001) headDelta.identity()
 
     if (headWeight > 0.001) {
@@ -392,6 +622,38 @@ export function createGaze(hooks: GazeHooks): Gaze {
       safeLerpQuat(qTmp.identity(), headDelta, headPart, qTmp2)
       applyWorldDelta(head, qTmp2)
       headLimit?.apply(head.quaternion)
+    }
+
+    // ── les YEUX renoncent aussi, mais plus tard ──────────────────────────
+    // Ce qu'il reste à faire à l'œil se mesure sur l'avant RÉEL de la tête,
+    // celui d'APRÈS l'assistance ET ses butées — pas sur la pose du clip, qui
+    // surestimerait la charge de tout ce que la tête vient d'absorber. La cible
+    // est ensuite RAMENÉE vers l'axe de la tête plutôt que laissée derrière :
+    // trois-vrm borne l'œil par les courbes du modèle, une cible inatteignable
+    // le laisse simplement plaqué en butée — le regard vitreux.
+    //
+    // La rotation monde de la tête sans REFAIRE remonter la chaîne : quand
+    // l'assistance vient de s'appliquer, `applyWorldDelta` a laissé dans `qCam`
+    // la rotation monde du PARENT (recalculée avec le cou déjà borné) — il ne
+    // reste qu'à composer la locale, elle-même bornée depuis. Sinon rien n'a
+    // bougé et la matrice monde de la tête est encore celle du début d'image.
+    if (headWeight > 0.001 && head.parent) qTmp.copy(qCam).multiply(head.quaternion)
+    else head.matrixWorld.decompose(vTrash1, qTmp, vTrash2)
+    vFwd.copy(faceAxis).applyQuaternion(qTmp)
+    vDir.subVectors(target.position, vEye) // longueur conservée : saccade comprise
+    const eyeLoad = angleBetween(vFwd, vDir)
+    eyeReaching = eyeLoad <= (eyeReaching ? EYE_REACH_OUT : EYE_REACH_IN)
+    const wantEye = eyeReaching ? 1 : 0
+    if (eyeReachPrimed) eyeReach += (wantEye - eyeReach) * Math.min(1, dt / EYE_REACH_FADE)
+    else {
+      eyeReach = wantEye
+      eyeReachPrimed = true
+    }
+    if (eyeReach < 0.999 && vDir.lengthSq() > 1e-8) {
+      vSide.copy(vDir).normalize()
+      qTmp.setFromUnitVectors(vSide, vFwd) // la cible → l'axe de la tête
+      safeMixQuat(Q_IDENT, qTmp, 1 - eyeReach, qTmp2)
+      target.position.copy(vEye).add(vDir.applyQuaternion(qTmp2))
     }
   }
 
