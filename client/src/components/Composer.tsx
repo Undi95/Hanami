@@ -360,7 +360,12 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
         ref={taRef}
         rows={1}
         value={text}
-        placeholder={t('writeMessage')}
+        // Le champ AFFICHE court et s'ANNONCE long : « Écrire un message… »
+        // demande 130,4 px et le champ n'en offre que 100 à 130 sur les mises en
+        // page étroites (voir i18n) — il passait à la ligne et la deuxième
+        // ligne était coupée. Le nom accessible, lui, ne coûte aucun pixel.
+        placeholder={t('writeMessageShort')}
+        aria-label={t('writeMessage')}
         disabled={disabled}
         onChange={(e) => {
           setText(e.target.value)

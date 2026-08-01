@@ -93,7 +93,16 @@ const FR = {
   vnMode: 'Mode visual novel',
 
   // ── Saisie et fil de messages ────────────────────────────────────────────
+  // Le libellé long reste le nom accessible du champ ; le champ, lui, affiche le
+  // court. Mesuré (Segoe UI 15 px, la police de l'interface) : « Écrire un
+  // message… » demande 130,4 px alors que le champ n'offre que 119 px utiles à
+  // 320 px de panneau, 130 px en plein écran à 320 et 100 px en mode VN — il
+  // passait à la ligne et la seconde ligne était coupée par la hauteur du champ
+  // (21 px, une ligne entière), on ne lisait que « Écrire un ». « Message… » :
+  // 69,3 px, il tient dans les trois cas avec 30 px de marge au pire.
+  // « Votre message… » (108,2 px) ne tenait pas en mode VN.
   writeMessage: 'Écrire un message…',
+  writeMessageShort: 'Message…',
   cmdMenuLabel: 'Commandes',
   cmdCompactHint: 'Compacter la conversation (instruction possible après la commande)',
   cmdCleanHint: 'Ouvrir une conversation vierge',
@@ -124,7 +133,11 @@ const FR = {
 
   // ── Recherche dans la conversation (Ctrl+F, ou la loupe de la barre) ──────
   searchInChat: 'Rechercher dans la conversation',
-  searchPlaceholder: 'Rechercher dans la conversation…',
+  // Même règle que le composer : le champ affiche court, `searchInChat` reste son
+  // nom accessible. « Rechercher dans la conversation… » demande 223,7 px pour
+  // 183 px utiles à 320 px de large — 18,2 % du libellé était coupé, on lisait
+  // « Rechercher dans la conversa ». « Rechercher… » : 84,3 px.
+  searchPlaceholder: 'Rechercher…',
   searchCount: '{n}/{m}',
   searchPrev: 'Correspondance précédente',
   searchNext: 'Correspondance suivante',
@@ -430,6 +443,7 @@ const EN: Record<Key, string> = {
 
   // ── Composer and message feed ────────────────────────────────────────────
   writeMessage: 'Write a message…',
+  writeMessageShort: 'Message…',
   cmdMenuLabel: 'Commands',
   cmdCompactHint: 'Compact the conversation (an instruction may follow the command)',
   cmdCleanHint: 'Open a fresh conversation',
@@ -460,7 +474,7 @@ const EN: Record<Key, string> = {
 
   // ── In-conversation search (Ctrl+F, or the magnifier in the bar) ─────────
   searchInChat: 'Search in conversation',
-  searchPlaceholder: 'Search this conversation…',
+  searchPlaceholder: 'Search…',
   searchCount: '{n}/{m}',
   searchPrev: 'Previous match',
   searchNext: 'Next match',

@@ -481,8 +481,10 @@ export default function MessageList({
             ref={searchRef}
             type="text"
             value={query}
+            // Affiché court (le champ tombe à 147 px utiles à 320 px de large),
+            // annoncé long — le même nom que la loupe qui l'ouvre.
             placeholder={t('searchPlaceholder')}
-            aria-label={t('searchPlaceholder')}
+            aria-label={t('searchInChat')}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
