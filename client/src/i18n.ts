@@ -82,6 +82,13 @@ const FR = {
   characterVoicePlaceholder: 'identifiant exact (ex. clone:Sakurav1)',
   characterVoiceHint:
     'Laissez vide pour la voix par défaut des Réglages. « Tester » interroge le serveur de synthèse configuré et propose ses voix.',
+  // Famille d'animations propre au personnage (dialog Personnages). Deux
+  // bibliothèques complètes et étanches — cf. vrma/README.md.
+  characterAnimations: 'Gestuelle',
+  animOverte: 'Overte',
+  animRocketbox: 'Rocketbox',
+  characterAnimationsHint:
+    'Deux bibliothèques complètes, jamais mélangées. Rocketbox apporte une gestuelle plus large et un socle d’écoute : le personnage change de posture pendant que vous tapez. En scène vivante 3D, la gestuelle repasse à Overte — c’est la seule à savoir marcher et s’asseoir.',
   importTitle: 'Importer',
   settingsUnavailable: 'Réglages indisponibles (serveur injoignable).',
   responseInterrupted: 'Réponse interrompue par le serveur.',
@@ -535,6 +542,11 @@ const EN: Record<Key, string> = {
   characterVoicePlaceholder: 'exact id (e.g. clone:Sakurav1)',
   characterVoiceHint:
     'Leave empty for the default voice from Settings. “Test” asks the configured speech server for its voices.',
+  characterAnimations: 'Body language',
+  animOverte: 'Overte',
+  animRocketbox: 'Rocketbox',
+  characterAnimationsHint:
+    'Two complete libraries, never mixed. Rocketbox brings a wider range of gestures and a listening idle: the character shifts posture while you type. In the living 3D scene, body language falls back to Overte — it is the only one that knows how to walk and sit down.',
   importTitle: 'Import',
   settingsUnavailable: 'Settings unavailable (server unreachable).',
   responseInterrupted: 'The server cut the response short.',

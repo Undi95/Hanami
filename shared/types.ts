@@ -80,6 +80,10 @@ export interface CharacterMeta {
   // Champ absent = repli sur `portrait`, puis sur l'initiale teintée.
   photo?: string // ex: /portraits/sakura-photo.png?v=1753900000000
   background: string // ex: /backgrounds/room.png ('' = dégradé par défaut)
+  // Famille d'animations de face à face (cf. AnimationFamily). Clé ABSENTE =
+  // 'overte', le défaut historique : tous les personnages écrits avant ce
+  // réglage gardent exactement les animations qu'ils avaient.
+  animations?: AnimationFamily
   // Décor 3D servi par /environments — la pièce dans laquelle l'avatar est posé,
   // à la place du fond 2D. Champ absent = aucun décor (comportement historique).
   // Sans modèle VRM, le décor n'est pas chargé : un portrait 2D flottant devant

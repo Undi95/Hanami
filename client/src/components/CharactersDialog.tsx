@@ -1,6 +1,6 @@
 // Personnages : grille de sélection, création, édition (prompt système inclus), suppression.
 import { useEffect, useRef, useState } from 'react'
-import type { CharacterFull, CharacterMeta, GreetingMode } from '../../../shared/types'
+import type { AnimationFamily, CharacterFull, CharacterMeta, GreetingMode } from '../../../shared/types'
 import * as api from '../api'
 import { translate, useI18n } from '../i18n'
 import { THEMES, THEME_LABELS } from '../themes'
@@ -41,6 +41,7 @@ interface FormState {
   background: string
   environment: string // '' = pas de décor 3D (fond 2D)
   theme: string // '' = thème de l'app
+  animations: AnimationFamily // famille de face à face ('overte' = le défaut)
   greeting: string
   greetings: string[]
   greetingMode: GreetingMode
@@ -55,6 +56,7 @@ const EMPTY_FORM: FormState = {
   background: '',
   environment: '',
   theme: '',
+  animations: 'overte',
   greeting: '',
   greetings: [],
   greetingMode: 'written',
@@ -65,6 +67,8 @@ const EMPTY_FORM: FormState = {
 }
 
 const GREETING_MODES: readonly GreetingMode[] = ['written', 'generated', 'ask']
+/** Overte en tête : c'est le défaut, et il le reste. */
+const ANIMATION_FAMILIES: readonly AnimationFamily[] = ['overte', 'rocketbox']
 
 function basename(url: string): string {
   return url.split('/').pop() ?? url
@@ -255,6 +259,9 @@ export default function CharactersDialog({
         background: c.background,
         environment: c.environment ?? '',
         theme: c.theme ?? '',
+        // Clé absente = le défaut historique, et c'est le cas de tous les
+        // personnages écrits avant ce réglage.
+        animations: c.animations ?? 'overte',
         greeting: c.greeting,
         greetings: c.greetings ?? [],
         greetingMode: c.greetingMode ?? 'written',
@@ -371,6 +378,7 @@ export default function CharactersDialog({
           background: form.background,
           environment: form.environment,
           theme: form.theme,
+          animations: form.animations,
           greeting: form.greeting,
           greetings,
           greetingMode: form.greetingMode,
@@ -389,6 +397,7 @@ export default function CharactersDialog({
           background: form.background,
           environment: form.environment,
           theme: form.theme,
+          animations: form.animations,
           greeting: form.greeting,
           greetings,
           greetingMode: form.greetingMode,
@@ -647,6 +656,29 @@ export default function CharactersDialog({
               ))}
               <option value="custom">{t('themeCustom')}</option>
             </select>
+          </div>
+          {/* GESTUELLE — deux bibliothèques complètes et ÉTANCHES (vrma/README.md).
+              Overte est le défaut, et le reste : un personnage qui n'a jamais
+              touché ce réglage n'a pas la clé dans son character.json. */}
+          <div className="field">
+            <label>{t('characterAnimations')}</label>
+            {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+            <div>
+              <div className="seg" role="group" aria-label={t('characterAnimations')}>
+                {ANIMATION_FAMILIES.map((fam) => (
+                  <button
+                    key={fam}
+                    type="button"
+                    className="seg-btn"
+                    aria-pressed={form.animations === fam}
+                    onClick={() => set('animations', fam)}
+                  >
+                    {fam === 'overte' ? t('animOverte') : t('animRocketbox')}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <span className="hint">{t('characterAnimationsHint')}</span>
           </div>
           {/* VOIX DU PERSONNAGE — chaque personnage a la sienne, c'est le propre
               d'une voix. Éteinte par défaut, ici comme pour tous ceux qui

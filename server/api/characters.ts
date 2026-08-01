@@ -77,6 +77,9 @@ charactersRouter.post('/api/characters', (req, res) => {
       greetings: greetingsOf(body.greetings),
       greetingMode: greetingModeOf(body.greetingMode),
       theme: typeof body.theme === 'string' ? body.theme : undefined,
+      // Famille d'animations : valeur reconnue seulement (storage n'écrit la clé
+      // que pour 'rocketbox' ; tout le reste, défaut compris, la laisse absente).
+      animations: body.animations === 'rocketbox' ? 'rocketbox' : undefined,
       // Voix : `true` explicite seulement (storage n'écrit la clé qu'allumée).
       ttsEnabled: body.ttsEnabled === true,
       ttsVoice: typeof body.ttsVoice === 'string' ? body.ttsVoice : undefined,

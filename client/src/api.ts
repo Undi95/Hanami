@@ -2,6 +2,7 @@
 // Le token de session (opaque, émis par /api/login) est envoyé en Authorization
 // sur toutes les requêtes.
 import type {
+  AnimationFamily,
   CharacterFull,
   CharacterMeta,
   ChatEvent,
@@ -209,6 +210,8 @@ export function createCharacter(input: {
   greetings?: string[]
   greetingMode?: GreetingMode
   theme?: string
+  /** Famille d'animations de face à face : absent (ou 'overte') = le défaut. */
+  animations?: AnimationFamily
   /** Voix du personnage : absent = muet (opt-in strict), voix vide = celle des Réglages. */
   ttsEnabled?: boolean
   ttsVoice?: string

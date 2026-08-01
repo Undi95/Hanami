@@ -518,6 +518,16 @@ function AppInner() {
     return () => window.clearTimeout(timer)
   }, [sceneLive, stageReady, vrmError, character?.vrm, character?.environment, env3d])
 
+  // Gestuelle du personnage : la famille d'animations de face à face. DÉCLARÉ
+  // AVANT l'effet de chargement du modèle, et ce n'est pas cosmétique — React
+  // exécute les effets dans l'ordre de déclaration, donc au changement de
+  // personnage la scène connaît la bonne famille avant que buildAnimations ne
+  // parte. Changer la famille d'un personnage déjà affiché (édition dans le
+  // dialog) reconstruit le mixer sans recharger le modèle.
+  useEffect(() => {
+    stageRef.current?.setAnimationFamily(character?.animations ?? 'overte')
+  }, [character?.animations, stageReady])
+
   // Changement de personnage (ou scène prête) → charger son modèle VRM, puis
   // réappliquer le cadrage caméra choisi pour lui DANS LE MODE courant.
   // Un échec (serveur en train de redémarrer) est réessayé deux fois en silence

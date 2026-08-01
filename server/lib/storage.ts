@@ -6,6 +6,7 @@ import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { emotionTagList } from '../../shared/emotions'
 import type {
+  AnimationFamily,
   CharacterFull,
   CharacterMeta,
   ChatMessage,
@@ -108,6 +109,10 @@ function normalizeMeta(raw: CharacterMeta, id: string): CharacterMeta {
   if (greetings.length > 0) meta.greetings = greetings
   else delete meta.greetings
   if (raw.greetingMode !== undefined) meta.greetingMode = normalizeGreetingMode(raw.greetingMode)
+  // Famille d'animations : une valeur inconnue écrite à la main (`animations:
+  // "mixamo"`) doit rendre le défaut, pas voyager jusqu'au client — la scène en
+  // ferait un catalogue vide, donc un avatar en pose de repos, sans un message.
+  if (raw.animations !== 'rocketbox') delete meta.animations
   return meta
 }
 
@@ -144,6 +149,7 @@ export interface CreateCharacterInput {
   greetings?: string[]
   greetingMode?: GreetingMode
   theme?: string
+  animations?: AnimationFamily
   systemPrompt?: string
   ttsEnabled?: boolean
   ttsVoice?: string
@@ -152,6 +158,17 @@ export interface CreateCharacterInput {
 /** Thème par personnage : clé écrite seulement quand elle porte une valeur. */
 function themeField(theme: unknown): Partial<CharacterMeta> {
   return typeof theme === 'string' && theme.trim() ? { theme: theme.trim() } : {}
+}
+
+/**
+ * Famille d'animations : même règle que le thème, avec un tour de vis — SEULE
+ * une valeur reconnue est écrite. Le défaut ('overte') ne s'écrit PAS : un
+ * character.json sans cette clé reste exactement ce qu'il était, et une valeur
+ * inventée à la main dans le fichier ne fige pas un personnage sur une famille
+ * qui n'existe pas.
+ */
+function animationsField(animations: unknown): Partial<CharacterMeta> {
+  return animations === 'rocketbox' ? { animations: 'rocketbox' } : {}
 }
 
 /** Décor 3D : même règle que le thème — et c'est ainsi qu'un '' explicite le RETIRE. */
@@ -210,6 +227,7 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
     greeting: input.greeting ?? '',
     ...greetingFields(input.greetings, input.greetingMode),
     ...themeField(input.theme),
+    ...animationsField(input.animations),
     ...environmentField(input.environment),
     ...ttsFields(input.ttsEnabled, input.ttsVoice),
     createdAt: new Date().toISOString(),
@@ -234,6 +252,11 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     ...greetingFields(patch.greetings ?? current.greetings, patch.greetingMode ?? current.greetingMode),
     // '' explicite dans le patch = retour au thème de l'app.
     ...themeField(patch.theme ?? current.theme),
+    // Famille d'animations : LE MÊME PIÈGE que le thème et le décor — meta est
+    // reconstruit clé par clé, oublier cette ligne renverrait tous les
+    // personnages Rocketbox à Overte à leur première édition, sans un mot.
+    // 'overte' explicite dans le patch = retour au défaut (la clé disparaît).
+    ...animationsField(patch.animations ?? current.animations),
     // Décor 3D : '' explicite = retour au fond 2D. Comme pour le thème, ce champ
     // DOIT être reconduit ici — meta est reconstruit clé par clé, un oubli
     // effacerait le décor en silence à chaque édition du personnage.
