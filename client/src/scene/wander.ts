@@ -42,8 +42,21 @@ const TURN_ENTER_RIGHT_S = 0.033
 const TURN_CLIP_THRESHOLD = 25 * (Math.PI / 180)
 /** Vitesse du glissement silencieux — la moitié d'un pivot joué. */
 const TURN_GLIDE_RATE = 30 * (Math.PI / 180)
-/** Fondu d'entrée et de sortie d'un pivot (raccords mesurés : 22,7° / 36,3°). */
+/** Fondu d'ENTRÉE d'un pivot — l'entrée a un contrat de phase (TURN_ENTER_*_S). */
 const TURN_FADE = 0.3
+/**
+ * Fondu de SORTIE d'un pivot. La sortie tombe où le cap l'arrête : aucune
+ * phase ne peut la sauver (pire 19,2 cm / moy 13,9 contre l'idle, mesuré sur
+ * toutes les phases des deux clips), seul le fondu adoucit. Mesures aux pires
+ * phases, pointe du pire os (cm/s), 0,3–0,4 → 0,5 :
+ *   pivot → idle        97–109 → 74–104
+ *   pivot → walk-start 250–272 → 212–231
+ *   pivot → sit-enter  150–160 → 111–143
+ * 0,5 s est la fourchette basse d'Overte (turns 0,5 ; entrée d'idle 0,667 —
+ * avec easeInOutQuad, que nous n'avons pas : un fondu linéaire plus long
+ * étale davantage, on reste donc au bas de la fourchette).
+ */
+const TURN_FADE_OUT = 0.5
 
 /**
  * Sous cet écart de cap, on ne fait RIEN. Sans zone morte, le moindre pan de
@@ -488,6 +501,13 @@ export function createWander(host: WanderHost): Wander {
   // Cap visé pendant un pivot, et sens du clip en cours (+1 = gauche).
   let yawTarget = 0
   let turnDir: 1 | -1 = 1
+  /**
+   * Un clip de pivot tient l'écran. C'est lui qui choisit le fondu de la
+   * SORTIE (TURN_FADE_OUT) là où la même jonction sans pivot garde son fondu
+   * court — un départ de marche depuis l'idle est excellent (2,0 cm), depuis
+   * un pivot il part de 19 cm.
+   */
+  let turnClipUp = false
   // Marche en cours.
   let plan: GaitPlan = GAIT_STROLL
   let destX = 0
@@ -567,6 +587,7 @@ export function createWander(host: WanderHost): Wander {
     // La phase d'entrée est le contrat de raccord — cf. TURN_ENTER_*_S.
     if (host.has(clip)) {
       host.gait(clip, TURN_FADE, turnDir > 0 ? TURN_ENTER_LEFT_S : TURN_ENTER_RIGHT_S)
+      turnClipUp = true
     }
     state = next
   }
@@ -764,15 +785,19 @@ export function createWander(host: WanderHost): Wander {
   function launchGait(): void {
     wantStop = false
     lastGaitTime = -1
+    // Sortie de pivot (état 'align') : fondu long — cf. TURN_FADE_OUT. Depuis
+    // l'idle, la jonction est excellente (2,0 cm) : le fondu court suffit.
+    const fade = turnClipUp ? TURN_FADE_OUT : WALK_FADE
+    turnClipUp = false
     if (plan.start && host.has(plan.start)) {
       // Départ : la dernière image de `world-walk-start` EST la pose du cycle à
       // t = 0,200 s. On l'y enchaîne donc SANS fondu et à cette phase exacte —
       // c'est le contrat mesuré à 0 cm.
-      host.once(plan.start, WALK_FADE, plan.clip, 0, plan.enterS)
+      host.once(plan.start, fade, plan.clip, 0, plan.enterS)
       state = 'starting'
       return
     }
-    host.gait(plan.clip, WALK_FADE, plan.enterS)
+    host.gait(plan.clip, fade, plan.enterS)
     state = 'walking'
   }
 
@@ -954,11 +979,15 @@ export function createWander(host: WanderHost): Wander {
     if (g !== null) run.groundY = g
     slide = { fx: p.x, fy: run.groundY, fz: p.z, tx: run.sitX, ty: run.seatedY, tz: run.sitZ }
     host.feet('reach')
+    // On arrive de seatAlign : si le pivot a joué, sa sortie veut le fondu
+    // long (150–160 cm/s à 0,3 s, 111–143 à 0,5 — cf. TURN_FADE_OUT).
+    const fadeIn = turnClipUp ? TURN_FADE_OUT : SIT_FADE
+    turnClipUp = false
     // Le socle assis est TIRÉ parmi cinq variantes (pickAction) : l'atterrissage
     // se fait donc en fondu d'une seconde, pas en claquant — cf. SIT_LAND_FADE.
     // La phase 0 reste le contrat : c'est là que chaque variante est le plus
     // près de la fin de sit-enter (mesuré ×5).
-    host.once('sit-enter', SIT_FADE, 'sit-idle', SIT_LAND_FADE, 0)
+    host.once('sit-enter', fadeIn, 'sit-idle', SIT_LAND_FADE, 0)
     seatBase = 'sit-idle'
     state = 'sitDown'
   }
@@ -1125,7 +1154,8 @@ export function createWander(host: WanderHost): Wander {
         // autour) : sans ça, elle finirait son angle puis en redemanderait un.
         if (!host.userBusy()) yawTarget = restingYaw()
         if (turnStep(delta, yawTarget)) {
-          host.gait(null, TURN_FADE)
+          host.gait(null, TURN_FADE_OUT)
+          turnClipUp = false
           state = 'rest'
         }
         break
@@ -1198,7 +1228,8 @@ export function createWander(host: WanderHost): Wander {
       }
       case 'seatAlign': {
         if (!seatRun) {
-          host.gait(null, TURN_FADE)
+          host.gait(null, TURN_FADE_OUT)
+          turnClipUp = false
           state = 'rest'
           break
         }
@@ -1338,6 +1369,7 @@ export function createWander(host: WanderHost): Wander {
       state = 'rest'
       wantStop = false
       walked = 0
+      turnClipUp = false
       seatRun = null
       slide = null
       afterStand = null
