@@ -53,6 +53,8 @@ import type { FootMode, LegIk } from './legIk'
 import { createJointLimits } from './jointLimits'
 import type { JointLimits } from './jointLimits'
 import { CriticallyDampedSpringPoseHelper } from './overteMath'
+import { buildEnvBvh, raycastFirst } from './bvh'
+import type { EnvBvh } from './bvh'
 import { createGaze } from './gaze'
 import { createHandRelax } from './handPoses'
 import type { HandRelax } from './handPoses'
@@ -1019,6 +1021,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
   // ── Décor ─────────────────────────────────────────────────────────────────
   let envRoot: Object3D | null = null
+  // L'arbre du décor en place (cf. scene/bvh), bâti une fois après le gel des
+  // matrices. null = pas de décor, ou décor dont la géométrie ne se laisse pas
+  // indexer : `viser` retombe alors sur le lancer de rayon de three, plus lent
+  // mais toujours juste. Il ne survit JAMAIS à son décor — il tient des vues
+  // sur ses tampons de sommets, et un arbre resté derrière serait à la fois une
+  // fuite mémoire et une géométrie fantôme sous le curseur.
+  let envBvh: EnvBvh | null = null
   // Dimensions du décor en place (mètres) : elles pilotent le plan lointain de la
   // caméra et la distance de recul maximale. null = pas de décor.
   let envMetrics: { radius: number; height: number } | null = null
@@ -1156,10 +1165,12 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   renderer.domElement.addEventListener('dblclick', onDblClick)
 
   // ── Interactions au clic (scène vivante) ──────────────────────────────────
-  // Un lancer de rayon À L'ÉVÉNEMENT DE CLIC uniquement, jamais en continu —
-  // intersecter la géométrie du décor par image est interdit par l'architecture,
-  // et le curseur contextuel qu'on a voulu au survol s'est heurté au même mur
-  // (mesuré : 5,9 ms au 95e centile sur la classe, cf. l'en-tête de clickMark).
+  // Un lancer de rayon AUX ÉVÉNEMENTS DE POINTEUR, jamais dans la boucle de
+  // rendu : intersecter la géométrie du décor par image reste interdit par
+  // l'architecture. Ce qui a changé, c'est le prix d'un rayon — le BVH des
+  // décors (scene/bvh) a ramené le pire cas de 12,9 ms à 0,004 ms au 95e
+  // centile, et c'est ce qui rouvre la porte au curseur contextuel refusé
+  // jusqu'ici sur mesure.
   // Le geste principal (glisser = pan) reste intact : un clic n'est retenu que
   // si le pointeur n'a pas bougé de plus de 6 px entre l'appui et le relâché.
   const raycaster = new Raycaster()
@@ -1188,6 +1199,47 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     | { quoi: 'inerte'; point: Vector3 }
 
   /**
+   * L'impact du décor pour le rayon courant du `raycaster`.
+   *
+   * L'arbre (scene/bvh) porte l'écrasante majorité de la géométrie et répond en
+   * quelques microsecondes là où `intersectObject` balayait jusqu'à 326 000
+   * triangles. Ce qu'il ne sait pas indexer — il le NOMME plutôt que de le
+   * taire — repasse par three, et le plus proche des deux gagne. Le résultat
+   * est donc exactement celui de `premierImpactVisible(intersectObject(envRoot,
+   * true))` : vérifié rayon par rayon par devtools/bench-raycast.mjs, 22 400
+   * rayons sur les sept décors et huit azimuts, zéro écart.
+   *
+   * Cette seconde passe est un GARDE-FOU, pas la réparation d'un bogue observé :
+   * lowpoly-restaurant porte trois segments de ligne (three les intersecte, via
+   * `params.Line.threshold`), et sur les huit azimuts mesurés aucun rayon ne
+   * leur revient. Elle reste parce que la caméra est libre et que le prochain
+   * décor importé n'a rien promis — et parce qu'un arbre qui perd un objet en
+   * silence, c'est un mur qui laisse passer les clics.
+   *
+   * Sans arbre (décor sans rien d'indexable, ou pas encore chargé), le chemin
+   * d'avant reste là, mot pour mot.
+   */
+  function viserDecor(): Intersection | null {
+    if (!envBvh) return envRoot ? premierImpactVisible(raycaster.intersectObject(envRoot, true)) : null
+    let best = raycastFirst(
+      envBvh,
+      raycaster.ray.origin,
+      raycaster.ray.direction,
+      estOpaqueAuClic,
+      raycaster.near,
+      raycaster.far,
+    )
+    // `false` : chaque nœud non couvert a été listé individuellement, descendre
+    // dans ses enfants les compterait deux fois — et repasserait par la
+    // géométrie que l'arbre vient justement d'indexer.
+    for (const objet of envBvh.rest) {
+      const hit = premierImpactVisible(raycaster.intersectObject(objet, false))
+      if (hit && (!best || hit.distance < best.distance)) best = hit
+    }
+    return best
+  }
+
+  /**
    * Le lancer de rayon et sa lecture, séparés de l'action : la même passe sert
    * à décider quoi faire ET où poser la marque. `null` = le rayon n'a rien
    * rencontré (le vide au-dessus de la pièce) — il n'existe alors aucun point
@@ -1204,7 +1256,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // une surface invisible n'est pas ce que l'utilisateur a visé (cf.
     // estOpaqueAuClic — le plafond alpha 0 du loft rendait le sol incliquable).
     const onAvatar = premierImpactVisible(raycaster.intersectObject(currentVrm.scene, true))
-    const onEnv = envRoot ? premierImpactVisible(raycaster.intersectObject(envRoot, true)) : null
+    const onEnv = viserDecor()
     const dAvatar = onAvatar ? onAvatar.distance : Infinity
     const dEnv = onEnv ? onEnv.distance : Infinity
     if (dAvatar < dEnv) return { quoi: 'avatar' }
@@ -2061,6 +2113,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       VRMUtils.deepDispose(envRoot)
       envRoot = null
     }
+    envBvh = null // avant tout le reste : il pointe des tampons qu'on vient de libérer
     envMetrics = null
     sceneMap = null
     envFrameDist = null
@@ -2176,6 +2229,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       envGroup.updateMatrixWorld(true)
       envGroup.matrixAutoUpdate = false
       envGroup.matrixWorldAutoUpdate = false
+      // L'arbre du décor, dans le MÊME bloc synchrone et juste après le gel :
+      // il fige les matrices monde telles qu'elles viennent d'être arrêtées, et
+      // plus rien ne les touchera. 18 à 180 ms selon le décor, payés une fois,
+      // à la suite d'un chargement réseau de plusieurs mégaoctets — et jamais
+      // dans le tick. En échange, viser() passe de 12,9 ms à 0,004 ms au 95e
+      // centile sur le pire décor (cf. devtools/bench-raycast.mjs).
+      envBvh = buildEnvBvh(envRoot)
       // APRÈS unloadEnvironment, qui remet la carte à null et ramène le
       // personnage chez lui : sinon la carte du nouveau décor serait effacée
       // aussitôt posée.

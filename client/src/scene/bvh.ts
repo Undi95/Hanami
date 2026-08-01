@@ -64,11 +64,12 @@
 //     passé en argument à la requête, appliqué par mesh, et le résultat est donc
 //     exactement `premierImpactVisible(intersectObject(...))`.
 //
-// CE QUE L'ARBRE NE SAIT PAS REPRÉSENTER, et qui le fait renoncer en bloc
-// (`buildEnvBvh` rend null, l'appelant garde le lancer de rayon de three) :
-// peau animée et morph targets — leurs sommets ne sont pas ceux du tampon.
-// Les Line et Points d'un décor exotique ne sont pas non plus couverts ; ils
-// seraient ignorés, d'où le renoncement dès qu'un mesh sort du cadre.
+// CE QUE L'ARBRE NE SAIT PAS REPRÉSENTER — peau animée, morph targets, Line,
+// Points, Sprite — n'est pas ignoré : il est NOMMÉ dans `rest`, et l'appelant
+// le donne à three avant de garder le plus proche des deux impacts. Un arbre
+// qui se tairait sur ce qu'il ne couvre pas serait un mur qui laisse passer
+// les clics, et ce n'est pas une hypothèse : `lowpoly-restaurant` porte trois
+// segments de ligne que three intersecte depuis toujours.
 
 import { BackSide, DoubleSide, Matrix4, Mesh, SkinnedMesh, Vector3 } from 'three'
 import type { Intersection, Object3D } from 'three'
@@ -154,6 +155,20 @@ interface BvhPart {
 /** L'arbre d'un décor entier : un `BvhPart` par mesh, plus de quoi rendre des comptes. */
 export interface EnvBvh {
   parts: BvhPart[]
+  /**
+   * Ce que l'arbre NE COUVRE PAS, et que l'appelant doit donner à three :
+   * peau animée et morph targets (leurs sommets ne sont pas ceux du tampon),
+   * Line / Points / Sprite (three les intersecte, l'arbre n'indexe que des
+   * triangles), géométrie dont le découpage en triangles serait décalé.
+   *
+   * Cette liste est le cœur du contrat. Un arbre qui couvre « presque tout »
+   * en se taisant sur le reste, c'est un mur qui laisse passer les clics —
+   * `lowpoly-restaurant` porte trois segments de ligne décoratifs, et c'est
+   * exactement ce qui aurait disparu en silence. L'appelant interroge l'arbre
+   * PUIS cette liste, et garde le plus proche des deux : la couverture est
+   * alors complète, et le décor n'a pas besoin de renoncer en bloc.
+   */
+  rest: Object3D[]
   /** Triangles couverts, tous meshes confondus. */
   triangles: number
   /** Millisecondes de construction (mesurées, pas estimées). */
@@ -569,39 +584,48 @@ function buildPart(mesh: Mesh, strategy: BvhStrategy): PartResult {
  * Construit l'arbre d'un décor entier. À appeler UNE FOIS, après le gel des
  * matrices (elles sont lues telles quelles et figées dans l'arbre).
  *
- * Rend `null` — et l'appelant doit alors garder le lancer de rayon de three —
- * si le décor contient une géométrie que l'arbre ne saurait pas représenter
- * fidèlement : peau animée, morph targets. Renoncer EN BLOC plutôt que par
- * mesh : un arbre partiel rendrait des impacts faux, ce qui est pire que lent.
+ * Rend `null` quand il n'y a RIEN à indexer — l'appelant garde alors le lancer
+ * de rayon de three sur tout le décor. Dans tous les autres cas l'arbre couvre
+ * ce qu'il sait couvrir et NOMME le reste dans `rest` : il n'y a pas de
+ * renoncement en bloc, et surtout pas de trou silencieux.
  */
 export function buildEnvBvh(root: Object3D, strategy: BvhStrategy = 'sah'): EnvBvh | null {
   const t0 = performance.now()
   const parts: BvhPart[] = []
+  const rest: Object3D[] = []
   let triangles = 0
   let bytes = 0
-  let refuse = false
 
   const meshes: Mesh[] = []
   root.traverse((node) => {
-    if (!(node instanceof Mesh)) return
-    if (node instanceof SkinnedMesh || (node as unknown as MeshLike).morphTargetInfluences) {
-      refuse = true
+    if (node instanceof Mesh) {
+      // Peau animée ou morph targets : les sommets rendus ne sont pas ceux du
+      // tampon, aucun arbre bâti dessus ne dirait la vérité. À three.
+      if (node instanceof SkinnedMesh || (node as unknown as MeshLike).morphTargetInfluences) rest.push(node)
+      else meshes.push(node)
       return
     }
-    meshes.push(node)
+    // Ce qui n'est pas un Mesh mais que three sait quand même intersecter, et
+    // qui doit donc continuer d'arrêter les clics : Line, LineSegments, Points,
+    // Sprite. On les reconnaît à leur géométrie plutôt qu'à leur classe — un
+    // type exotique d'un .glb importé tombera dans le même filet.
+    const like = node as unknown as { geometry?: unknown; isSprite?: boolean }
+    if (like.geometry !== undefined || like.isSprite === true) rest.push(node)
   })
-  if (refuse || meshes.length === 0) return null
 
   for (const mesh of meshes) {
     const built = buildPart(mesh, strategy)
-    if (built === 'refus') return null // un seul mesh mal indexé condamne l'arbre entier
+    if (built === 'refus') {
+      rest.push(mesh) // indexable de travers vaut moins que pas indexé du tout
+      continue
+    }
     if (built === 'vide') continue // aucun triangle : rien à toucher, rien à représenter
     parts.push(built.part)
     bytes += built.bytes
     triangles += built.part.tris.length
   }
   if (parts.length === 0) return null
-  return { parts, triangles, buildMs: performance.now() - t0, bytes }
+  return { parts, rest, triangles, buildMs: performance.now() - t0, bytes }
 }
 
 // ── Requête ─────────────────────────────────────────────────────────────────

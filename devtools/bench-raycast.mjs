@@ -15,6 +15,10 @@
 // Le banc VÉRIFIE aussi les deux chemins l'un contre l'autre : pour chacun des
 // 400 rayons, même objet touché et même distance à 1 µm près. Un écart est une
 // panne, pas une nuance — il s'affiche en clair.
+//
+// Enfin il chiffre le PERSONNAGE, que le BVH ne couvre pas et ne couvrira pas.
+// `viser` interroge le décor ET l'avatar : un budget qui n'en compterait qu'un
+// serait un budget faux, et c'est ce total qui décide du curseur au survol.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -23,6 +27,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
 
 const {
+  Bone,
   Box3,
   BufferAttribute,
   BufferGeometry,
@@ -35,7 +40,11 @@ const {
   PlaneGeometry,
   Quaternion,
   Raycaster,
+  LineBasicMaterial,
+  LineSegments,
   Scene,
+  Skeleton,
+  SkinnedMesh,
   Vector2,
   Vector3,
 } = await import(pathToFileURL(path.join(ROOT, 'node_modules/three/build/three.module.js')).href)
@@ -126,12 +135,30 @@ function isOpaque(m) {
 function buildEnv(file, json_bin) {
   const { json, bin } = json_bin
   const prims = []
+  const lines = []
   const scene = json.scenes[json.scene ?? 0]
   const walk = (nodeIndex, parent) => {
     const node = json.nodes[nodeIndex]
     const world = new Matrix4().multiplyMatrices(parent, nodeMatrix(node))
     if (node.mesh !== undefined) {
       for (const p of json.meshes[node.mesh].primitives) {
+        // LIGNES (mode 1). GLTFLoader en fait des LineSegments, que three
+        // intersecte avec `params.Line.threshold` — elles arrêtent donc les
+        // clics. lowpoly-restaurant en porte trois segments : c'est le seul
+        // décor qui met à l'épreuve la liste `rest` du BVH, et sans elles le
+        // banc validerait un arbre qui perd de la géométrie en silence.
+        if (p.mode === 1 || p.mode === 3) {
+          const lp = readAccessor(json, bin, p.attributes.POSITION)
+          const lv = new Vector3()
+          for (let i = 0; i < lp.length; i += 3) {
+            lv.set(lp[i], lp[i + 1], lp[i + 2]).applyMatrix4(world)
+            lp[i] = lv.x
+            lp[i + 1] = lv.y
+            lp[i + 2] = lv.z
+          }
+          lines.push(lp)
+          continue
+        }
         if (p.mode !== undefined && p.mode !== 4) continue
         const pos = readAccessor(json, bin, p.attributes.POSITION)
         const v = new Vector3()
@@ -141,7 +168,10 @@ function buildEnv(file, json_bin) {
           pos[i + 1] = v.y
           pos[i + 2] = v.z
         }
-        const idx = p.indices !== undefined ? Uint32Array.from(readAccessor(json, bin, p.indices)) : null
+        // Les indices gardent le type du .glb (Uint16 le plus souvent) : c'est
+        // ce que voit un mesh que mergeEnvironment laisse tranquille, et c'est
+        // ce qui met sous le banc le chemin de recopie du BVH.
+        const idx = p.indices !== undefined ? readAccessor(json, bin, p.indices) : null
         prims.push({ positions: pos, index: idx, mat: p.material ?? -1 })
       }
     }
@@ -174,21 +204,31 @@ function buildEnv(file, json_bin) {
   const group = new Group()
   let tris = 0
   const push = (batch, material) => {
-    let nVerts = 0
-    let nIdx = 0
-    for (const p of batch) {
-      nVerts += p.positions.length / 3
-      nIdx += p.index ? p.index.length : 0
-    }
-    const positions = new Float32Array(nVerts * 3)
-    const index = batch[0].index ? new Uint32Array(nIdx) : null
-    let vo = 0
-    let io = 0
-    for (const p of batch) {
-      positions.set(p.positions, vo * 3)
-      if (index) for (let i = 0; i < p.index.length; i++) index[io + i] = p.index[i] + vo
-      vo += p.positions.length / 3
-      io += p.index ? p.index.length : 0
+    let positions
+    let index
+    if (batch.length === 1) {
+      // Un mesh que la fusion laisse tranquille garde EXACTEMENT ses tampons.
+      positions = batch[0].positions
+      index = batch[0].index
+    } else {
+      let nVerts = 0
+      let nIdx = 0
+      for (const p of batch) {
+        nVerts += p.positions.length / 3
+        nIdx += p.index ? p.index.length : 0
+      }
+      positions = new Float32Array(nVerts * 3)
+      // mergeGeometries réindexe en Uint32 : le lot fusionné passe la barre des
+      // 65 536 sommets bien plus souvent qu'une primitive isolée.
+      index = batch[0].index ? new Uint32Array(nIdx) : null
+      let vo = 0
+      let io = 0
+      for (const p of batch) {
+        positions.set(p.positions, vo * 3)
+        if (index) for (let i = 0; i < p.index.length; i++) index[io + i] = p.index[i] + vo
+        vo += p.positions.length / 3
+        io += p.index ? p.index.length : 0
+      }
     }
     const geometry = new BufferGeometry()
     geometry.setAttribute('position', new BufferAttribute(positions, 3))
@@ -206,7 +246,15 @@ function buildEnv(file, json_bin) {
     void key
   }
   for (const p of loose) push([p], matOf(p.mat))
-  return { group, tris }
+  // Les lignes ne sont jamais fusionnées (mergeEnvironment ne voit que les Mesh) :
+  // elles restent des LineSegments à part entière, comme chez GLTFLoader.
+  for (const lp of lines) {
+    const geometry = new BufferGeometry()
+    geometry.setAttribute('position', new BufferAttribute(lp, 3))
+    geometry.computeBoundingSphere()
+    group.add(new LineSegments(geometry, new LineBasicMaterial()))
+  }
+  return { group, tris, lines: lines.length }
 }
 
 /** addEnvBackdrops : des plans DoubleSide, ajoutés avant la fusion, jamais fusionnés. */
@@ -256,6 +304,105 @@ function premierImpactVisible(hits) {
   return null
 }
 
+// ── L'avatar, que le BVH ne couvre PAS ─────────────────────────────────────
+//
+// `viser` interroge DEUX choses : le décor (l'arbre, désormais) et le
+// personnage — et lui n'a pas le choix du lancer de rayon de three, sa peau est
+// animée, ses sommets ne sont pas ceux du tampon. Un curseur au survol paie
+// donc les deux, dix fois par seconde : chiffrer l'arbre sans chiffrer le
+// personnage ne dirait RIEN du budget réel.
+//
+// Le maillage est remonté tel quel depuis le .vrm (positions, indices,
+// JOINTS_0, WEIGHTS_0) sur un squelette d'os à l'identité. Les VALEURS des
+// matrices d'os ne changent pas le travail fait par sommet — applyBoneTransform
+// compose quatre matrices quoi qu'elles vaillent — et le compte de triangles,
+// lui, est celui du vrai modèle.
+
+/** L'en-tête JSON d'un .glb, sans lire ses mégaoctets de textures. */
+function readGlbJson(file) {
+  const fd = fs.openSync(file, 'r')
+  try {
+    const head = Buffer.alloc(20)
+    fs.readSync(fd, head, 0, 20, 0)
+    const jsonLen = head.readUInt32LE(12)
+    const body = Buffer.alloc(jsonLen)
+    fs.readSync(fd, body, 0, jsonLen, 20)
+    return JSON.parse(body.toString('utf8'))
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
+/** Triangles des primitives À PEAU : celles que le rayon paiera vraiment. */
+function skinnedTriangles(json) {
+  let tris = 0
+  for (const mesh of json.meshes ?? []) {
+    for (const p of mesh.primitives ?? []) {
+      if (p.mode !== undefined && p.mode !== 4) continue
+      if (p.attributes?.JOINTS_0 === undefined) continue
+      const acc = json.accessors[p.indices !== undefined ? p.indices : p.attributes.POSITION]
+      tris += Math.floor(acc.count / 3)
+    }
+  }
+  return tris
+}
+
+/**
+ * Les deux extrêmes de vrm/. Le plus lourd donne le pire cas ; le plus LÉGER
+ * est le chiffre qui tranche vraiment — si même lui dépasse le budget, aucun
+ * modèle ne le tient, et la question est close pour tout le monde.
+ */
+function extremesVrm() {
+  const dir = path.join(ROOT, 'vrm')
+  if (!fs.existsSync(dir)) return null
+  const all = []
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.toLowerCase().endsWith('.vrm')) continue
+    try {
+      all.push({ name, tris: skinnedTriangles(readGlbJson(path.join(dir, name))) })
+    } catch {
+      continue // .vrm illisible : ce n'est pas le sujet du banc
+    }
+  }
+  if (all.length === 0) return null
+  all.sort((a, b) => a.tris - b.tris)
+  return { leger: all[0], lourd: all[all.length - 1], total: all.length, median: all[all.length >> 1].tris }
+}
+
+/** Le personnage remonté en SkinnedMesh, prêt pour intersectObject. */
+function buildAvatar(file) {
+  const { json, bin } = readGlb(file)
+  const boneCount = Math.max(1, ...(json.skins ?? []).map((s) => s.joints.length))
+  const bones = []
+  for (let i = 0; i < boneCount; i++) bones.push(new Bone())
+  const root = new Group()
+  for (const b of bones) root.add(b)
+  const skeleton = new Skeleton(bones)
+
+  const attr = (index, itemSize) => {
+    const acc = json.accessors[index]
+    return new BufferAttribute(readAccessor(json, bin, index), itemSize, acc.normalized === true)
+  }
+  let tris = 0
+  for (const mesh of json.meshes ?? []) {
+    for (const p of mesh.primitives ?? []) {
+      if (p.mode !== undefined && p.mode !== 4) continue
+      if (p.attributes?.JOINTS_0 === undefined) continue
+      const geometry = new BufferGeometry()
+      geometry.setAttribute('position', attr(p.attributes.POSITION, 3))
+      geometry.setAttribute('skinIndex', attr(p.attributes.JOINTS_0, 4))
+      geometry.setAttribute('skinWeight', attr(p.attributes.WEIGHTS_0, 4))
+      if (p.indices !== undefined) geometry.setIndex(attr(p.indices, 1))
+      const skinned = new SkinnedMesh(geometry, new MeshBasicMaterial())
+      skinned.bind(skeleton)
+      root.add(skinned)
+      tris += (p.indices !== undefined ? json.accessors[p.indices].count : geometry.attributes.position.count) / 3
+    }
+  }
+  root.updateMatrixWorld(true)
+  return { root, tris: Math.floor(tris) }
+}
+
 // ── Banc ───────────────────────────────────────────────────────────────────
 
 const ALL = [
@@ -270,6 +417,14 @@ const ALL = [
 const ENVS = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ALL
 const RAYS = 400
 const BUDGET = 0.3 // ms — le seuil sous lequel un test au survol à 10 Hz est jouable
+/**
+ * Azimuts de VÉRIFICATION (degrés). Les mesures, elles, restent au cadrage par
+ * défaut pour rester comparables. Un seul point de vue ne prouverait rien : le
+ * décor est orbitable, et les vues alignées sur les axes ont leur propre
+ * pathologie (rayons parallèles à un axe → `0 × ∞` → NaN dans le test des
+ * boîtes englobantes).
+ */
+const AZIMUTS = [0, 45, 90, 135, 180, 225, 270, 315]
 
 function stat(list) {
   const s = [...list].sort((a, b) => a - b)
@@ -284,6 +439,7 @@ const query = []
 const build = []
 let worstP95 = 0
 let mismatches = 0
+let checked = 0
 
 for (const name of ENVS) {
   const file = path.join(ROOT, 'environments', `${name}.glb`)
@@ -299,9 +455,20 @@ for (const name of ENVS) {
   scene.add(group)
 
   const camera = new PerspectiveCamera(30, 16 / 9, 0.1, 20)
-  camera.position.set(0, 1.35, sidecar.frameDistance ?? 3)
-  camera.lookAt(0, 1.25, 0)
-  camera.updateMatrixWorld(true)
+  const dist = sidecar.frameDistance ?? 3
+  /**
+   * La caméra du cadrage par défaut, tournée de `az` autour du personnage.
+   * L'utilisateur ORBITE : vérifier un seul azimut validerait un arbre qui se
+   * trompe dès qu'on tourne. Les vues alignées sur les axes (90°, 180°, 270°)
+   * sont en plus les seules qui produisent des rayons parallèles à un axe —
+   * exactement le cas où `0 × ∞` donne NaN dans le test des boîtes.
+   */
+  const placeCamera = (az) => {
+    camera.position.set(Math.sin(az) * dist, 1.35, Math.cos(az) * dist)
+    camera.lookAt(0, 1.25, 0)
+    camera.updateMatrixWorld(true)
+  }
+  placeCamera(0)
 
   // Construction : les deux stratégies, pour que le choix se mesure.
   const bvhMedian = buildEnvBvh(group, 'median')
@@ -329,9 +496,19 @@ for (const name of ENVS) {
     return times
   }
   const three = () => premierImpactVisible(raycaster.intersectObject(group, true))
-  const maison = () => raycastFirst(bvh, raycaster.ray.origin, raycaster.ray.direction, estOpaqueAuClic)
-  const parMediane = () =>
-    raycastFirst(bvhMedian, raycaster.ray.origin, raycaster.ray.direction, estOpaqueAuClic)
+  // viserDecor() de vrmStage, à l'identique : l'arbre, PUIS ce qu'il n'a pas su
+  // indexer, et le plus proche des deux gagne. Le banc doit mesurer et vérifier
+  // le chemin réel de l'application, pas une version de l'arbre toute seule.
+  const parArbre = (a) => {
+    let best = raycastFirst(a, raycaster.ray.origin, raycaster.ray.direction, estOpaqueAuClic)
+    for (const objet of a.rest) {
+      const hit = premierImpactVisible(raycaster.intersectObject(objet, false))
+      if (hit && (!best || hit.distance < best.distance)) best = hit
+    }
+    return best
+  }
+  const maison = () => parArbre(bvh)
+  const parMediane = () => parArbre(bvhMedian)
 
   // Une passe de chauffe chacun (le JIT a le droit de s'installer : dans
   // l'application, le premier clic n'est jamais le seul).
@@ -343,21 +520,40 @@ for (const name of ENVS) {
   // Un arbre coupé autrement reste le même décor — s'il répond autre chose,
   // c'est le parcours qui est en faute, pas la stratégie de coupe.
   let diff = 0
+  // Rayons que three fait atterrir sur autre chose qu'un Mesh — une ligne, donc.
+  // Ce compte n'est pas décoratif : il dit si la liste `rest` est réellement
+  // MISE À L'ÉPREUVE sur ce décor, ou si le filet est tendu pour rien. Sans lui,
+  // « zéro écart » sur lowpoly-restaurant pourrait vouloir dire « la ligne n'a
+  // jamais été touchée » plutôt que « la ligne est bien prise en compte ».
+  let surLigne = 0
+  let verifies = 0
   const meme = (a, b) =>
     !a === !b && (!a || !b || (a.object === b.object && Math.abs(a.distance - b.distance) <= 1e-6))
-  for (let i = 0; i < RAYS; i++) {
-    setRay(i)
-    const a = three()
-    if (!meme(a, maison())) diff++
-    if (bvhMedian && !meme(a, parMediane())) diff++
+  for (const az of AZIMUTS) {
+    placeCamera((az * Math.PI) / 180)
+    for (let i = 0; i < RAYS; i++) {
+      setRay(i)
+      const a = three()
+      if (a && a.object.isMesh !== true) surLigne++
+      if (!meme(a, maison())) diff++
+      if (bvhMedian && !meme(a, parMediane())) diff++
+      verifies++
+    }
   }
+  placeCamera(0) // les mesures se font toutes depuis le cadrage par défaut
   mismatches += diff
+  checked += verifies
+  if (surLigne > 0) {
+    console.log(
+      `(${name} : ${surLigne} rayons sur ${verifies} atterrissent sur une ligne — liste « hors arbre » éprouvée)`,
+    )
+  }
 
   const avant = stat(pass(three))
   const apres = stat(pass(maison))
   const mediane = bvhMedian ? stat(pass(parMediane)) : null
   worstP95 = Math.max(worstP95, apres.p95)
-  query.push({ name, meshes: group.children.length, tris, avant, apres, diff })
+  query.push({ name, meshes: group.children.length, hors: bvh.rest.length, tris, avant, apres, diff })
   build.push({
     name,
     sah: bvh.buildMs,
@@ -371,11 +567,12 @@ for (const name of ENVS) {
 
 const f = (v, w = 8, d = 3) => v.toFixed(d).padStart(w)
 console.log('\n── Coût d’un lancer de rayon, 400 rayons de grille (ms) ──')
-console.log('décor                mesh     tris |  three: méd      p95      max |    BVH: méd      p95      max |  gain p95')
+// « hors » = objets laissés à three (EnvBvh.rest) : lignes, peau animée…
+console.log('décor                objets  hors     tris |  three: méd      p95      max |    BVH: méd      p95      max |  gain p95')
 for (const r of query) {
   const gain = r.apres.p95 > 0 ? r.avant.p95 / r.apres.p95 : Infinity
   console.log(
-    `${r.name.padEnd(20)}${String(r.meshes).padStart(5)}${String(r.tris).padStart(9)} |` +
+    `${r.name.padEnd(20)}${String(r.meshes).padStart(6)}${String(r.hors).padStart(6)}${String(r.tris).padStart(9)} |` +
       `${f(r.avant.med)}${f(r.avant.p95)}${f(r.avant.max)} |` +
       `${f(r.apres.med)}${f(r.apres.p95)}${f(r.apres.max)} |` +
       `${gain.toFixed(0).padStart(8)}×${r.diff ? `  ⚠ ${r.diff} ÉCARTS` : ''}`,
@@ -395,9 +592,59 @@ for (const b of build) {
   )
 }
 
+// ── Le personnage, et le budget d'un survol complet ────────────────────────
+
+let avatarP95 = 0
+const vrms = extremesVrm()
+if (vrms) {
+  console.log('\n── Le personnage (three, et il n’y a pas le choix : peau animée) ──')
+  console.log(
+    `${vrms.total} modèles dans vrm/ — de ${vrms.leger.tris} à ${vrms.lourd.tris} ` +
+      `triangles à peau (médiane ${vrms.median})`,
+  )
+  console.log('modèle                                       tris à peau |     méd      p95      max')
+  for (const cible of [vrms.leger, vrms.lourd]) {
+    const { root, tris } = buildAvatar(path.join(ROOT, 'vrm', cible.name))
+    const scene = new Scene()
+    scene.add(root)
+    const camera = new PerspectiveCamera(30, 16 / 9, 0.1, 20)
+    camera.position.set(0, 1.35, 3)
+    camera.lookAt(0, 1.25, 0)
+    camera.updateMatrixWorld(true)
+    const raycaster = new Raycaster()
+    const ndc = new Vector2()
+    const shoot = () => {
+      const times = []
+      for (let i = 0; i < RAYS; i++) {
+        ndc.set(((i % 20) / 19) * 2 - 1, (Math.floor(i / 20) / 19) * 2 - 1)
+        raycaster.setFromCamera(ndc, camera)
+        const t0 = process.hrtime.bigint()
+        premierImpactVisible(raycaster.intersectObject(root, true))
+        times.push(Number(process.hrtime.bigint() - t0) / 1e6)
+      }
+      return times
+    }
+    shoot() // chauffe
+    const s = stat(shoot())
+    // Le plus LÉGER fixe le plancher du budget : c'est lui qui décide.
+    if (cible === vrms.leger) avatarP95 = s.p95
+    console.log(`${cible.name.slice(0, 42).padEnd(42)}${String(tris).padStart(13)} |${f(s.med)}${f(s.p95)}${f(s.max)}`)
+  }
+  // La médiane du personnage est quasi nulle et son p95 énorme : la sphère
+  // englobante rejette les rayons qui partent à côté, et fait payer PLEIN
+  // TARIF ceux qui l'effleurent. C'est le p95 qui compte — le curseur suit le
+  // pointeur, et le pointeur passe sur le personnage.
+} else {
+  console.log('\n(aucun .vrm dans vrm/ : le coût du personnage n’est pas mesuré)')
+}
+
+// Le budget d'un survol, c'est ce que coûte viser() EN ENTIER : le décor par
+// l'arbre, PLUS le personnage par three. C'est ce total qui décide du curseur.
+const survol = worstP95 + avatarP95
 console.log(
-  `\np95 le plus mauvais, tous décors : ${worstP95.toFixed(3)} ms — ` +
-    `budget du curseur au survol (10 Hz) : ${BUDGET} ms → ${worstP95 < BUDGET ? 'TENU' : 'DÉPASSÉ'}.`,
+  `\np95 le plus mauvais, tous décors : ${worstP95.toFixed(3)} ms` +
+    (avatarP95 ? ` + personnage le plus léger ${avatarP95.toFixed(3)} ms = ${survol.toFixed(3)} ms` : '') +
+    `\nbudget d’un survol à 10 Hz : ${BUDGET} ms → ${survol < BUDGET ? 'TENU' : 'DÉPASSÉ'}.`,
 )
 if (mismatches > 0) console.log(`⚠ ${mismatches} rayons où le BVH et three ne disent PAS la même chose.`)
-else console.log('Les deux chemins rendent le même impact sur tous les rayons.')
+else console.log(`Les deux chemins rendent le même impact sur les ${checked} rayons vérifiés.`)
