@@ -958,6 +958,14 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     defaultFramed = false
     camGrabbed = false
     camReleasedAt = performance.now()
+    // RIEN n'est persisté tant qu'aucun cadrage n'a eu lieu : avant le premier
+    // frameCamera, la caméra est encore celle de la CONSTRUCTION, et un geste
+    // fait pendant le chargement (le décor est à l'écran bien avant le .vrm)
+    // enregistrait cette caméra d'usine comme un cadrage voulu. C'est un
+    // enregistrement durable et invisible : applyViewFor le réinstalle à chaque
+    // chargement via setView, qui pose defaultFramed = false — le cadrage par
+    // défaut du personnage n'a alors plus jamais lieu.
+    if (!lastFrame) return
     viewChangeCb?.(currentView())
   })
   // 'start' est utilisateur lui aussi. Le cadrage cesse d'être « celui par
