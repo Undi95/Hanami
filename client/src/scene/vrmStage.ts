@@ -567,6 +567,10 @@ const WORLD_NEEDED: readonly string[] = [
   'walk',
   'walk-start',
   'walk-stop',
+  // L'arrêt COURT des coins d'itinéraire (`beginStop` de wander.ts). Sans cette
+  // ligne, `host.has('walk-stop-small')` rend false et chaque étape retombe sur
+  // le tirage des arrêts longs : la correction est là, mais dormante.
+  'walk-stop-small',
   'sit-enter',
   'sit-exit',
   'sit-idle',
