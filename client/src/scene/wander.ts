@@ -758,17 +758,32 @@ export function createWander(host: WanderHost): Wander {
    * `maxLen` borne la LONGUEUR DU CHEMIN (pas la distance à vol d'oiseau) : la
    * déambulation s'en sert pour refuser les détours qui changeraient sa flânerie
    * en traversée de pièce.
+   *
+   * `commit` : n'engager le trajet que s'il MÈNE QUELQUE PART. Sans ligne de vue
+   * ni chemin, le segment droit est raccourci devant l'obstacle — pour un but
+   * qui n'est pas une destination en soi (une assise), s'arrêter au milieu de la
+   * pièce n'est pas un demi-succès, c'est une marche pour rien. On exige alors
+   * que le segment dépose le personnage DANS LA ZONE DE MANŒUVRE de son but,
+   * seule longueur sur laquelle les derniers centimètres savent encore mordre.
    */
-  function startRoute(x: number, z: number, seatLeg = false, maxLen = Infinity): boolean {
+  function startRoute(
+    x: number,
+    z: number,
+    seatLeg = false,
+    maxLen = Infinity,
+    commit = false,
+  ): boolean {
     route.length = 0
     routeLegs = 0
     const radius = host.bodyRadius()
     const tail = seatLeg ? MANEUVER_M : 0
     const head = host.canStand(p.x, p.z, radius) ? 0 : MANEUVER_M
-    const pts = pathClear(p.x, p.z, x, z, radius, tail, head)
-      ? null
-      : host.path(p.x, p.z, x, z, radius)
-    if (!pts) return Math.hypot(x - p.x, z - p.z) <= maxLen && planWalk(x, z, seatLeg)
+    const straight = pathClear(p.x, p.z, x, z, radius, tail, head)
+    const pts = straight ? null : host.path(p.x, p.z, x, z, radius)
+    if (!pts) {
+      if (Math.hypot(x - p.x, z - p.z) > maxLen || !planWalk(x, z, seatLeg)) return false
+      return !commit || straight || Math.hypot(destX - x, destZ - z) <= MANEUVER_M
+    }
     let len = 0
     let cx = p.x
     let cz = p.z
@@ -1020,8 +1035,10 @@ export function createWander(host: WanderHost): Wander {
     // s'occuperont du reste, cf. endLeg — même repli). L'itinéraire dégénère en
     // ligne droite dès que la vue porte : les assises déjà prenables le restent
     // par le chemin exact d'avant.
+    // `commit` : on n'engage pas une marche d'assise qui ne mène nulle part.
     const walkable =
-      startRoute(run.standX, run.standZ, true) || startRoute(run.apprX, run.apprZ, true)
+      startRoute(run.standX, run.standZ, true, Infinity, true) ||
+      startRoute(run.apprX, run.apprZ, true, Infinity, true)
     if (!walkable) return false
     seatRun = run
     beginWalk()
