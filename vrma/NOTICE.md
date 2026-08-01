@@ -85,6 +85,7 @@ Dépôt / repository : <https://github.com/overte-org/overte>
 | `happy.vrma` | `emote_clap01_all.fbx` | intégralité, images 1 → 160, 5,30 s — **reconverti à la passe v6**, cf. plus bas |
 | `happy-2.vrma` | `emote_clap02_all.fbx` | images 1 → 114, 3,77 s — à-coups lissés, cf. *passe biomécanique* |
 | `happy-3.vrma` | `emote_clap03_all.fbx` | images 15 → 163, 4,93 s |
+| `happy-6.vrma` | `emote_clap03_all.fbx` | intégralité (`applaudClap03Intro+Loop+Outro`), images 1 → 149, 4,93 s — monté d'`extra/` à la passe v7 : bord amont ancré sur la pose moyenne d'`idle`, jambes amorties (patinage), pic lissé 1000 → 604 °/s |
 | `sad.vrma` | `emote_disagree_drophead.fbx` | intégralité, 3,27 s |
 | `angry.vrma` | `emote_disagree_annoyedheadshake.fbx` | images 7 → 76, 2,30 s |
 | `angry-2.vrma` | `emote_disagree_thoughtfulheadshake.fbx` | intégralité, 2,73 s |
@@ -538,9 +539,9 @@ to 39°, that of Overte's own seated `world-sit-shake`; and `happy-2`'s two jolt
 (1000 and 818 °/s) locally smoothed to a 688 °/s peak. Edge poses are unchanged in
 every case, so no seam to the idle moved.*
 
-### Sous-dossier `extra/` — dix-sept clips convertis, non retenus
+### Sous-dossier `extra/` — seize clips convertis, non retenus
 
-Le sous-dossier [`extra/`](extra) porte **17 clips** (4,51 Mo) issus de la même
+Le sous-dossier [`extra/`](extra) porte **16 clips** (4,52 Mo) issus de la même
 passe et de la **même source** : tous dérivent d'Overte, sous la même licence
 Apache-2.0, avec les mêmes modifications que celles décrites ci-dessus. Ils ne sont
 jamais chargés par l'application — `/api/vrm-animations` ne liste que la racine de
@@ -548,7 +549,7 @@ jamais chargés par l'application — `/api/vrm-animations` ne liste que la raci
 paragraphe les couvre exactement comme les autres. Le pourquoi de leur mise à
 l'écart, clip par clip, est dans [`README.md`](README.md#extra--les-clips-convertis-et-non-retenus).
 
-*The `extra/` subfolder holds 17 clips (4.51 MB) from the same pass and the **same
+*The `extra/` subfolder holds 16 clips (4.52 MB) from the same pass and the **same
 source**: all derive from Overte under the same Apache-2.0 licence, with the same
 modifications described above. The application never loads them, but they are
 redistributed with it and this section's notice covers them like the rest.*
@@ -560,7 +561,6 @@ redistributed with it and this section's notice covers them like the rest.*
 | `cand-idle-3-fenetre.vrma` | `idle03.fbx` | `masterIdle3` | 1→800, 26,63 s |
 | `cand-idle-talking-fenetre.vrma` | `talk_armsdown.fbx` | `talk_armsdown` | 1→215, 7,13 s |
 | `happy-5.vrma` | `emote_clap02_all.fbx` | `applaudClap02Intro+Loop+Outro` | 1→115, 3,77 s |
-| `happy-6.vrma` | `emote_clap03_all.fbx` | `applaudClap03Intro+Loop+Outro` | 1→149, 4,93 s |
 | `idle-talking-2.vrma` | `talk.fbx` | `talk` | 1→500, 16,63 s |
 | `idle-talking-3.vrma` | `talk02.fbx` | `talk02` | 1→325, 10,80 s |
 | `neutral-2.vrma` | `idle_once_slownod.fbx` | `idle_once_slownod` | 1→91, 2,97 s |
@@ -832,7 +832,7 @@ carried an attribution requirement, so their removal changes no obligation.*
   une transition dédiée au lieu d'être fondus : l'enchaînement complet reste sous
   6 cm là où le clip seul en valait 15.
 
-*v6, the current pass: Overte's pack taken from its **animation graph** rather than
+*v6: Overte's pack taken from its **animation graph** rather than
 from its file names. 77 clips entered (12 face-to-face, 65 in the 3D world),
 `happy` was re-converted, and `transitions.json` — the graph itself, made
 machine-readable — ships beside them. Three fixes came straight out of reading the
@@ -842,3 +842,41 @@ of them their six leg bones as well (50.5 → 5.4 cm); the four new **stops** go
 v5 anchoring pass (0 / 0 / 0 cm at their three seams). Two idles and two held
 gestures that failed the face-to-face rule entered under the `world-` prefix
 instead, where they are sequenced rather than cross-faded.*
+
+- **v7, la passe courante — le « gisement clips »** : la robustesse multi-modèles.
+  Les sept « limite » du rig de référence redevenaient six **échecs** sur un rig
+  plus grand (hanches 0,9045 m) ; chacun a reçu la recette que sa mesure
+  désignait — ancrage de bord (`world-point-in`, `world-sit-cheer`,
+  `world-sit-clap-3`), rotation de phase + ancrage pour les deux frères de
+  `world-sit-talking-2`, greffe d'os **absents du fichier** (`upperChest` de
+  `world-sit-talking-3`, `leftShoulder` de `world-sit-cheer`), greffe des jambes
+  du socle pour `world-sit-idle-5`, lissage circulaire de la couture du maintien
+  `world-raise-hand-hold` (saut 98 → 25 °/s, pose exacte conservée). Les cinq
+  pics > 800 °/s (avant-bras et mains) sont lissés localement, bords intacts.
+  Les quatre allures saines retrouvent l'**oscillation latérale de bassin** que
+  la conversion avait aplatie — amplitude et phase par grille par clip, bornées
+  à la bande anatomique, le sens dicté par les jambes elles-mêmes : la traînée
+  latérale du pied d'appui tombe de moitié. `happy-6` monte d'`extra/` (11,1 →
+  0 cm, quatrième applaudissement authentique) ; `happy-5`, `neutral-2` et
+  `point` y retournent après réexamen — leurs raccords se réparent, leur
+  **redondance** ou leur absence de rôle, non. Bilan sonde : **0 échec, 0
+  limite, 53 excellents** sur le rig de référence ; 0 échec et les 4 limites
+  pré-existantes sur le rig 0,9045. Aucune régression : sonde intégrale des
+  deux rigs rejouée après chaque correction.
+
+*v7, the current pass — the “clip lode”: multi-model robustness. The reference
+rig's seven “borderline” clips became six outright **failures** on a taller rig
+(hips at 0.9045 m); each got the recipe its measurement called for — edge
+anchoring, loop phase rotation, grafts for bones **missing from the file**
+(`upperChest`, `leftShoulder`), the socle's legs for `world-sit-idle-5`, and a
+circular seam smoothing for the raised-hand hold (velocity jump 98 → 25 °/s,
+seam pose kept exact). The five > 800 °/s spikes were smoothed locally, edges
+untouched. The four healthy gaits got their **lateral pelvis sway** back — the
+conversion had flattened it; amplitude and phase fitted per clip within the
+anatomical band, the sign dictated by the legs themselves: the stance foot's
+lateral drag halves. `happy-6` moves up from `extra/` (11.1 → 0 cm); `happy-5`,
+`neutral-2` and `point` return there after re-examination — their seams can be
+fixed, their **redundancy** or lack of a role cannot. Probe tally: **0 fail, 0
+borderline, 53 excellent** on the reference rig; 0 fail and the 4 pre-existing
+borderlines on the 0.9045 rig. No regression: the full probe was replayed on
+both rigs after every fix.*

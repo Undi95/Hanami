@@ -59,7 +59,7 @@ C'est ce que fait Overte lui-même, et l'enchaînement complet retombe alors sou
 | Émotion | Clips | Source |
 | --- | --- | --- |
 | `neutral` | `neutral` | inclinaison de tête |
-| `happy` | `happy`, `happy-2`, `happy-3` | trois applaudissements |
+| `happy` | `happy`, `happy-2`, `happy-3`, `happy-6` | quatre applaudissements — le quatrième repêché d'`extra/` une fois sa mesure réparée (entrée 11,1 → 0 cm, pieds ancrés, pic lissé) |
 | `sad` | `sad` | tête qui tombe |
 | `angry` | `angry`, `angry-2` | dénégation agacée, dénégation posée |
 | `relaxed` | `relaxed`, `relaxed-2`, `relaxed-3` | étirement de la nuque, report de poids, dandinement d'attente (14 s) |
@@ -144,7 +144,7 @@ bibliothèque n'avait **aucune** émote assise.
 
 ## `extra/` — les clips convertis et non retenus
 
-Le sous-dossier [`extra/`](extra) contient **17 clips** (4,51 Mo) issus de la même
+Le sous-dossier [`extra/`](extra) contient **16 clips** (4,52 Mo) issus de la même
 passe de conversion que les autres : mêmes outils, mêmes corrections, même
 validation à l'aller-retour, mêmes crédits (voir [`NOTICE.md`](NOTICE.md) §1). Ils
 n'ont simplement pas leur place dans la bibliothèque active. Ils sont livrés quand
@@ -165,11 +165,10 @@ et `idle-talking`. Seuil d'échec : 10 cm.
 | --- | --- | --- |
 | `idle-talking-2.vrma` | repos parlant — les bras finissent loin du socle | 39,5 cm |
 | `raise-hand.passe-complete.vrma` | lever de main, **passe complète** (intro + maintien + sortie) : c'est le clip que le domaine `world-` livre découpé en `world-raise-hand-in` / `-hold` / `-out` | 18,8 cm |
-| `point.vrma` | pointage, passe complète — même histoire, livré découpé en `world-point-…` | 15,7 cm |
-| `happy-6.vrma` | quatrième applaudissement | 14,9 cm |
+| `point.vrma` | pointage, passe complète — même histoire, livré découpé en `world-point-…`. Réexaminé le 2026-08-01 : un ancrage du bord amont le fait passer à 6,7 cm, mais **aucun rôle `point` n'existe en face à face** — promu il resterait muet ; la version découpée `world-` est celle qui joue, et elle est excellente | 15,7 cm |
 | `idle-talking-3.vrma` | repos parlant, dépasse le seuil de peu | 11,2 cm |
-| `happy-5.vrma` | applaudissement — **c'est `happy-2`** : les deux clips ne s'écartent jamais de plus de **3,4°** (os le plus concerné, sur toute la durée). Le promouvoir donnerait au tirage au sort deux fois la même émote. L'à-coup de poignet qu'il porte (1000 °/s à t = 0,3 s) a donc été lissé **dans `happy-2`**, où il est réellement joué | 8,7 cm |
-| `neutral-2.vrma` | hochement de tête lent — **redondant avec les cinq `nod`** : le vocabulaire du face à face doit rester court, et `neutral` a déjà son clip. Tient visuellement, mais n'ajoute rien | 8,1 cm |
+| `happy-5.vrma` | applaudissement — **c'est `happy-2`** : les deux clips ne s'écartent jamais de plus de **3,4°** (os le plus concerné, sur toute la durée). Le promouvoir donnerait au tirage au sort deux fois la même émote. L'à-coup de poignet qu'il porte (1000 °/s à t = 0,3 s) a donc été lissé **dans `happy-2`**, où il est réellement joué. Réexaminé le 2026-08-01 : même retouché (ancrage + lissage), il reste la chorégraphie de `happy-2` à 14° près — l'argument du doublon tient, il reste ici | 8,7 cm |
+| `neutral-2.vrma` | hochement de tête lent — **redondant avec les cinq `nod`** : le vocabulaire du face à face doit rester court, et `neutral` a déjà son clip. Tient visuellement, mais n'ajoute rien. Réexaminé le 2026-08-01 : raccord propre (5,7–6,9 cm), la redondance décide, pas la mesure | 8,1 cm |
 | `cand-idle-fenetre.vrma` | `idle` reconverti sur la fenêtre **déclarée** par le graphe (1→300) au lieu du découpage retenu — quasi identique au fichier livré | 5,0 cm |
 | `cand-idle-2-fenetre.vrma` | idem pour `idle-2` (1→902) | 5,0 cm |
 | `cand-idle-3-fenetre.vrma` | idem pour `idle-3`, mais la fenêtre déclarée fait **26,63 s** là où le fichier livré n'en garde qu'une sous-boucle de 13,33 s : celui-ci est réellement différent | 5,2 cm |
@@ -177,13 +176,18 @@ et `idle-talking`. Seuil d'échec : 10 cm.
 | `world-jump-start.vrma`, `world-jump-air.vrma`, `world-jump-land.vrma`, `world-jump-run-start.vrma`, `world-jump-run-land.vrma` | les cinq temps du saut. Chez Overte la phase aérienne n'est pas une animation mais des **poses fixes mélangées par la vitesse verticale** du moteur physique, et la hauteur du saut vit dans la simulation, pas dans le fichier : sans ce code, ils ne se tiennent pas (cf. [`NOTICE.md`](NOTICE.md) §3) | — |
 | `world-afk-texting.vrma` | personnage qui pianote sur son téléphone. **Orphelin du graphe** : `afk_texting.fbx` n'est référencé par aucun nœud, Overte lui-même ne le joue jamais | — |
 
-**Deux de ces clips sont montés à la racine** après le premier jugement à l'image
-de la bibliothèque : `idle-talking-4` (8,8 cm) et `relaxed-3` (7,6 cm). Ils
+**Trois de ces clips sont montés à la racine.** `idle-talking-4` (8,8 cm) et
+`relaxed-3` (7,6 cm) après le premier jugement à l'image de la bibliothèque : ils
 sortaient de la fourchette des clips retenus (4,1 à 8,0 cm) sans dépasser le seuil
 de 10 cm, et c'est le seul reproche que la mesure leur faisait ; à l'image, le
 premier gesticule exactement comme les `idle-talking-5/-6/-7` déjà en place, le
-second est une attente crédible en boucle de fond. Les deux qui restent au-dessus
-de la fourchette, `happy-5` et `neutral-2`, restent ici — non pour leur raccord,
+second est une attente crédible en boucle de fond. Puis `happy-6` (2026-08-01),
+écarté uniquement pour sa mesure (11,1 cm d'entrée, pieds qui patinent, pic
+1000 °/s) : la mesure réparée — bord amont ancré sur la pose moyenne d'`idle`,
+jambes amorties vers leur pose initiale, pic lissé à 604 °/s — c'est un
+applaudissement authentiquement différent de ses trois frères (117 à 135° d'écart
+au pire os), il enrichit le tirage. Les deux qui restent au-dessus de la
+fourchette, `happy-5` et `neutral-2`, restent ici — non pour leur raccord,
 mais parce qu'ils **doublent** un clip déjà livré (voir le tableau).
 
 **Six clips convertis ne sont pas ici, et c'est voulu** : les versions brutes de
@@ -202,7 +206,7 @@ variante, c'est un état antérieur.
 3. **Recharger la page.** Le catalogue est reconstruit à partir des fichiers
    réellement présents ; le serveur n'a pas besoin d'être redémarré.
 
-`happy-5`, `happy-6`, `idle-talking-2`, `-3` et `neutral-2` portent
+`happy-5`, `idle-talking-2`, `-3` et `neutral-2` portent
 déjà un nom conforme et un numéro libre : ils se déplacent tels quels, et **les
 trous de numérotation sont sans effet**. Les autres demandent un nom :
 
@@ -297,6 +301,37 @@ généralisent :
    quand l'intention arrive (`world-raise-hand-in` vise donc la pose moyenne d'`idle`,
    pas une de ses phases).
 
+
+**La passe « gisement clips » du 2026-08-01** solde les sept « limite » que le banc
+laissait sur le rig de référence et les six échecs qu'ils redevenaient sur un rig
+plus grand (hanches 0,9045 m) — la marge multi-modèles était le vrai enjeu. Mêmes
+outils, mêmes conventions que la passe précédente, plus deux passes nouvelles :
+lissage **local** d'un pic de vitesse (fenêtré, bords intacts) et lissage
+**circulaire** d'une couture (la pose de recollement reste exacte, seule la
+vitesse s'étale).
+
+| Clip | Retouche | Avant → après (rig de référence · rig 0,9045) |
+| --- | --- | --- |
+| `world-point-in` | bord amont ancré sur la pose moyenne d'`idle` (recette `world-raise-hand-in`) | jonction **8,1 → 1,6 cm** · **10,1 → 2,0** ; aval 0,7 inchangé |
+| `world-sit-talking`, `-3` | rotation de phase vers l'image la plus proche du maintien (+58 / +13 images, balayage des deux rigs) + bords ancrés ; `-3` : greffe d'`upperChest` **absent du fichier** | E **8,3/8,6 → 0 cm** partout · coutures 0 cm, sauts 63→30 / 31→32 °/s |
+| `world-sit-idle-5` | jambes quasi statiques (≤ 0,9°) mais décalées de la famille : greffe constante des six os de jambe depuis la pose moyenne du socle | E **9,3 → 3,1 cm** · **10,4 → 3,9** ; genoux 101° = famille ; couture intacte ; ancrage des bras REFUSÉ (pic ×10 rejoué à chaque tour pour un écart déjà absorbé en fondu) |
+| `world-sit-cheer` | piste `leftShoulder` **absente** (épaule debout figée sous le corps assis) : greffe depuis le socle, puis les deux bords ancrés (fenêtre courte 0,25 s — le pic du « ouais ! » à 687 °/s ne bouge pas) | E = S **8,9 → 0 cm** · **10,7 → 0** |
+| `world-sit-clap-3` | bord amont seul ancré (la sortie était déjà à 2,1) | entrée **7,9 → 0 cm** ; pic 747 inchangé |
+| `world-raise-hand-hold` | couture : pose exacte mais saut de vitesse 98 °/s (ratio 1,34 × p95) sur toute la chaîne du bras levé — lissage circulaire ±0,2 s, quatre os | saut **98 → 25 °/s** · déviation max 1,1° · les deux jonctions du maintien restent excellentes |
+| `raise-hand-2`, `world-sit-raise-hand`, `world-raise-hand-in` | pics d'avant-bras > 800 °/s (plateaux d'écrêtage 1000, arrêt mort puis claquement 936) : lissage local aux instants fautifs, montée ET redescente | pics **1000/1000/936 → 779/739/687 °/s**, verdict vitesse « bon » ; raccords au dixième près inchangés |
+| `world-sit-disbelief`, `world-sit-clap` | pics de main (cosmétiques) : 993/1000/815 et 956/875 °/s — lissage local, y compris un `rightHand` 815 que la chasse n'avait pas vu | tous les pics **≤ 797 °/s** ; la frappe du clap garde son claquement (797 non touché) |
+| `world-walk`, `-fast`, `-back`, `-back-fast` | la piste `hips.position` était **purement verticale** — or les jambes de la source compensent un bassin qui oscille : sans lui, c'est le pied d'appui qui écope (2,2 à 12,0 cm de traînée latérale pendant l'appui). Sinus 1×/cycle sur période exacte, amplitude et phase par **grille par clip** (bornée à la bande « bon » du juge, 3–5 cm crête-à-crête), sens mesuré sur les jambes | traînée d'appui **3,7→1,7 · 6,6→3,1 · 7,8→4,1 · 12,0→7,6 cm** ; juge bassin-latéral **0,0 « limite » → 4–5 cm « bon »** ; coutures et sauts au degré près inchangés ; jonction walk-start→walk 0,3 cm (zéro du sinus sur le contrat t=0,200 s) |
+
+Après la passe : **0 échec et 0 « limite » sur le rig de référence** (53 excellents,
+62 passe), 0 échec et les 4 « limite » pré-existants sur le rig 0,9045 — aucune
+régression, prouvée par la sonde intégrale des deux rigs avant/après chaque
+correction. Les « pieds qui glissent » des cinq gestes face (`relaxed-2/-3`,
+`think-2`, `happy`, `happy-3`) ont été examinés et **laissés tels quels** : le
+critère du juge mesure le pied **relativement au bassin** et somme donc le
+balancement du corps avec le patinage ; en espace MONDE les pieds ne bougent que
+de 1,3 à 5,6 cm (quatre des cinq sous la barre des 3 cm), et amortir les jambes
+tuerait le report de poids qui fait vivre ces poses (`relaxed-2` est un
+contrapposto : sa « glisse » est son installation).
 
 **`world-walk-slow` a été examiné et laissé tel quel.** Ses pieds ne décollent que
 de 2,6 cm et c'est l'allure de la déambulation autonome, mais les deux issues
