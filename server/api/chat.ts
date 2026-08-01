@@ -20,6 +20,7 @@ import { MEMORY_TOOL_NAMES, executeMemoryTool, memoryToolDefs } from '../tools/m
 import { FILE_TOOL_NAMES, executeFileTool, fileToolDefs } from '../tools/fileTools'
 import { CHAT_TOOL_NAMES, chatToolDefs, executeChatTool } from '../tools/chatTools'
 import { firstEmotionTag } from '../../shared/emotions'
+import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
 import type { ChatEvent, ChatMessage, ContextInfo, Settings } from '../../shared/types'
 
 export const chatRouter = Router()
@@ -52,6 +53,23 @@ export function multimodalContent(text: string, images: string[]): ContentPart[]
   if (text) parts.push({ type: 'text', text })
   for (const url of images) parts.push({ type: 'image_url', image_url: { url } })
   return parts
+}
+
+// ── Macros des cards ───────────────────────────────────────────────────────
+// {{char}} / {{user}} (et <BOT> / <USER>) sont substitués ICI, à la
+// construction du payload : les fichiers du disque gardent leurs macros, seul
+// ce qui PART vers le modèle est résolu. Le prompt du personnage renvoyé à
+// l'inspecteur reste donc la source, éditable telle quelle.
+
+/** Noms substitués pour ce personnage (côté utilisateur : « User » par défaut). */
+function macroNamesFor(characterName: string): MacroNames {
+  return { char: characterName, user: userName() }
+}
+
+/** Substitution dans un content OpenAI : texte seul, ou parties texte d'un multimodal. */
+function subContent(content: string | ContentPart[], names: MacroNames): string | ContentPart[] {
+  if (typeof content === 'string') return substituteMacros(content, names)
+  return content.map((p) => (p.type === 'text' ? { ...p, text: substituteMacros(p.text, names) } : p))
 }
 
 /** Bloc résumé de compaction injecté dans le system prompt (visible dans l'inspecteur). */
@@ -147,6 +165,10 @@ function timeBlock(lastMessageTs: string | null): string {
  * et `injected` (ce que Hanami ajoute : mémoire, résumé, notes de scène,
  * heure). L'inspecteur s'en sert pour rendre le premier ÉDITABLE sur place,
  * sans avoir à deviner où finit l'un et où commence l'autre.
+ *
+ * Nuance depuis les macros : ces deux morceaux sont la SOURCE, macros comprises
+ * ({{char}}, {{user}}) — `systemText` et `payload`, eux, sont résolus. Écrire
+ * l'un par-dessus l'autre figerait les macros dans le fichier du personnage.
  */
 export function buildPayload(
   characterId: string,
@@ -170,16 +192,23 @@ export function buildPayload(
   if (settings.timeAwareness) {
     injected += timeBlock(history.length > 0 ? history[history.length - 1].ts : null)
   }
-  const systemText = characterPrompt + injected
+  // Macros résolues sur TOUT ce qui part : le texte système (prompt du
+  // personnage ET blocs ajoutés — une note de scène peut dire « {{char}} »),
+  // l'historique et le message courant. `characterPrompt` reste brut plus bas :
+  // c'est la source que l'inspecteur rend éditable.
+  const names = macroNamesFor(character.name)
+  const systemText = substituteMacros(characterPrompt + injected, names)
   const live = history.slice(upto)
   const recent = settings.maxHistoryMessages > 0 ? live.slice(-settings.maxHistoryMessages) : []
   const messages: unknown[] = [
     { role: 'system', content: systemText },
     // Un message d'historique porteur d'images repart en multimodal : le modèle
     // à vision revoit donc les images des tours précédents.
-    ...recent.map((m) => ({ role: m.role, content: messageContent(m) })),
+    ...recent.map((m) => ({ role: m.role, content: subContent(messageContent(m), names) })),
   ]
-  if (pendingUserContent !== undefined) messages.push({ role: 'user', content: pendingUserContent })
+  if (pendingUserContent !== undefined) {
+    messages.push({ role: 'user', content: subContent(pendingUserContent, names) })
+  }
 
   // Mode simple : AUCUN outil n'est exposé (le tool-calling est le talon d'Achille
   // des petits modèles). Le bloc mémoire, lui, reste injecté — il se lit sans outil.
@@ -750,6 +779,7 @@ async function runCompaction(
 
   // Mode simple : pas de passe agentique, donc rien à annoncer sur les outils mémoire.
   const simple = settings.modelMode === 'simple'
+  const names = macroNamesFor(character.name)
   let systemText = character.systemPrompt
   if (settings.memoryEnabled) systemText += buildMemoryBlock(characterId, simple)
   if (meta.summary) systemText += summaryBlock(meta.summary)
@@ -782,9 +812,11 @@ async function runCompaction(
   const slice = candidates.slice(0, take)
   const upto = prevUpto + take
 
+  // Mêmes macros que le chat : le modèle qui résume lit le personnage sous son
+  // nom, pas sous « {{char}} ».
   const baseMessages: unknown[] = [
-    { role: 'system', content: systemText },
-    ...slice.map((m) => ({ role: m.role, content: m.content })),
+    { role: 'system', content: substituteMacros(systemText, names) },
+    ...slice.map((m) => ({ role: m.role, content: substituteMacros(m.content, names) })),
   ]
   const messages: unknown[] = [...baseMessages, { role: 'user', content: directive }]
   const tools = settings.memoryEnabled && !simple ? memoryToolDefs : []

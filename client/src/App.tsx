@@ -9,6 +9,7 @@ import type {
   Settings,
 } from '../../shared/types'
 import type { FrameMode, VrmStage } from './scene/types'
+import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
 import * as api from './api'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
 import { disposeNotify, playNotify } from './sound'
@@ -78,10 +79,23 @@ function excerpt(text: string, max: number): string {
   return flat.length > max ? flat.slice(0, max - 1).trimEnd() + '…' : flat
 }
 
-/** Messages d'accueil écrits du personnage : le principal puis ses variantes, vides retirés. */
+/** Noms des macros pour ce personnage — {{user}} retombe sur « User » sans persona. */
+function macroNamesOf(char: CharacterFull): MacroNames {
+  return { char: char.name, user: userName() }
+}
+
+/**
+ * Messages d'accueil écrits du personnage : le principal puis ses variantes,
+ * vides retirés — et macros résolues, car un accueil de card commence neuf fois
+ * sur dix par « Hello {{user}}! ». La substitution est faite ICI, à l'affichage :
+ * character.json garde ses macros (renommer le personnage suffit à les suivre).
+ */
 function greetingPool(char: CharacterFull): string[] {
   const variants = Array.isArray(char.greetings) ? char.greetings : []
-  return [char.greeting, ...variants].filter((g) => typeof g === 'string' && g.trim().length > 0)
+  const names = macroNamesOf(char)
+  return [char.greeting, ...variants]
+    .filter((g) => typeof g === 'string' && g.trim().length > 0)
+    .map((g) => substituteMacros(g, names))
 }
 
 /** Tirage d'un accueil : chaque nouvelle conversation peut s'ouvrir autrement. */
@@ -795,7 +809,10 @@ function AppInner() {
           if (chatIdRef.current !== chat.id || meta.messageCount === chat.messageCount) return
           setChatMeta(meta)
           const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
-          if (items.length === 0 && char.greeting) items.push({ kind: 'greeting', text: char.greeting })
+          // Même accueil que partout ailleurs : macros résolues (cf. greetingPool).
+          if (items.length === 0 && char.greeting) {
+            items.push({ kind: 'greeting', text: substituteMacros(char.greeting, macroNamesOf(char)) })
+          }
           setFeed(items)
           const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
           if (lastAssistant) {
