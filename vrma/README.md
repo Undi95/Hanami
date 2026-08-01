@@ -323,9 +323,11 @@ vitesse s'étale).
 | `world-walk`, `-fast`, `-back`, `-back-fast` | la piste `hips.position` était **purement verticale** — or les jambes de la source compensent un bassin qui oscille : sans lui, c'est le pied d'appui qui écope (2,2 à 12,0 cm de traînée latérale pendant l'appui). Sinus 1×/cycle sur période exacte, amplitude et phase par **grille par clip** (bornée à la bande « bon » du juge, 3–5 cm crête-à-crête), sens mesuré sur les jambes | traînée d'appui **3,7→1,7 · 6,6→3,1 · 7,8→4,1 · 12,0→7,6 cm** ; juge bassin-latéral **0,0 « limite » → 4–5 cm « bon »** ; coutures et sauts au degré près inchangés ; jonction walk-start→walk 0,3 cm (zéro du sinus sur le contrat t=0,200 s) |
 
 Après la passe : **0 échec et 0 « limite » sur le rig de référence** (53 excellents,
-62 passe), 0 échec et les 4 « limite » pré-existants sur le rig 0,9045 — aucune
-régression, prouvée par la sonde intégrale des deux rigs avant/après chaque
-correction. Les « pieds qui glissent » des cinq gestes face (`relaxed-2/-3`,
+59 passe sur les 112 clips livrés — le décompte 62 datait d'avant le retour
+d'`happy-5`, `neutral-2` et `point` dans `extra/`), 0 échec et les 4 « limite »
+pré-existants sur le rig 0,9045 — aucune régression, prouvée par la sonde
+intégrale des deux rigs avant/après chaque correction, et re-prouvée par une
+sonde indépendante après clôture (2026-08-01 : mêmes décomptes au clip près). Les « pieds qui glissent » des cinq gestes face (`relaxed-2/-3`,
 `think-2`, `happy`, `happy-3`) ont été examinés et **laissés tels quels** : le
 critère du juge mesure le pied **relativement au bassin** et somme donc le
 balancement du corps avec le patinage ; en espace MONDE les pieds ne bougent que
