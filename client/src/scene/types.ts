@@ -13,6 +13,27 @@ import type { AnimationFamily, StageView } from '../../../shared/types'
  */
 export type FrameMode = 'centered' | 'left'
 
+/**
+ * Ce que la scène a à DIRE du placement du décor qu'elle vient d'afficher —
+ * pour que l'écran sombre ne soit plus jamais muet. `null` (le cas normal) : le
+ * personnage est posé sur le sol de la pièce et l'objectif voit quelque chose.
+ *
+ * Le serveur recale tout seul les décors qu'il peut (`spawnAuto` du
+ * `.scene.json`) ; il reste ce qui lui a échappé : un sidecar `spawn` mal réglé
+ * — sa parole passe avant tout, elle n'est jamais corrigée — ou un décor où
+ * l'analyse n'a trouvé nulle part où poser quelqu'un.
+ */
+export interface EnvNotice {
+  /** Nom du décor tel qu'il apparaît dans `environments/`, sans extension. */
+  name: string
+  /** Altitude du sol de la pièce (m) : positif = le personnage est SOUS le plancher. `null` = le sol est bien sous ses pieds. */
+  ground: number | null
+  /** L'objectif est dans la géométrie : rien à voir depuis là où le personnage se tient. */
+  blind: boolean
+  /** Le personnage se tient hors de la pièce praticable. */
+  outside: boolean
+}
+
 export interface VrmStage {
   /** Charge un modèle .vrm (url '' = décharge le modèle courant). */
   loadModel(url: string): Promise<void>
@@ -21,8 +42,11 @@ export interface VrmStage {
    * retour au fond 2D). Indépendant de loadModel : l'avatar reste à l'origine du
    * monde, c'est le décor qui se place autour de lui — les cadrages caméra
    * sauvegardés ne périment donc jamais.
+   *
+   * Rend le diagnostic de placement du décor chargé (`null` = rien à dire), à
+   * charge de l'appelant de l'afficher : la scène mesure, l'UI parle.
    */
-  loadEnvironment(url: string): Promise<void>
+  loadEnvironment(url: string): Promise<EnvNotice | null>
   /**
    * Applique une émotion ([happy] etc.) avec transition douce.
    * `live` : l'émotion vient DE SE PRODUIRE (tag reçu dans le flux, réponse

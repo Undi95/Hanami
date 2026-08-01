@@ -730,6 +730,16 @@ select {
   font-size: 13px;
 }
 
+/* Variante SANS alarme : le décor s'affiche, il est simplement mal calé et on
+   dit quoi écrire pour le caler. Le rose d'alerte crierait à la panne là où il
+   n'y a qu'un réglage à faire — d'où les couleurs neutres du fond de l'app. */
+.banner.note {
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border-color: var(--border);
+  color: var(--text-dim);
+  backdrop-filter: blur(6px);
+}
+
 /* ── Fil de messages ──────────────────────────────────────────────────── */
 
 /* Enveloppe transparente du fil : n'existe que pour ancrer le champ de

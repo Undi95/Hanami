@@ -42,7 +42,7 @@ import { getVrmAnimations } from '../api'
 // Les erreurs de cette scène remontent TELLES QUELLES à l'écran (bandeaux de
 // App.tsx) : elles se traduisent, comme celles de la couche API.
 import { translate } from '../i18n'
-import type { FrameMode, StageView, VrmStage } from './types'
+import type { EnvNotice, FrameMode, StageView, VrmStage } from './types'
 import { IdleAnimator } from './idle'
 import type { PosedBone } from './idle'
 import { normalizeEmotion, resolveExpressions } from './emotionMap'
@@ -59,7 +59,7 @@ import { createGaze } from './gaze'
 import { applyRelaxedHands } from './handPoses'
 import { BASE_SWAP, fadeCurve, GESTURE_IN, GESTURE_OUT, NO_FADE } from './fades'
 import type { Fade } from './fades'
-import { fetchSceneMap } from './sceneMap'
+import { fetchSceneMap, placementTrouble } from './sceneMap'
 import type { SceneMap, Seat } from './sceneMap'
 import { mergeEnvironment } from './envMerge'
 import { createClickMarks } from './clickMark'
@@ -2220,8 +2220,19 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    * plausible est laissée intacte, une hauteur absurde (décor exporté en
    * centimètres) est ramenée à ~2,6 m — et le plancher vient à y = 0, là où
    * l'avatar a les pieds.
+   *
+   * `autoSpawn` est le point d'accueil que l'ANALYSE a calculé pour ce décor
+   * (`placement.spawnAuto` du `.scene.json`), quand l'origine du modèle n'en
+   * était pas un — un quai posé au-dessus de sa voie, par exemple. L'ordre est
+   * sidecar > calculé > origine : la parole de l'auteur d'abord, le calage
+   * automatique ensuite, et le comportement historique s'il n'y a ni l'un ni
+   * l'autre. Rien à convertir, les deux se comptent dans le même repère.
    */
-  function fitEnvironment(root: Object3D, placement: EnvPlacement): void {
+  function fitEnvironment(
+    root: Object3D,
+    placement: EnvPlacement,
+    autoSpawn: readonly [number, number, number] | null,
+  ): void {
     envGroup.position.set(0, 0, 0)
     envGroup.rotation.set(0, (placement.rotationY ?? 0) * DEG2RAD, 0)
     envGroup.scale.setScalar(placement.scale ?? 1)
@@ -2247,17 +2258,21 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // laisse le calage automatique faire son travail dans le cas courant. Un décor
     // « skybox » dont la boîte englobante ment (sol infini, min.y à −500) se
     // rattrape justement par ce spawn.
-    const [sx, sy, sz] = placement.spawn ?? [0, 0, 0]
+    const [sx, sy, sz] = placement.spawn ?? autoSpawn ?? [0, 0, 0]
     envGroup.position.set(-sx, -(box.min.y + sy), -sz)
     envMetrics = { radius: Math.max(size.length() / 2, 0.5), height: Math.max(size.y, 0.5) }
   }
 
-  /** Charge un décor .glb dans envGroup (url '' = décharge le décor courant). */
-  async function loadEnvironment(url: string): Promise<void> {
+  /**
+   * Charge un décor .glb dans envGroup (url '' = décharge le décor courant).
+   * Rend le diagnostic de placement du décor posé — `null` quand il n'y a rien
+   * à dire, ce qui est le cas normal.
+   */
+  async function loadEnvironment(url: string): Promise<EnvNotice | null> {
     const generation = ++envGeneration
     if (!url) {
       unloadEnvironment()
-      return
+      return null
     }
     try {
       // Le sidecar part en même temps que le .glb : il est minuscule, et son
@@ -2273,7 +2288,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       if (generation !== envGeneration || disposed) {
         // Un loadEnvironment plus récent (ou dispose) est passé entre-temps.
         VRMUtils.deepDispose(gltf.scene)
-        return
+        return null
       }
       unloadEnvironment()
       envRoot = gltf.scene
@@ -2281,7 +2296,11 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // place dès la première image, jamais un éclair à la couleur d'origine.
       applyEnvMaterials(envRoot, placement)
       envGroup.add(envRoot)
-      fitEnvironment(envRoot, placement)
+      // La carte porte le point d'accueil calculé par l'analyse : il ne sert
+      // QUE si le sidecar n'en donne pas (cf. fitEnvironment). Carte absente
+      // (analyse pas encore prête) : le décor se pose comme il l'a toujours
+      // fait, et le rechargement qui suivra l'analyse le recalera.
+      fitEnvironment(envRoot, placement, map?.spawnAuto ?? null)
       addEnvBackdrops(envRoot, placement.backdrop)
       // Fusion des opaques par matériau, puis GEL de toute la branche décor :
       // matrices monde recalculées une dernière fois (le placement de
@@ -2316,6 +2335,18 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // frameDistance. Sans elle, ce recadrage rend la même caméra qu'avant,
       // au millimètre : le cas courant ne bouge pas.
       if (defaultFramed && lastFrame) frameCamera(lastFrame.vrm, lastFrame.h)
+      // Et le dernier mot sur ce placement : le décor est posé, la carte le
+      // décrit tel qu'il vient d'être posé — s'il reste quelque chose qui cloche
+      // (un sidecar `spawn` mal réglé, un décor où l'analyse n'a trouvé nulle
+      // part où poser quelqu'un), c'est maintenant qu'on peut le dire.
+      const trouble = map ? placementTrouble(map) : null
+      if (!trouble) return null
+      return {
+        name: decodeURIComponent((url.split('/').pop() ?? url).replace(/\.(glb|gltf)$/i, '')),
+        ground: trouble.ground,
+        blind: trouble.blind,
+        outside: trouble.outside,
+      }
     } catch (e) {
       console.error('[env]', e)
       // Décor illisible : retirer celui d'AVANT. Sans ça, le bandeau d'erreur

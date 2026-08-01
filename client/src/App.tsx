@@ -8,7 +8,7 @@ import type {
   ContextInfo,
   Settings,
 } from '../../shared/types'
-import type { FrameMode, VrmStage } from './scene/types'
+import type { EnvNotice, FrameMode, VrmStage } from './scene/types'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
 import * as api from './api'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
@@ -168,6 +168,9 @@ function AppInner() {
   // introuvable ne doit pas faire croire à un avatar cassé.
   const [envError, setEnvError] = useState<string | null>(null)
   const [envLoading, setEnvLoading] = useState(false)
+  // Décor chargé mais mal calé : le serveur recale tout seul ce qu'il peut, et ce
+  // qui reste s'explique ici plutôt que de donner un écran sombre sans un mot.
+  const [envNotice, setEnvNotice] = useState<EnvNotice | null>(null)
   // Thème de l'app (préférence serveur, comme la langue) — le thème propre au
   // personnage actif, s'il existe, prend le dessus.
   const [appTheme, setAppTheme] = useState<AppTheme>(savedTheme)
@@ -583,12 +586,18 @@ function AppInner() {
     if (!stage || !stageReady) return
     const url = env3d && character?.vrm ? (character.environment ?? '') : ''
     setEnvError(null)
+    setEnvNotice(null)
     setEnvLoading(url !== '')
     let cancelled = false
     stage
       .loadEnvironment(url)
-      .then(() => {
-        if (!cancelled) setEnvLoading(false)
+      .then((notice) => {
+        if (cancelled) return
+        setEnvLoading(false)
+        // Ce que la scène a mesuré du placement du décor : `null` dans le cas
+        // normal. Voir la bannière plus bas — elle dit quoi écrire dans le
+        // sidecar, ce qu'aucun écran noir ne dira jamais.
+        setEnvNotice(notice)
       })
       .catch((e) => {
         // Personnage changé (ou effet rejoué) entre-temps : ce chargement ne
@@ -1419,6 +1428,50 @@ function AppInner() {
         >
           <span>{t('environmentLoadError')}</span>
           <span style={{ fontSize: 11, opacity: 0.75 }}>{envError}</span>
+        </div>
+      )}
+
+      {/* DÉCOR MAL CALÉ — le filet du calage automatique. Un décor dont le sol
+          n'est pas sous les pieds du personnage, ou dont l'objectif est dans la
+          géométrie, donnait un écran sombre SANS UN MOT : rien dans l'interface
+          ne pouvait mettre sur la piste, et la mesure existait pourtant déjà
+          dans le `.scene.json`. L'analyse recale désormais toute seule les
+          décors qu'elle peut ; ce qui reste (un sidecar `spawn` mal réglé — sa
+          parole passe avant tout — ou un décor sans point d'accueil praticable)
+          se dit ici, avec la valeur exacte à écrire.
+
+          `status` et non `alert` : rien n'est cassé, le décor s'affiche. Elle
+          n'apparaît QUE quand quelque chose cloche vraiment, donc jamais dans
+          l'usage normal. */}
+      {envNotice && !envError && (
+        <div
+          className="banner note"
+          role="status"
+          style={{
+            position: 'fixed',
+            top: vrmError ? 78 : 10,
+            left: 10,
+            zIndex: 5,
+            margin: 0,
+            maxWidth: 340,
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            gap: 2,
+          }}
+        >
+          <span>
+            {envNotice.ground !== null
+              ? t('envPlacementGround', { m: envNotice.ground.toFixed(2) })
+              : envNotice.blind
+                ? t('envPlacementBlind')
+                : t('envPlacementOutside')}
+          </span>
+          <span style={{ fontSize: 11, opacity: 0.75 }}>
+            {t('envPlacementFix', {
+              file: `${envNotice.name}.json`,
+              spawn: envNotice.ground !== null ? `[x, ${envNotice.ground.toFixed(3)}, z]` : '[x, y, z]',
+            })}
+          </span>
         </div>
       )}
 

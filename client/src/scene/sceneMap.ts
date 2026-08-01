@@ -46,6 +46,21 @@ const SUPPORTED_VERSION = 1
 /** Rayon par défaut du gabarit, si le fichier ne le dit pas (m). */
 const DEFAULT_RADIUS = 0.25
 /**
+ * Bornes d'un point d'accueil, recopiées de la validation du sidecar
+ * (`parsePlacement` de vrmStage.ts) : ce que l'analyse propose passe par la même
+ * porte que ce qu'un humain écrit à la main, sans passe-droit.
+ */
+const SPAWN_LIMIT = 1000
+/**
+ * Seuils du diagnostic de placement, recopiés de `spawnTrouble()` de
+ * server/lib/envScene.ts — l'analyse recale, le client explique quand il reste
+ * quelque chose à expliquer, et les deux doivent dire la même chose. Écart
+ * toléré entre le sol de la pièce et les pieds de l'avatar (m), puis dégagement
+ * maximal en deçà duquel l'objectif est DANS la géométrie (m).
+ */
+const GROUND_TOL = 0.1
+const BLIND_CLEARANCE = 0.3
+/**
  * Dénivelé franchissable par défaut (m) — la valeur que l'analyseur émet
  * (`STEP_MAX` de server/lib/envScene.ts, la hauteur d'une contremarche). Ne sert
  * qu'à un fichier édité à la main qui aurait perdu son champ `body.step` : les
@@ -59,6 +74,14 @@ function isFiniteNumber(v: unknown): v is number {
 
 function asPair(v: unknown): [number, number] | null {
   return Array.isArray(v) && v.length === 2 && v.every(isFiniteNumber) ? [v[0], v[1]] : null
+}
+
+function asSpawn(v: unknown): [number, number, number] | null {
+  return Array.isArray(v) &&
+    v.length === 3 &&
+    v.every((n) => isFiniteNumber(n) && n >= -SPAWN_LIMIT && n <= SPAWN_LIMIT)
+    ? [v[0], v[1], v[2]]
+    : null
 }
 
 function asQuad(v: unknown): [number, number, number, number] | null {
@@ -136,6 +159,47 @@ export interface SceneMap {
    * historique, jamais une erreur.
    */
   readonly camClearance: readonly number[] | null
+  /**
+   * Point d'accueil CALCULÉ par l'analyse quand le sidecar n'en donne pas et que
+   * l'origine du modèle n'en est pas un (cf. `spawnAuto` de
+   * server/lib/envScene.ts). Il s'applique exactement comme un `spawn` de
+   * sidecar — et toutes les autres mesures de ce fichier le supposent déjà
+   * appliqué. `null` : rien à appliquer, le décor se pose à son origine.
+   */
+  readonly spawnAuto: readonly [number, number, number] | null
+  /**
+   * Altitude du sol de la pièce (m). ≈ 0 quand le décor est bien calé ; toute
+   * autre valeur dit de combien le personnage est enterré (positif) ou en l'air.
+   */
+  readonly ground: number
+}
+
+/** Ce qui cloche dans le placement du décor affiché. `null` = rien à signaler. */
+export interface PlacementTrouble {
+  /** Altitude du sol de la pièce (m) quand elle ne tombe pas sous les pieds du personnage. */
+  ground: number | null
+  /** L'objectif est dans la géométrie : il n'y a rien à voir d'où l'on est. */
+  blind: boolean
+  /** Le personnage se tient hors de la pièce : on marche ailleurs. */
+  outside: boolean
+}
+
+/**
+ * Le décor affiché pose-t-il son personnage quelque part d'impossible ?
+ * MÊME règle que `spawnTrouble()` de server/lib/envScene.ts, sur les mêmes
+ * mesures — le serveur s'en sert pour recaler tout seul, le client pour
+ * expliquer ce qui a résisté (sidecar `spawn` mal réglé, décor sans aucun point
+ * d'accueil praticable). Un décor sans sol praticable n'est jamais concerné :
+ * c'est un fond peint, et le personnage devant lui est à sa place.
+ */
+export function placementTrouble(map: SceneMap): PlacementTrouble | null {
+  if (!(map.walkArea > 0)) return null
+  const ground = Math.abs(map.ground) > GROUND_TOL ? map.ground : null
+  const rose = map.camClearance
+  const blind = !!rose && rose.length > 0 && Math.max(...rose) < BLIND_CLEARANCE
+  const [x0, z0, x1, z1] = map.bounds
+  const outside = !(x0 <= 0 && 0 <= x1 && z0 <= 0 && 0 <= z1)
+  return ground === null && !blind && !outside ? null : { ground, blind, outside }
 }
 
 /**
@@ -214,6 +278,13 @@ export function parseSceneMap(raw: unknown): SceneMap | null {
       number,
     ])
   const walkArea = isFiniteNumber(room.walkArea) ? room.walkArea : 0
+  const ground = isFiniteNumber(room.ground) ? room.ground : 0
+
+  // Le point d'accueil calculé par l'analyse. Absent du fichier dans le cas
+  // courant (sidecar réglé, ou origine du modèle déjà bonne) : c'est alors
+  // `null`, et le décor se pose à son origine comme il l'a toujours fait.
+  const place = (f.placement ?? {}) as Record<string, unknown>
+  const spawnAuto = asSpawn(place.spawnAuto)
 
   // Les assises sont validées UNE PAR UNE : une entrée abîmée est jetée, les
   // autres restent. C'est l'inverse de la grille, qui est tout ou rien — une
@@ -346,5 +417,7 @@ export function parseSceneMap(raw: unknown): SceneMap | null {
     body: { radius, step, height },
     walkArea,
     camClearance,
+    spawnAuto,
+    ground,
   }
 }

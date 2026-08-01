@@ -95,6 +95,15 @@ const FR = {
   vrmLoadError: 'Le modèle 3D n’a pas pu être chargé.',
   environmentLoadError: 'Le décor 3D n’a pas pu être chargé.',
   environmentLoading: 'Chargement du décor…',
+  // Décor affiché mais mal calé (bannière discrète, côté scène). L'analyse
+  // recale toute seule les décors qu'elle peut ; il ne reste ici que ce qu'elle
+  // n'a pas le droit de corriger — un `spawn` de sidecar, la parole de l'auteur
+  // — ou ce qu'elle n'a pas su corriger. Sans ces phrases, l'écran est sombre
+  // et muet, alors que la mesure existe dans le fichier d'analyse.
+  envPlacementGround: 'Ce décor place son sol à {m} m des pieds du personnage.',
+  envPlacementBlind: 'Ce décor enferme la caméra là où le personnage se tient.',
+  envPlacementOutside: 'Ce décor pose le personnage hors de sa pièce praticable.',
+  envPlacementFix: 'Ajoutez « "spawn": {spawn} » dans {file}, à côté du .glb.',
   resetLayout: 'Réinitialiser l’affichage (avatar et panneaux)',
   resizeChatPanel: 'Largeur du chat — glissez, double-clic pour réinitialiser',
   resizeVnBox: 'Taille de la boîte de dialogue — glissez, double-clic pour réinitialiser',
@@ -553,6 +562,10 @@ const EN: Record<Key, string> = {
   vrmLoadError: 'The 3D model could not be loaded.',
   environmentLoadError: 'The 3D environment could not be loaded.',
   environmentLoading: 'Loading the environment…',
+  envPlacementGround: 'This environment puts its floor {m} m away from the character’s feet.',
+  envPlacementBlind: 'This environment boxes the camera in where the character stands.',
+  envPlacementOutside: 'This environment puts the character outside its walkable room.',
+  envPlacementFix: 'Add “"spawn": {spawn}” to {file}, next to the .glb.',
   resetLayout: 'Reset the layout (avatar and panels)',
   resizeChatPanel: 'Chat width — drag, double-click to reset',
   resizeVnBox: 'Dialogue box size — drag, double-click to reset',
