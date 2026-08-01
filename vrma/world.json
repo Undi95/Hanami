@@ -75,6 +75,37 @@
         "imageOptimale": 4,
         "tS": 0.133,
         "ecartCm": 8.3
+      },
+      "sortieMoteurVersArrets": {
+        "commentaire": "L’arrêt de flânerie vaut aujourd’hui 9,4 cm (limite) : sortie du cycle à 0,133 s vers un arrêt à t=0, identique sur les cinq variantes (leur première image partage le contrat de world-walk). Mieux demande une phase d’ENTRÉE dans l’arrêt, que once()/playOnce ne sait pas poser — et la paire optimale NE SE TRANSPORTE PAS d’une variante à l’autre : mesuré sortie 0 s → entrée 0,133 s : 6,9 cm sur world-walk-stop mais 23,6 sur -3 et 10,9 sur -4 (leurs intérieurs divergent vite du cycle, seul t=0 est ancré). La correction complète est donc : (1) apprendre la phase d’entrée à playOnce, (2) atterrir l’arrêt de flânerie sur la variante CANONIQUE seulement, (3) sortir le cycle à 0 s et entrer world-walk-stop à 0,133 s, (4) décompter dans planWalk la distance que l’arrêt saute. Rig de la sonde, sim-jonctions flanerie.",
+        "aujourdHui": {
+          "sortieS": 0.133,
+          "entreeS": 0,
+          "ecartCm": 9.4
+        },
+        "meilleurePaireCanonique": {
+          "sortieS": 0,
+          "entreeS": 0.133,
+          "ecartCm": 6.9
+        },
+        "paireSurVariantes": {
+          "world-walk-stop-2": {
+            "entreeS": 0.2,
+            "ecartCm": 8
+          },
+          "world-walk-stop-3": {
+            "entreeS": 0,
+            "ecartCm": 8.5
+          },
+          "world-walk-stop-4": {
+            "entreeS": 0,
+            "ecartCm": 8.5
+          },
+          "world-walk-stop-small": {
+            "entreeS": 0.2,
+            "ecartCm": 8.3
+          }
+        }
       }
     },
     "world-walk-fast": {
