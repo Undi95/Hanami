@@ -858,6 +858,16 @@ export function hanchesAuRepos(THREE, rig) {
  *     l'image où l'appui change est attribuée à un pied qui décolle.
  *   distanceParCycleLargeM (large) : somme, pour CHAQUE pied, de tout son recul
  *     sur le cycle. Majore : un pied peut reculer un peu pendant son envol.
+ *     Cette somme n'a PAS de signe propre (on n'y garde que les reculs positifs) :
+ *     le sens de l'allure lui est donné par `signeAvance`, une somme des mêmes
+ *     intervalles PONDÉRÉE par la bassesse du pied porteur. Il valait autrefois
+ *     `Math.sign(prudent)`, ce qui marchait tant que le prudent restait loin de
+ *     zéro — mais sur une COURSE il tombe au résidu numérique (world-run-back :
+ *     −0,006 m sur le rig de mesure, +0,0006 m sur un autre), et il retournait
+ *     alors TOUTE la fourchette, donc le verdict d'accord avec world.json, selon
+ *     le modèle chargé. La pondération éteint les images de vol au lieu de les
+ *     compter à plein : sur les vingt allures du dépôt, le signe pondéré est
+ *     d'accord avec le prudent partout, et il ne dépend plus du modèle.
  *
  * La vérité est entre les deux. Les afficher tous les deux évite de faire passer
  * une convention de mesure pour une propriété du clip.
@@ -879,6 +889,13 @@ export function mesurerCycle(THREE, rig, ech, duree, hanchesRepos) {
   let piedYMin = Infinity, piedYMax = -Infinity
   let distance = 0, lateral = 0
   let reculG = 0, reculD = 0
+  // Le module de l'estimateur LARGE est solide, son SIGNE ne l'est pas : il n'a
+  // pas de sens propre (on n'y somme que des reculs positifs) et il était
+  // emprunté au prudent. Sur une COURSE, le prudent peut tomber au résidu
+  // numérique et changer de signe d'un modèle à l'autre. On mémorise donc les
+  // intervalles avec la HAUTEUR du pied porteur, pour en tirer après coup une
+  // somme pondérée par l'appui — voir `signeAvance` plus bas.
+  const intervalles = []
   let lacetBassin = 0, lacetPrec = NaN
   let rotation = 0
   const pDebut = new THREE.Vector3(), pFin = new THREE.Vector3()
@@ -925,6 +942,8 @@ export function mesurerCycle(THREE, rig, ech, duree, hanchesRepos) {
         const d = rel.clone().sub(rp)
         distance += -d.dot(av) // recul du pied = avance du corps
         lateral += -d.dot(prev.cote)
+        const yAppui = prev.appui === 'g' ? prev.pgY : prev.pdY
+        if (isFinite(yAppui)) intervalles.push({ y: yAppui, d: -d.dot(av) })
       }
       // Estimateur large : tout recul de chaque pied, appui ou non.
       if (relG && prev.relG) { const d = -relG.clone().sub(prev.relG).dot(av); if (d > 0) reculG += d }
@@ -934,9 +953,28 @@ export function mesurerCycle(THREE, rig, ech, duree, hanchesRepos) {
       const capP = prev.appui === 'g' ? prev.capG : prev.capD
       if (isFinite(cap) && isFinite(capP)) rotation += -delta180(cap, capP)
     }
-    prev = { appui, relG, relD, capG, capD, avant: avant.clone(), cote: cote.clone() }
+    prev = {
+      appui, relG, relD, capG, capD, avant: avant.clone(), cote: cote.clone(),
+      pgY: pg ? pg.y : NaN, pdY: pd ? pd.y : NaN,
+    }
   }
   restaurerPose(rig, snap)
+  // SIGNE DE L'AVANCE, mesuré au lieu d'emprunté. Chaque intervalle pèse la
+  // BASSESSE de son pied porteur : 1 au point le plus bas du cycle, 0 au plus
+  // haut. Les images de VOL — celles où le pied « le plus bas » ne porte rien et
+  // balance en sens inverse — s'éteignent au lieu de compter à plein. Sur les
+  // vingt allures du dépôt le signe pondéré tombe d'accord avec le prudent, à
+  // une exception : world-run-back, dont le prudent vaut −0,006 m sur le rig de
+  // mesure et +0,0006 m sur un autre — un résidu numérique qui retournait toute
+  // la fourchette du LARGE, et avec elle le verdict d'accord de world.json.
+  const signeAvance = (() => {
+    if (!intervalles.length) return Math.sign(distance || 1)
+    const ys = intervalles.map((x) => x.y)
+    const yLo = Math.min(...ys), yHi = Math.max(...ys)
+    let pondere = 0
+    for (const x of intervalles) pondere += (yHi > yLo ? 1 - (x.y - yLo) / (yHi - yLo) : 1) * x.d
+    return Math.sign(pondere || distance || 1)
+  })()
   const f = (y) => (isFinite(hanchesRepos) && hanchesRepos > 0 ? y / hanchesRepos : NaN)
   const dep = pFin.clone().sub(pDebut)
   return {
@@ -947,9 +985,9 @@ export function mesurerCycle(THREE, rig, ech, duree, hanchesRepos) {
     hanchesM: { min: arr3(hMin), max: arr3(hMax), moy: arr3(hSum / n) },
     piedYCm: [arr1(piedYMin * 100), arr1(piedYMax * 100)],
     distanceParCycleM: arr3(distance),
-    distanceParCycleLargeM: arr3(Math.sign(distance || 1) * (reculG + reculD)),
+    distanceParCycleLargeM: arr3(signeAvance * (reculG + reculD)),
     vitesseMS: arr3(distance / Math.max(1e-6, duree)),
-    vitesseLargeMS: arr3((Math.sign(distance || 1) * (reculG + reculD)) / Math.max(1e-6, duree)),
+    vitesseLargeMS: arr3((signeAvance * (reculG + reculD)) / Math.max(1e-6, duree)),
     vitesseLateraleMS: arr3(lateral / Math.max(1e-6, duree)),
     angleParCycleDeg: arr1(rotation),
     vitesseRotationDegS: arr1(rotation / Math.max(1e-6, duree)),

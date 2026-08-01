@@ -412,6 +412,17 @@ La vérité est entre les deux ; les afficher tous les deux évite de faire pass
 convention de mesure pour une propriété du clip. L'accord est déclaré si la valeur
 annoncée tombe dans la fourchette, à 10 % près.
 
+Le **sens** de l'allure (avant / arrière) ne vient d'aucun des deux : *large* ne
+somme que des reculs positifs, il n'a pas de signe propre. Il est mesuré à part,
+sur les mêmes intervalles **pondérés par la bassesse du pied porteur** — 1 au
+point le plus bas du cycle, 0 au plus haut, de sorte qu'une image de vol ne
+compte pour rien. Auparavant *large* empruntait le signe de *prudent*, ce qui
+tenait tant que *prudent* restait loin de zéro ; sur une course il tombe au
+résidu numérique (`world-run-back` : −0,006 m sur le rig de mesure, +0,0006 m sur
+un autre) et retournait toute la fourchette, donc le verdict d'accord, **selon le
+modèle chargé**. Un désaccord qui change avec le modèle est un défaut
+d'instrument, pas de fichier.
+
 Le banc contrôle aussi la **cohérence interne** de `world.json` : `distanceParCycleM
 ÷ dureeS` doit redonner `vitesseMS`. Et la **taille du fichier** : si elle ne
 correspond plus, le clip a été remplacé depuis que `world.json` a été écrit.

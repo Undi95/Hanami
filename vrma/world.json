@@ -585,7 +585,7 @@
       "osAnimes": 21,
       "doigtsAnimes": false,
       "amplitudeDoigtsDeg": 0,
-      "tailleOctets": 81808,
+      "tailleOctets": 83040,
       "hanchesFraction": {
         "min": 0.9324,
         "max": 0.9827,
@@ -623,7 +623,7 @@
       "osAnimes": 22,
       "doigtsAnimes": false,
       "amplitudeDoigtsDeg": 0,
-      "tailleOctets": 81532,
+      "tailleOctets": 82760,
       "hanchesFraction": {
         "min": 0.9307,
         "max": 0.9733,
@@ -661,7 +661,7 @@
       "osAnimes": 51,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 97.3,
-      "tailleOctets": 124108,
+      "tailleOctets": 125308,
       "hanchesFraction": {
         "min": 0.9369,
         "max": 0.9814,
@@ -961,7 +961,7 @@
       "osAnimes": 50,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 118.1,
-      "tailleOctets": 273524,
+      "tailleOctets": 275368,
       "hanchesFraction": {
         "min": 0.5409,
         "max": 0.5409,
@@ -1518,7 +1518,7 @@
       "osAnimes": 34,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 54.1,
-      "tailleOctets": 90456,
+      "tailleOctets": 91636,
       "enchaine": {
         "depuis": "idle",
         "vers": "world-point-hold",
@@ -1576,7 +1576,7 @@
       "osAnimes": 33,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 27.8,
-      "tailleOctets": 311756,
+      "tailleOctets": 312952,
       "enchaine": {
         "depuis": "world-raise-hand-in",
         "vers": "world-raise-hand-out",
@@ -1612,7 +1612,7 @@
       "osAnimes": 33,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 10.6,
-      "tailleOctets": 85592,
+      "tailleOctets": 85908,
       "enchaine": {
         "depuis": "idle",
         "vers": "world-raise-hand-hold",
@@ -1806,7 +1806,7 @@
       "osAnimes": 34,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 82.8,
-      "tailleOctets": 115380,
+      "tailleOctets": 117720,
       "hanchesFraction": {
         "min": 0.5409,
         "max": 0.5409,
@@ -1835,7 +1835,7 @@
       "osAnimes": 52,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 67.1,
-      "tailleOctets": 175932,
+      "tailleOctets": 177104,
       "hanchesFraction": {
         "min": 0.5409,
         "max": 0.5409,
@@ -1896,7 +1896,7 @@
       "osAnimes": 52,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 46.9,
-      "tailleOctets": 209056,
+      "tailleOctets": 210240,
       "hanchesFraction": {
         "min": 0.5409,
         "max": 0.5411,
@@ -1925,7 +1925,7 @@
       "osAnimes": 50,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 70.8,
-      "tailleOctets": 203552,
+      "tailleOctets": 204928,
       "hanchesFraction": {
         "min": 0.5329,
         "max": 0.5462,
@@ -2359,7 +2359,7 @@
       "osAnimes": 47,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 60.4,
-      "tailleOctets": 330888,
+      "tailleOctets": 332124,
       "hanchesFraction": {
         "min": 0.5409,
         "max": 0.5409,
@@ -2543,7 +2543,7 @@
       "osAnimes": 49,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 59.9,
-      "tailleOctets": 385932,
+      "tailleOctets": 388456,
       "hanchesFraction": {
         "min": 0.5409,
         "max": 0.5409,
@@ -3301,7 +3301,7 @@
       "osAnimes": 48,
       "doigtsAnimes": true,
       "amplitudeDoigtsDeg": 12.3,
-      "tailleOctets": 111632,
+      "tailleOctets": 112852,
       "hanchesFraction": {
         "min": 0.9187,
         "max": 0.9784,
