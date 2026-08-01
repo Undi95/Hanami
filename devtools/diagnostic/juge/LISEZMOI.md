@@ -200,6 +200,15 @@ tous produisaient des chiffres **crédibles et faux**.
   ne normalise pas. À lire comme « à la limite haute », pas comme un défaut ferme.
 - **Le visage, le regard, les expressions** : hors périmètre, les pistes correspondantes sont ignorées.
 - **L'esthétique** : le juge dit qu'un mouvement est *plausible*, pas qu'il est *joli*.
+- **Le sol-enfoncement ASSIS et d'allure est un verdict HORS SCÈNE.** Le juge rejoue le clip nu ;
+  l'app, elle, passe chaque image dans `client/src/scene/legIk.ts` (`'reach'` assis : le pied VISE le
+  sol ; `'planted'` debout : un pied qui traverse est remonté). Mesuré le 2026-08-01 en exécutant les
+  VRAIES sources du client sur quatre gabarits (0,33 → 1,25 m de hanches) : `world-sit-idle` passe de
+  −54…−178 mm (clip nu, pire semelle) à **−1,2…−5,1 mm** avec l'IK, `world-sit-enter` de −69…−243 à
+  −4…−12 mm. Le défaut « 94/94 modèles » de la matrice n'existe donc pas en scène pour l'assise — ne
+  PAS retoucher les clips assis pour ça. En marche/course, l'IK plante les TALONS (0,0 mm) mais la
+  POINTE en fin d'appui appartient au clip (l'IK suit la projection de la cheville et rend au pied
+  l'orientation du clip) : le résidu d'orteils reste à lire sur les planches, pas à corriger par l'IK.
 
 ## Les contre-épreuves
 
