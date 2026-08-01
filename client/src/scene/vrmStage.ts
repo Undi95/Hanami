@@ -1165,14 +1165,40 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   renderer.domElement.addEventListener('dblclick', onDblClick)
 
   // ── Interactions au clic (scène vivante) ──────────────────────────────────
-  // Un lancer de rayon AUX ÉVÉNEMENTS DE POINTEUR, jamais dans la boucle de
-  // rendu : intersecter la géométrie du décor par image reste interdit par
-  // l'architecture. Ce qui a changé, c'est le prix d'un rayon — le BVH des
-  // décors (scene/bvh) a ramené le pire cas de 12,9 ms à 0,004 ms au 95e
-  // centile, et c'est ce qui rouvre la porte au curseur contextuel refusé
-  // jusqu'ici sur mesure.
+  // Un lancer de rayon À L'ÉVÉNEMENT DE CLIC uniquement, jamais en continu —
+  // intersecter la géométrie par image est interdit par l'architecture.
   // Le geste principal (glisser = pan) reste intact : un clic n'est retenu que
   // si le pointeur n'a pas bougé de plus de 6 px entre l'appui et le relâché.
+  //
+  // LE CURSEUR CONTEXTUEL AU SURVOL RESTE REFUSÉ, et la raison a changé.
+  // Il l'était à cause du décor : 12,9 ms au 95e centile sur japanese-classroom.
+  // Le BVH a réglé ce point-là et au-delà — 0,004 ms, 3 400× moins. Mais `viser`
+  // interroge DEUX choses, et la seconde n'a pas bougé d'un pouce.
+  //
+  // Le personnage a une peau animée : ses sommets sont recalculés par
+  // `applyBoneTransform` au moment du lancer de rayon, quatre matrices composées
+  // par sommet, pour TOUS les triangles dès que la sphère englobante est
+  // touchée. Aucun arbre ne peut indexer une géométrie qui n'existe pas encore
+  // au moment où on la cherche. Mesuré sur les 94 modèles de vrm/ (25 000 à
+  // 81 000 triangles à peau, cf. devtools/bench-raycast.mjs), p95 d'un rayon :
+  //
+  //   le plus LÉGER des 94   25 090 tris    4,0 ms
+  //   le plus lourd          81 476 tris   19,8 ms
+  //
+  // Budget d'un test au survol à 10 Hz : 0,3 ms. Le plus léger le dépasse de
+  // 13×, le plus lourd de 66×. Et ce n'est pas qu'une affaire de moyenne : une
+  // image à 60 Hz dure 16,7 ms, donc un seul survol du personnage lourd mange
+  // une image ENTIÈRE — dix fois par seconde tant que le pointeur reste sur lui.
+  // La médiane, elle, est à 0,002 ms : la sphère englobante rejette les rayons
+  // qui partent à côté et fait payer plein tarif ceux qui l'effleurent. C'est
+  // donc exactement là où le curseur devrait être le plus bavard qu'il coûterait
+  // le plus cher.
+  //
+  // Rendre le survol moins cher voudrait dire lui donner une vérité DIFFÉRENTE
+  // de celle du clic (silhouette approchée, boîte englobante, échantillon
+  // périmé) : un curseur qui promet ce que le clic ne tient pas est pire que
+  // pas de curseur. Ce qu'il faudrait pour rouvrir le dossier, c'est un test de
+  // silhouette du personnage à la fois EXACT et bon marché — pas un arbre.
   const raycaster = new Raycaster()
   const ndc = new Vector2()
   // Marqueurs de clic : deux anneaux réutilisés, posés dans la SCÈNE (le groupe

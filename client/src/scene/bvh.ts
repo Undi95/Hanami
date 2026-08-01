@@ -18,10 +18,15 @@
 //
 // Chez three, la médiane et le p95 divergent parce que la sphère englobante
 // décide de tout : un rayon qui part vers le vide ne coûte rien, un rayon qui
-// touche coûte le décor entier. Conséquences payées avant ce fichier : le clic
-// pouvait attendre 13 ms, et le curseur contextuel au survol (un test à 10 Hz)
-// a été REFUSÉ sur mesure. Avec l'arbre, le pire décor descend à 0,006 ms —
-// c'est ce qui l'a débloqué.
+// touche coûte le décor entier. Le clic pouvait donc attendre 13 ms ; avec
+// l'arbre, le pire décor descend à 0,006 ms.
+//
+// CE QUE CELA NE DÉBLOQUE PAS : le curseur contextuel au survol. Le décor
+// n'était que la moitié du prix — `viser` interroge aussi le personnage, dont
+// la peau animée coûte 4 à 20 ms selon le modèle et qu'AUCUN arbre ne peut
+// indexer (ses sommets n'existent pas encore quand le rayon les cherche). Le
+// détail des mesures et le raisonnement sont dans vrmStage, là où le curseur
+// serait branché.
 //
 // LE REMÈDE. Un décor est IMMOBILE une fois placé (cf. envMerge : fusion par
 // matériau puis gel des matrices) : c'est exactement la condition qui rend un

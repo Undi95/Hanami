@@ -65,11 +65,12 @@ declare module 'three' {
     direction: Vector3
   }
 
-  // Lancer de rayon — UNIQUEMENT à l'événement de clic (et au survol throttlé du
-  // curseur contextuel), jamais dans la boucle de rendu. Sur les décors, ce
-  // n'est plus `intersectObject` qui travaille mais le BVH maison (cf.
-  // scene/bvh.ts), qui lit `ray` directement ; l'avatar, lui, a une peau animée
-  // et reste sur le lancer de rayon de three.
+  // Lancer de rayon — UNIQUEMENT à l'événement de clic, jamais dans la boucle
+  // de rendu, et pas non plus au survol (le curseur contextuel reste refusé :
+  // le coût est celui du personnage, cf. vrmStage). Sur les décors, ce n'est
+  // plus `intersectObject` qui travaille mais le BVH maison (cf. scene/bvh.ts),
+  // qui lit `ray` directement ; l'avatar, lui, a une peau animée et reste sur
+  // le lancer de rayon de three.
   export class Raycaster {
     constructor()
     near: number
