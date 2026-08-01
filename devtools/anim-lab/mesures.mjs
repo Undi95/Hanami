@@ -148,15 +148,31 @@ export const estMonde = (slug) => slug.startsWith('world-')
 export const domaine = (slug) => (estMonde(slug) ? 'monde' : 'face')
 
 /**
+ * Le face à face a DEUX familles étanches (cf. vrma/README.md) : celle d'Overte,
+ * sans préfixe, et celle de Rocketbox, préfixe `rb-`. Elles ne se raccordent
+ * jamais l'une à l'autre — 16,5 à 20,3 cm de raccord croisé — donc un clip `rb-`
+ * jugé contre le socle d'Overte mesurerait la distance entre deux studios, pas
+ * un défaut. C'est la même erreur que « juger un clip assis contre le socle
+ * debout », celle qui donnait 79 échecs sur 111.
+ */
+export const estRocketbox = (slug) => slug.startsWith('rb-')
+/** Les deux socles de la famille d'un clip de face à face. */
+export const soclesDeFamille = (slug) =>
+  estRocketbox(slug) ? ['rb-idle', 'rb-idle-talking'] : ['idle', 'idle-talking']
+
+/**
  * Famille déduite du NOM seul — le nom de fichier EST la configuration, il n'y a
  * pas de fichier de mapping (cf. vrma/README.md). Aucune liste de clips en dur :
  * un clip ajouté ou remplacé pendant que le banc tourne est classé sans rien changer.
  */
 export function familleDeduite(slug) {
   if (!estMonde(slug)) {
-    const base = slug.replace(/-\d+$/, '')
+    // Le préfixe de famille est retiré AVANT la dérivation du rôle, exactement
+    // comme le fait catalogFromUrls : `rb-idle-2` est bien un socle.
+    const base = (estRocketbox(slug) ? slug.slice('rb-'.length) : slug).replace(/-\d+$/, '')
     if (base === 'idle') return 'socle'
     if (base === 'idle-talking') return 'socle parlant'
+    if (base === 'listen') return 'socle écoute'
     return 'geste'
   }
   const s = slug.slice('world-'.length)
@@ -179,6 +195,8 @@ export const familleDe = (slug, worldJson) => worldJson?.clips?.[slug]?.famille 
 /** Boucle déduite du NOM seul (le repli quand world.json manque). */
 export const boucleDeduite = (slug) =>
   /^idle(-talking)?(-\d+)?$/.test(slug) ||
+  // Famille Rocketbox : les mêmes socles, plus celui d'ÉCOUTE, qui boucle aussi.
+  /^rb-(idle|idle-talking|listen)(-\d+)?$/.test(slug) ||
   /^world-.*-(idle|loop|talking|hold)(-\d+)?$/.test(slug) ||
   (/^world-(walk|run|jog|strafe|step|turn)(-[a-z0-9]+)*$/.test(slug) &&
     !/-(start|stop|enter|exit|end|in|out)(-|$)/.test(slug))
@@ -633,7 +651,10 @@ export function mesurerJonction(THREE, rig, a, b, opts = {}) {
 // debout, alors qu'un clip assis est à ~45 cm de la pose debout PAR CONSTRUCTION
 // — c'est la hauteur d'une chaise, pas un défaut. Le verdict n'a de sens que
 // contre le référentiel que l'app utilisera vraiment :
-//   · geste face à face  → les socles debout (idle, idle-talking) — inchangé ;
+//   · geste face à face  → les socles debout DE SA FAMILLE (idle / idle-talking
+//     pour Overte, rb-idle / rb-idle-talking pour Rocketbox) — les deux familles
+//     ne se raccordent jamais l'une à l'autre, les croiser mesurerait 16 à 20 cm
+//     d'écart de studio ;
 //   · geste assis        → le socle assis (world-sit-idle), celui vers lequel
 //     il revient réellement en fondu ;
 //   · boucle qui tourne (allure, pivot, repos alterné, geste tenu, socle assis
@@ -651,7 +672,10 @@ export function mesurerJonction(THREE, rig, a, b, opts = {}) {
 export function referentielDe(slug, worldJson) {
   const meta = worldJson?.clips?.[slug] ?? null
   if (!estMonde(slug)) {
-    return { type: 'socles', socles: ['idle', 'idle-talking'], libelle: 'idle / idle-talking' }
+    // …et un clip de face à face contre les socles de SA famille (jamais ceux de
+    // l'autre : voir estRocketbox).
+    const socles = soclesDeFamille(slug)
+    return { type: 'socles', socles, libelle: socles.join(' / ') }
   }
   const fam = familleDe(slug, worldJson)
   const boucle = meta ? !!meta.boucle : boucleDeduite(slug)

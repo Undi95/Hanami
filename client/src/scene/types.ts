@@ -4,7 +4,7 @@
 // préférence persistée côté serveur (data/ui.json), donc partie du contrat
 // client/serveur. Réexporté ici pour que la scène garde un import unique.
 export type { StageView } from '../../../shared/types'
-import type { StageView } from '../../../shared/types'
+import type { AnimationFamily, StageView } from '../../../shared/types'
 
 /**
  * Cadrage par défaut de l'avatar, imposé par la place que l'UI laisse à la scène :
@@ -37,6 +37,26 @@ export interface VrmStage {
    * et joue le socle « parle » s'il existe dans vrma/.
    */
   setSpeaking(speaking: boolean): void
+  /**
+   * true tant que l'utilisateur TAPE son message → socle « écoute » s'il existe
+   * dans la famille du personnage. Il n'existe QUE dans la famille Rocketbox :
+   * pour un personnage Overte, cet appel ne change strictement rien.
+   *
+   * Priorité : allure > posture > parole > écoute > repos. Un personnage qui
+   * marche en scène vivante n'écoute donc pas des bras — exactement comme il ne
+   * parle pas des bras.
+   */
+  setListening(on: boolean): void
+  /**
+   * Famille d'animations de face à face du personnage affiché (défaut 'overte').
+   * Changer de famille RECONSTRUIT le mixer : les deux bibliothèques n'ont aucun
+   * fichier en commun, et celle qui n'est pas choisie n'est jamais téléchargée.
+   *
+   * Sans effet tant que la scène vivante est allumée : le domaine `world-` est
+   * intégralement Overte, donc le face à face l'est aussi le temps de la scène
+   * (cf. vrma/README.md, « la règle des familles »).
+   */
+  setAnimationFamily(family: AnimationFamily): void
   /**
    * Animations .vrma allumées ou éteintes (préférence UiPrefs.vrmaEnabled).
    * Éteint = mixer DÉCHARGÉ et retour à la pose de repos, pas une mise en pause.

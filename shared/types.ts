@@ -52,6 +52,19 @@ export interface Settings {
 // est proposé à l'ouverture. Champ absent = 'written' (character.json historiques).
 export type GreetingMode = 'written' | 'generated' | 'ask'
 
+/**
+ * Famille d'animations de FACE À FACE d'un personnage. Deux bibliothèques
+ * complètes et ÉTANCHES (cf. vrma/README.md) : celle d'Overte, sans préfixe, et
+ * celle de Microsoft Rocketbox, préfixe `rb-`. Elles ne se mélangent jamais —
+ * leurs stations debout diffèrent de 16,5 à 20,3 cm, deux fois et demie le seuil
+ * d'acceptation d'un raccord.
+ *
+ * Ce réglage ne vaut QUE pour le face à face : en scène vivante 3D, le domaine
+ * `world-` est intégralement Overte et le personnage joue la famille Overte
+ * entière, socle compris.
+ */
+export type AnimationFamily = 'overte' | 'rocketbox'
+
 export interface CharacterMeta {
   id: string
   name: string

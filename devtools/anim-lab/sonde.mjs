@@ -219,7 +219,9 @@ async function mesurerRig(nomRig, ctxRig, opts = {}) {
     clip.name = slug
     const e = M.echantillonneur(THREE, adapt, clip)
     const meta = WORLD?.clips?.[slug] ?? null
-    const boucle = meta ? !!meta.boucle : /^(idle|idle-2|idle-3|idle-talking)$/.test(slug)
+    // Repli identique à celui de la page : la règle vit dans mesures.mjs et
+    // couvre les deux familles de face à face (socles d'écoute `rb-listen` compris).
+    const boucle = meta ? !!meta.boucle : M.boucleDeduite(slug)
     clips.set(slug, { slug, clip, ...e, boucle, meta, taille: buf.length })
   }
 

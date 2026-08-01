@@ -1153,8 +1153,10 @@
         } finally { M.restaurerPose(rig, snap) }
       }
 
-      const boucleAttendue = (nom) =>
-        worldJson?.clips?.[nom]?.boucle ?? /^(idle|idle-2|idle-3|idle-talking|world-.*-(idle|loop|talking)(-\d+)?)$/.test(nom)
+      // Le repli quand world.json ne dit rien du clip : la règle vit dans
+      // mesures.mjs (M.boucleDeduite), qui couvre les deux familles de face à
+      // face — dont les socles d'écoute `rb-listen`, qui bouclent aussi.
+      const boucleAttendue = (nom) => worldJson?.clips?.[nom]?.boucle ?? M.boucleDeduite(nom)
 
       /** Le contexte que le noyau attend pour juger : clips et socles par slug. */
       const ctxJuge = {

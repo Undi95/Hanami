@@ -11,6 +11,12 @@
 // produit aucune erreur à l'écran : elle produit un personnage qui ne fait
 // simplement rien.
 //
+// Depuis la famille Rocketbox, il répond aussi à la question jumelle : les deux
+// familles de face à face sont-elles ÉTANCHES ? Un clip qui fuit d'une famille
+// à l'autre ne produit pas d'erreur non plus — il produit un raccord de 16 à
+// 20 cm qu'aucun fondu n'absorbe. Le banc rejoue donc le catalogue une fois par
+// famille et compare les deux listes.
+//
 // AUCUNE VALEUR N'EST RECOPIÉE : la liste des .vrma vient de
 // /api/vrm-animations (ce que la page voit ; à défaut, le disque), et
 // WORLD_NEEDED, SIT_EMOTES, SIT_REACTIONS sont RELUS DANS LE SOURCE. Ce qui
@@ -61,20 +67,28 @@ const SIT_EMOTES = Object.fromEntries(
 // ── La grammaire du catalogue, recopiée de catalogFromUrls (cf. en-tête) ─────
 const EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'surprised', 'relaxed']
 const TALKING_STEM = 'idle-talking'
+const LISTENING_STEM = 'listen'
 const REACTION_STEM = 'nod'
 const WORLD_PREFIX = 'world-'
+const RB_PREFIX = 'rb-'
 const POSTURE_PREFIXES = ['pose-', 'sit-']
+const FAMILLES = ['overte', 'rocketbox']
 
-function catalogFromUrls(urls) {
-  const cat = { idle: [], talking: [], gestures: new Map(), postures: new Map(), world: new Map(), reactions: [] }
+function catalogFromUrls(urls, family) {
+  const cat = { idle: [], talking: [], listening: [], gestures: new Map(), postures: new Map(), world: new Map(), reactions: [] }
   const push = (map, k, u) => { const l = map.get(k); if (l) l.push(u); else map.set(k, [u]) }
   for (const url of urls) {
     const file = decodeURIComponent(url.split('/').pop() ?? '')
-    const stem = file.replace(/\.vrma$/i, '').toLowerCase().replace(/-\d+$/, '')
+    const nom = file.replace(/\.vrma$/i, '').toLowerCase().replace(/-\d+$/, '')
+    const rb = nom.startsWith(RB_PREFIX) && nom.length > RB_PREFIX.length
+    if (rb !== (family === 'rocketbox')) continue // familles étanches
+    const stem = rb ? nom.slice(RB_PREFIX.length) : nom
     if (stem === 'idle') cat.idle.push(url)
     else if (stem === TALKING_STEM) cat.talking.push(url)
-    else if (stem === REACTION_STEM) cat.reactions.push(url)
+    else if (stem === LISTENING_STEM) cat.listening.push(url)
     else if (EMOTIONS.includes(stem)) push(cat.gestures, stem, url)
+    else if (rb) continue // la scène vivante reste 100 % Overte
+    else if (stem === REACTION_STEM) cat.reactions.push(url)
     else if (stem.startsWith(WORLD_PREFIX) && stem.length > WORLD_PREFIX.length) {
       push(cat.world, stem.slice(WORLD_PREFIX.length), url)
     } else {
@@ -97,10 +111,12 @@ try {
   urls = fs.readdirSync(dir).filter((f) => /\.vrma$/i.test(f)).sort().map((f) => '/vrma/' + f)
   source = `disque ${dir} (API injoignable : ${e.message})`
 }
-const cat = catalogFromUrls(urls)
+const cats = Object.fromEntries(FAMILLES.map((f) => [f, catalogFromUrls(urls, f)]))
+const cat = cats.overte // les clefs `world-` n'existent que là (scène vivante = Overte)
 const octets = (u) => {
   try { return fs.statSync(path.join(RACINE, decodeURIComponent(u).replace(/^\//, ''))).size } catch { return 0 }
 }
+const poids = (l) => l.reduce((s, u) => s + octets(u), 0)
 
 const p = (s, n) => String(s).padEnd(n)
 const r = (s, n) => String(s).padStart(n)
@@ -144,5 +160,66 @@ if (eteint !== 0) echecs++
 console.log(`\n  mode éteint : ${eteint} fichier(s) — attendu 0`)
 console.log(`  mode allumé : ${worldUrlsNeeded(true).length} fichier(s), dont ${cat.reactions.length} d'acquiescement debout`)
 
-console.log(`\n${echecs === 0 ? '✓ aucune clef morte, aucune clef de table non déclarée' : `✗ ${echecs} problème(s)`}`)
+// ── LES DEUX FAMILLES DE FACE À FACE ────────────────────────────────────────
+// Ce que buildAnimations télécharge réellement, famille par famille, scène
+// vivante ÉTEINTE (c'est le seul mode où la famille du personnage s'applique :
+// allumée, la famille effective est forcée à Overte).
+console.log('\n── familles de face à face (scène vivante éteinte) ──')
+// Tous les fichiers qu'une famille REVENDIQUE (l'étanchéité se juge là-dessus)…
+const listeFace = (c) => [
+  ...c.idle, ...c.talking, ...c.listening,
+  ...[...c.gestures.values()].flat(), ...[...c.postures.values()].flat(),
+]
+// …et ceux que buildAnimations DEMANDE vraiment : un seul socle, tiré au hasard
+// une fois par chargement de modèle, tout le reste en entier.
+const listeChargee = (c) => [
+  ...c.idle.slice(0, 1), ...c.talking, ...c.listening,
+  ...[...c.gestures.values()].flat(), ...[...c.postures.values()].flat(),
+]
+const parFamille = {}
+const chargee = {}
+for (const f of FAMILLES) {
+  const c = cats[f]
+  parFamille[f] = new Set(listeFace(c))
+  chargee[f] = listeChargee(c)
+  const roles = [
+    `socle ${c.idle.length}`, `parle ${c.talking.length}`, `écoute ${c.listening.length}`,
+    `gestes ${[...c.gestures.values()].flat().length} sur ${c.gestures.size} émotion(s)`,
+  ]
+  if (c.idle.length === 0) { echecs++; roles.push('AUCUN SOCLE — la famille est inerte') }
+  console.log(`  ${p(f, 10)}${r(parFamille[f].size, 3)} fichier(s) revendiqués   ${roles.join(' · ')}`)
+  console.log(
+    `             téléchargés : ${r(chargee[f].length, 3)} fichier(s)` +
+    `${r((poids(chargee[f]) / 1048576).toFixed(2), 7)} Mo (un seul socle sur ${c.idle.length}) · ` +
+    `${[...c.gestures.entries()].map(([e, l]) => `${e}(${l.length})`).join(' ')}`,
+  )
+}
+
+// L'ÉTANCHÉITÉ, prouvée sur les listes elles-mêmes : aucun fichier commun, et
+// aucun clip `rb-` dans le catalogue Overte (ni l'inverse) — y compris dans les
+// rôles de la scène vivante, qui reste 100 % Overte.
+const estRb = (u) => /(^|\/)rb-[^/]*\.vrma$/i.test(decodeURIComponent(u))
+const commun = [...parFamille.overte].filter((u) => parFamille.rocketbox.has(u))
+const intrusRb = [...parFamille.overte].filter(estRb)
+const intrusOverte = [...parFamille.rocketbox].filter((u) => !estRb(u))
+const mondeRb = [...worldUrlsNeeded(true), ...[...cats.overte.postures.values()].flat()].filter(estRb)
+for (const [quoi, l] of [
+  ['fichier(s) dans les DEUX familles', commun],
+  ['clip(s) rb- dans la famille overte', intrusRb],
+  ['clip(s) overte dans la famille rocketbox', intrusOverte],
+  ['clip(s) rb- dans la scène vivante', mondeRb],
+]) {
+  if (l.length) { echecs++; console.log(`  ✗ ${l.length} ${quoi} : ${l.slice(0, 5).join(', ')}`) }
+  else console.log(`  ✓ 0 ${quoi}`)
+}
+// Le chargement paresseux : choisir une famille, c'est NE PAS télécharger l'autre.
+for (const f of FAMILLES) {
+  const autre = FAMILLES.find((x) => x !== f)
+  console.log(
+    `  famille ${p(f, 10)} → ${r(chargee[f].length, 3)} fichier(s) demandés, ` +
+    `${r(parFamille[autre].size, 3)} JAMAIS (${(poids([...parFamille[autre]]) / 1048576).toFixed(2)} Mo non téléchargés)`,
+  )
+}
+
+console.log(`\n${echecs === 0 ? '✓ aucune clef morte, aucune clef de table non déclarée, familles étanches' : `✗ ${echecs} problème(s)`}`)
 process.exit(echecs === 0 ? 0 : 1)

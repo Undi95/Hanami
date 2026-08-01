@@ -37,7 +37,7 @@ import {
 } from '@pixiv/three-vrm-animation'
 import type { VRMAnimation } from '@pixiv/three-vrm-animation'
 import { EMOTIONS } from '../../../shared/types'
-import type { Emotion } from '../../../shared/types'
+import type { AnimationFamily, Emotion } from '../../../shared/types'
 import { getVrmAnimations } from '../api'
 // Les erreurs de cette scène remontent TELLES QUELLES à l'écran (bandeaux de
 // App.tsx) : elles se traduisent, comme celles de la couche API.
@@ -541,6 +541,21 @@ const BASE_FADE = 0.5
 
 /** Socle de remplacement pendant qu'une réponse s'écrit. */
 const TALKING_STEM = 'idle-talking'
+/**
+ * Socle de remplacement pendant que l'utilisateur TAPE. Rôle propre à la famille
+ * Rocketbox : Overte n'a aucun clip d'écoute, donc `cat.listening` y reste vide
+ * et setListening n'a littéralement rien à faire — le comportement d'un
+ * personnage Overte ne bouge pas d'un millimètre.
+ */
+const LISTENING_STEM = 'listen'
+/**
+ * Préfixe de la SECONDE famille de face à face (Microsoft Rocketbox, cf.
+ * vrma/README.md). Deux bibliothèques complètes, deux stations debout
+ * différentes : le raccord CROISÉ mesure 16,5 à 20,3 cm là où il vaut 0,2 à
+ * 5,7 cm à l'intérieur d'une famille. Elles ne se mélangent donc jamais — la
+ * séparation se fait ici, à la construction du catalogue.
+ */
+const RB_PREFIX = 'rb-'
 /** Radicaux de posture : `pose-sit` (nom court) et les clips assis livrés tels quels. */
 const POSTURE_PREFIXES = ['pose-', 'sit-'] as const
 /**
@@ -563,6 +578,7 @@ const REACTION_STEM = 'nod'
 interface VrmaCatalog {
   idle: string[] // socle en boucle — SANS LUI, aucune animation n'est jouée
   talking: string[] // socle en boucle pendant que le personnage parle
+  listening: string[] // socle en boucle pendant que l'utilisateur tape (famille rb)
   gestures: Map<Emotion, string[]> // joué une fois, puis retour au socle
   postures: Map<string, string[]> // remplace le socle (setPosture)
   world: Map<string, string[]> // domaine `world-`, clé = radical SANS le préfixe
@@ -576,14 +592,25 @@ function pushInto<K>(map: Map<K, string[]>, key: K, url: string): void {
 }
 
 /**
- * URLs → rôles. Le radical est mis en minuscules et son suffixe de variante
- * (`-2`, `-3`…) retiré : `happy-2.vrma` est une variante de `happy`, exactement
- * la grammaire des salutations multiples d'un personnage.
+ * URLs → rôles, POUR UNE SEULE FAMILLE. Le radical est mis en minuscules et son
+ * suffixe de variante (`-2`, `-3`…) retiré : `happy-2.vrma` est une variante de
+ * `happy`, exactement la grammaire des salutations multiples d'un personnage.
+ *
+ * LA FAMILLE SE LIT DANS LE NOM, et elle est ÉTANCHE : un fichier qui n'est pas
+ * de la famille demandée n'entre dans aucun rôle — pour le catalogue rendu, il
+ * n'existe pas. C'est ce qui garantit qu'aucun rôle ne mélange les deux
+ * bibliothèques (16,5 à 20,3 cm de raccord croisé, cf. RB_PREFIX), et c'est
+ * aussi ce qui fait que la famille NON choisie n'est jamais téléchargée : ses
+ * URLs ne sont dans aucune liste que buildAnimations parcourt.
+ *
+ * Le préfixe `rb-` est retiré AVANT la dérivation du rôle — la grammaire est
+ * ensuite la même mot pour mot pour les deux familles.
  */
-function catalogFromUrls(urls: readonly string[]): VrmaCatalog {
+function catalogFromUrls(urls: readonly string[], family: AnimationFamily): VrmaCatalog {
   const cat: VrmaCatalog = {
     idle: [],
     talking: [],
+    listening: [],
     gestures: new Map(),
     postures: new Map(),
     world: new Map(),
@@ -591,14 +618,24 @@ function catalogFromUrls(urls: readonly string[]): VrmaCatalog {
   }
   for (const url of urls) {
     const file = decodeURIComponent(url.split('/').pop() ?? '')
-    const stem = file
+    const nom = file
       .replace(/\.vrma$/i, '')
       .toLowerCase()
       .replace(/-\d+$/, '')
+    const rb = nom.startsWith(RB_PREFIX) && nom.length > RB_PREFIX.length
+    if (rb !== (family === 'rocketbox')) continue // l'autre famille n'existe pas ici
+    const stem = rb ? nom.slice(RB_PREFIX.length) : nom
     if (stem === 'idle') cat.idle.push(url)
     else if (stem === TALKING_STEM) cat.talking.push(url)
-    else if (stem === REACTION_STEM) cat.reactions.push(url)
+    else if (stem === LISTENING_STEM) cat.listening.push(url)
     else if ((EMOTIONS as readonly string[]).includes(stem)) pushInto(cat.gestures, stem as Emotion, url)
+    // LA FRONTIÈRE. Tout ce qui suit appartient à la SCÈNE VIVANTE (domaine
+    // `world-`, postures, acquiescement au clic), et la scène vivante reste
+    // 100 % Overte pour tout le monde : un socle debout Rocketbox raccordé à un
+    // arrêt de marche Overte rejouerait les 16 à 20 cm à chaque arrêt. Un
+    // `rb-nod` est donc un « nod » de réserve, jamais la réaction au clic.
+    else if (rb) continue
+    else if (stem === REACTION_STEM) cat.reactions.push(url)
     // Le domaine `world-` se teste AVANT les postures : `world-sit-idle`
     // commence par `world-`, pas par `sit-`. C'est cet ordre manquant qui rendait
     // POSTURE_PREFIXES aveugle aux clips renommés — cat.postures restait vide et
@@ -701,23 +738,41 @@ function loadVrmAnimation(url: string): Promise<VRMAnimation | null> {
   return pending
 }
 
-// Catalogue résolu UNE FOIS pour la session : le contenu du dossier ne change pas
-// pendant qu'on s'en sert. Liste injoignable → catalogue vide → aucun mixer, donc
-// exactement le comportement d'avant les animations. Mais cet échec-là n'est PAS
-// mémorisé : la promesse est oubliée pour que le prochain chargement de modèle (ou
-// l'interrupteur des Réglages) retente, au lieu de servir un catalogue vide jusqu'au
-// F5 suivant.
-let catalogPending: Promise<VrmaCatalog> | null = null
+// Liste des fichiers, demandée UNE FOIS pour la session : le contenu du dossier ne
+// change pas pendant qu'on s'en sert. Liste injoignable → catalogues vides → aucun
+// mixer, donc exactement le comportement d'avant les animations. Mais cet échec-là
+// n'est PAS mémorisé : la promesse est oubliée pour que le prochain chargement de
+// modèle (ou l'interrupteur des Réglages) retente, au lieu de servir un catalogue
+// vide jusqu'au F5 suivant.
+let listPending: Promise<readonly string[]> | null = null
 
-function loadCatalog(): Promise<VrmaCatalog> {
-  catalogPending ??= getVrmAnimations()
-    .then(catalogFromUrls)
-    .catch((e) => {
-      console.warn('[vrma]', e)
-      catalogPending = null
-      return catalogFromUrls([])
-    })
-  return catalogPending
+function loadList(): Promise<readonly string[]> {
+  listPending ??= getVrmAnimations().catch((e) => {
+    console.warn('[vrma]', e)
+    listPending = null
+    return []
+  })
+  return listPending
+}
+
+// Un catalogue PAR FAMILLE, dérivé de la même liste. Deux familles = deux
+// catalogues disjoints, jamais un catalogue mixte : c'est ici que l'étanchéité
+// devient une structure de données et pas une intention. Le cache évite de
+// reconstruire à chaque changement de personnage ; la famille non consultée n'a
+// même pas de catalogue, et pas un octet de ses clips n'est demandé.
+const catalogByFamily = new Map<AnimationFamily, VrmaCatalog>()
+
+async function loadCatalog(family: AnimationFamily): Promise<VrmaCatalog> {
+  const known = catalogByFamily.get(family)
+  if (known) return known
+  const urls = await loadList()
+  const cached = catalogByFamily.get(family)
+  if (cached) return cached // une autre demande est arrivée pendant l'attente
+  const cat = catalogFromUrls(urls, family)
+  // Un catalogue bâti sur une liste VIDE n'est pas mémorisé — même règle que
+  // listPending : l'échec ne doit pas survivre à la tentative suivante.
+  if (urls.length > 0) catalogByFamily.set(family, cat)
+  return cat
 }
 
 /** Un élément au hasard (liste jamais vide à l'appel). */
@@ -841,12 +896,20 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   const actions = new Map<string, AnimationAction>() // une action par URL de .vrma
   let idleAction: AnimationAction | null = null
   let talkingAction: AnimationAction | null = null
+  let listenAction: AnimationAction | null = null
+  let lastListen: AnimationAction | null = null // anti-répétition du tirage d'écoute
   let postureAction: AnimationAction | null = null
   let gaitAction: AnimationAction | null = null // allure ou pivot du domaine `world-`
   let postureName: string | null = null
   let baseAction: AnimationAction | null = null // socle voulu (en boucle)
   let activeAction: AnimationAction | null = null // ce qui tient l'écran : socle ou geste
   let talking = false
+  let listening = false // l'utilisateur est en train de taper (cf. setListening)
+  // Famille CHOISIE par le personnage, et famille du mixer EN PLACE. Les deux
+  // divergent le temps d'un chargement, et en scène vivante où la famille
+  // effective est forcée à Overte (cf. effectiveFamily).
+  let animFamily: AnimationFamily = 'overte'
+  let builtFamily: AnimationFamily | null = null
   // Poids porté par chaque action à cette image, et fondu en cours. C'est NOTRE
   // livre de comptes, trois raisons de ne pas laisser three le tenir :
   // - `crossFadeFrom` code en dur les poids de DÉPART (1 → 0 et 0 → 1) et
@@ -1361,12 +1424,18 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   /**
    * Socle voulu maintenant. Ordre : ce que font les JAMBES prime sur ce que
    * disent les bras — marcher ou pivoter passe donc avant tout, puis une posture,
-   * puis « parle », puis l'idle.
+   * puis « parle », puis « écoute », puis l'idle.
+   *
+   * Parole AVANT écoute : si une réponse s'écrit pendant que l'utilisateur tape
+   * déjà la suivante, c'est le personnage qui parle qu'il faut voir. Et l'allure
+   * prime sur les deux : en scène vivante, marcher neutralise l'écoute
+   * exactement comme elle neutralise la parole, sans une ligne de plus.
    */
   function desiredBase(): AnimationAction | null {
     if (gaitAction) return gaitAction
     if (postureAction) return postureAction
     if (talking && talkingAction) return talkingAction
+    if (listening && listenAction) return listenAction
     return idleAction
   }
 
@@ -1660,11 +1729,14 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // Les variantes mémorisées par l'anti-répétition appartenaient à CE mixer.
     lastGesture.clear()
     lastReaction = null
+    lastListen = null
     lastWorld.clear()
     idleAction = null
     talkingAction = null
+    listenAction = null
     postureAction = null
     gaitAction = null
+    builtFamily = null
     onceThen = null
     baseAction = null
     activeAction = null
@@ -1674,6 +1746,20 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // Plus de mixer : un recadrage encore en attente n'aurait plus rien à
     // rattraper (le squelette repart de la pose de repos).
     reframePending = false
+  }
+
+  /**
+   * La famille RÉELLEMENT jouée. Le choix du personnage ne vaut qu'en FACE À
+   * FACE : scène vivante allumée, tout repasse à Overte, socle compris.
+   *
+   * Ce n'est pas une restriction de confort, c'est la règle d'étanchéité. Les
+   * clips de déplacement, de pivot et d'assise n'existent que chez Overte ;
+   * debout à l'arrêt, le socle est le socle du face à face, et c'est justement
+   * lui que `world-walk-stop` vient rejoindre. Un socle Rocketbox là rejouerait
+   * les 16 à 20 cm de raccord croisé à CHAQUE arrêt de marche.
+   */
+  function effectiveFamily(): AnimationFamily {
+    return interactive ? 'overte' : animFamily
   }
 
   /**
@@ -1690,8 +1776,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    */
   async function buildAnimations(vrm: VRM): Promise<void> {
     if (!animationsEnabled) return
-    const cat = await loadCatalog()
+    const fam = effectiveFamily()
+    const cat = await loadCatalog(fam)
     if (!animationsEnabled || disposed || currentVrm !== vrm) return
+    // La famille a pu changer pendant que la liste arrivait (l'utilisateur passe
+    // d'un personnage à l'autre) : ce catalogue-là n'est plus celui qu'on veut,
+    // et un autre buildAnimations est déjà en vol pour le bon.
+    if (fam !== effectiveFamily()) return
     catalog = cat
     if (cat.idle.length === 0) return // pas de socle : pas de mixer du tout
     // Le socle est tiré au hasard UNE FOIS par chargement de modèle ; les gestes
@@ -1700,6 +1791,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const urls = [
       idleUrl,
       ...cat.talking,
+      // Les socles d'écoute partent avec le reste du face à face : ils pèsent
+      // 0,70 Mo pour la famille rb, et RIEN pour Overte, qui n'en a aucun.
+      ...cat.listening,
       ...[...cat.gestures.values()].flat(),
       ...[...cat.postures.values()].flat(),
       ...worldUrlsNeeded(cat, interactive),
@@ -1737,8 +1831,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       if (baseAction) fadeTo(baseAction, GESTURE_RETURN)
     })
     for (const [url, clip] of clips) actions.set(url, mixer.clipAction(clip))
+    builtFamily = fam
     idleAction = asBase(actions.get(idleUrl) ?? null)
     talkingAction = asBase(pickAction(cat.talking))
+    // Écoute déjà en cours au moment où le modèle arrive (l'utilisateur tape
+    // pendant le chargement) : le socle est posé tout de suite, comme la posture.
+    listenAction = listening ? asBase(pickAction(cat.listening)) : null
+    lastListen = listenAction
     postureAction = asBase(postureName ? pickAction(cat.postures.get(postureName)) : null)
     syncBase(0)
     // Le socle est posé mais PAS ENCORE ÉVALUÉ : le squelette est toujours dans la
@@ -2301,6 +2400,32 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       syncBase(BASE_FADE)
     },
 
+    setListening(on: boolean): void {
+      if (on === listening) return
+      listening = on
+      // Un TIRAGE à chaque entrée en écoute, avec anti-répétition — même règle
+      // que les gestes : trois variantes tirées uniformément rejoueraient la
+      // précédente une fois sur trois, et c'est ce qui se lit comme un tic.
+      // Le socle « parle », lui, est tiré une fois par modèle : il tourne des
+      // secondes d'affilée, l'écoute revient à chaque phrase tapée.
+      listenAction = on ? asBase(pickAction(catalog?.listening, lastListen)) : null
+      if (listenAction) lastListen = listenAction
+      // Aucun clip d'écoute (famille Overte, ou fichiers absents) : listenAction
+      // reste null, desiredBase l'ignore, RIEN ne change. Le fondu ci-dessous
+      // n'a alors rien à faire — syncBase ne bouge que si le socle voulu change.
+      syncBase(BASE_FADE)
+    },
+
+    setAnimationFamily(family: AnimationFamily): void {
+      if (family === animFamily) return
+      animFamily = family
+      // Les deux familles n'ont aucun fichier en commun : changer de famille,
+      // c'est changer TOUS les clips. On reconstruit — et si la scène vivante
+      // est allumée, la famille effective n'a pas bougé (elle est forcée à
+      // Overte) et il n'y a rien à refaire.
+      if (currentVrm && builtFamily !== effectiveFamily()) void buildAnimations(currentVrm)
+    },
+
     setAnimationsEnabled(on: boolean): void {
       if (on === animationsEnabled) return
       animationsEnabled = on
@@ -2348,6 +2473,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       springSettle = true // retour à l'origine = saut (cf. springSettle)
       syncBase(BASE_FADE)
       reframePending = true
+      // Le personnage RETROUVE SA FAMILLE en quittant la scène vivante (cf.
+      // effectiveFamily). Sans famille propre, `builtFamily` vaut déjà 'overte'
+      // et rien n'est reconstruit : le mode par défaut ne paie rien.
+      if (currentVrm && builtFamily !== effectiveFamily()) void buildAnimations(currentVrm)
     },
 
     setPosture(name: string | null): void {
