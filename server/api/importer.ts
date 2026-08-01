@@ -18,6 +18,13 @@ function queryString(v: unknown): string {
  * Compose le system prompt LISIBLEMENT à partir de la card :
  * system_prompt tel quel en tête, puis sections markdown pour les champs
  * non vides — contenu VERBATIM, aucune réécriture.
+ *
+ * L'ORDRE est celui de SillyTavern, et il n'est pas décoratif : le dialogue
+ * d'exemple vient après la description (on montre la voix une fois qu'on sait
+ * qui parle), et les consignes post-historique ferment la marche — ST les place
+ * après l'historique justement pour qu'elles pèsent le plus lourd. Hanami
+ * n'envoie qu'UN message système : la fin du prompt est la place la plus tardive
+ * dont il dispose, et le personnage reste modifiable à la main ensuite.
  */
 function composeSystemPrompt(card: ParsedCard): string {
   const parts: string[] = []
@@ -25,6 +32,10 @@ function composeSystemPrompt(card: ParsedCard): string {
   if (card.description.trim()) parts.push(`## Description\n\n${card.description}`)
   if (card.personality.trim()) parts.push(`## Personality\n\n${card.personality}`)
   if (card.scenario.trim()) parts.push(`## Scenario\n\n${card.scenario}`)
+  if (card.mesExample.trim()) parts.push(`## Example dialogue\n\n${card.mesExample}`)
+  if (card.postHistoryInstructions.trim()) {
+    parts.push(`## Final instructions (from the card — they take precedence)\n\n${card.postHistoryInstructions}`)
+  }
   return parts.join('\n\n')
 }
 

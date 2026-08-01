@@ -9,6 +9,13 @@ export interface ParsedCard {
   firstMes: string
   alternateGreetings: string[] // V2/V3 : data.alternate_greetings (vide en V1)
   systemPrompt: string
+  // Dialogue d'exemple (V1 comme V2) : les répliques modèles de la card,
+  // séparées par des <START>. C'est là que vit la VOIX du personnage — le ton,
+  // les tics, la longueur des réponses.
+  mesExample: string
+  // Consignes que SillyTavern place APRÈS l'historique (le « jailbreak » des
+  // cards) : la règle qui doit peser le plus lourd au moment de répondre.
+  postHistoryInstructions: string
 }
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -72,6 +79,8 @@ function normalizeCard(raw: unknown): ParsedCard | null {
     firstMes: str(src.first_mes),
     alternateGreetings: strArray(src.alternate_greetings),
     systemPrompt: str(src.system_prompt),
+    mesExample: str(src.mes_example),
+    postHistoryInstructions: str(src.post_history_instructions),
   }
   if (!card.name && !card.description && !card.firstMes) return null
   return card
