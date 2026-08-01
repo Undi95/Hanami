@@ -801,11 +801,30 @@ export function createWander(host: WanderHost): Wander {
     state = 'walking'
   }
 
-  /** Déclenche l'arrêt : le clip d'arrêt, puis le retour au socle. */
+  /**
+   * Déclenche l'arrêt : le clip d'arrêt, puis le retour au socle.
+   *
+   * AUX ÉTAPES (il reste un itinéraire, ou un trajet d'assise suit), l'arrêt
+   * est le COURT — `world-walk-stop-small`, 1,27 s — et pas le tirage parmi
+   * les longs (1,27 à 2,70 s, dont 2,70 une fois sur quatre) : un coin
+   * d'itinéraire coûtait 3 à 5 s planté (arrêt + pivot + départ), l'arrêt
+   * court en rend ~0,7 s en moyenne et retire l'aléa du pire tirage. Le
+   * raccord ne change pas : les cinq arrêts partagent le contrat d'entrée
+   * (walk@0 → 0,0 cm ×5) et la même pose de fin (→ idle pire 3,0 cm,
+   * moy 1,3 — mesuré sur le petit comme sur les quatre autres). À l'ARRIVÉE,
+   * le tirage long demeure : s'installer est le moment de prendre son temps.
+   *
+   * `world-walk-stop-small` a sa propre clé de catalogue (un suffixe non
+   * numérique survit au regroupement des variantes), mais il faut encore que
+   * WORLD_NEEDED (vrmStage) le télécharge : tant que ce n'est pas fait,
+   * has() rend false et ce choix retombe exactement sur l'arrêt d'avant.
+   */
   function beginStop(): void {
     wantStop = false
-    if (host.has('walk-stop')) {
-      host.once('walk-stop', STOP_FADE, null, AFTER_STOP_FADE)
+    const midStop = route.length > 0 || seatRun !== null
+    const stop = midStop && host.has('walk-stop-small') ? 'walk-stop-small' : 'walk-stop'
+    if (host.has(stop)) {
+      host.once(stop, STOP_FADE, null, AFTER_STOP_FADE)
       state = 'stopping'
       return
     }
