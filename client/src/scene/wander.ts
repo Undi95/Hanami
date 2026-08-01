@@ -583,9 +583,14 @@ export function createWander(host: WanderHost): Wander {
     turnDir = d > 0 ? 1 : -1
     yawTarget = want
     const clip = turnDir > 0 ? 'turn-left' : 'turn-right'
+    // GARDE D'ANGLE : sous la demi-zone morte, turnStep rendra la main à sa
+    // première image — le clip posé quand même prenait ~5 % de poids UNE image
+    // avant d'être remplacé (flash mécanique du seatAlign d'un personnage déjà
+    // aligné, endLeg → tryGoSit). Le seuil est EXACTEMENT la condition de fin
+    // immédiate de turnStep : les deux ne peuvent pas se contredire.
     // Clip absent (dossier vrma/ incomplet) : on glisse, on ne bloque pas.
     // La phase d'entrée est le contrat de raccord — cf. TURN_ENTER_*_S.
-    if (host.has(clip)) {
+    if (Math.abs(d) >= FACE_DEADZONE * 0.5 && host.has(clip)) {
       host.gait(clip, TURN_FADE, turnDir > 0 ? TURN_ENTER_LEFT_S : TURN_ENTER_RIGHT_S)
       turnClipUp = true
     }
