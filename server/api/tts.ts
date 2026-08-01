@@ -30,7 +30,12 @@ ttsRouter.post('/api/tts', async (req, res) => {
   try {
     const r = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // charset=utf-8 ANNONCÉ : le corps part déjà en UTF-8 (fetch n'encode pas
+      // autrement, et c'est ce que JSON impose depuis la RFC 8259), mais les
+      // serveurs TTS sont des scripts Python maison — celui qui décode selon
+      // l'en-tête, faute de charset, retombe parfois sur latin1 et lit
+      // « cÃ´tÃ© ». Le dire coûte quinze octets et ferme la question.
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify(payload),
       signal: ctrl.signal,
     })
