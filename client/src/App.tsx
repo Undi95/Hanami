@@ -40,7 +40,7 @@ import { chatPanelWidth, healLayoutPrefs, saveChatPanelWidth, saveVnBoxWidth, sa
 import { I18nProvider, chatDisplayTitle, getLang, localeOf, useI18n } from './i18n'
 import TopBar, { AUTO_COMPACT_AT, CtxBadge, type DialogKind } from './components/TopBar'
 import { ChatPanelGrip } from './components/ResizeGrips'
-import MessageList, { VnBox, type FeedItem } from './components/MessageList'
+import MessageList, { VnBox, messageVariants, type FeedItem } from './components/MessageList'
 import Composer from './components/Composer'
 import LoginGate from './components/LoginGate'
 import Dialog from './components/Dialog'
@@ -1163,6 +1163,32 @@ function AppInner() {
     )
   }
 
+  // Change la variante affichée d'une réponse (« Régénérer » les empile). Le
+  // serveur recopie la variante choisie dans le corps du message : le fil, le
+  // prochain payload, l'export, la voix et la copie la suivent d'un coup. Rien
+  // ne bouge à l'écran tant qu'il n'a pas répondu — comme pour la suppression.
+  async function handleSwitchVariant(ordinal: number, variant: number) {
+    const char = character
+    const chat = chatMeta
+    if (!char || !chat) return
+    const out = await api.setChatMessageVariant(char.id, chat.id, ordinal, variant)
+    setFeed((f) => {
+      let n = -1
+      return f.map((it) => {
+        if (it.kind !== 'msg') return it
+        n++
+        return n === ordinal ? { kind: 'msg' as const, msg: out.message } : it
+      })
+    })
+    // Le visage suit la variante affichée : chacune porte SON tag. `live` —
+    // cette réplique-là s'affiche maintenant, exactement comme une réponse qui
+    // vient d'arriver. Seule la DERNIÈRE réponse du fil pilote l'avatar.
+    const lastOrdinal = feed.reduce((n, it) => (it.kind === 'msg' ? n + 1 : n), -1)
+    if (ordinal === lastOrdinal) {
+      applyEmotion(out.message.emotion ?? extractEmotion(out.message.content) ?? 'neutral', true)
+    }
+  }
+
   // Épingle : gadget d'affichage seulement (l'ordinal vit dans l'en-tête du chat,
   // jamais dans le payload envoyé au modèle). Optimiste : le bandeau suit le clic,
   // et repart à l'état serveur si l'appel échoue.
@@ -1250,6 +1276,11 @@ function AppInner() {
   })()
   const canRegen = !!lastFeedMsg && !lastFeedMsg.pending
   const canContinue = canRegen && lastFeedMsg.msg.role === 'assistant'
+  // Variantes de la dernière réponse, et son ordinal : le mode VN n'a pas de
+  // bulle à survoler, ses flèches vivent dans la bande basse — à côté du
+  // « Régénérer » qui les produit.
+  const lastOrdinal = feed.reduce((n, it) => (it.kind === 'msg' ? n + 1 : n), -1)
+  const lastVariants = canRegen && lastFeedMsg ? messageVariants(lastFeedMsg.msg) : null
 
   // Ce personnage-ci parle-t-il ? La synthèse est un service d'application (on
   // l'allume et on la configure une fois, dans les Réglages) ; la VOIX, elle,
@@ -1476,6 +1507,7 @@ function AppInner() {
             pinned={chatMeta?.pinned ?? null}
             onSaveEdit={handleEditMessage}
             onDeleteMessage={handleDeleteMessage}
+            onSwitchVariant={handleSwitchVariant}
             onReply={setReplyTo}
             onPin={(ordinal) => {
               handlePin(ordinal).catch((e) => console.error('[pin]', e))
@@ -1518,6 +1550,42 @@ function AppInner() {
             )}
             {!streaming && canRegen && (
               <>
+                {/* Feuilleter les variantes en mode VN : même mécanique que les
+                    flèches de la bulle, au seul endroit où l'on peut cliquer
+                    quand le fil n'est pas monté. */}
+                {vnMode && lastVariants && (
+                  <span className="vn-variants" title={t('variantTitle', { n: lastVariants.index + 1, m: lastVariants.total })}>
+                    <button
+                      className="btn small"
+                      disabled={lastVariants.index === 0}
+                      title={t('variantPrev')}
+                      aria-label={t('variantPrev')}
+                      onClick={() => {
+                        handleSwitchVariant(lastOrdinal, lastVariants.index - 1).catch((e) =>
+                          console.error('[variant]', e),
+                        )
+                      }}
+                    >
+                      ‹
+                    </button>
+                    <span className="vn-vcount">
+                      {t('variantCount', { n: lastVariants.index + 1, m: lastVariants.total })}
+                    </span>
+                    <button
+                      className="btn small"
+                      disabled={lastVariants.index === lastVariants.total - 1}
+                      title={t('variantNext')}
+                      aria-label={t('variantNext')}
+                      onClick={() => {
+                        handleSwitchVariant(lastOrdinal, lastVariants.index + 1).catch((e) =>
+                          console.error('[variant]', e),
+                        )
+                      }}
+                    >
+                      ›
+                    </button>
+                  </span>
+                )}
                 <button
                   className="btn small"
                   onClick={() => runGeneration({ mode: 'regenerate' }).catch((e) => console.error('[regen]', e))}

@@ -143,6 +143,12 @@ const FR = {
   remembered: 'Épinglé dans la mémoire (moments.md).',
   pinMessage: 'Épingler ce message',
   unpin: 'Retirer l’épingle',
+  // Variantes de réponse : « Régénérer » les empile, ces flèches les feuillettent.
+  // Le titre dit l'essentiel — au prochain message, seule celle qu'on lit reste.
+  variantCount: '{n}/{m}',
+  variantPrev: 'Variante précédente',
+  variantNext: 'Variante suivante',
+  variantTitle: 'Variante {n} sur {m} — seule celle qui est affichée sera conservée au prochain message',
 
   // ── Images (modèles à vision) ────────────────────────────────────────────
   attachImage: 'Joindre une image',
@@ -582,6 +588,10 @@ const EN: Record<Key, string> = {
   remembered: 'Pinned to memory (moments.md).',
   pinMessage: 'Pin this message',
   unpin: 'Remove the pin',
+  variantCount: '{n}/{m}',
+  variantPrev: 'Previous variant',
+  variantNext: 'Next variant',
+  variantTitle: 'Variant {n} of {m} — only the one shown is kept once you send the next message',
 
   // ── Images (vision models) ───────────────────────────────────────────────
   attachImage: 'Attach an image',

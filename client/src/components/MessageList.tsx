@@ -42,6 +42,12 @@ interface Props {
   onSaveEdit: (ordinal: number, content: string) => Promise<void>
   /** Retire un message du fil — même ordinal que l'édition. */
   onDeleteMessage: (ordinal: number) => Promise<void>
+  /**
+   * Change la variante affichée d'une réponse (« Régénérer » les empile). Même
+   * ordinal que l'édition : une variante ne crée aucun message, elle vit DANS
+   * celui-ci.
+   */
+  onSwitchVariant: (ordinal: number, variant: number) => Promise<void>
   /** « Retiens ça » : épingle le contenu du message dans la mémoire. */
   onRemember: (msg: ChatMessage) => void
   /** Cible le message dans le composer (la citation sera écrite dans l'envoi). */
@@ -167,6 +173,60 @@ function ImageOverlay({ url, onClose }: { url: string; onClose: () => void }) {
   )
 }
 
+// ── Variantes de réponse ───────────────────────────────────────────────────
+// « Régénérer » n'écrase plus : chaque réponse générée reste, et on feuillette.
+// Le message porte la liste et l'indice affiché (shared/types.ts) ; l'UI n'a
+// donc rien à retenir — elle lit la donnée et renvoie l'indice voulu.
+
+/** Position affichée dans les variantes d'un message — null s'il n'en a pas. */
+export function messageVariants(msg: ChatMessage): { index: number; total: number } | null {
+  const total = msg.variants?.length ?? 0
+  return total >= 2 ? { index: msg.variant ?? 0, total } : null
+}
+
+/**
+ * Flèches ‹ n/m › de la rangée du survol. Discrètes par construction : mêmes
+ * boutons que les icônes voisines (.msg-edit), un compteur, et rien du tout
+ * quand la réponse n'a qu'une version. Aux extrémités la flèche s'éteint plutôt
+ * que de boucler — feuilleter n'est pas un carrousel.
+ */
+function Variants({ msg, onSwitch }: { msg: ChatMessage; onSwitch: (variant: number) => void }) {
+  const { t } = useI18n()
+  const v = messageVariants(msg)
+  if (!v) return null
+  const { index, total } = v
+  const title = t('variantTitle', { n: index + 1, m: total })
+  return (
+    <span className="msg-variants" title={title}>
+      <button
+        className="msg-edit"
+        disabled={index === 0}
+        title={t('variantPrev')}
+        aria-label={t('variantPrev')}
+        onClick={() => onSwitch(index - 1)}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 5.5L7.5 12l6.5 6.5" />
+        </svg>
+      </button>
+      <span className="msg-vcount" aria-label={title}>
+        {t('variantCount', { n: index + 1, m: total })}
+      </span>
+      <button
+        className="msg-edit"
+        disabled={index === total - 1}
+        title={t('variantNext')}
+        aria-label={t('variantNext')}
+        onClick={() => onSwitch(index + 1)}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10 5.5l6.5 6.5-6.5 6.5" />
+        </svg>
+      </button>
+    </span>
+  )
+}
+
 function fmtTime(ts: string, lang: Lang): string {
   const d = new Date(ts)
   if (Number.isNaN(d.getTime())) return ''
@@ -197,6 +257,7 @@ export default function MessageList({
   pinned,
   onSaveEdit,
   onDeleteMessage,
+  onSwitchVariant,
   onRemember,
   onReply,
   onPin,
@@ -446,6 +507,17 @@ export default function MessageList({
               <div className="msg-ts">
                 {editable && ordinal !== null && (
                   <>
+                    {/* Variantes de la réponse (« Régénérer » les empile) : on
+                        feuillette EN TÊTE de rangée, avant les actions — ces
+                        flèches ne modifient rien, elles changent ce qu'on lit.
+                        Clic seulement : la flèche haut du clavier appartient à
+                        l'édition du dernier message. */}
+                    <Variants
+                      msg={item.msg}
+                      onSwitch={(variant) => {
+                        onSwitchVariant(ordinal, variant).catch((e) => console.error('[variant]', e))
+                      }}
+                    />
                     {/* Copier : la seule action qui ne touche à rien — d'où sa
                         place en tête de rangée. La coche remplace l'icône deux
                         secondes, c'est tout le retour visuel. */}

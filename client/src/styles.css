@@ -1019,6 +1019,66 @@ select {
   }
 }
 
+/* ── Variantes de réponse (« Régénérer » les empile) ────────────────────────
+   Les flèches ‹ n/m › ouvrent la rangée du survol, avant les actions : elles ne
+   modifient rien, elles changent ce qu'on lit. Boutons .msg-edit, donc même
+   discrétion et même apparition au survol que leurs voisines — seul le compteur
+   demande ses propres règles. */
+.msg-variants {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-right: 2px;
+  vertical-align: middle;
+}
+
+.msg-vcount {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  opacity: 0.75;
+}
+
+/* Flèche en bout de course : présente, mais éteinte — feuilleter n'est pas un
+   carrousel. Jamais visible sans survol : les règles restent dans les media. */
+.msg-variants .msg-edit:disabled {
+  cursor: default;
+}
+
+@media (pointer: fine) {
+  .msg-vcount {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .msg:hover .msg-vcount,
+  .msg:focus-within .msg-vcount {
+    opacity: 0.75;
+  }
+  .msg:hover .msg-variants .msg-edit:disabled,
+  .msg:focus-within .msg-variants .msg-edit:disabled {
+    opacity: 0.18;
+  }
+}
+
+/* Tactile : cibles de 40 px, sans grossir l'icône (le dessin reste celui des
+   voisines, c'est la zone de toucher qui s'élargit). */
+@media (pointer: coarse) {
+  .msg-variants .msg-edit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+    margin-left: 0;
+  }
+  .msg-variants .msg-edit:disabled {
+    opacity: 0.18;
+  }
+}
+
 .bubble.editing {
   width: min(420px, 78vw);
 }
@@ -3186,6 +3246,41 @@ select {
 
 .chat-panel.vn .reply-actions .btn:hover {
   color: var(--accent);
+}
+
+/* Feuilleter les variantes depuis la bande basse : en mode VN il n'y a pas de
+   bulle à survoler, ces flèches sont la seule prise. Elles se rangent contre
+   « Régénérer », qui est ce qui les produit — chevrons pleine hauteur pour une
+   cible de 40 px au doigt, sans que la bande ne grandisse (la bande fait déjà
+   cette hauteur avec ses libellés). */
+.chat-panel.vn .vn-variants {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 6px;
+}
+
+.chat-panel.vn .vn-variants .btn {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  font-size: 17px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.chat-panel.vn .vn-variants .btn:disabled {
+  opacity: 0.25;
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.chat-panel.vn .vn-vcount {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
 }
 
 /* Téléphone : la bande basse ne tient plus sur UNE ligne. À 375 px la boîte fait

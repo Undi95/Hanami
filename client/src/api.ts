@@ -619,6 +619,20 @@ export function deleteChatMessage(
   return req('DELETE', '/api/chat/message', { characterId, chatId, index })
 }
 
+/**
+ * Change la variante AFFICHÉE d'une réponse (index = position dans le fichier).
+ * Le serveur recopie la variante choisie dans le corps du message : le prochain
+ * payload, l'export, la voix, la copie et l'émotion la suivent aussitôt.
+ */
+export function setChatMessageVariant(
+  characterId: string,
+  chatId: string,
+  index: number,
+  variant: number,
+): Promise<{ index: number; message: ChatMessage }> {
+  return req('PUT', '/api/chat/variant', { characterId, chatId, index, variant })
+}
+
 /** Épingle un message du chat (ordinal) ou le désépingle (null) — pur affichage. */
 export function pinChatMessage(
   characterId: string,
