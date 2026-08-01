@@ -254,6 +254,18 @@ const SIT_BACKUP_FRAC = 0.2672 / 1.0167
 const SEAT_INSET_FRAC = 0.22
 /** Fondu d'ENTRÉE des transitions assises (l'autre extrémité est ancrée : 0). */
 const SIT_FADE = 0.3
+/**
+ * Fondu d'ATTERRISSAGE d'assise : fin de `world-sit-enter` → la variante de
+ * `world-sit-idle` que le tirage a choisie. L'ancrage « la dernière image de
+ * sit-enter EST sit-idle@0 » n'est vrai QUE de la variante canonique : les
+ * quatre autres en sont à 1,6–4,4 cm (et jusqu'à 92° de poignet), et l'ancien
+ * enchaînement SANS fondu les claquait en une image (98 à 235 cm/s mesurés au
+ * banc). Une seconde de fondu les ramène à 1,7–4 cm/s — le rythme propre des
+ * clips assis — et ne coûte RIEN à la variante canonique (1,1 cm/s : fondre
+ * deux poses identiques ne se voit pas). C'est la durée d'Overte entre
+ * variantes assises (seatedIdle01–05, fonduS 1,0).
+ */
+const SIT_LAND_FADE = 1.0
 /** Fondu d'un échange de socle assis (sit-idle ↔ sit-talking) et des gestes assis. */
 const BASE_SWAP_FADE = 0.4
 /** Durée passée assis (s), tirée uniformément. On s'assoit pour de bon. */
@@ -916,9 +928,11 @@ export function createWander(host: WanderHost): Wander {
     if (g !== null) run.groundY = g
     slide = { fx: p.x, fy: run.groundY, fz: p.z, tx: run.sitX, ty: run.seatedY, tz: run.sitZ }
     host.feet('reach')
-    // La dernière image de world-sit-enter EST world-sit-idle à t = 0 (ancrée) :
-    // enchaînement sans fondu, à cette phase exacte.
-    host.once('sit-enter', SIT_FADE, 'sit-idle', 0, 0)
+    // Le socle assis est TIRÉ parmi cinq variantes (pickAction) : l'atterrissage
+    // se fait donc en fondu d'une seconde, pas en claquant — cf. SIT_LAND_FADE.
+    // La phase 0 reste le contrat : c'est là que chaque variante est le plus
+    // près de la fin de sit-enter (mesuré ×5).
+    host.once('sit-enter', SIT_FADE, 'sit-idle', SIT_LAND_FADE, 0)
     seatBase = 'sit-idle'
     state = 'sitDown'
   }
