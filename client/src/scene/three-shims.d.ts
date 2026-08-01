@@ -59,13 +59,23 @@ declare module 'three' {
     object: Object3D
   }
 
-  // Lancer de rayon — UNIQUEMENT à l'événement de clic, jamais dans la boucle :
-  // intersecter un décor de 200 000 triangles par image est exactement le genre
-  // de calcul que l'architecture interdit à l'exécution.
+  /** Demi-droite du monde : `direction` est unitaire quand three la fabrique. */
+  export class Ray {
+    origin: Vector3
+    direction: Vector3
+  }
+
+  // Lancer de rayon — UNIQUEMENT à l'événement de clic (et au survol throttlé du
+  // curseur contextuel), jamais dans la boucle de rendu. Sur les décors, ce
+  // n'est plus `intersectObject` qui travaille mais le BVH maison (cf.
+  // scene/bvh.ts), qui lit `ray` directement ; l'avatar, lui, a une peau animée
+  // et reste sur le lancer de rayon de three.
   export class Raycaster {
     constructor()
     near: number
     far: number
+    /** Le rayon du monde, reconstruit par setFromCamera. */
+    ray: Ray
     setFromCamera(coords: Vector2, camera: Camera): void
     intersectObject(object: Object3D, recursive?: boolean): Intersection[]
   }
@@ -103,6 +113,8 @@ declare module 'three' {
   }
 
   export class Matrix4 {
+    /** Les 16 coefficients, EN COLONNES (elements[12..14] = la translation). */
+    elements: number[]
     copy(m: Matrix4): this
     invert(): this
     multiply(m: Matrix4): this
@@ -199,6 +211,10 @@ declare module 'three' {
 
   // Référencés par les .d.ts de @pixiv/three-vrm (skipLibCheck, mais les noms doivent exister).
   export class Material {
+    // Faces retenues (FrontSide par défaut). Sur la classe de BASE parce que le
+    // BVH des décors doit reproduire le tri de faces de three sur n'importe quel
+    // matériau venu d'un .glb, pas seulement sur ceux qu'on fabrique.
+    side: number
     // Clone INDÉPENDANT : les Color (`color`, `emissive`) sont recopiées, les
     // textures restent partagées avec l'original par référence.
     clone(): this
@@ -229,12 +245,12 @@ declare module 'three' {
   export class MeshBasicMaterial extends Material {
     constructor(parameters?: Record<string, unknown>)
     color: Color
-    side: number
     /** Écrite par image pendant l'estompage d'un marqueur de clic. */
     opacity: number
   }
-  /** Faces visibles des deux côtés (Material.side). */
+  /** Valeurs de Material.side. FrontSide est le défaut de three, et n'est pas nommé ici. */
   export const DoubleSide: number
+  export const BackSide: number
 
   // ── Animation (.vrma) ──────────────────────────────────────────────────────
   // Les pistes ne sont JAMAIS construites ici : elles arrivent des .vrma via
