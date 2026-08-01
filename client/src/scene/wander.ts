@@ -340,8 +340,9 @@ const SEAT_PULL_STEP = 0.05
  *
  * Debout, une émotion joue son geste (`happy.vrma`…) ; assis, le socle EST une
  * allure du domaine `world-`, et la garde de playGesture refusait donc TOUT
- * geste — le visage portait l'émotion à lui seul, sur les ~40 % du temps que la
- * scène vivante passe assise. Ces clips-là existent pourtant, mesurés contre le
+ * geste — le visage portait l'émotion à lui seul, sur les 18 à 25 % du temps
+ * que la scène vivante passe assise (mesuré sur les trois décors, 15 min de
+ * simulation chacun). Ces clips-là existent pourtant, mesurés contre le
  * maintien assis (`world-sit-idle`) : c'est cette table qui les rattache.
  *
  * LES CLEFS SONT CELLES DU CATALOGUE, pas des noms de fichiers : `catalogFromUrls`
