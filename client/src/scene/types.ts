@@ -50,11 +50,13 @@ export interface VrmStage {
   /**
    * Famille d'animations de face à face du personnage affiché (défaut 'overte').
    * Changer de famille RECONSTRUIT le mixer : les deux bibliothèques n'ont aucun
-   * fichier en commun, et celle qui n'est pas choisie n'est jamais téléchargée.
+   * clip de face à face en commun, et celle qui n'est pas choisie n'est jamais
+   * téléchargée.
    *
-   * Sans effet tant que la scène vivante est allumée : le domaine `world-` est
-   * intégralement Overte, donc le face à face l'est aussi le temps de la scène
-   * (cf. vrma/README.md, « la règle des familles »).
+   * Le réglage porte sur le socle, la parole, l'écoute et les gestes — dans les
+   * deux modes. Le domaine `world-` de la scène vivante (allures, pivots,
+   * postures assises, acquiescement au clic) reste Overte pour tout le monde :
+   * Rocketbox n'a rien de tout cela (cf. vrma/README.md).
    */
   setAnimationFamily(family: AnimationFamily): void
   /**

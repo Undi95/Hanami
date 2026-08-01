@@ -81,14 +81,17 @@ function catalogFromUrls(urls, family) {
     const file = decodeURIComponent(url.split('/').pop() ?? '')
     const nom = file.replace(/\.vrma$/i, '').toLowerCase().replace(/-\d+$/, '')
     const rb = nom.startsWith(RB_PREFIX) && nom.length > RB_PREFIX.length
-    if (rb !== (family === 'rocketbox')) continue // familles étanches
     const stem = rb ? nom.slice(RB_PREFIX.length) : nom
-    if (stem === 'idle') cat.idle.push(url)
-    else if (stem === TALKING_STEM) cat.talking.push(url)
-    else if (stem === LISTENING_STEM) cat.listening.push(url)
-    else if (EMOTIONS.includes(stem)) push(cat.gestures, stem, url)
-    else if (rb) continue // la scène vivante reste 100 % Overte
-    else if (stem === REACTION_STEM) cat.reactions.push(url)
+    // Rôles de FACE À FACE : la famille demandée, et elle seule.
+    if (rb === (family === 'rocketbox')) {
+      if (stem === 'idle') { cat.idle.push(url); continue }
+      if (stem === TALKING_STEM) { cat.talking.push(url); continue }
+      if (stem === LISTENING_STEM) { cat.listening.push(url); continue }
+      if (EMOTIONS.includes(stem)) { push(cat.gestures, stem, url); continue }
+    }
+    // Domaine de la SCÈNE VIVANTE : Overte, quelle que soit la famille.
+    if (rb) continue
+    if (stem === REACTION_STEM) cat.reactions.push(url)
     else if (stem.startsWith(WORLD_PREFIX) && stem.length > WORLD_PREFIX.length) {
       push(cat.world, stem.slice(WORLD_PREFIX.length), url)
     } else {
@@ -161,17 +164,17 @@ console.log(`\n  mode éteint : ${eteint} fichier(s) — attendu 0`)
 console.log(`  mode allumé : ${worldUrlsNeeded(true).length} fichier(s), dont ${cat.reactions.length} d'acquiescement debout`)
 
 // ── LES DEUX FAMILLES DE FACE À FACE ────────────────────────────────────────
-// Ce que buildAnimations télécharge réellement, famille par famille, scène
-// vivante ÉTEINTE (c'est le seul mode où la famille du personnage s'applique :
-// allumée, la famille effective est forcée à Overte).
-console.log('\n── familles de face à face (scène vivante éteinte) ──')
-// Tous les fichiers qu'une famille REVENDIQUE (l'étanchéité se juge là-dessus)…
+// L'étanchéité porte sur les RÔLES DE FACE À FACE — socle, parole, écoute,
+// gestes. Le domaine de la scène vivante (allures, postures, acquiescement) est
+// Overte dans les deux catalogues, et c'est voulu : Rocketbox n'a ni marche, ni
+// pivot, ni assise. On compare donc les listes de face à face.
+console.log('\n── familles de face à face ──')
+// Tous les fichiers de face à face qu'une famille REVENDIQUE…
 const listeFace = (c) => [
-  ...c.idle, ...c.talking, ...c.listening,
-  ...[...c.gestures.values()].flat(), ...[...c.postures.values()].flat(),
+  ...c.idle, ...c.talking, ...c.listening, ...[...c.gestures.values()].flat(),
 ]
-// …et ceux que buildAnimations DEMANDE vraiment : un seul socle, tiré au hasard
-// une fois par chargement de modèle, tout le reste en entier.
+// …et ce que buildAnimations DEMANDE vraiment en face à face : un seul socle,
+// tiré au hasard une fois par chargement de modèle, tout le reste en entier.
 const listeChargee = (c) => [
   ...c.idle.slice(0, 1), ...c.talking, ...c.listening,
   ...[...c.gestures.values()].flat(), ...[...c.postures.values()].flat(),
@@ -187,7 +190,7 @@ for (const f of FAMILLES) {
     `gestes ${[...c.gestures.values()].flat().length} sur ${c.gestures.size} émotion(s)`,
   ]
   if (c.idle.length === 0) { echecs++; roles.push('AUCUN SOCLE — la famille est inerte') }
-  console.log(`  ${p(f, 10)}${r(parFamille[f].size, 3)} fichier(s) revendiqués   ${roles.join(' · ')}`)
+  console.log(`  ${p(f, 10)}${r(parFamille[f].size, 3)} clip(s) de face à face   ${roles.join(' · ')}`)
   console.log(
     `             téléchargés : ${r(chargee[f].length, 3)} fichier(s)` +
     `${r((poids(chargee[f]) / 1048576).toFixed(2), 7)} Mo (un seul socle sur ${c.idle.length}) · ` +
@@ -195,28 +198,38 @@ for (const f of FAMILLES) {
   )
 }
 
-// L'ÉTANCHÉITÉ, prouvée sur les listes elles-mêmes : aucun fichier commun, et
-// aucun clip `rb-` dans le catalogue Overte (ni l'inverse) — y compris dans les
-// rôles de la scène vivante, qui reste 100 % Overte.
+// L'ÉTANCHÉITÉ, prouvée sur les listes elles-mêmes : aucun clip de face à face
+// commun aux deux familles, aucun `rb-` dans les rôles Overte (ni l'inverse), et
+// aucun `rb-` dans la scène vivante, qui reste 100 % Overte.
 const estRb = (u) => /(^|\/)rb-[^/]*\.vrma$/i.test(decodeURIComponent(u))
 const commun = [...parFamille.overte].filter((u) => parFamille.rocketbox.has(u))
 const intrusRb = [...parFamille.overte].filter(estRb)
 const intrusOverte = [...parFamille.rocketbox].filter((u) => !estRb(u))
-const mondeRb = [...worldUrlsNeeded(true), ...[...cats.overte.postures.values()].flat()].filter(estRb)
+const mondeRb = FAMILLES.flatMap((f) => [
+  ...WORLD_NEEDED.flatMap((n) => cats[f].world.get(n) ?? []),
+  ...cats[f].reactions,
+  ...[...cats[f].postures.values()].flat(),
+]).filter(estRb)
 for (const [quoi, l] of [
-  ['fichier(s) dans les DEUX familles', commun],
-  ['clip(s) rb- dans la famille overte', intrusRb],
-  ['clip(s) overte dans la famille rocketbox', intrusOverte],
-  ['clip(s) rb- dans la scène vivante', mondeRb],
+  ['clip(s) de face à face dans les DEUX familles', commun],
+  ['clip(s) rb- dans les rôles de la famille overte', intrusRb],
+  ['clip(s) overte dans les rôles de la famille rocketbox', intrusOverte],
+  ['clip(s) rb- dans la scène vivante (les deux catalogues)', mondeRb],
 ]) {
   if (l.length) { echecs++; console.log(`  ✗ ${l.length} ${quoi} : ${l.slice(0, 5).join(', ')}`) }
   else console.log(`  ✓ 0 ${quoi}`)
 }
+// Le domaine de la scène vivante doit être IDENTIQUE dans les deux catalogues :
+// c'est la contrepartie de l'étanchéité — une seule famille pour marcher.
+const mondeDe = (f) => [...WORLD_NEEDED.flatMap((n) => cats[f].world.get(n) ?? []), ...cats[f].reactions].sort().join('|')
+const memeMonde = mondeDe('overte') === mondeDe('rocketbox')
+if (!memeMonde) echecs++
+console.log(`  ${memeMonde ? '✓' : '✗'} scène vivante identique pour les deux familles (${worldUrlsNeeded(true).length} fichiers Overte)`)
 // Le chargement paresseux : choisir une famille, c'est NE PAS télécharger l'autre.
 for (const f of FAMILLES) {
   const autre = FAMILLES.find((x) => x !== f)
   console.log(
-    `  famille ${p(f, 10)} → ${r(chargee[f].length, 3)} fichier(s) demandés, ` +
+    `  famille ${p(f, 10)} → ${r(chargee[f].length, 3)} fichier(s) de face à face demandés, ` +
     `${r(parFamille[autre].size, 3)} JAMAIS (${(poids([...parFamille[autre]]) / 1048576).toFixed(2)} Mo non téléchargés)`,
   )
 }

@@ -26,8 +26,9 @@
  * Un personnage joue Overte OU Rocketbox en face à face, JAMAIS un mélange :
  * les deux bibliothèques n'ont pas la même pose de repos et le raccord croisé
  * mesure 16 à 20 cm d'excursion (contre 0,2 à 5,7 cm à l'intérieur de la
- * famille Rocketbox). Le domaine `world-` (scène vivante 3D) reste, lui,
- * 100 % Overte pour tout le monde. Voir vrma/README.md.
+ * famille Rocketbox). Le domaine `world-` (marcher, pivoter, s'asseoir) reste,
+ * lui, 100 % Overte pour tout le monde : Rocketbox n'en a aucun clip et
+ * n'entrera jamais dans ces rôles. Voir vrma/README.md.
  *
  * ─── USAGE ──────────────────────────────────────────────────────────────────
  *   node scripts/convert-rocketbox.mjs                  convertit tout le plan
@@ -105,7 +106,7 @@ const RACINE = path.resolve(ICI, '..')
 // Recalculées à chaque exécution (cf. l'en-tête « TRAÇABILITÉ »). Celle de la
 // méthode est prise sur le fichier PRIVÉ DE CETTE LIGNE — sinon elle se
 // contiendrait elle-même, ce qui n'a pas de point fixe.
-const SHA_METHODE = '7076a763cf9ab62faca20efb3f9e7a93e38cb19c0892aa87a209e0be812ac26f'
+const SHA_METHODE = 'a904328ff9234bbbb2e4fef3273bf8b8a3a1096cd7cea736d6fe6f8d23e9d86b'
 const SHA_PLAN = '8d8aa36b43f0267bc719818158928729fa42e480717ac94a2ae70b660f7af051'
 
 /** Dossier des FBX Rocketbox (hors dépôt — cf. l'en-tête). */

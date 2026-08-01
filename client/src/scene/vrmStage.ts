@@ -552,8 +552,14 @@ const LISTENING_STEM = 'listen'
  * Préfixe de la SECONDE famille de face à face (Microsoft Rocketbox, cf.
  * vrma/README.md). Deux bibliothèques complètes, deux stations debout
  * différentes : le raccord CROISÉ mesure 16,5 à 20,3 cm là où il vaut 0,2 à
- * 5,7 cm à l'intérieur d'une famille. Elles ne se mélangent donc jamais — la
- * séparation se fait ici, à la construction du catalogue.
+ * 5,7 cm à l'intérieur d'une famille. Les rôles de face à face ne les mélangent
+ * donc jamais — la séparation se fait ici, à la construction du catalogue.
+ *
+ * Le domaine `world-` de la scène vivante, lui, n'a qu'une famille et n'en aura
+ * pas d'autre : Rocketbox n'a ni marche, ni pivot, ni assise. En scène vivante,
+ * un personnage Rocketbox garde donc SES socles et SES gestes, et emprunte les
+ * allures d'Overte — c'est le seul raccord croisé de tout le système, et il est
+ * documenté dans vrma/README.md.
  */
 const RB_PREFIX = 'rb-'
 /** Radicaux de posture : `pose-sit` (nom court) et les clips assis livrés tels quels. */
@@ -596,12 +602,18 @@ function pushInto<K>(map: Map<K, string[]>, key: K, url: string): void {
  * suffixe de variante (`-2`, `-3`…) retiré : `happy-2.vrma` est une variante de
  * `happy`, exactement la grammaire des salutations multiples d'un personnage.
  *
- * LA FAMILLE SE LIT DANS LE NOM, et elle est ÉTANCHE : un fichier qui n'est pas
- * de la famille demandée n'entre dans aucun rôle — pour le catalogue rendu, il
- * n'existe pas. C'est ce qui garantit qu'aucun rôle ne mélange les deux
- * bibliothèques (16,5 à 20,3 cm de raccord croisé, cf. RB_PREFIX), et c'est
- * aussi ce qui fait que la famille NON choisie n'est jamais téléchargée : ses
- * URLs ne sont dans aucune liste que buildAnimations parcourt.
+ * LA FAMILLE SE LIT DANS LE NOM, et la séparation porte sur les rôles de FACE À
+ * FACE — socle, socle parlant, socle d'écoute, gestes d'émotion. Ceux-là ne
+ * viennent que de la famille demandée : un clip de l'autre famille n'y entre
+ * jamais (16,5 à 20,3 cm de raccord croisé, cf. RB_PREFIX), et la famille non
+ * choisie n'est donc jamais téléchargée — ses URLs ne sont dans aucune liste que
+ * buildAnimations parcourt.
+ *
+ * Le domaine de la SCÈNE VIVANTE, lui, est le même pour tout le monde : allures,
+ * pivots, transitions, postures assises et acquiescement au clic sont
+ * intégralement Overte, parce qu'ils n'existent que là. Rocketbox n'en fournit
+ * aucun et n'en fournira pas : un `rb-nod` est un « nod » de réserve, jamais la
+ * réaction au clic.
  *
  * Le préfixe `rb-` est retiré AVANT la dérivation du rôle — la grammaire est
  * ensuite la même mot pour mot pour les deux familles.
@@ -623,19 +635,35 @@ function catalogFromUrls(urls: readonly string[], family: AnimationFamily): Vrma
       .toLowerCase()
       .replace(/-\d+$/, '')
     const rb = nom.startsWith(RB_PREFIX) && nom.length > RB_PREFIX.length
-    if (rb !== (family === 'rocketbox')) continue // l'autre famille n'existe pas ici
     const stem = rb ? nom.slice(RB_PREFIX.length) : nom
-    if (stem === 'idle') cat.idle.push(url)
-    else if (stem === TALKING_STEM) cat.talking.push(url)
-    else if (stem === LISTENING_STEM) cat.listening.push(url)
-    else if ((EMOTIONS as readonly string[]).includes(stem)) pushInto(cat.gestures, stem as Emotion, url)
-    // LA FRONTIÈRE. Tout ce qui suit appartient à la SCÈNE VIVANTE (domaine
-    // `world-`, postures, acquiescement au clic), et la scène vivante reste
-    // 100 % Overte pour tout le monde : un socle debout Rocketbox raccordé à un
-    // arrêt de marche Overte rejouerait les 16 à 20 cm à chaque arrêt. Un
-    // `rb-nod` est donc un « nod » de réserve, jamais la réaction au clic.
-    else if (rb) continue
-    else if (stem === REACTION_STEM) cat.reactions.push(url)
+    // ── Rôles de FACE À FACE : la famille demandée, et elle seule ───────────
+    if (rb === (family === 'rocketbox')) {
+      if (stem === 'idle') {
+        cat.idle.push(url)
+        continue
+      }
+      if (stem === TALKING_STEM) {
+        cat.talking.push(url)
+        continue
+      }
+      if (stem === LISTENING_STEM) {
+        cat.listening.push(url)
+        continue
+      }
+      if ((EMOTIONS as readonly string[]).includes(stem)) {
+        pushInto(cat.gestures, stem as Emotion, url)
+        continue
+      }
+    }
+    // ── Domaine de la SCÈNE VIVANTE : Overte, quelle que soit la famille ────
+    // Un clip `rb-` qui arrive ici (rb-nod, rb-wave, rb-think…) n'a pas trouvé
+    // de rôle de face à face : il est ignoré, comme `shake` ou `raise-hand`
+    // côté Overte. Un clip Overte qui arrive ici alors qu'on bâtit le catalogue
+    // Rocketbox est soit un socle de l'autre famille (ignoré plus bas, aucun
+    // test ne le prend), soit une allure, une posture ou l'acquiescement — et
+    // ceux-là, on les veut.
+    if (rb) continue
+    if (stem === REACTION_STEM) cat.reactions.push(url)
     // Le domaine `world-` se teste AVANT les postures : `world-sit-idle`
     // commence par `world-`, pas par `sit-`. C'est cet ordre manquant qui rendait
     // POSTURE_PREFIXES aveugle aux clips renommés — cat.postures restait vide et
@@ -905,11 +933,11 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   let activeAction: AnimationAction | null = null // ce qui tient l'écran : socle ou geste
   let talking = false
   let listening = false // l'utilisateur est en train de taper (cf. setListening)
-  // Famille CHOISIE par le personnage, et famille du mixer EN PLACE. Les deux
-  // divergent le temps d'un chargement, et en scène vivante où la famille
-  // effective est forcée à Overte (cf. effectiveFamily).
+  // Famille de face à face du personnage affiché. Elle vaut dans les deux modes :
+  // en scène vivante, elle continue de fournir le socle, la parole, l'écoute et
+  // les gestes — seul le domaine `world-` (allures, postures, transitions) reste
+  // Overte, parce qu'il n'existe que là.
   let animFamily: AnimationFamily = 'overte'
-  let builtFamily: AnimationFamily | null = null
   // Poids porté par chaque action à cette image, et fondu en cours. C'est NOTRE
   // livre de comptes, trois raisons de ne pas laisser three le tenir :
   // - `crossFadeFrom` code en dur les poids de DÉPART (1 → 0 et 0 → 1) et
@@ -1736,7 +1764,6 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     listenAction = null
     postureAction = null
     gaitAction = null
-    builtFamily = null
     onceThen = null
     baseAction = null
     activeAction = null
@@ -1746,20 +1773,6 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // Plus de mixer : un recadrage encore en attente n'aurait plus rien à
     // rattraper (le squelette repart de la pose de repos).
     reframePending = false
-  }
-
-  /**
-   * La famille RÉELLEMENT jouée. Le choix du personnage ne vaut qu'en FACE À
-   * FACE : scène vivante allumée, tout repasse à Overte, socle compris.
-   *
-   * Ce n'est pas une restriction de confort, c'est la règle d'étanchéité. Les
-   * clips de déplacement, de pivot et d'assise n'existent que chez Overte ;
-   * debout à l'arrêt, le socle est le socle du face à face, et c'est justement
-   * lui que `world-walk-stop` vient rejoindre. Un socle Rocketbox là rejouerait
-   * les 16 à 20 cm de raccord croisé à CHAQUE arrêt de marche.
-   */
-  function effectiveFamily(): AnimationFamily {
-    return interactive ? 'overte' : animFamily
   }
 
   /**
@@ -1776,13 +1789,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    */
   async function buildAnimations(vrm: VRM): Promise<void> {
     if (!animationsEnabled) return
-    const fam = effectiveFamily()
+    const fam = animFamily
     const cat = await loadCatalog(fam)
     if (!animationsEnabled || disposed || currentVrm !== vrm) return
     // La famille a pu changer pendant que la liste arrivait (l'utilisateur passe
     // d'un personnage à l'autre) : ce catalogue-là n'est plus celui qu'on veut,
     // et un autre buildAnimations est déjà en vol pour le bon.
-    if (fam !== effectiveFamily()) return
+    if (fam !== animFamily) return
     catalog = cat
     if (cat.idle.length === 0) return // pas de socle : pas de mixer du tout
     // Le socle est tiré au hasard UNE FOIS par chargement de modèle ; les gestes
@@ -1831,7 +1844,6 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       if (baseAction) fadeTo(baseAction, GESTURE_RETURN)
     })
     for (const [url, clip] of clips) actions.set(url, mixer.clipAction(clip))
-    builtFamily = fam
     idleAction = asBase(actions.get(idleUrl) ?? null)
     talkingAction = asBase(pickAction(cat.talking))
     // Écoute déjà en cours au moment où le modèle arrive (l'utilisateur tape
@@ -2419,11 +2431,11 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     setAnimationFamily(family: AnimationFamily): void {
       if (family === animFamily) return
       animFamily = family
-      // Les deux familles n'ont aucun fichier en commun : changer de famille,
-      // c'est changer TOUS les clips. On reconstruit — et si la scène vivante
-      // est allumée, la famille effective n'a pas bougé (elle est forcée à
-      // Overte) et il n'y a rien à refaire.
-      if (currentVrm && builtFamily !== effectiveFamily()) void buildAnimations(currentVrm)
+      // Les deux familles n'ont AUCUN clip de face à face en commun : changer de
+      // famille, c'est changer le socle, la parole, l'écoute et tous les gestes.
+      // On reconstruit — le socle en place ne bouge pas d'un millimètre tant que
+      // les nouveaux .vrma ne sont pas là (même règle que setInteractive).
+      if (currentVrm) void buildAnimations(currentVrm)
     },
 
     setAnimationsEnabled(on: boolean): void {
@@ -2473,10 +2485,6 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       springSettle = true // retour à l'origine = saut (cf. springSettle)
       syncBase(BASE_FADE)
       reframePending = true
-      // Le personnage RETROUVE SA FAMILLE en quittant la scène vivante (cf.
-      // effectiveFamily). Sans famille propre, `builtFamily` vaut déjà 'overte'
-      // et rien n'est reconstruit : le mode par défaut ne paie rien.
-      if (currentVrm && builtFamily !== effectiveFamily()) void buildAnimations(currentVrm)
     },
 
     setPosture(name: string | null): void {

@@ -115,14 +115,24 @@ octet — même mécanisme que le chargement paresseux du domaine `world-`.
 ### Et en scène vivante 3D ?
 
 **Le domaine `world-` reste 100 % Overte, pour tout le monde.** Marcher, se
-tourner, s'asseoir, les gestes assis : ces clips n'existent que chez Overte, et
-un socle debout Rocketbox raccordé à un arrêt de marche Overte rejouerait
-exactement les 16 à 20 cm ci-dessus, à chaque arrêt.
+tourner, s'asseoir, les gestes assis : ces clips n'existent que chez Overte,
+Rocketbox n'en a aucun et n'en aura pas. Un personnage Rocketbox garde donc ses
+socles, son écoute et ses gestes, et **emprunte les allures d'Overte** le temps
+de traverser la pièce.
 
-La conséquence est nette et voulue : **le réglage `animations` ne vaut qu'en face
-à face**. Scène vivante allumée, le personnage joue la famille Overte entière,
-socle compris ; éteinte, il retrouve sa famille. C'est le seul agencement qui
-tienne la règle d'étanchéité sans mutiler la scène vivante.
+C'est le **seul raccord croisé de tout le système**, et il faut le dire : la
+dernière image de `world-walk-stop` est ancrée sur la pose d'`idle`, donc sur la
+station debout d'Overte. Reprise par un socle `rb-idle`, la jonction porte les
+16 à 20 cm — étalés sur le fondu de socle (0,5 s), pas claqués en une image. En
+pratique cela se voit à l'arrivée d'un déplacement, pas en conversation.
+
+Deux raisons de l'assumer plutôt que de forcer Overte en scène vivante. D'abord
+la scène vivante est **un interrupteur global**, pas un état du personnage :
+allumé sans décor 3D, il ne fait presque rien — et il rendrait pourtant le
+réglage de gestuelle sans effet, ce qui se lit comme une panne. Ensuite ce qu'on
+échangerait est disproportionné : le socle d'écoute, les cinq `neutral`, les
+quatre `relaxed` — toute la richesse de la famille — contre une jonction par
+déplacement.
 
 ## Convention de nommage
 
@@ -657,14 +667,23 @@ mechanism as the `world-` domain's lazy loading.
 ### And in the living 3D scene?
 
 **The `world-` domain stays 100 % Overte, for everyone.** Walking, turning,
-sitting down, the seated gestures: those clips only exist in Overte, and a
-Rocketbox standing base joined to an Overte walk stop would replay exactly the
-16–20 cm above, at every stop.
+sitting down, the seated gestures: those clips only exist in Overte, Rocketbox
+has none of them and never will. A Rocketbox character therefore keeps its bases,
+its listening idle and its gestures, and **borrows Overte's gaits** to cross the
+room.
 
-The consequence is deliberate: **the `animations` setting only applies face to
-face**. With the living scene on, the character plays the whole Overte family,
-base included; off, it gets its own family back. It is the only arrangement that
-keeps the watertight rule without crippling the living scene.
+That is the **one cross-family seam in the whole system**, and it must be said:
+the last frame of `world-walk-stop` is anchored on the `idle` pose, i.e. on
+Overte's standing stance. Picked up by an `rb-idle` base, the junction carries
+the 16–20 cm — spread over the base fade (0.5 s), not snapped in one frame. In
+practice it shows at the end of a walk, never in conversation.
+
+Two reasons to accept it rather than force Overte while the living scene is on.
+First, the living scene is a **global switch**, not a state of the character:
+turned on without a 3D set it does almost nothing — and it would still make the
+body-language setting inert, which reads as a fault. Second, the trade is
+lopsided: the listening idle, the five `neutral`s, the four `relaxed`s — the
+whole richness of the family — against one junction per walk.
 
 ## Naming convention
 

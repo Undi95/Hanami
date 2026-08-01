@@ -53,15 +53,14 @@ export interface Settings {
 export type GreetingMode = 'written' | 'generated' | 'ask'
 
 /**
- * Famille d'animations de FACE À FACE d'un personnage. Deux bibliothèques
- * complètes et ÉTANCHES (cf. vrma/README.md) : celle d'Overte, sans préfixe, et
- * celle de Microsoft Rocketbox, préfixe `rb-`. Elles ne se mélangent jamais —
- * leurs stations debout diffèrent de 16,5 à 20,3 cm, deux fois et demie le seuil
- * d'acceptation d'un raccord.
+ * Famille d'animations de FACE À FACE d'un personnage : socle, socle parlant,
+ * socle d'écoute, gestes d'émotion. Deux bibliothèques complètes et ÉTANCHES
+ * (cf. vrma/README.md) : celle d'Overte, sans préfixe, et celle de Microsoft
+ * Rocketbox, préfixe `rb-`. Aucun rôle ne les mélange — leurs stations debout
+ * diffèrent de 16,5 à 20,3 cm, deux fois et demie le seuil d'acceptation.
  *
- * Ce réglage ne vaut QUE pour le face à face : en scène vivante 3D, le domaine
- * `world-` est intégralement Overte et le personnage joue la famille Overte
- * entière, socle compris.
+ * Le domaine `world-` de la scène vivante 3D (marcher, pivoter, s'asseoir) n'a
+ * qu'une famille et n'en aura pas d'autre : Rocketbox ne l'a pas.
  */
 export type AnimationFamily = 'overte' | 'rocketbox'
 
