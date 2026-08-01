@@ -753,8 +753,12 @@ class MirroredConstraint implements RotationConstraint {
  * MESURÉ, jamais supposé, et par le même témoin que le regard : up × (épaule
  * droite − épaule gauche) est l'avant géométrique, il ne dépend d'aucune
  * convention de format. Repli sur `metaVersion` quand les épaules manquent.
+ *
+ * EXPORTÉ parce que la table d'articulations n'est pas seule à écrire des
+ * angles en dur dans ce repère : la pose de repos des doigts (handPoses.ts) a
+ * le même besoin, et deux mesures du même fait finiraient par diverger.
  */
-function normalizedFacesPlusZ(vrm: VRM): boolean {
+export function normalizedFacesPlusZ(vrm: VRM): boolean {
   const left = vrm.humanoid.getNormalizedBoneNode('leftUpperArm')
   const right = vrm.humanoid.getNormalizedBoneNode('rightUpperArm')
   const ref = vrm.humanoid.getNormalizedBoneNode('hips') ?? left

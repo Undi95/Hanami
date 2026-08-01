@@ -19,29 +19,53 @@
  * mesuré 66,7° de flexion moyenne pour 5° de hors-axe. Portage Hanami, 2026,
  * redistribué sous AGPL-3.0.
  *
- * LE RÔLE : les clips CMU et la plupart des clips du domaine `world-` ne
- * pilotent pas les doigts (0 piste sur idle.vrma, world-walk.vrma,
- * world-sit-idle.vrma) — sans ce fichier, les mains restent figées en
- * « moufles plates » de la pose de repos VRM. Les gestes d'Overte (happy…),
- * eux, animent les 30 os de doigts : la pose de repos ne s'applique QUE
- * quand aucune piste n'écrit — jamais par-dessus une animation.
+ * ── LE RÔLE ────────────────────────────────────────────────────────────────
+ * Un VRM charge doigts TENDUS : sans pose de repos, chaque os de doigt est à
+ * l'identité et la main est une moufle plate, doigts en éventail — le mannequin
+ * de vitrine. Et 30 des 151 clips livrés n'ont AUCUNE piste de doigt, dont
+ * précisément ceux qu'on regarde le plus longtemps : `idle`, `idle-2`,
+ * `world-walk`, `world-run`, les six `world-sit-idle*`, les demi-tours assis.
+ * Ce fichier fabrique LA POSE DE REPOS DES DOIGTS, et vrmStage la pose sur le
+ * squelette AVANT de construire le mixer, exactement comme REST_POSE_Z pose
+ * les bras. C'est tout : aucun code par image.
  *
- * Détection « le clip pilote-t-il les doigts ? » par SENTINELLE : avant le
- * mixer, chaque os de doigt reçoit le quaternion (0,0,0,−1) — la MÊME
- * rotation que l'identité (q et −q sont la même rotation), mais un encodage
- * qu'aucune piste réelle ne produit. Après le mixer : si w vaut encore −1,
- * personne n'a écrit — la pose détendue s'applique, en fondu depuis la
- * dernière pose affichée (l'esprit du `dataDefault` capturé à chaud de
- * handTouch.js, et de sa cadence : cible atteinte en ~10 images).
+ * Pourquoi « avant le mixer » suffit, et pourquoi c'est la BONNE place :
+ * three relève la valeur de chaque os à la première activation d'une action
+ * (PropertyMixer.saveOriginalState) et la traite ensuite comme le fond du
+ * décor —
+ *   • os qu'AUCUN clip ne pilote : jamais lié, jamais réécrit, il garde la
+ *     pose de repos pour toujours ;
+ *   • os qu'un clip pilote à poids plein : le clip écrase, il GAGNE ;
+ *   • pendant un fondu, tant que la somme des poids qui touchent CET os est
+ *     < 1, three complète avec la valeur relevée — la main revient donc à sa
+ *     détente au rythme du fondu (0,3 à 0,5 s), sans une ligne de plus ;
+ *   • à la reconstruction du mixer, disposeAnimations appelle uncacheRoot,
+ *     qui rend justement cette valeur (cf. son commentaire).
+ *
+ * ── CE QUI A ÉTÉ ESSAYÉ AVANT, ET POURQUOI C'EST PARTI ─────────────────────
+ * La première version posait la main À CHAQUE IMAGE, après le mixer, sur les
+ * os qu'un marqueur — le quaternion (0,0,0,−1), l'identité dans un encodage
+ * qu'aucune piste ne produit — avait traversés intacts. Deux mesures l'ont
+ * condamnée :
+ *   1. elle posait `dataOpen`, la main OUVERTE d'Overte : 4,8° de flexion
+ *      moyenne hors pouce. C'est-à-dire RIEN — la moufle plate, exactement ce
+ *      qu'elle prétendait corriger ;
+ *   2. le marqueur MENT. three n'appelle setValue que si la valeur accumulée
+ *      diffère de celle de l'image précédente (PropertyMixer.apply, dernière
+ *      boucle) : un doigt tenu immobile par un clip cesse d'être réécrit, le
+ *      marqueur survit, et la main détendue se serait posée PAR-DESSUS le
+ *      clip. Mesuré sur les 121 clips qui pistent les doigts : 105 ont au
+ *      moins un os que three cesse de réécrire, 37 voient une MAIN ENTIÈRE
+ *      déclarée libre à tort, 10,8 % des couples (os pisté × image) sont vus
+ *      libres alors qu'ils ne le sont pas. Inoffensif tant que la pose valait
+ *      l'identité ; ruineux dès qu'elle porte une vraie courbure.
+ * La pose de repos n'a aucun de ces deux défauts, et ne coûte rien par image.
  */
-import { Quaternion } from 'three'
-import type { Object3D } from 'three'
+import { Quaternion, Vector3 } from 'three'
 import type { VRM, VRMHumanBoneName } from '@pixiv/three-vrm'
 import { safeLerpQuat } from './overteMath'
+import { normalizedFacesPlusZ } from './jointLimits'
 import raw from './handPosesOverte.json'
-
-/** `defaultAnimationSteps = 10` de handTouch.js : retour au repos en 10 images (à 60 i/s). */
-const RELAX_IN_S = 10 / 60
 
 /**
  * M par main (repère HiFi → repère VRM normalisé), déterminé par le critère
@@ -50,7 +74,15 @@ const RELAX_IN_S = 10 / 60
 const M_LEFT = new Quaternion(-0.5, -0.5, 0.5, -0.5)
 const M_RIGHT = new Quaternion(0.5, 0.5, 0.5, -0.5)
 
-/** doigt du JSON → segments d'os VRM (le pouce a un métacarpien, pas d'intermédiaire). */
+/**
+ * doigt du JSON → segments d'os VRM. Le pouce n'a pas d'intermédiaire : ses
+ * trois segments sont métacarpien, proximale, distale. Les modèles VRM 0.x
+ * nomment les leurs `thumbProximal/Intermediate/Distal`, mais three-vrm les
+ * renomme à l'import (VRMHumanoidLoaderPlugin, thumbBoneNameMap) — les 89
+ * modèles 0.x du dossier exposent donc les mêmes 30 os que les 5 en 1.x, et
+ * une seule table suffit pour les deux formats (vérifié sur EtalonChibi en
+ * 0.x et ayaka en 1.x : 30/30 os retrouvés de part et d'autre).
+ */
 const FINGER_BONES: ReadonlyArray<readonly [string, string, ReadonlyArray<string>]> = [
   ['thumb', 'Thumb', ['Metacarpal', 'Proximal', 'Distal']],
   ['index', 'Index', ['Proximal', 'Intermediate', 'Distal']],
@@ -66,6 +98,7 @@ interface RawQuat {
   w: number
 }
 type RawHand = Record<string, RawQuat[]>
+type RawPose = Record<'left' | 'right', RawHand>
 
 /** Convertit une pose brute (repère HiFi) en table os VRM → quaternion. */
 function convertHand(side: 'left' | 'right', hand: RawHand): Map<string, Quaternion> {
@@ -87,78 +120,85 @@ function convertHand(side: 'left' | 'right', hand: RawHand): Map<string, Quatern
   return out
 }
 
-/** La pose « ouverte détendue », en repère VRM, prête à poser sur les os normalisés. */
+const data = raw as { open: RawPose; closed: RawPose }
+/** `dataOpen` : la main OUVERTE — doigts tendus, 4,8° de flexion hors pouce. */
 const OPEN_POSE = new Map<string, Quaternion>([
-  ...convertHand('left', (raw as { open: Record<'left' | 'right', RawHand> }).open.left),
-  ...convertHand('right', (raw as { open: Record<'left' | 'right', RawHand> }).open.right),
+  ...convertHand('left', data.open.left),
+  ...convertHand('right', data.open.right),
 ])
-
-/** Le poing (`dataClose`), converti lui aussi — pas encore branché, disponible. */
-export const CLOSED_POSE = new Map<string, Quaternion>([
-  ...convertHand('left', (raw as { closed: Record<'left' | 'right', RawHand> }).closed.left),
-  ...convertHand('right', (raw as { closed: Record<'left' | 'right', RawHand> }).closed.right),
+/** `dataClose` : le POING — 67,1° de flexion moyenne hors pouce. */
+const CLOSED_POSE = new Map<string, Quaternion>([
+  ...convertHand('left', data.closed.left),
+  ...convertHand('right', data.closed.right),
 ])
-
-export interface HandRelax {
-  /** AVANT mixer.update : pose la sentinelle sur chaque os de doigt. */
-  beforeMixer(): void
-  /** APRÈS le mixer : là où la sentinelle a survécu, pose la main détendue. */
-  apply(dt: number): void
-}
-
-interface FingerEntry {
-  node: Object3D
-  target: Quaternion
-  /** Pose affichée à l'image précédente — le départ du fondu vers la détente. */
-  prev: Quaternion
-  left: boolean
-}
 
 /**
- * Prépare la détente de mains pour un modèle. null si le modèle n'a aucun os
- * de doigt (les mains restent ce qu'elles sont, comme avant).
+ * Fraction du chemin ouverte → poing qui fait la main AU REPOS. Overte n'a que
+ * les deux extrêmes ; handTouch.js lui-même ne connaît la main intermédiaire
+ * que comme un point du segment entre les deux, et c'est cette même règle qu'on
+ * reprend — aucun angle inventé à la main, un seul nombre à défendre.
+ *
+ * 0,30 : la pulpe des doigts arrive au tiers de la paume. Mesuré sur la pose
+ * obtenue (main gauche, flexion autour de −Z) : courbure totale 53,7° pour
+ * l'index, 55,9° majeur, 60,1° annulaire, 63,6° auriculaire — la cascade
+ * naturelle d'une main qui pend, l'index le plus droit et l'auriculaire le
+ * plus fermé ; pouce à 14,7° de flexion au métacarpien, phalanges à −7,8°,
+ * c'est-à-dire détendu le long de l'index, ni collé ni écarté. Symétrie
+ * gauche/droite : 0,14° d'écart maximum.
+ * Au-delà de 0,4 la main commence à tenir quelque chose ; en deçà de 0,2 elle
+ * redevient la planche qu'on corrige.
  */
-export function createHandRelax(vrm: VRM): HandRelax | null {
-  const entries: FingerEntry[] = []
-  for (const [boneName, target] of OPEN_POSE) {
-    const node = vrm.humanoid.getNormalizedBoneNode(boneName as VRMHumanBoneName)
-    if (node) entries.push({ node, target, prev: new Quaternion(), left: boneName.startsWith('left') })
+const RELAX_T = 0.3
+
+/**
+ * LA POSE DE REPOS : ce que valent les doigts quand aucun clip n'en parle.
+ * Le mélange est celui d'Overte lui-même (`AnimUtil.h::safeLerp`, cf.
+ * overteMath) et non le slerp de three : 0,8° d'écart au plus sur les 30 os,
+ * et c'est la primitive avec laquelle le moteur d'origine mélange ses poses.
+ * Un os présent dans `open` mais pas dans `closed` (données tronquées) garde
+ * simplement la pose ouverte — on ne fabrique rien qu'on ne sache mesurer.
+ */
+const RELAXED_POSE: ReadonlyMap<string, Quaternion> = new Map(
+  [...OPEN_POSE].map(([bone, open]) => {
+    const closed = CLOSED_POSE.get(bone)
+    return [
+      bone,
+      closed ? safeLerpQuat(open, closed, RELAX_T, new Quaternion()) : open.clone(),
+    ] as const
+  }),
+)
+
+/**
+ * Demi-tour autour de Y — la MÊME conjugaison que MirroredConstraint, et pour
+ * la même raison : le repère des os normalisés d'un VRM 0.x regarde le −Z (89
+ * des 94 modèles du dossier, dont celui de l'utilisateur), et une flexion
+ * écrite en dur pour le +Z s'y applique À L'ENVERS — les doigts se cabrent en
+ * hyperextension au lieu de se refermer. Vérifié contre la vérité terrain que
+ * sont les clips de capture : `rb-happy` ferme le poing à +62,2° de flexion
+ * sur un rig 1.x et −62,2° sur les quatre rigs 0.x sondés, au même quantième
+ * d'image. C'est ce piège qui rendait le portage inoffensif dans les deux
+ * sens : la pose « ouverte » d'Overte valant 4,8°, se tromper de signe ne se
+ * voyait pas.
+ */
+const HALF_TURN_Y = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI)
+const HALF_TURN_Y_INV = HALF_TURN_Y.clone().invert()
+
+/**
+ * Pose la main détendue sur les os de doigts NORMALISÉS du modèle. À appeler
+ * avec le reste de la pose de repos, donc AVANT la construction du mixer (cf.
+ * en-tête). Un modèle sans os de doigts n'est pas touché — sa main reste ce
+ * qu'elle est, comme avant.
+ * Retourne le nombre d'os posés (0 à 30), pour qui veut le vérifier.
+ */
+export function applyRelaxedHands(vrm: VRM): number {
+  const mirror = !normalizedFacesPlusZ(vrm)
+  let posed = 0
+  for (const [bone, q] of RELAXED_POSE) {
+    const node = vrm.humanoid.getNormalizedBoneNode(bone as VRMHumanBoneName)
+    if (!node) continue
+    node.quaternion.copy(q)
+    if (mirror) node.quaternion.premultiply(HALF_TURN_Y).multiply(HALF_TURN_Y_INV)
+    posed++
   }
-  if (entries.length === 0) return null
-  // Fondu d'engagement par MAIN (les doigts d'une main vivent ensemble, et
-  // les clips d'Overte pilotent les 15 os d'une main d'un bloc) :
-  // 0 = ce que le clip a laissé, 1 = pose détendue pleine.
-  let weightLeft = 0
-  let weightRight = 0
-  return {
-    beforeMixer(): void {
-      // (0,0,0,−1) est l'identité, encodée comme aucune piste ne l'encode.
-      for (const e of entries) e.node.quaternion.set(0, 0, 0, -1)
-    },
-    apply(dt): void {
-      let leftDriven = false
-      let rightDriven = false
-      for (const e of entries) {
-        if (e.node.quaternion.w !== -1) {
-          if (e.left) leftDriven = true
-          else rightDriven = true
-        }
-      }
-      const step = dt / RELAX_IN_S
-      weightLeft = leftDriven ? 0 : Math.min(1, weightLeft + step)
-      weightRight = rightDriven ? 0 : Math.min(1, weightRight + step)
-      for (const e of entries) {
-        if (e.left ? leftDriven : rightDriven) {
-          // le clip pilote : mémoriser ce qu'il affiche, ne rien toucher —
-          // c'est d'ICI que partira le fondu quand il lâchera les doigts.
-          e.prev.copy(e.node.quaternion)
-          continue
-        }
-        // sentinelle survivante : rendre l'identité propre, puis fondre de la
-        // dernière pose pilotée vers la détente.
-        if (e.node.quaternion.w === -1) e.node.quaternion.set(0, 0, 0, 1)
-        safeLerpQuat(e.prev, e.target, e.left ? weightLeft : weightRight, e.node.quaternion)
-      }
-    },
-  }
+  return posed
 }

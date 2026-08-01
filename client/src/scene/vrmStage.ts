@@ -56,8 +56,7 @@ import { CriticallyDampedSpringPoseHelper } from './overteMath'
 import { buildEnvBvh, raycastFirst } from './bvh'
 import type { EnvBvh } from './bvh'
 import { createGaze } from './gaze'
-import { createHandRelax } from './handPoses'
-import type { HandRelax } from './handPoses'
+import { applyRelaxedHands } from './handPoses'
 import { fetchSceneMap } from './sceneMap'
 import type { SceneMap, Seat } from './sceneMap'
 import { mergeEnvironment } from './envMerge'
@@ -988,12 +987,6 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // createJointLimits mesure le sens du repère, il l'est aussi des 89 en 0.x
   // (0,9° max, vérifié sur les deux formats).
   let jointLimits: JointLimits | null = null
-  // Mains détendues (60 quaternions de handTouch.js, cf. handPoses.ts) : quand
-  // aucun clip ne pilote les doigts — idle et domaine `world-` n'ont AUCUNE
-  // piste de doigt — la main prend la pose « ouverte détendue » d'Overte au
-  // lieu de rester en moufle plate. Les gestes qui animent les doigts (happy…)
-  // gardent la priorité : la pose ne s'applique que là où rien n'écrit.
-  let handRelax: HandRelax | null = null
   // Carte du décor en place (`<décor>.scene.json`). null = pas d'analyse : le
   // décor reste un fond, exactement comme aujourd'hui.
   let sceneMap: SceneMap | null = null
@@ -1406,7 +1399,6 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     frameDist = null // plus de cadrage par défaut : plus de plancher à protéger
     legIk = null // ses os appartiennent au modèle qu'on vient de jeter
     jointLimits = null // idem — la table est liée aux nœuds normalisés du modèle
-    handRelax = null // idem
     posedBones.clear()
     idle.setExpressionTable(new Map()) // plus de modèle : aucune expression pilotable
   }
@@ -1418,6 +1410,15 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       const node = vrm.humanoid.getNormalizedBoneNode(name)
       if (node) node.rotation.z = z
     }
+    // Les DOIGTS de la même façon, et pour la même raison : un VRM charge la
+    // main tendue, doigts en éventail — un mannequin de vitrine. La pose de
+    // repos d'Overte (cf. handPoses.ts) leur donne la courbure d'une main qui
+    // pend. Elle est posée ICI, donc avant la construction du mixer, ce qui
+    // suffit à tout : les os qu'aucun clip ne pilote la gardent, ceux qu'un
+    // clip pilote sont écrasés par lui, et un fondu ramène la main à sa détente
+    // au rythme du fondu. Aucun code par image — c'est three qui tient la
+    // valeur de repos (PropertyMixer.saveOriginalState / uncacheRoot).
+    applyRelaxedHands(vrm)
     posedBones.clear()
     for (const name of TRACKED_BONES) {
       const node = vrm.humanoid.getNormalizedBoneNode(name)
@@ -2351,7 +2352,6 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // ce dont dépend tout le calcul du point « semelle ».
       legIk = createLegIk(vrm, avatarGroup)
       jointLimits = createJointLimits(vrm)
-      handRelax = createHandRelax(vrm)
       // Le TRAJET appartenait à l'ancien corps : un personnage assis dont on
       // change le modèle laisserait le nouveau flotter à hauteur d'assise, dans
       // une pièce peut-être identique (le rechargement du décor n'est pas
@@ -2390,9 +2390,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // raison : la correction d'assiette de l'image précédente est défaite ici,
       // sans quoi elle se cumulerait sur les os qu'un clip n'anime pas.
       if (interactive) legIk?.beforeMixer()
-      // Les DOIGTS : sentinelle posée avant le mixer — c'est elle qui dira,
-      // après, quels os aucune piste n'a écrits (cf. handPoses.ts).
-      handRelax?.beforeMixer()
+      // Les DOIGTS n'ont RIEN à faire ici : leur pose de repos est posée une
+      // fois pour toutes avec le reste (applyRestPose), et c'est three qui la
+      // tient (cf. handPoses.ts). Un os de doigt qu'aucun clip ne pilote n'est
+      // même pas lié au mixer.
       // Les poids du fondu en cours sont posés AVANT l'évaluation : le mixer lit
       // ceux de CETTE image, et leur somme vaut 1 quand il accumule.
       advanceFade(delta)
@@ -2403,9 +2404,6 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // saine, et l'IK n'est jamais défait par un clamp après coup (son genou
       // est une charnière PAR CONSTRUCTION, il ne peut pas violer la table).
       jointLimits?.apply()
-      // Mains : là où la sentinelle a survécu au mixer, la pose détendue
-      // d'Overte se pose (fondu en ~10 images depuis la dernière pose animée).
-      handRelax?.apply(delta)
       for (const bone of posedBones.values()) bone.base.copy(bone.node.rotation)
       // Cinématique inverse : le clip a donné l'allure, on corrige l'assiette.
       // APRÈS le mixer (elle lit la pose qu'il vient d'écrire) et AVANT l'idle,
