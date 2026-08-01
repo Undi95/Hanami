@@ -298,7 +298,7 @@ qu'aucune licence n'oblige à citer**, parce qu'un crédit caché n'honore perso
 
 ### Décors 3D
 
-Trois pièces d'intérieur, toutes en **CC BY 4.0** — la seule licence de ce projet qui *impose*
+Quatre pièces d'intérieur, toutes en **CC BY 4.0** — la seule licence de ce projet qui *impose*
 l'attribution. Via [Sketchfab](https://sketchfab.com) :
 
 - « **Anime Class Room** » par **AnixMoonLight** ([profil](https://sketchfab.com/ani111)) — la salle
@@ -307,6 +307,8 @@ l'attribution. Via [Sketchfab](https://sketchfab.com) :
   loft cosy.
 - « **Rustic Bedroom** » par **Bársh** ([profil](https://sketchfab.com/borsh_and)) — la chambre
   rustique.
+- « **Low Poly Restaurant Interior Scene** » par **GameAssetsFin**
+  ([profil](https://sketchfab.com/MarkoJantti)) — le restaurant.
 
 ### Police
 

@@ -81,6 +81,31 @@ Version juridique intégrale / Full legal code: <https://creativecommons.org/lic
 
 ---
 
+## 4. `lowpoly-restaurant.glb`
+
+|  |  |
+|---|---|
+| **Titre / Title** | Low Poly Restaurant Interior Scene |
+| **Auteur / Author** | GameAssetsFin (`@MarkoJantti`) |
+| **Profil / Profile** | <https://sketchfab.com/MarkoJantti> |
+| **Page du modèle / Model page** | <https://sketchfab.com/3d-models/low-poly-restaurant-interior-scene-ce81c3ee5c45471ea75fb6222fd64f9e> |
+| **Licence / License** | CC Attribution 4.0 International (CC BY 4.0) — <https://creativecommons.org/licenses/by/4.0/> |
+| **Source** | Sketchfab |
+| **Publié le / Published** | 2026-01-24 |
+
+**Attribution requise (FR) :**
+> « Low Poly Restaurant Interior Scene » par GameAssetsFin, licence CC-BY 4.0, via Sketchfab.
+
+**Required attribution (EN):**
+> "Low Poly Restaurant Interior Scene" by GameAssetsFin, licensed under CC-BY 4.0, via Sketchfab.
+
+**Modifications / Modifications :** aucune — le `.glb` est l'export Sketchfab d'origine, octet
+pour octet. Le placement (échelle, point d'accueil) vit dans le sidecar `lowpoly-restaurant.json`,
+en dehors du modèle. / none — the `.glb` is the original Sketchfab export, byte for byte. Placement
+(scale, spawn) lives in the `lowpoly-restaurant.json` sidecar, outside the model.
+
+---
+
 ## Bloc d'attribution prêt à coller / Ready-to-paste attribution block
 
 **FR — Décors 3D**
@@ -88,12 +113,14 @@ Version juridique intégrale / Full legal code: <https://creativecommons.org/lic
 - « Anime Class Room » par AnixMoonLight, licence CC-BY 4.0, via Sketchfab.
 - « Cute Isometric Room ✿ » par JaDe.Dfr, licence CC-BY 4.0, via Sketchfab.
 - « Rustic Bedroom » par Bársh, licence CC-BY 4.0, via Sketchfab.
+- « Low Poly Restaurant Interior Scene » par GameAssetsFin, licence CC-BY 4.0, via Sketchfab.
 
 **EN — 3D environments**
 
 - "Anime Class Room" by AnixMoonLight, licensed under CC-BY 4.0, via Sketchfab.
 - "Cute Isometric Room ✿" by JaDe.Dfr, licensed under CC-BY 4.0, via Sketchfab.
 - "Rustic Bedroom" by Bársh, licensed under CC-BY 4.0, via Sketchfab.
+- "Low Poly Restaurant Interior Scene" by GameAssetsFin, licensed under CC-BY 4.0, via Sketchfab.
 
 ---
 
@@ -102,34 +129,43 @@ Version juridique intégrale / Full legal code: <https://creativecommons.org/lic
 **FR —** Chaque fichier `.glb` embarque également son attribution dans
 `asset.extras` (champs `author`, `license`, `source`, `title`) : ne pas dépouiller
 ces métadonnées lors d'un éventuel retraitement (compression Draco, `gltf-transform`,
-etc.). Aucun des trois décors ne contient de squelette (`skins`) ; seul
+etc.). Aucun décor ne contient de squelette (`skins`) ; seul
 `cozy-loft-room.glb` contient une animation décorative (« Take 001 »).
 
 **EN —** Each `.glb` also carries its attribution inside `asset.extras`
 (`author`, `license`, `source`, `title` fields): do not strip that metadata if the
-files are ever reprocessed (Draco compression, `gltf-transform`, …). None of the
-three environments contains a skeleton (`skins`); only `cozy-loft-room.glb`
+files are ever reprocessed (Draco compression, `gltf-transform`, …). No environment
+contains a skeleton (`skins`); only `cozy-loft-room.glb`
 contains one decorative animation ("Take 001").
 
-| Fichier / File | Faces | Sommets / Verts | Taille / Size | Échelle / Scale | Pièce réelle / Real room |
-|---|---|---|---|---|---|
-| `anime-classroom.glb` | 217 314 | 111 826 | 8,5 Mo | ×0,31 | 6,20 × 7,60 m, plafond 3,13 m |
-| `cozy-loft-room.glb` | 74 904 | 40 230 | 5,5 Mo | ×0,031 | 3,24 × 3,23 m, plafond 2,97 m |
-| `rustic-bedroom.glb` | 21 828 | 12 213 | 3,9 Mo | ×1,1 | 3,12 × 4,49 m, murs 2,42 m |
+| Fichier / File | Faces | Sommets / Verts | Taille / Size | Échelle / Scale | Pièce mesurée / Measured room | Praticable / Walkable | Assises / Seats |
+|---|---|---|---|---|---|---|---|
+| `anime-classroom.glb` | 217 314 | 111 826 | 8,5 Mo | ×0,31 | 6,30 × 7,60 m, plafond 3,13 m | 31,15 m² | 55 |
+| `cozy-loft-room.glb` | 74 904 | 40 230 | 5,5 Mo | ×0,031 | 2,60 × 3,00 m, plafond 2,98 m | 3,34 m² | 6 |
+| `rustic-bedroom.glb` | 21 828 | 12 213 | 3,9 Mo | ×1,1 | 2,70 × 3,00 m, murs 2,42 m | 1,67 m² | 5 |
+| `lowpoly-restaurant.glb` | 64 750 | 35 698 | 4,5 Mo | ×1 | 7,80 × 14,80 m, plafond 3,33 m | 46,21 m² | 29 |
 
 **FR —** Les modèles sont orientés Y-up (conversion effectuée par l'export Sketchfab).
-Aucun n'est livré à l'échelle métrique : les facteurs ci-dessus sont **mesurés** (hauteur
-de plafond, de fenêtre, de commode, pas des pupitres — recoupés entre eux) et vivent dans
+Les trois premiers ne sont pas livrés à l'échelle métrique ; les facteurs ci-dessus sont
+**mesurés** (hauteur de plafond, de fenêtre, de commode, pas des pupitres, nappe d'assise
+vers 0,45-0,50 m et plateau de table vers 0,75 m — recoupés entre eux) et vivent dans
 le sidecar `<nom>.json` de chaque décor, qui fait foi avec la rotation, le point d'accueil
-et l'exposition. La matrice racine posée par l'export Sketchfab peut déjà contenir un
-facteur : mesurer le rendu final, jamais les seules coordonnées des sommets.
+et l'exposition. Un décor déjà métrique garde `"scale": 1` **écrit** dans son sidecar :
+sans lui, une hauteur brute hors des bornes de plausibilité (1,5 à 12 m — un modèle qui
+embarque son environnement, un plan de coupe) déclencherait le rattrapage automatique et
+écraserait l'échelle vraie. La matrice racine posée par l'export Sketchfab peut déjà contenir
+un facteur : mesurer le rendu final, jamais les seules coordonnées des sommets.
 
-**EN —** All models are Y-up (converted by the Sketchfab exporter). None ships at metric
-scale: the factors above are **measured** (ceiling, window, dresser and desk-spacing
-heights, cross-checked against each other) and live in each environment's `<name>.json`
-sidecar, which is authoritative — along with rotation, spawn point and exposure. The root
-matrix written by the Sketchfab exporter may already carry a factor of its own: measure the
-final render, never the raw vertex coordinates.
+**EN —** All models are Y-up (converted by the Sketchfab exporter). The first three do not
+ship at metric scale; the factors above are **measured** (ceiling, window, dresser and
+desk-spacing heights, seat surfaces around 0.45-0.50 m and table tops around 0.75 m,
+cross-checked against each other) and live in each environment's `<name>.json`
+sidecar, which is authoritative — along with rotation, spawn point and exposure. An
+environment that is already metric keeps an explicit `"scale": 1` in its sidecar: without
+it, a raw height outside the plausibility range (1.5 to 12 m — a model that ships its
+surroundings, a cutaway plan) would trigger the automatic rescale and destroy the true
+scale. The root matrix written by the Sketchfab exporter may already carry a factor of its
+own: measure the final render, never the raw vertex coordinates.
 
 **FR —** `anime-classroom.glb` et `rustic-bedroom.glb` utilisent `KHR_materials_unlit` :
 leurs matériaux ignorent les lumières de la scène. Un réglage d'exposition doit donc agir
