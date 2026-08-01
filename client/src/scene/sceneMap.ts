@@ -127,6 +127,15 @@ export interface SceneMap {
   readonly body: { readonly radius: number; readonly step: number; readonly height: number }
   /** Surface praticable (m²) — sert à décider si la pièce mérite qu'on s'y déplace. */
   readonly walkArea: number
+  /**
+   * Rose de dégagement de la CAMÉRA : distance libre (m) depuis le point
+   * d'accueil, à hauteur d'objectif, dans 16 directions — indice 0 = +Z (l'axe
+   * de recul de la caméra), pas de 22,5°. C'est elle qui borne le recul maximal
+   * au lieu de la boîte englobante, qu'un plan de fond lointain gonfle. null si
+   * le fichier ne la porte pas (ou la porte abîmée) : le repli est la formule
+   * historique, jamais une erreur.
+   */
+  readonly camClearance: readonly number[] | null
 }
 
 /**
@@ -183,6 +192,17 @@ export function parseSceneMap(raw: unknown): SceneMap | null {
   const step = isFiniteNumber(b.step) && b.step > 0 ? b.step : DEFAULT_STEP
   const radius = isFiniteNumber(b.radius) && b.radius > 0 ? b.radius : DEFAULT_RADIUS
   const height = isFiniteNumber(b.height) && b.height > 0 ? b.height : 1.6
+
+  // La rose de dégagement caméra : 16 nombres finis ≥ 0, sinon rien. Le contrat
+  // (16 directions, 0 = +Z) est celui de l'analyseur ; une rose d'une autre
+  // longueur viendrait d'un format qu'on ne connaît pas — on préfère l'inertie.
+  const cam = (f.camera ?? {}) as Record<string, unknown>
+  const camClearance =
+    Array.isArray(cam.clearance) &&
+    cam.clearance.length === 16 &&
+    cam.clearance.every((v): v is number => isFiniteNumber(v) && v >= 0)
+      ? [...cam.clearance]
+      : null
 
   const room = (f.room ?? {}) as Record<string, unknown>
   const wb =
@@ -325,5 +345,6 @@ export function parseSceneMap(raw: unknown): SceneMap | null {
     bounds: wb,
     body: { radius, step, height },
     walkArea,
+    camClearance,
   }
 }

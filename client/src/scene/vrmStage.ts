@@ -94,6 +94,16 @@ const FILL_LIGHT_ENV = 0.35
 const ENV_MIN_EXPOSURE = 0.1
 const ENV_MAX_EXPOSURE = 4
 
+// Recul de la caméra dans un décor CARTOGRAPHIÉ : la rose de dégagement borne le
+// zoom arrière (cf. envPullback). Marge au-delà de la clairance mesurée — la rose
+// s'arrête à la première cellule occupée, ~une résolution de grille AVANT la
+// surface du mur — et secteurs retenus : ±45° autour de +Z, l'axe de recul
+// (16 directions, 0 = +Z, pas de 22,5°). L'éventail plutôt que le seul cap +Z :
+// la rose est mesurée depuis le point d'accueil, pas depuis où le personnage
+// (scène vivante) ni la caméra (orbite) se trouvent à cet instant.
+const CAM_WALL_MARGIN = 0.3
+const CAM_ROSE_FRONT = [14, 15, 0, 1, 2] as const
+
 const DEG2RAD = Math.PI / 180
 
 /**
@@ -662,6 +672,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
   // ── Cadrage utilisateur (pan/zoom/rotation) : persistance + reset ─────────
   let lastFrame: { vrm: VRM; h: number } | null = null // cadrage par défaut re-calculable
+  // Distance du DERNIER cadrage par défaut (frameCamera) : le plancher du clamp
+  // de recul — borner le zoom arrière sous cette distance rendrait le cadrage du
+  // double-clic inatteignable (OrbitControls rapprocherait la caméra tout seul).
+  let frameDist: number | null = null
   let viewChangeCb: ((view: StageView | null) => void) | null = null
   // La caméra tient-elle EXACTEMENT le cadrage par défaut calculé par frameCamera,
   // sans que personne n'y ait touché depuis ? Faux dès qu'une vue sauvegardée est
@@ -794,6 +808,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     VRMUtils.deepDispose(currentVrm.scene)
     currentVrm = null
     lastFrame = null
+    frameDist = null // plus de cadrage par défaut : plus de plancher à protéger
     legIk = null // ses os appartiennent au modèle qu'on vient de jeter
     jointLimits = null // idem — la table est liée aux nœuds normalisés du modèle
     handRelax = null // idem
@@ -1337,6 +1352,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const headPos = new Vector3(0, h * (1.35 / 1.6), 0) // repli si modèle sans os "head"
     if (head) head.getWorldPosition(headPos)
     const distance = Math.min(2.5 * h, Math.max(0.375 * h, headPos.y * 1.4))
+    frameDist = distance // AVANT applyEnvLimits : c'est le plancher du clamp de recul
     controls.target.set(headPos.x, headPos.y - 0.12, headPos.z)
     // Le `z` de la caméra est DEVANT la tête, pas à une abscisse absolue : sans
     // ça, un double-clic ne retrouverait plus le personnage dès qu'il s'écarte du
@@ -1354,10 +1370,29 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   }
 
   /**
+   * Recul maximal autorisé par la PIÈCE, lu dans la rose de dégagement de la
+   * carte : min des secteurs ±45° autour de +Z (cf. CAM_ROSE_FRONT), plus la
+   * marge de résolution de la rose. null = pas de carte, la formule seule décide.
+   */
+  function envPullback(): number | null {
+    const rose = sceneMap?.camClearance
+    if (!rose) return null
+    let free = Infinity
+    for (const k of CAM_ROSE_FRONT) free = Math.min(free, rose[k])
+    return free + CAM_WALL_MARGIN
+  }
+
+  /**
    * Plan lointain et recul maximum. SANS décor : exactement les valeurs
    * historiques (15 h et 3 h) — zéro régression. AVEC décor : de quoi voir la
-   * pièce entière sans la clipper, et de quoi s'en éloigner un peu, sans jamais
-   * réduire ce que l'avatar seul permettait.
+   * pièce entière sans la clipper, et de quoi s'en éloigner un peu — mais jamais
+   * SORTIR de la pièce. La formule historique (rayon de la boîte englobante) ment
+   * dès que le .glb porte un plan de fond lointain : anime-classroom déclare un
+   * rayon de 15,9 m pour 5,4 m de clairance réelle, et le recul plein remplissait
+   * le cadre avec le DOS du mur (mesuré — aplat uni, rien d'identifiable). Quand
+   * la carte du décor est là, le recul s'arrête donc où la pièce s'arrête
+   * (envPullback), sans jamais descendre sous la distance du cadrage par défaut :
+   * le double-clic reste toujours atteignable. Sans carte, formule intacte.
    * Appelée des DEUX côtés (frameCamera et loadEnvironment) : le modèle et le
    * décor sont chargés par deux effets React indépendants, l'ordre n'est pas
    * garanti — sinon un décor arrivé après le modèle serait tronqué à l'écran.
@@ -1365,7 +1400,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   function applyEnvLimits(h = lastFrame?.h ?? 1.6): void {
     if (envMetrics) {
       camera.far = Math.max(15 * h, 4 * envMetrics.radius)
-      controls.maxDistance = Math.min(8 * h, Math.max(3 * h, envMetrics.radius))
+      const formula = Math.min(8 * h, Math.max(3 * h, envMetrics.radius))
+      const pullback = envPullback()
+      // 1,4 h majore la distance que frameCamera peut produire pour un modèle
+      // debout à l'origine (headPos.y ≤ h) : plancher transitoire d'avant le
+      // premier cadrage — dès que frameCamera passe, frameDist fait foi.
+      controls.maxDistance =
+        pullback === null ? formula : Math.min(formula, Math.max(pullback, frameDist ?? 1.4 * h))
     } else {
       camera.far = 15 * h
       controls.maxDistance = 3 * h
