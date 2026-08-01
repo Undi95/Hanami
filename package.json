@@ -11,6 +11,7 @@
     "start": "tsx server/index.ts --prod",
     "typecheck": "tsc --noEmit",
     "mock-llm": "node scripts/mock-llm.cjs",
+    "test:restore": "tsx scripts/test-restore.ts",
     "env:scene": "tsx scripts/env-scene.ts"
   },
   "dependencies": {

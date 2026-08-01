@@ -23,6 +23,8 @@ import { assetsRouter } from './api/assets'
 import { ttsRouter } from './api/tts'
 import { statsRouter } from './api/stats'
 import { backupRouter } from './api/backup'
+import { defaultRoots } from './lib/backupArchive'
+import { purgeStaging } from './lib/backupRestore'
 import { startSpontaneous } from './lib/spontaneous'
 import { startEnvironmentIndex } from './lib/envIndex'
 import { uiRouter } from './api/ui'
@@ -38,6 +40,10 @@ function firstLanIPv4(): string {
 
 async function main(): Promise<void> {
   ensureDataDirs()
+  // Archives déposées pour un aperçu de restauration puis oubliées (onglet fermé,
+  // coupure) : elles contiennent config.json, donc la clé API et le mot de passe.
+  // Elles ne survivent pas à un redémarrage.
+  purgeStaging(defaultRoots(), 0)
   const app = express()
 
   // Garde CSRF : refus des requêtes mutantes cross-site. Les requêtes

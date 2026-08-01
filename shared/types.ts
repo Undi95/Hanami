@@ -143,6 +143,69 @@ export type ChatEvent =
 export const EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'surprised', 'relaxed'] as const
 export type Emotion = (typeof EMOTIONS)[number]
 
+// ── Restauration d'une sauvegarde (POST /api/backup/restore…) ──────────────
+// Le serveur ne renvoie que des CHIFFRES et des CODES : les phrases sont
+// écrites dans les deux langues côté client (i18n.ts), jamais ici.
+
+/** Points d'attention d'une restauration — traduits par le client. */
+export type RestoreWarning =
+  /** Le fichier data/config.json de l'archive remplacera les réglages (clé API et mot de passe compris). */
+  | 'configReplaced'
+  /** Le mot de passe d'accès de l'archive DIFFÈRE de celui en place : reconnexion nécessaire. */
+  | 'passwordChanges'
+  /** Archive d'avant le manifeste, reconnue à sa structure. */
+  | 'noManifest'
+  /** L'instance est vide : la restauration ne remplacera rien. */
+  | 'emptyInstance'
+
+/** Un personnage porté par l'archive, et ce qu'il deviendrait. */
+export interface RestoreCharacterEntry {
+  id: string
+  name: string
+  status: 'added' | 'replaced' | 'identical'
+  chats: number
+  memory: number
+}
+
+/** L'APERÇU : ce que la restauration ferait. Aucune écriture n'a eu lieu. */
+export interface RestorePreview {
+  /** Jeton de l'archive déposée — à renvoyer tel quel pour confirmer. */
+  stagedId: string
+  archive: {
+    /** Date de la sauvegarde (ISO), `null` si l'archive ne la porte pas. */
+    createdAt: string | null
+    /** Version du format ; 0 = archive d'avant le manifeste. */
+    version: number
+    source: 'manifest' | 'structure'
+  }
+  /** Décompte des fichiers de l'archive : `ignored` = hors data/ et portraits/. */
+  files: { total: number; added: number; replaced: number; identical: number; ignored: number }
+  /** Taille décompressée des fichiers restaurables. */
+  bytes: number
+  counts: {
+    characters: number
+    chats: number
+    memory: number
+    portraits: number
+    config: boolean
+    ui: boolean
+    other: number
+  }
+  characters: RestoreCharacterEntry[]
+  /** Ce que la restauration NE touche pas : rien n'est jamais supprimé. */
+  kept: { characters: string[]; files: number }
+  warnings: RestoreWarning[]
+}
+
+/** Ce qui a réellement été écrit. */
+export interface RestoreResult {
+  /** Le filet : l'état d'AVANT, archivé juste avant d'écrire. Jamais supprimé. */
+  net: { file: string; fileCount: number; bytes: number }
+  files: { total: number; added: number; replaced: number; identical: number }
+  /** Le mot de passe d'accès a changé : les sessions sont tombées, il faut se reconnecter. */
+  passwordChanged: boolean
+}
+
 // ── Préférences d'interface (data/ui.json) ─────────────────────────────────
 // L'utilisateur est SEUL sur son serveur : ses réglages d'interface le suivent
 // du PC au téléphone. Le serveur fait foi ; le localStorage du client n'en est
