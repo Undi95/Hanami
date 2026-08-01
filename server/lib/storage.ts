@@ -285,6 +285,23 @@ export function savePhoto(id: string, png: Buffer): string {
   return `/portraits/${encodeURIComponent(name)}?v=${Date.now()}`
 }
 
+/**
+ * Image d'un personnage pour l'export de card : sa PHOTO d'abord (la vignette
+ * d'identité, carrée, celle qu'on reconnaît dans la liste), sinon le portrait
+ * de la card importée. null = ce personnage n'a aucune image — la card partira
+ * en .json.
+ */
+export function readCharacterImage(id: string): Buffer | null {
+  for (const file of [photoFile(id), portraitFile(id)]) {
+    try {
+      return fs.readFileSync(file)
+    } catch {
+      /* absente : on essaie la suivante */
+    }
+  }
+  return null
+}
+
 /** Supprime le fichier de la photo (la clé du character.json se retire à part). */
 export function deletePhoto(id: string): void {
   fs.rmSync(photoFile(id), { force: true })

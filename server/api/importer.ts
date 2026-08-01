@@ -27,6 +27,20 @@ function queryString(v: unknown): string {
  * dont il dispose, et le personnage reste modifiable à la main ensuite.
  */
 function composeSystemPrompt(card: ParsedCard): string {
+  // Card à UNE seule section, la description : elle EST le prompt, on la rend
+  // telle quelle. Coiffer un texte unique d'un « ## Description » n'apprend rien
+  // à personne, et c'est ce qui rend l'aller-retour exact avec notre propre
+  // export (qui écrit le prompt du personnage dans ce champ, cf. cardExport.ts).
+  if (
+    card.description.trim() &&
+    !card.systemPrompt.trim() &&
+    !card.personality.trim() &&
+    !card.scenario.trim() &&
+    !card.mesExample.trim() &&
+    !card.postHistoryInstructions.trim()
+  ) {
+    return card.description
+  }
   const parts: string[] = []
   if (card.systemPrompt.trim()) parts.push(card.systemPrompt)
   if (card.description.trim()) parts.push(`## Description\n\n${card.description}`)

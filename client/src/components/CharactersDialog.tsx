@@ -205,6 +205,30 @@ export default function CharactersDialog({
     setArmed(false)
   }
 
+  /**
+   * Exporte un personnage en character card. Le SERVEUR décide de la forme :
+   * PNG quand le personnage a une image (sa photo, sinon le portrait de la card
+   * dont il vient), .json sinon — et il annonce nom et type dans ses en-têtes.
+   * Le fichier est offert au navigateur par un <a download> créé à la volée,
+   * comme la sauvegarde des Réglages et l'export d'une conversation.
+   */
+  async function exportCharacter(c: CharacterMeta) {
+    try {
+      const { blob, filename } = await api.downloadCharacterCard(c.id, c.name)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      // Dans le document : Firefox ignore le clic d'un lien détaché.
+      document.body.append(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) {
+      setError(api.errorMessage(e))
+    }
+  }
+
   async function openEdit(id: string) {
     setError(null)
     setArmed(false)
@@ -417,15 +441,35 @@ export default function CharactersDialog({
                 {/* Cascade : photo → portrait de la card → initiale teintée. */}
                 <Thumb id={c.id} name={c.name} src={c.photo || c.portrait || ''} />
                 <span className="char-name">{c.name}</span>
-                <button
-                  className="btn small"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    openEdit(c.id).catch((err) => console.error('[characters]', err))
-                  }}
-                >
-                  {t('edit')}
-                </button>
+                <div className="char-actions">
+                  <button
+                    className="btn small"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openEdit(c.id).catch((err) => console.error('[characters]', err))
+                    }}
+                  >
+                    {t('edit')}
+                  </button>
+                  {/* Emporter UN personnage : l'archive des Réglages sauvegarde
+                      tout et ne se relit qu'ici — une card, elle, se donne, se
+                      range, et se relit partout (à commencer par notre propre
+                      import). Même flèche que l'export d'une conversation. */}
+                  <button
+                    className="btn small"
+                    title={t('exportCharacter')}
+                    aria-label={t('exportCharacter')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      exportCharacter(c).catch((err) => console.error('[characters]', err))
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 4v10m0 0l-3.6-3.6M12 14l3.6-3.6" />
+                      <path d="M5 16.5v2a1.8 1.8 0 001.8 1.8h10.4A1.8 1.8 0 0019 18.5v-2" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             ))}
           </div>

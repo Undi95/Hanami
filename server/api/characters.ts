@@ -12,10 +12,12 @@ import {
   listCharacters,
   listChats,
   readChat,
+  readCharacterImage,
   savePhoto,
   updateChatHeader,
   updateCharacter,
 } from '../lib/storage'
+import { buildCardV2, cardDisposition, embedCardInPng, safeCardFileName } from '../lib/cardExport'
 // Même reconnaissance d'image que le dépôt d'un fond : un seul sniff dans l'app.
 import { sniffFamily } from './assets'
 
@@ -129,6 +131,40 @@ charactersRouter.delete('/api/characters/:id', (req, res) => {
     }
     deleteCharacter(req.params.id)
     res.json({ ok: true })
+  } catch (e) {
+    sendError(res, 500, e)
+  }
+})
+
+// ── Export en character card ───────────────────────────────────────────────
+// GET /api/characters/:id/card → la card V2 du personnage, PNG si l'on dispose
+// d'une image (photo, sinon portrait), .json sinon. Le type et le nom de
+// fichier sont annoncés dans les en-têtes : le client télécharge ce qu'on lui
+// donne, sans avoir à deviner. C'est l'exact pendant de POST /api/import/card,
+// qui sait relire les deux formes.
+
+charactersRouter.get('/api/characters/:id/card', (req, res) => {
+  try {
+    const character = findCharacter(req.params.id)
+    if (!character) {
+      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      return
+    }
+    const json = JSON.stringify(buildCardV2(character), null, 2)
+    const base = safeCardFileName(character.name)
+    // Image illisible ou pas au format PNG : le .json vaut mieux qu'un échec —
+    // il porte exactement les mêmes champs, il n'a que l'image en moins.
+    const image = readCharacterImage(character.id)
+    const png = image ? embedCardInPng(image, json) : null
+    if (png) {
+      res.setHeader('Content-Type', 'image/png')
+      res.setHeader('Content-Disposition', cardDisposition(base, 'png'))
+      res.send(png)
+      return
+    }
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.setHeader('Content-Disposition', cardDisposition(base, 'json'))
+    res.send(json)
   } catch (e) {
     sendError(res, 500, e)
   }

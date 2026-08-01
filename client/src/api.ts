@@ -248,6 +248,50 @@ export async function uploadCharacterPhoto(id: string, png: Blob): Promise<strin
   return photo
 }
 
+/**
+ * Nom de fichier annoncé par le serveur : `filename*=UTF-8''…` d'abord (il
+ * porte les accents), repli sur `filename="…"`, puis sur le nom fourni.
+ */
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  const raw = header ?? ''
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(raw)
+  if (utf8) {
+    try {
+      const decoded = decodeURIComponent(utf8[1].trim())
+      // Ni guillemet ni séparateur de chemin : le nom part dans un attribut download.
+      if (decoded && !/[\\/"]/.test(decoded)) return decoded
+    } catch {
+      /* séquence % invalide : on essaie la forme simple */
+    }
+  }
+  const plain = /filename="([^"\\/]+)"/.exec(raw)
+  return plain ? plain[1] : fallback
+}
+
+/**
+ * Télécharge un personnage sous forme de character card : PNG quand il a une
+ * image, .json sinon — c'est le SERVEUR qui tranche, et il l'annonce dans ses
+ * en-têtes. Comme la sauvegarde, ça passe par fetch (un <a href> ne porterait
+ * pas l'en-tête Authorization) puis par un blob.
+ */
+export async function downloadCharacterCard(id: string, fallbackName: string): Promise<{ blob: Blob; filename: string }> {
+  let res: Response
+  try {
+    res = await fetch(`/api/characters/${encodeURIComponent(id)}/card`, { headers: authHeaders() })
+  } catch {
+    throw new ApiError(t('serverUnreachable'), 0)
+  }
+  if (!res.ok) return throwFromResponse(res)
+  const type = res.headers.get('content-type') ?? ''
+  return {
+    blob: await res.blob(),
+    filename: filenameFromDisposition(
+      res.headers.get('content-disposition'),
+      `${fallbackName}.${type.startsWith('image/png') ? 'png' : 'json'}`,
+    ),
+  }
+}
+
 /** Retire la photo d'un personnage (fichier supprimé, clé retirée). */
 export function deleteCharacterPhoto(id: string): Promise<{ ok: true }> {
   return req('DELETE', `/api/characters/${encodeURIComponent(id)}/photo`)

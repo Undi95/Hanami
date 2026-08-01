@@ -2520,6 +2520,28 @@ select {
   background: var(--accent-soft);
 }
 
+/* Actions d'une vignette de personnage : « Modifier » et l'export, côte à côte.
+   Au doigt, les deux passent à 44 px — la carte est petite, ses boutons ne
+   doivent pas l'être. */
+.char-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.char-actions .btn.small svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (pointer: coarse) {
+  .char-actions .btn.small {
+    min-height: 44px;
+  }
+}
+
 .char-name {
   font-weight: 600;
   font-size: 14px;
