@@ -19,14 +19,12 @@ import { streamChatCompletion, type StreamedToolCall } from '../llm/openai'
 import { MEMORY_TOOL_NAMES, executeMemoryTool, memoryToolDefs } from '../tools/memoryTools'
 import { FILE_TOOL_NAMES, executeFileTool, fileToolDefs } from '../tools/fileTools'
 import { CHAT_TOOL_NAMES, chatToolDefs, executeChatTool } from '../tools/chatTools'
+import { firstEmotionTag } from '../../shared/emotions'
 import type { ChatEvent, ChatMessage, ContextInfo, Settings } from '../../shared/types'
 
 export const chatRouter = Router()
 
 const MAX_TOOL_ITERATIONS = 6
-// Non ancrée : première occurrence n'importe où, comme extractEmotion côté client.
-// \s* : les modèles écrivent parfois « [ happy ] » avec des espaces.
-const EMOTION_RE = /\[\s*(neutral|happy|sad|angry|surprised|relaxed)\s*\]/i
 
 interface BackendPayload {
   messages: unknown[]
@@ -204,9 +202,9 @@ export function buildPayload(
 }
 
 function toAssistantMessage(text: string, thinking?: string): ChatMessage {
-  const m = EMOTION_RE.exec(text)
+  const emotion = firstEmotionTag(text)
   const msg: ChatMessage = { role: 'assistant', content: text, ts: new Date().toISOString() }
-  if (m) msg.emotion = m[1].toLowerCase()
+  if (emotion) msg.emotion = emotion
   if (thinking) msg.thinking = thinking
   return msg
 }
@@ -509,8 +507,8 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       const base = continueBase
       const joiner = base.content.endsWith('\n') || assistantText.startsWith('\n') ? '' : ' '
       const merged: ChatMessage = { ...base, content: base.content + joiner + assistantText }
-      const m = EMOTION_RE.exec(merged.content)
-      if (m) merged.emotion = m[1].toLowerCase()
+      const mergedEmotion = firstEmotionTag(merged.content)
+      if (mergedEmotion) merged.emotion = mergedEmotion
       if (assistantThinking) {
         merged.thinking = base.thinking ? base.thinking + '\n\n' + assistantThinking : assistantThinking
       }
@@ -938,8 +936,8 @@ chatRouter.put('/api/chat/message', (req, res) => {
     const msg: ChatMessage = { ...msgs[index], content }
     if (msg.role === 'assistant') {
       delete msg.emotion
-      const m = EMOTION_RE.exec(content)
-      if (m) msg.emotion = m[1].toLowerCase()
+      const emotion = firstEmotionTag(content)
+      if (emotion) msg.emotion = emotion
     }
     msgs[index] = msg
     updated = msg

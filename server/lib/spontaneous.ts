@@ -10,6 +10,7 @@ import { readUiPrefs } from '../api/ui'
 import { buildPayload } from '../api/chat'
 import { appendChatMessage, readChat } from './storage'
 import { streamChatCompletion } from '../llm/openai'
+import { firstEmotionTag } from '../../shared/emotions'
 import type { ChatMessage, Settings } from '../../shared/types'
 
 const HOUR_MS = 3600 * 1000
@@ -24,10 +25,6 @@ const MAX_UNANSWERED = THRESHOLDS_H.length
 // Jitter tiré à chaque tick (jamais persisté) : le personnage n'écrit pas
 // « à l'heure pile », il a son propre rythme.
 const JITTER_MS = 30 * 60 * 1000
-
-// Même détection qu'à la fin d'une réponse normale (server/api/chat.ts) :
-// première occurrence n'importe où, espaces tolérés.
-const EMOTION_RE = /\[\s*(neutral|happy|sad|angry|surprised|relaxed)\s*\]/i
 
 // Consignes envoyées dans le payload et JAMAIS sauvegardées dans le chat —
 // même statut que la consigne de continuation ou d'ouverture.
@@ -165,8 +162,9 @@ export async function runSpontaneousTick(): Promise<void> {
       ts: new Date().toISOString(),
       spontaneous: true,
     }
-    const emotion = EMOTION_RE.exec(text)
-    if (emotion) msg.emotion = emotion[1].toLowerCase()
+    // Même détection qu'à la fin d'une réponse normale (shared/emotions.ts).
+    const emotion = firstEmotionTag(text)
+    if (emotion) msg.emotion = emotion
     appendChatMessage(characterId, chatId, msg)
   } catch (e) {
     console.warn('[spontaneous]', e instanceof Error ? e.message : String(e))

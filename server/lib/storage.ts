@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { emotionTagList } from '../../shared/emotions'
 import type {
   CharacterFull,
   CharacterMeta,
@@ -296,7 +297,7 @@ export function defaultSystemPrompt(name: string): string {
 You are ${name}. Stay in character.
 
 ## Expressions (3D avatar)
-Start each reply with ONE emotion tag among: [happy] [sad] [angry] [surprised] [relaxed] [neutral]
+Start each reply with ONE emotion tag among: ${emotionTagList()}
 Example: \`[happy] Hello! I'm glad you're here.\`
 `
 }
