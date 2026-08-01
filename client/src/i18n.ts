@@ -268,7 +268,13 @@ const FR = {
   summaryHint:
     'Ce résumé remplace les messages compactés dans le contexte envoyé au modèle. Corrigez-le librement — le vider annule la compaction (tout l’historique repart).',
   compactNow: 'Compacter maintenant',
-  compactInstructionPlaceholder: 'Instruction optionnelle (ex. « garde tous les détails du voyage »)',
+  // Même règle que le composer et la recherche : le champ AFFICHE court et
+  // s'ANNONCE long. Il partage une .row de 284 px avec « Compacter maintenant »
+  // (157,7 px) et ne garde que 92 px utiles à 320 px de large — le libellé
+  // complet en demande 421,7, soit 78,2 % coupé (on lisait « Instruction op »),
+  // et 65,1 % encore à 375 px. « Instruction… » : 81,55 px, il tient partout.
+  compactInstruction: 'Instruction optionnelle (ex. « garde tous les détails du voyage »)',
+  compactInstructionPlaceholder: 'Instruction…',
   compactDone: 'Conversation compactée ({n} messages résumés).',
   sectionTts: 'Synthèse vocale (TTS)',
   ttsEnabled: 'Lire les réponses à voix haute',
@@ -600,7 +606,8 @@ const EN: Record<Key, string> = {
   summaryHint:
     'This summary replaces the compacted messages in the context sent to the model. Edit it freely — clearing it undoes the compaction (the full history is sent again).',
   compactNow: 'Compact now',
-  compactInstructionPlaceholder: 'Optional instruction (e.g. “keep every detail of the trip”)',
+  compactInstruction: 'Optional instruction (e.g. “keep every detail of the trip”)',
+  compactInstructionPlaceholder: 'Instruction…',
   compactDone: 'Conversation compacted ({n} messages summarized).',
   sectionTts: 'Text-to-speech (TTS)',
   ttsEnabled: 'Read replies out loud',

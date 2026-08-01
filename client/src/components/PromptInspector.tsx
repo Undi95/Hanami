@@ -152,7 +152,12 @@ export default function PromptInspector({
             <input
               type="text"
               value={instruction}
+              // Affiché court, annoncé long : le champ ne garde que 92 px utiles
+              // à 320 px de large (il partage sa .row avec « Compacter
+              // maintenant »), le libellé complet en demande 421,7 — voir i18n.
               placeholder={t('compactInstructionPlaceholder')}
+              aria-label={t('compactInstruction')}
+              title={t('compactInstruction')}
               style={{ flex: 1, minWidth: 0 }}
               onChange={(e) => setInstruction(e.target.value)}
             />
