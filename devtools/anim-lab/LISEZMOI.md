@@ -351,6 +351,23 @@ dans le TSV. Un défaut de clip y est quasi constant d'un gabarit à l'autre —
 « échoue sur 65/94 » se lit alors comme UN défaut, pas 65. **Aucun verdict n'en
 dépend** : le juge de paix reste l'écart en cm réels, seuils 2/7/10.
 
+**Modèles HORS-GABARIT anthropométrique** — à lire comme des morphologies, pas
+comme des défauts de clips (inventaire de la passe des 94, 2026-08-01) :
+
+| modèle | hanches | particularité |
+| --- | --- | --- |
+| `5661047213623940145.vrm` | 0,328 m | chibi : écartement des pieds « défaut » au juge (jusqu'à 37 cm-adulte), c'est son bassin |
+| `RigMascotte.vrm` | 0,547 m | rig mascotte : **sans os `neck`**, jambes 0,68 × hanches — traverse son tronc en course, charnière de genou jusqu'à 50° |
+| `7312138852387622699.vrm` | 0,628 m | proportions enfant, jambes 0,82 × hanches |
+
+Les fourchettes anthropométriques du juge (écartement, hauteur de pas…) ne leur
+sont pas opposables ; leurs cases « défaut » sur CES critères-là n'appellent
+aucune retouche. Inventaire des os optionnels sur les 94 modèles, pour mémoire :
+`leftEye`/`rightEye`, `toes` et `shoulders` présents PARTOUT (le regard œil+tête
+a ses os sur tous les gabarits) ; `upperChest` absent sur 3 modèles seulement
+(HatsuneMiku8593…, Sonic, MascotteKana — les pistes upperChest n'y lient pas,
+perte de souplesse du buste quasi invisible) ; `neck` absent sur la mascotte seule.
+
 ---
 
 # Les deux domaines
