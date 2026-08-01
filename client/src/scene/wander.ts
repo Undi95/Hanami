@@ -155,8 +155,97 @@ const GAIT_WALK: GaitPlan = {
   startFrac: STRIDE_START,
 }
 
-/** Au-delà de cette distance, la flânerie devient ridicule : on marche. */
+/**
+ * FRACTION DE CYCLE entre la phase d'ENTRÉE et la phase de SORTIE. La marche
+ * n'est pas faite de cycles entiers : elle entre à `enterS` et sort à `exitS`,
+ * et ne dépeint entre les deux que cette fraction-là du dernier cycle. La
+ * compter pour un cycle plein décalait toute l'arithmétique d'arrêt d'autant —
+ * et comme l'arrêt ne part QUE sur une phase de sortie, le personnage dépassait
+ * sa destination de la fraction manquante puis finissait le cycle : mesuré
+ * 0,84 m de trop (0,8 cycle de `world-walk`, entrée 0,200 s / sortie 0,000 s)
+ * sur CHAQUE marche franche. La flânerie n'en souffrait presque pas (0,133 s
+ * d'écart, 3,8 cm) — c'est ce qui a caché le défaut aux premiers bancs, qui ne
+ * mesuraient la position que sur elle.
+ */
+function cycleTail(g: GaitPlan): number {
+  return ((g.exitS - g.enterS + g.durationS) % g.durationS) / g.durationS
+}
+
+/**
+ * Plus court trajet que `g` sache dépeindre, en fraction de hanches : son clip
+ * de départ (s'il en a un) plus la fraction de cycle qu'il joue avant de sortir
+ * sur la couture. Pour `world-walk` : 0,392 + 1,398 × 0,8 = 1,51 hanche, soit
+ * 1,54 m sur le rig de mesure. C'est la borne sous laquelle l'allure ne peut
+ * plus servir — elle dépasserait le but au lieu de s'en approcher.
+ */
+function shortestTrip(g: GaitPlan): number {
+  return g.startFrac + g.strideFrac * cycleTail(g)
+}
+
+/**
+ * Au-delà de cette distance, la flânerie devient ridicule : on marche.
+ *
+ * Ce n'est PAS un réglage de goût, c'est la granularité de `world-walk` : sa
+ * foulée fait 1,421 m et son plus court trajet possible vaut
+ * `startFrac + strideFrac × (1 + exitFrac)` = 0,399 + 1,421 × 1,8 = 2,96 m
+ * (rig de mesure). En dessous, la marche franche ne sait pas se poser près du
+ * but — elle le dépasse. La flânerie, foulée 0,501 m, descend elle à 0,55 m.
+ * Le seuil est donc là où les deux se croisent, pas ailleurs.
+ */
 const WALK_OVER_STROLL_M = 2.6
+
+// ── COURIR : MESURÉ, ET REFUSÉ — trois fois plutôt qu'une ───────────────────
+//
+// Le catalogue contient `world-jog` et `world-run`, et l'envie de s'en servir
+// sur les longs trajets est légitime. Ils ne sont pas branchés, et ce bloc dit
+// pourquoi : ce n'est pas un choix, c'est une mesure.
+//
+// 1. L'ODOMÉTRIE NE LES PORTE PAS. La vitesse de ce fichier n'est jamais
+//    imposée, elle est LUE sur l'animation (`host.stride()`, cf. legIk.stride :
+//    recul pondéré du pied le plus BAS). Une allure de VOL n'a, par définition,
+//    aucun pied porteur pendant l'envol : le « pied le plus bas » y balance vers
+//    l'AVANT, et l'odométrie lit un recul NÉGATIF. Rejoué image par image sur
+//    les vrais clips, sur trois modèles couvrant tout le dossier vrm/ (hanches
+//    0,755 / 0,905 / 1,201 m) :
+//
+//                     avance nette      recul cumulé      images en
+//                     (rig 0,905 m)     par cycle         marche arrière
+//      world-walk        1,348 m/s         0,0 cm             3 %
+//      world-walk-slow   0,277 m/s         2,1 cm            15 %
+//      world-walk-fast   1,125 m/s        13,7 cm            21 %
+//      world-jog         0,669 m/s        42,2 cm            31 %
+//      world-run         0,089 m/s        67,3 cm            42 %
+//
+//    `world-run` fait 5,6 cm par cycle de 0,63 s : il COURT SUR PLACE, en
+//    tremblant de 67 cm d'avant en arrière à chaque foulée. `world-walk-fast`
+//    lui-même recule 0,15 s d'affilée par cycle (jusqu'à −2,0 m/s) — c'est
+//    pour ça qu'il n'est pas branché non plus. Seul `world-walk` ne recule
+//    JAMAIS : c'est la seule allure franche que ce moteur sait porter.
+//
+// 2. AUCUN RACCORD PROPRE, NI À L'ENTRÉE NI À LA SORTIE. `phasesDeRaccord` de
+//    vrma/world.json, à la MEILLEURE phase de chaque cycle : `world-jog` tombe
+//    à 33,5 cm de l'idle et 33,0 cm de l'arrêt ; `world-run` à 51,4 et 51,6 cm.
+//    Le seuil du projet est 10 cm. Il n'y a donc pas d'arrêt de course à
+//    « décélérer » vers la marche : il n'y a pas de course tenable du tout.
+//
+// 3. OVERTE NE FAIT PAS CE QU'ON VOUDRAIT FAIRE. Dans vrma/transitions.json,
+//    il n'existe NI état `jog` NI état `run` : `WALKFWD` est un seul état de
+//    type `blendLinearMove` dont les cinq enfants sont walk_short / walk /
+//    walk_fast / jog / run, mélangés le long de `moveForwardSpeed`
+//    (vitesses caractéristiques 0,5 / 1,8 / 2,5 / 3,55 / 5,675 m/s). Le moteur
+//    « choisit et ÉTIRE le cycle selon la vitesse réelle du personnage » : chez
+//    Overte c'est la vitesse qui commande le clip. Ici c'est le clip qui
+//    commande la vitesse — l'inverse exact, et c'est ce qui nous garantit zéro
+//    patinage sur n'importe quel modèle. Imposer 1,4 m/s à `world-run` ferait
+//    balayer le pied d'appui de ~24 cm par phase d'appui (seuil « défaut » du
+//    banc : 8 cm).
+//
+// CE QU'IL FAUDRAIT POUR COURIR : un mélange de deux allures à phase verrouillée
+// AVEC mise à l'échelle du temps de lecture (le `blendLinearMove` d'Overte), et
+// une odométrie qui sache traverser une phase de vol. Le premier est du ressort
+// de vrmStage (cf. le bloc « CHANGER D'ALLURE EN MARCHANT » ci-dessous), le
+// second de legIk. Tant que les deux n'existent pas, la bande « course » n'a pas
+// de clip pour la tenir, et une bande sans clip n'est pas une bande.
 
 // ── CHANGER D'ALLURE EN MARCHANT — mesuré, PAS branché ─────────────────────
 //
@@ -594,6 +683,28 @@ export function createWander(host: WanderHost): Wander {
   let route: Waypoint[] = []
   /** Segments de marche encore accordés à l'itinéraire (garde-fou). */
   let routeLegs = 0
+  /**
+   * Le trajet en cours a été COMMANDÉ (un clic au sol, un clic sur une assise),
+   * par opposition à la déambulation spontanée. Un ordre et une flânerie n'ont
+   * pas les mêmes droits : l'ordre choisit son allure sur tout le chemin, la
+   * flânerie garde la sienne, segment par segment, comme toujours.
+   */
+  let ordered = false
+  /**
+   * Allure du trajet COMMANDÉ en cours, choisie une fois pour toutes sur la
+   * LONGUEUR DU CHEMIN (somme des étapes de l'itinéraire, pas la distance à vol
+   * d'oiseau) — et tenue sur TOUS ses segments. null : trajet spontané, chaque
+   * segment choisit comme avant.
+   *
+   * C'EST LE DÉFAUT QUE CE CHAMP CORRIGE. L'allure se décidait dans planWalk sur
+   * la seule distance du segment courant. Un chemin d'itinéraire est fait de
+   * segments COURTS (le coude d'un couloir, le tour d'une table) : chacun tombait
+   * donc sous le seuil et repartait en flânerie à 0,28 m/s. Mesuré au banc
+   * (couloir en L, coude à 6 m) : 10 m de chemin en 18,65 s à 0,57 m/s de
+   * moyenne, contre 9,13 s à 1,10 m/s pour les mêmes 10 m en ligne droite. Le
+   * chemin ne rallongeait pas le trajet : il changeait l'allure.
+   */
+  let routeGait: GaitPlan | null = null
   /** Temps restant (s) avant le prochain déplacement spontané. */
   let restTimer = rand(REST_MIN_S, REST_MAX_S)
   /** Horloge interne (s, cumul des deltas) — sert aux fenêtres d'attention. */
@@ -709,6 +820,11 @@ export function createWander(host: WanderHost): Wander {
    * destination, sans qu'il faille ni presser le pas ni dépasser.
    * `seatLeg` : segment d'un trajet d'assise — la fin du chemin et la
    * destination elle-même sont en zone de manœuvre (gabarit au point).
+   *
+   * L'ALLURE VIENT DE `routeGait` QUAND IL Y EN A UN — c'est-à-dire sur un
+   * trajet COMMANDÉ, où elle a été choisie une fois pour toutes sur la LONGUEUR
+   * DU CHEMIN (cf. startRoute). Sans lui (déambulation spontanée), c'est la
+   * règle de toujours : ce segment-ci, à vol d'oiseau.
    */
   function planWalk(x: number, z: number, seatLeg = false): boolean {
     if (!host.mapped()) return false
@@ -719,46 +835,89 @@ export function createWander(host: WanderHost): Wander {
     const dz = z - p.z
     const want = Math.hypot(dx, dz)
     if (want < 0.05) return false
-    const g = want > WALK_OVER_STROLL_M && host.has(GAIT_WALK.clip) ? GAIT_WALK : GAIT_STROLL
-    if (!host.has(g.clip)) return false
-    const stride = g.strideFrac * h
-    const startD = g.startFrac * h
     // Départ d'un endroit serré (on vient de se lever contre un meuble) : la
     // tête du chemin est en manœuvre, elle aussi au point.
     const head = host.canStand(p.x, p.z, radius) ? 0 : MANEUVER_M
-    /**
-     * FRACTION DE CYCLE entre la phase d'ENTRÉE et la phase de SORTIE. La marche
-     * n'est pas faite de cycles entiers : elle entre à `enterS` et sort à
-     * `exitS`, et ne dépeint entre les deux que cette fraction-là du dernier
-     * cycle. La compter pour un cycle plein décalait toute l'arithmétique
-     * d'arrêt d'autant — et comme l'arrêt ne part QUE sur une phase de sortie,
-     * le personnage dépassait sa destination de la fraction manquante puis
-     * finissait le cycle : mesuré 0,84 m de trop (0,8 cycle de `world-walk`,
-     * entrée 0,200 s / sortie 0,000 s) sur CHAQUE marche franche. La flânerie
-     * n'en souffrait presque pas (0,133 s d'écart, 3,8 cm) — c'est ce qui a
-     * caché le défaut aux premiers bancs, qui ne mesuraient la position que sur
-     * elle.
-     */
-    const exitFrac = ((g.exitS - g.enterS + g.durationS) % g.durationS) / g.durationS
-    // Nombre de cycles, au moins un, le dernier étant PARTIEL (entrée → sortie),
-    // pour approcher `want` au mieux.
-    let n = Math.max(1, Math.round((want - startD) / stride - exitFrac))
     const dir = { x: dx / want, z: dz / want }
-    // On raccourcit tant que le chemin ne passe pas : mieux vaut s'arrêter avant
-    // l'obstacle que de s'y cogner et de rester planté contre lui.
-    for (; n >= 1; n--) {
-      const d = startD + stride * (n + exitFrac)
-      const tx = p.x + dir.x * d
-      const tz = p.z + dir.z * d
-      const rEnd = seatLeg && Math.hypot(x - tx, z - tz) < tail ? 0 : radius
-      if (host.canStand(tx, tz, rEnd) && pathClear(p.x, p.z, tx, tz, radius, tail, head)) {
-        plan = g
-        destX = tx
-        destZ = tz
-        return true
+    /** Essaie UNE allure : rend true et engage le plan si elle tient sur ce segment. */
+    const tenter = (g: GaitPlan): boolean => {
+      if (!host.has(g.clip)) return false
+      const stride = g.strideFrac * h
+      const startD = g.startFrac * h
+      /**
+       * FRACTION DE CYCLE entre la phase d'ENTRÉE et la phase de SORTIE. La marche
+       * n'est pas faite de cycles entiers : elle entre à `enterS` et sort à
+       * `exitS`, et ne dépeint entre les deux que cette fraction-là du dernier
+       * cycle. La compter pour un cycle plein décalait toute l'arithmétique
+       * d'arrêt d'autant — et comme l'arrêt ne part QUE sur une phase de sortie,
+       * le personnage dépassait sa destination de la fraction manquante puis
+       * finissait le cycle : mesuré 0,84 m de trop (0,8 cycle de `world-walk`,
+       * entrée 0,200 s / sortie 0,000 s) sur CHAQUE marche franche. La flânerie
+       * n'en souffrait presque pas (0,133 s d'écart, 3,8 cm) — c'est ce qui a
+       * caché le défaut aux premiers bancs, qui ne mesuraient la position que sur
+       * elle.
+       */
+      // Nombre de cycles, le dernier étant PARTIEL (entrée → sortie), pour
+      // approcher `want` au mieux.
+      const naturel = Math.round((want - startD) / stride - cycleTail(g))
+      /**
+       * PLANCHER DU NOMBRE DE CYCLES. Une allure qui entre par un clip de DÉPART
+       * porte déjà de la distance avant son premier cycle : `world-walk-start`
+       * dépeint 0,392 hanche, et la fraction de cycle qui suit en ajoute 0,8 —
+       * un trajet de 1,54 m (rig de mesure) SANS aucun cycle entier, contrat de
+       * phase intact (entrée 0,200 s, sortie sur la couture). Elle peut donc
+       * descendre à zéro cycle. La flânerie, elle, n'a pas de départ : sans un
+       * cycle au moins, elle ne dépeint plus rien, et son plancher reste 1.
+       *
+       * RÉSERVÉ AUX ORDRES. Un trajet spontané garde le plancher de toujours :
+       * autoriser le demi-trajet changeait les plans que la pièce raccourcit,
+       * donc le tirage, donc TOUTE l'empreinte de déambulation (mesuré : 47,0 m
+       * et 30,9 % d'assise au lieu de 56,1 m et 17,8 %, à graine identique).
+       * La flânerie ne change pas.
+       */
+      const plancher = ordered && g.startFrac > 0 ? 0 : 1
+      let n = Math.max(plancher, naturel)
+      // On raccourcit tant que le chemin ne passe pas : mieux vaut s'arrêter avant
+      // l'obstacle que de s'y cogner et de rester planté contre lui.
+      for (; n >= plancher; n--) {
+        const d = startD + stride * (n + cycleTail(g))
+        /**
+         * PROGRESSER, TOUJOURS. Quand le plancher ÉTIRE l'allure au-delà de sa
+         * granularité (segment plus court qu'un de ses trajets), le plan peut
+         * déposer le personnage PLUS LOIN du but qu'il n'en est déjà : l'étape
+         * reste alors en tête d'itinéraire, le segment suivant repart en sens
+         * inverse, et c'est la navette. Mesuré au banc avant cette garde :
+         * 17,6 m parcourus et 31,9 s pour un chemin de 8 m, cinq arrêts. Le
+         * plan est refusé, et l'appelant retombe sur la flânerie — dont les
+         * petites foulées savent, elles, viser à 25 cm près. Comme le plancher
+         * ci-dessus, la garde ne vaut que pour un ORDRE : sans le plancher à
+         * zéro, le cas ne peut pas se produire sur un trajet spontané.
+         */
+        if (ordered && n > naturel && Math.abs(d - want) >= want) continue
+        const tx = p.x + dir.x * d
+        const tz = p.z + dir.z * d
+        const rEnd = seatLeg && Math.hypot(x - tx, z - tz) < tail ? 0 : radius
+        if (host.canStand(tx, tz, rEnd) && pathClear(p.x, p.z, tx, tz, radius, tail, head)) {
+          plan = g
+          destX = tx
+          destZ = tz
+          return true
+        }
       }
+      return false
     }
-    return false
+    const voulue = routeGait ?? (want > WALK_OVER_STROLL_M ? GAIT_WALK : GAIT_STROLL)
+    /**
+     * LE REPLI EST LA FLÂNERIE, et il n'existe QUE quand l'allure a été IMPOSÉE
+     * par la longueur du chemin (`routeGait`). La marche franche a besoin de
+     * 1,54 m devant elle : un coin d'itinéraire trop serré la refuse, et sans ce
+     * repli le segment échouerait — le personnage resterait planté là où, hier,
+     * il flânait. Sur un trajet SPONTANÉ l'allure vient de ce segment-ci : elle
+     * ne peut pas être trop grande pour lui, et un échec doit rester un échec
+     * (c'est lui qui fait retirer une autre destination, cf. roam). Le repli
+     * ouvert à tous changeait l'empreinte de déambulation à graine identique.
+     */
+    return tenter(voulue) || (routeGait !== null && voulue !== GAIT_STROLL && tenter(GAIT_STROLL))
   }
 
   /**
@@ -792,7 +951,18 @@ export function createWander(host: WanderHost): Wander {
       // mauvaise direction et l'on perdrait le coin qu'il fallait contourner.
       if (i > 0 && !pathClear(p.x, p.z, w.x, w.z, radius, tail, head)) continue
       if (!planWalk(w.x, w.z, seatLeg)) continue
-      route.splice(0, Math.hypot(destX - w.x, destZ - w.z) < reach ? i + 1 : i)
+      /**
+       * L'ÉTAPE EST ATTEINTE À LA PRÉCISION DE LA FOULÉE, PAS MIEUX. Une allure
+       * se pose par pas entiers : lui redemander de revenir sur un reliquat plus
+       * court qu'un demi-pas ne fait pas gagner de précision, ça coûte un segment
+       * de plus — et si le reliquat est DERRIÈRE, un demi-tour complet. Mesuré au
+       * banc (couloir en L, chemin de 10 m) : 37 cm de dépassement déclenchaient
+       * un pivot de 173° et un dernier segment, soit 5,4 s pour 37 cm — un tiers
+       * du trajet. La tolérance suit donc la foulée de l'allure employée, sans
+       * jamais descendre sous celle d'avant.
+       */
+      const atteint = Math.max(reach, (plan.strideFrac / 2) * host.hips())
+      route.splice(0, Math.hypot(destX - w.x, destZ - w.z) < atteint ? i + 1 : i)
       routeLegs--
       return true
     }
@@ -835,13 +1005,36 @@ export function createWander(host: WanderHost): Wander {
   ): boolean {
     route.length = 0
     routeLegs = 0
+    routeGait = null
     const radius = host.bodyRadius()
     const tail = seatLeg ? MANEUVER_M : 0
     const head = host.canStand(p.x, p.z, radius) ? 0 : MANEUVER_M
     const straight = pathClear(p.x, p.z, x, z, radius, tail, head)
     const pts = straight ? null : host.path(p.x, p.z, x, z, radius)
+    /**
+     * LA BANDE D'ALLURE D'UN ORDRE, sur la longueur du CHEMIN.
+     *
+     * Deux bandes, et deux seulement. La borne n'est pas un goût : c'est le plus
+     * court trajet que la marche franche sache dépeindre (`shortestTrip`,
+     * 1,54 m sur le rig de mesure, à l'échelle du modèle partout ailleurs).
+     * En dessous, elle ne peut pas servir — elle dépasserait le but. Au-dessus,
+     * la flânerie devient une punition : 0,28 m/s mesurés, soit 36 s pour
+     * traverser une pièce de 10 m. La troisième bande — courir — n'a pas de clip
+     * pour la tenir : voir le bloc « COURIR : MESURÉ, ET REFUSÉ » en tête de
+     * fichier.
+     *
+     * La borne d'un ORDRE est donc plus basse que celle de la flânerie
+     * (WALK_OVER_STROLL_M, 2,6 m) : un ordre demande d'ALLER quelque part, et se
+     * poser 40 cm avant le point cliqué vaut mieux que d'y traîner cinq
+     * secondes. La déambulation spontanée, elle, garde sa règle telle quelle.
+     */
+    const bande = (chemin: number): GaitPlan =>
+      chemin > shortestTrip(GAIT_WALK) * host.hips() && host.has(GAIT_WALK.clip) ? GAIT_WALK : GAIT_STROLL
     if (!pts) {
-      if (Math.hypot(x - p.x, z - p.z) > maxLen || !planWalk(x, z, seatLeg)) return false
+      const len = Math.hypot(x - p.x, z - p.z)
+      if (len > maxLen) return false
+      if (ordered) routeGait = bande(len)
+      if (!planWalk(x, z, seatLeg)) return false
       return !commit || straight || Math.hypot(destX - x, destZ - z) <= MANEUVER_M
     }
     let len = 0
@@ -853,6 +1046,7 @@ export function createWander(host: WanderHost): Wander {
       cz = w.z
     }
     if (len > maxLen) return false
+    if (ordered) routeGait = bande(len)
     route = pts
     routeLegs = Math.min(pts.length + ROUTE_SPARE_LEGS, ROUTE_MAX_LEGS)
     if (nextLeg(seatLeg)) return true
@@ -1088,6 +1282,7 @@ export function createWander(host: WanderHost): Wander {
   /** Prépare et lance un trajet d'assise. Rend false sans rien changer si impossible. */
   function tryGoSit(seat: Seat): boolean {
     if (!host.has('sit-idle')) return false
+    routeGait = null // l'allure d'un trajet précédent n'a rien à faire ici
     const run = planSeat(seat)
     if (!run) return false
     // DÉJÀ à portée du point de pré-assise — on est venu par ses propres clics,
@@ -1271,6 +1466,10 @@ export function createWander(host: WanderHost): Wander {
    */
   function roam(): void {
     if (!host.mapped()) return
+    // FLÂNERIE, PAS ORDRE. Tout ce qui suit garde la règle d'allure d'avant :
+    // chaque segment se juge à vol d'oiseau, et le personnage ne se met jamais
+    // à traverser la pièce d'un pas décidé parce que le chemin fait un détour.
+    ordered = false
     const h = host.hips()
     // Une fois sur trois : aller s'asseoir quelque part. L'assise est tirée au
     // poids de l'AIRE — un canapé attire plus qu'un tabouret, comme dans la vie.
@@ -1528,6 +1727,8 @@ export function createWander(host: WanderHost): Wander {
           if (afterStand) {
             const dest = afterStand
             afterStand = null
+            // Elle vient d'un goTo : c'est un ORDRE, même différé par l'assise.
+            ordered = true
             if (startRoute(dest.x, dest.z)) beginWalk()
           }
         }
@@ -1555,12 +1756,16 @@ export function createWander(host: WanderHost): Wander {
       // « cliquer pour y aller » sourd une fois sur deux. beginWalk pose son
       // propre pivot d'alignement par-dessus, les états s'enchaînent déjà.
       if (state !== 'rest' && state !== 'pivot') return false
+      // ORDRE : l'allure se choisira sur la longueur du CHEMIN, pas sur celle
+      // du premier segment (cf. routeGait).
+      ordered = true
       if (!startRoute(x, z)) return false
       beginWalk()
       return true
     },
     goSit(seat): boolean {
       if (state !== 'rest' && state !== 'pivot') return false
+      ordered = true
       return tryGoSit(seat)
     },
     poke(): void {
@@ -1590,6 +1795,8 @@ export function createWander(host: WanderHost): Wander {
       afterStand = null
       route.length = 0
       routeLegs = 0
+      routeGait = null
+      ordered = false
       restTimer = rand(REST_MIN_S, REST_MAX_S)
       host.feet('planted')
       host.gait(null, fade)
