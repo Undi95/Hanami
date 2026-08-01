@@ -30,6 +30,12 @@ interface Props {
    * la valeur initiale n'ouvre rien.
    */
   searchSignal: number
+  /**
+   * Même grammaire que `searchSignal` : le parent bumpe (flèche haut dans un
+   * composer vide), et le fil ouvre en édition le DERNIER message de
+   * l'utilisateur. La mécanique d'édition vit ici, la demande vient d'ailleurs.
+   */
+  editLastSignal: number
   /** Ordinal du message épinglé — null = aucun. Pur affichage, hors payload LLM. */
   pinned: number | null
   /** Sauvegarde une édition — ordinal = position parmi les messages sauvegardés. */
@@ -187,6 +193,7 @@ export default function MessageList({
   editable,
   searchable,
   searchSignal,
+  editLastSignal,
   pinned,
   onSaveEdit,
   onDeleteMessage,
@@ -220,6 +227,8 @@ export default function MessageList({
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const searchRef = useRef<HTMLInputElement>(null)
+  // Champ d'édition en cours (un seul à la fois) : sert à y poser le curseur.
+  const editRef = useRef<HTMLTextAreaElement>(null)
 
   // Autoscroll : un NOUVEL item (message envoyé, réponse, chip) force le retour
   // en bas ; la simple croissance du texte en streaming respecte la position de
@@ -310,6 +319,35 @@ export default function MessageList({
     setEditError(null)
   }
 
+  // Flèche haut du composer : le DERNIER message de l'utilisateur repasse en
+  // édition. Rien ne se produit pendant un stream ou une compaction (`editable`
+  // est faux : la rangée d'icônes est déjà retirée), ni dans un fil qui n'a
+  // encore aucun message de l'utilisateur.
+  const seenEditSignalRef = useRef(editLastSignal)
+  useEffect(() => {
+    if (seenEditSignalRef.current === editLastSignal) return
+    seenEditSignalRef.current = editLastSignal
+    if (!editable) return
+    let n = -1
+    let target: { ordinal: number; msg: ChatMessage } | null = null
+    for (const it of items) {
+      if (it.kind !== 'msg') continue
+      n++
+      if (it.msg.role === 'user' && !it.pending) target = { ordinal: n, msg: it.msg }
+    }
+    if (target) startEdit(target.ordinal, target.msg)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editLastSignal])
+
+  // Le champ d'édition prend le focus, curseur EN FIN de texte : qu'on y arrive
+  // par le crayon ou par la flèche haut, on vient corriger la fin de sa phrase.
+  useEffect(() => {
+    const el = editRef.current
+    if (editing === null || !el) return
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }, [editing])
+
   /**
    * Copie le texte AFFICHÉ du message (tags d'émotion retirés pour l'assistant,
    * comme dans la bulle) — pas la source brute : on copie ce qu'on lit.
@@ -372,7 +410,7 @@ export default function MessageList({
             )}
             {isEditing ? (
               <div className="bubble editing">
-                <textarea value={draft} rows={4} onChange={(e) => setDraft(e.target.value)} />
+                <textarea ref={editRef} value={draft} rows={4} onChange={(e) => setDraft(e.target.value)} />
                 {editError && <span className="msg-err">{editError}</span>}
                 <div className="row" style={{ justifyContent: 'flex-end', marginTop: 6 }}>
                   <button className="btn small" disabled={saving} onClick={() => setEditing(null)}>

@@ -129,6 +129,9 @@ function AppInner() {
   // observe pour ouvrir (ou refermer) sa barre de recherche. Le Ctrl+F, lui, reste
   // entièrement géré dans MessageList.
   const [searchSignal, setSearchSignal] = useState(0)
+  // Même mécanique pour la flèche haut d'un composer vide : le compteur monte,
+  // le fil rouvre le dernier message de l'utilisateur en édition.
+  const [editLastSignal, setEditLastSignal] = useState(0)
   const [backendDown, setBackendDown] = useState(false)
   // Le modèle configuré lit-il les images ? (réglage « Images (vision) » : forcé,
   // jamais, ou détecté auprès du backend). Faux = le composer ne propose rien.
@@ -1447,6 +1450,7 @@ function AppInner() {
             // Ctrl+F appartient au dialog ouvert (ou à l'écran de connexion).
             searchable={!dialog && !greetingAsk && !needLogin}
             searchSignal={searchSignal}
+            editLastSignal={editLastSignal}
             pinned={chatMeta?.pinned ?? null}
             onSaveEdit={handleEditMessage}
             onDeleteMessage={handleDeleteMessage}
@@ -1573,6 +1577,9 @@ function AppInner() {
               else setFeed((f) => [...f, { kind: 'error', text: api.errorMessage(e) }])
             })
           }}
+          // Flèche haut dans un champ vide : le fil rouvre le dernier message
+          // envoyé. Sans effet en mode VN, où le fil n'est pas monté.
+          onEditLast={() => setEditLastSignal((n) => n + 1)}
           onStop={stopStreaming}
         />
       </div>

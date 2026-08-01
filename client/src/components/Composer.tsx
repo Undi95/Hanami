@@ -19,6 +19,12 @@ interface Props {
   onSend: (text: string, images: string[]) => void
   /** Commande slash validée — arg = ce qui suit le nom (instruction de /compact). */
   onCommand: (name: CommandName, arg: string) => void
+  /**
+   * Flèche HAUT dans un champ vide : réflexe de terminal et de messagerie —
+   * reprendre son dernier message. C'est le fil qui sait lequel et comment
+   * l'éditer ; le composer se contente de le demander.
+   */
+  onEditLast: () => void
   onStop: () => void
 }
 
@@ -147,7 +153,7 @@ function joinSpoken(base: string, spoken: string): string {
   return base === '' || /\s$/.test(base) ? base + said : `${base} ${said}`
 }
 
-export default function Composer({ disabled, streaming, vision, onSend, onCommand, onStop }: Props) {
+export default function Composer({ disabled, streaming, vision, onSend, onCommand, onEditLast, onStop }: Props) {
   const { t, lang } = useI18n()
   const [text, setText] = useState('')
   // Images en attente d'envoi (data URLs déjà réduites) — vidées à l'envoi.
@@ -400,6 +406,14 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
               setCmdClosed(true)
               return
             }
+          }
+          // Champ VIDE (aucun texte, aucune image en attente) : la flèche haut
+          // rouvre son dernier message en édition. Le champ non vide garde son
+          // comportement normal — le curseur y remonte d'une ligne.
+          if (e.key === 'ArrowUp' && text === '' && shots.length === 0 && !disabled && !streaming) {
+            e.preventDefault()
+            onEditLast()
+            return
           }
           if (e.key === 'Enter' && !e.shiftKey && !coarse) {
             e.preventDefault()
