@@ -1334,6 +1334,37 @@
       },
       "vitesseAngulaireMaxDegS": 170
     },
+    "world-afk-texting": {
+      "role": "repos debout, pianote sur son téléphone — absence prolongée",
+      "famille": "repos",
+      "boucle": true,
+      "pourquoiPasEnFaceAFace": "26,8 à 29,1 cm de la pose des socles debout : les mains montent devant le buste et y restent tout le cycle, ce repos-là ne s'atteint pas par un fondu. Comme world-idle-alt1/alt2, il appartient au monde 3D, qui séquence. Sa couture, elle, est exacte (0 cm de pose, 12 °/s de saut) : en boucle il est irréprochable.",
+      "source": {
+        "depot": "overte-org/overte",
+        "licence": "Apache-2.0",
+        "fichier": "afk_texting.fbx",
+        "noeudOverte": null,
+        "fenetreImages": "fichier entier",
+        "commentaire": "ORPHELIN du graphe d'Overte : afk_texting.fbx n'est référencé par aucun nœud d'avatar-animation.json, Overte lui-même ne le joue jamais. La fenêtre est donc le fichier entier."
+      },
+      "dureeS": 11.03,
+      "osAnimes": 48,
+      "doigtsAnimes": true,
+      "amplitudeDoigtsDeg": 24.8,
+      "tailleOctets": 407876,
+      "hanchesFraction": {
+        "min": 0.9941,
+        "max": 0.997,
+        "debut": 0.9951,
+        "fin": 0.9951
+      },
+      "coutureBoucleDeg": 0,
+      "raccordVitesse": {
+        "sautDegS": 12,
+        "osSaut": "leftHand"
+      },
+      "vitesseAngulaireMaxDegS": 32
+    },
     "world-jog": {
       "role": "petite foulée, avant",
       "famille": "allure",

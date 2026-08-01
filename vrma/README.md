@@ -125,6 +125,7 @@ passés au domaine `world-` sous les noms `world-idle-alt1` et `world-idle-alt2`
 | `world-walk-stop-small` | arrêt court, celui des à-coups et des micro-ajustements |
 | `world-idle-alt1`, `world-idle-alt2` | repos debout d'une **autre posture** (pied gauche, pied droit en avant), en boucle |
 | `world-idle-alt1-enter` / `-exit`, `world-idle-alt2-enter` / `-exit` | les transitions qui y mènent et en reviennent. Overte ne fond **jamais** un repos vers un repos de posture différente : il joue un clip qui fait le trajet |
+| `world-afk-texting` | repos debout, pianote sur son téléphone — l'absence prolongée. En boucle, couture exacte. **Orphelin du graphe** d'Overte : `afk_texting.fbx` n'est référencé par aucun nœud, Overte lui-même ne le joue jamais |
 | `world-clap-in` / `-hold` / `-out`, `world-point-…`, `world-raise-hand-…` | **gestes tenus**, en trois temps : l'intro amène, le maintien **boucle** aussi longtemps que l'intention dure, la sortie ramène. C'est le découpage d'Overte lui-même |
 | `world-sit-enter`, `world-sit-exit` | s'asseoir et se lever, joués une fois |
 | `world-sit-idle` → `world-sit-idle-5` | maintien assis, en boucle — **remplacent** le socle |
@@ -144,7 +145,7 @@ bibliothèque n'avait **aucune** émote assise.
 
 ## `extra/` — les clips convertis et non retenus
 
-Le sous-dossier [`extra/`](extra) contient **16 clips** (4,52 Mo) issus de la même
+Le sous-dossier [`extra/`](extra) contient **15 clips** (4,11 Mo) issus de la même
 passe de conversion que les autres : mêmes outils, mêmes corrections, même
 validation à l'aller-retour, mêmes crédits (voir [`NOTICE.md`](NOTICE.md) §1). Ils
 n'ont simplement pas leur place dans la bibliothèque active. Ils sont livrés quand
@@ -174,7 +175,6 @@ et `idle-talking`. Seuil d'échec : 10 cm.
 | `cand-idle-3-fenetre.vrma` | idem pour `idle-3`, mais la fenêtre déclarée fait **26,63 s** là où le fichier livré n'en garde qu'une sous-boucle de 13,33 s : celui-ci est réellement différent | 5,2 cm |
 | `cand-idle-talking-fenetre.vrma` | idem pour `idle-talking` (1→215) | 5,5 cm |
 | `world-jump-start.vrma`, `world-jump-air.vrma`, `world-jump-land.vrma`, `world-jump-run-start.vrma`, `world-jump-run-land.vrma` | les cinq temps du saut. Chez Overte la phase aérienne n'est pas une animation mais des **poses fixes mélangées par la vitesse verticale** du moteur physique, et la hauteur du saut vit dans la simulation, pas dans le fichier : sans ce code, ils ne se tiennent pas (cf. [`NOTICE.md`](NOTICE.md) §3) | — |
-| `world-afk-texting.vrma` | personnage qui pianote sur son téléphone. **Orphelin du graphe** : `afk_texting.fbx` n'est référencé par aucun nœud, Overte lui-même ne le joue jamais | — |
 
 **Trois de ces clips sont montés à la racine.** `idle-talking-4` (8,8 cm) et
 `relaxed-3` (7,6 cm) après le premier jugement à l'image de la bibliothèque : ils
@@ -189,6 +189,14 @@ applaudissement authentiquement différent de ses trois frères (117 à 135° d'
 au pire os), il enrichit le tirage. Les deux qui restent au-dessus de la
 fourchette, `happy-5` et `neutral-2`, restent ici — non pour leur raccord,
 mais parce qu'ils **doublent** un clip déjà livré (voir le tableau).
+
+**Et un clip du domaine monde 3D**, `world-afk-texting` (2026-08-01) : le tableau
+ci-dessus ne lui donnait pas de raccord parce qu'un `world-` ne se juge pas contre
+les socles debout. Jugé contre ce qui le concerne — sa **couture de boucle** — il
+est irréprochable : 0 cm de pose, saut de 12 °/s pour un 95ᵉ centile interne de
+21 °/s. Il est monté à la racine **avec son entrée dans [`world.json`](world.json)**
+(`famille: repos`, `boucle: true`) : un clip `world-` sans entrée serait jugé
+contre le socle debout, à 26,8–29,1 cm, et fabriquerait un faux échec.
 
 **Six clips convertis ne sont pas ici, et c'est voulu** : les versions brutes de
 `world-sit-point`, `world-sit-raise-hand-2` et des quatre `world-walk-stop-…`
@@ -216,7 +224,7 @@ trous de numérotation sont sans effet**. Les autres demandent un nom :
 | `cand-idle-talking-fenetre` | `idle-talking-8`, ou `idle-talking` pour remplacer le livré |
 | `raise-hand.passe-complete` | `raise-hand-3` ; ou `raise-hand` pour remplacer l'intro seule qui est livrée. Le suffixe `.passe-complete` n'existe que pour éviter la collision de noms dans `extra/`, il ne veut rien dire pour le lecteur |
 | `point` | aucun rôle `point` n'existe dans le vocabulaire du face à face : sous ce nom le clip reste ignoré. À verser dans un rôle voisin, ou à laisser au domaine `world-`, qui le livre déjà découpé |
-| les cinq `world-jump-*`, `world-afk-texting` | le préfixe `world-` suffit à les faire entrer dans le domaine monde 3D, mais le moteur de scène ne les enchaînera pas sans entrée correspondante dans [`world.json`](world.json) |
+| les cinq `world-jump-*` | le préfixe `world-` suffit à les faire entrer dans le domaine monde 3D, mais le moteur de scène ne les enchaînera pas sans entrée correspondante dans [`world.json`](world.json) — et sans elle le banc les juge contre le socle **debout**, ce qui fabrique un faux échec |
 
 Ces clips ont été écartés **sur mesure**, pas au hasard. Au-dessus de 10 cm, le
 raccord socle → geste → socle se voit : le corps est tiré et les pieds glissent sans
@@ -423,9 +431,9 @@ fichier, les avis de licence et les mentions à conserver sont dans
 [`NOTICE.md`](NOTICE.md), à lire avant toute redistribution :
 
 - **Overte** — **Apache 2.0** : **107 clips sur 109**, soit tout le domaine face à
-  face (28 clips : neuf socles, dix-neuf gestes) et tout le domaine monde 3D sauf
-  les deux transitions assises (79 clips). `transitions.json` vient de la même
-  source et de la même licence. Les **19 clips de `extra/`** viennent eux aussi
+  face (31 clips : dix socles, vingt et un gestes) et tout le domaine monde 3D sauf
+  les deux transitions assises (80 clips). `transitions.json` vient de la même
+  source et de la même licence. Les **15 clips de `extra/`** viennent eux aussi
   d'Overte, sous la même licence — ils portent donc les mêmes obligations, qu'ils
   soient joués ou non.
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, domaine public :
@@ -562,6 +570,7 @@ catalogue is built from the files actually present, not from a count. `idle-5` a
 | `world-walk-stop-small` | short stop, for jerks and micro-adjustments |
 | `world-idle-alt1`, `world-idle-alt2` | standing idles in a **different stance** (left foot, right foot forward), looping |
 | `world-idle-alt1-enter` / `-exit`, `world-idle-alt2-enter` / `-exit` | the transitions in and out. Overte **never** cross-fades one idle into another of a different stance: it plays a clip that makes the trip |
+| `world-afk-texting` | standing idle, tapping at a phone — the long absence. Loops, with an exact seam. **Orphaned in Overte's graph**: `afk_texting.fbx` is referenced by no node, Overte itself never plays it |
 | `world-clap-in` / `-hold` / `-out`, `world-point-…`, `world-raise-hand-…` | **held gestures**, in three beats: the intro brings the gesture in, the hold **loops** for as long as the intent lasts, the outro brings it back. This is Overte's own split |
 | `world-sit-enter`, `world-sit-exit` | sitting down and standing up, played once |
 | `world-sit-idle` → `world-sit-idle-5` | seated hold, looping — **replaces** the base pose |
@@ -581,7 +590,7 @@ by Overte, and it was until now the pack's largest untapped seam: the library ha
 
 ## `extra/` — the converted clips that were not kept
 
-The [`extra/`](extra) subfolder holds **19 clips** (5.22 MB) from the same
+The [`extra/`](extra) subfolder holds **15 clips** (4.11 MB) from the same
 conversion pass as the others: same tools, same fixes, same round-trip validation,
 same credits (see [`NOTICE.md`](NOTICE.md) §1). They simply have no place in the
 active library. They ship anyway, because a clip that was converted and then set
@@ -612,7 +621,6 @@ pose of the `idle` and `idle-talking` bases. Failure threshold: 10 cm.
 | `cand-idle-3-fenetre.vrma` | same for `idle-3`, but the declared window runs **26.63 s** where the shipped file keeps only a 13.33 s sub-loop: this one really is different | 5.2 cm |
 | `cand-idle-talking-fenetre.vrma` | same for `idle-talking` (1→215) | 5.5 cm |
 | `world-jump-start.vrma`, `world-jump-air.vrma`, `world-jump-land.vrma`, `world-jump-run-start.vrma`, `world-jump-run-land.vrma` | the five beats of a jump. In Overte the airborne phase is not an animation but **fixed poses blended by the physics engine's vertical speed**, and the jump height lives in the simulation, not in the file: without that code they do not stand up (see [`NOTICE.md`](NOTICE.md) §3) | — |
-| `world-afk-texting.vrma` | character tapping at a phone. **Orphaned in the graph**: `afk_texting.fbx` is referenced by no node, Overte itself never plays it | — |
 
 **Two of these clips moved up to the root** after the library's first judgement by
 eye: `idle-talking-4` (8.8 cm) and `relaxed-3` (7.6 cm). They fell outside the range
@@ -649,7 +657,7 @@ numbering have no effect**. The others need a name:
 | `cand-idle-talking-fenetre` | `idle-talking-8`, or `idle-talking` to replace the shipped one |
 | `raise-hand.passe-complete` | `raise-hand-3`; or `raise-hand` to replace the intro-only clip that ships. The `.passe-complete` suffix exists only to avoid a name collision inside `extra/`, it means nothing to the player |
 | `point` | there is no `point` role in the face-to-face vocabulary: under that name the clip stays ignored. Fold it into a neighbouring role, or leave it to the `world-` domain, which already ships it split |
-| the five `world-jump-*`, `world-afk-texting` | the `world-` prefix is enough to place them in the 3D-world domain, but the scene engine will not sequence them without a matching entry in [`world.json`](world.json) |
+| the five `world-jump-*` | the `world-` prefix is enough to place them in the 3D-world domain, but the scene engine will not sequence them without a matching entry in [`world.json`](world.json) — and without it the bench judges them against the **standing** base, which manufactures a false failure |
 
 These clips were set aside **on a measurement**, not at random. Above 10 cm the
 base → gesture → base seam shows: the body is dragged and the feet slide without a
@@ -816,9 +824,9 @@ notices and the mentions to keep are in [`NOTICE.md`](NOTICE.md), which must be
 read before any redistribution:
 
 - **Overte** — **Apache 2.0**: **107 clips out of 109** — the whole face-to-face
-  domain (28 clips: nine base poses, nineteen gestures) and the whole 3D-world
-  domain except the two seated transitions (79 clips). `transitions.json` comes
-  from the same source under the same licence. The **19 clips in `extra/`** also
+  domain (31 clips: ten base poses, twenty-one gestures) and the whole 3D-world
+  domain except the two seated transitions (80 clips). `transitions.json` comes
+  from the same source under the same licence. The **15 clips in `extra/`** also
   come from Overte under the same licence — they carry the same obligations,
   whether or not they are ever played.
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, public domain: the

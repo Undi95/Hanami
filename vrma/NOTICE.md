@@ -14,15 +14,15 @@ redistribution.*
 
 ## 1. Overte — Apache License 2.0
 
-**Cent neuf fichiers sur cent onze** dérivent des animations d'avatar du projet
+**Cent onze fichiers sur cent treize** dérivent des animations d'avatar du projet
 **Overte** (`overte-org/overte`, `interface/resources/avatar/animations/`,
 127 fichiers FBX) : **tout le domaine face à face** — les dix animations de
-repos et de parole, qui sont le socle permanent de la scène, et les vingt
+repos et de parole, qui sont le socle permanent de la scène, et les vingt et un
 gestes — ainsi que tout le domaine monde 3D sauf les deux transitions assises.
 C'est la source de la bibliothèque, à deux fichiers près.
 
 Ce décompte est celui de la **bibliothèque active**, à la racine de `vrma/`. S'y
-ajoutent les **dix-sept clips du sous-dossier `extra/`**, convertis mais non retenus
+ajoutent les **quinze clips du sous-dossier `extra/`**, convertis mais non retenus
 et jamais chargés par l'application : ils viennent eux aussi d'Overte, sous la même
 licence, et sont détaillés en fin de section. Overte fournit donc **126 des 128**
 fichiers `.vrma` redistribués.
@@ -40,14 +40,14 @@ dans Maya — les métadonnées internes des FBX déclarent
 Mixamo recyclé : la recherche de chaînes ne donne aucune occurrence de « mixamo »
 ou « adobe », et aucun os ne porte le préfixe `mixamorig:`.
 
-*One hundred and nine files out of one hundred and eleven derive from the avatar
+*One hundred and eleven files out of one hundred and thirteen derive from the avatar
 animations of the **Overte** project (127 FBX files): the whole face-to-face
 domain — all ten idle and talking animations, which are the permanent base of the
-scene, and the twenty gestures — plus the whole 3D-world domain except the two
+scene, and the twenty-one gestures — plus the whole 3D-world domain except the two
 seated transitions. `transitions.json` derives from the same repository's animation
 graph under the same licence. These animations were hand-made in-house at High
 Fidelity by an animator, in Maya. That count covers the active library at the root
-of `vrma/`; the seventeen clips of the `extra/` subfolder — converted, not kept, never
+of `vrma/`; the fifteen clips of the `extra/` subfolder — converted, not kept, never
 loaded — also come from Overte under the same licence, so Overte supplies **126 of
 the 128** redistributed `.vrma` files.*
 
@@ -230,6 +230,7 @@ VRM 1.0, frame de bind pose parasite retirée, échelle cm → m, ré-échantill
 | `world-idle-alt2.vrma` | `idle_RFF_all.fbx` | `altIdle2` | 80→388, 10,30 s |
 | `world-idle-alt2-enter.vrma` | `idle_RFF_all.fbx` | `transitionToAltIdle2` | 1→80 ×0,65, 4,05 s |
 | `world-idle-alt2-exit.vrma` | `idle_RFF_all.fbx` | `alt2ToMasterIdle` | 388→453, 2,10 s |
+| `world-afk-texting.vrma` | `afk_texting.fbx` | *aucun — orphelin du graphe* | fichier entier, 11,03 s — monté d'`extra/` à la passe v8 |
 | **gestes tenus** | | | |
 | `world-clap-in.vrma` | `emote_clap01_all.fbx` | `applaudClap01Intro` | 1→17, 0,53 s |
 | `world-clap-hold.vrma` | `emote_clap01_all.fbx` | `applaudClap01Loop` | 17→111, 3,17 s |
@@ -539,9 +540,9 @@ to 39°, that of Overte's own seated `world-sit-shake`; and `happy-2`'s two jolt
 (1000 and 818 °/s) locally smoothed to a 688 °/s peak. Edge poses are unchanged in
 every case, so no seam to the idle moved.*
 
-### Sous-dossier `extra/` — seize clips convertis, non retenus
+### Sous-dossier `extra/` — quinze clips convertis, non retenus
 
-Le sous-dossier [`extra/`](extra) porte **16 clips** (4,52 Mo) issus de la même
+Le sous-dossier [`extra/`](extra) porte **15 clips** (4,11 Mo) issus de la même
 passe et de la **même source** : tous dérivent d'Overte, sous la même licence
 Apache-2.0, avec les mêmes modifications que celles décrites ci-dessus. Ils ne sont
 jamais chargés par l'application — `/api/vrm-animations` ne liste que la racine de
@@ -549,7 +550,7 @@ jamais chargés par l'application — `/api/vrm-animations` ne liste que la raci
 paragraphe les couvre exactement comme les autres. Le pourquoi de leur mise à
 l'écart, clip par clip, est dans [`README.md`](README.md#extra--les-clips-convertis-et-non-retenus).
 
-*The `extra/` subfolder holds 16 clips (4.52 MB) from the same pass and the **same
+*The `extra/` subfolder holds 15 clips (4.11 MB) from the same pass and the **same
 source**: all derive from Overte under the same Apache-2.0 licence, with the same
 modifications described above. The application never loads them, but they are
 redistributed with it and this section's notice covers them like the rest.*
@@ -566,22 +567,23 @@ redistributed with it and this section's notice covers them like the rest.*
 | `neutral-2.vrma` | `idle_once_slownod.fbx` | `idle_once_slownod` | 1→91, 2,97 s |
 | `point.vrma` | `emote_point01_all.fbx` | `reactionPointIntro+Loop+Outro` | 1→134, 4,43 s |
 | `raise-hand.passe-complete.vrma` | `emote_raisehand01_all.fbx` | `raiseHand01Intro+Loop+Outro` | 1→435, 14,47 s |
-| `world-afk-texting.vrma` | `afk_texting.fbx` | *aucun — orphelin du graphe* | fichier entier, 11,03 s |
 | `world-jump-start.vrma` | `jump_standing_launch_all.fbx` | `takeoffStand` | 1→16, 0,50 s |
 | `world-jump-air.vrma` | `jump_standing_apex_all.fbx` | `inAirStandApex` | 2→2, 0,40 s |
 | `world-jump-land.vrma` | `jump_standing_land_settle_all.fbx` | `landStandImpact+landStand` | 1→68, 2,20 s |
 | `world-jump-run-start.vrma` | `jump_running_launch_land_all.fbx` | `TAKEOFFRUN` | 4→15, 0,37 s |
 | `world-jump-run-land.vrma` | `jump_running_launch_land_all.fbx` | `LANDRUN` | 29→40, 0,33 s |
 
-Aucun de ces dix-neuf clips n'est joué ralenti : leur `timeScale` vaut 1 dans le
+Aucun de ces quinze clips n'est joué ralenti : leur `timeScale` vaut 1 dans le
 graphe, la durée annoncée est la durée du fichier. `raise-hand.passe-complete.vrma`
 est le seul renommé — il porte la **passe complète** du lever de main, quand la
 racine livre sous `raise-hand.vrma` la seule intro (`raiseHand01Intro`) ; le suffixe
 n'existe que pour éviter la collision de noms.
 
-Deux fichiers FBX n'apparaissent que dans cette table : `afk_texting.fbx`, orphelin
-du graphe d'Overte, et `jump_running_launch_land_all.fbx`, dont les deux fenêtres
-`TAKEOFFRUN` et `LANDRUN` ne servent qu'au saut en course.
+Un seul fichier FBX n'apparaît que dans cette table : `jump_running_launch_land_all.fbx`,
+dont les deux fenêtres `TAKEOFFRUN` et `LANDRUN` ne servent qu'au saut en course.
+`afk_texting.fbx` — l'autre orphelin du graphe d'Overte — en est sorti à la passe
+v8 : `world-afk-texting` est monté à la racine, il figure désormais dans la table
+du domaine monde 3D.
 
 ---
 
@@ -754,17 +756,17 @@ un peu plus de 20,1 Mo avec `world.json`, `transitions.json` et les deux documen
 
 | Source | Licence | Fichiers | Domaine |
 | --- | --- | --- | --- |
-| Overte | Apache-2.0 | 109 | 30 face à face, 79 monde 3D |
+| Overte | Apache-2.0 | 111 | 31 face à face, 80 monde 3D |
 | Quaternius | CC0-1.0 | 2 | monde 3D (les deux transitions assises) |
 | Overte — `transitions.json` | Apache-2.0 | 1 | le graphe d'animation, hors clips |
 
-**Réserve** (`extra/`, jamais chargée par l'app) : 17 fichiers `.vrma`, **4,51 Mo**,
-**tous Overte / Apache-2.0** — soit **24,09 Mo de clips au total, 128 fichiers**, dont
+**Réserve** (`extra/`, jamais chargée par l'app) : 15 fichiers `.vrma`, **4,11 Mo**,
+**tous Overte / Apache-2.0** — soit **25,26 Mo de clips au total, 128 fichiers**, dont
 126 Overte. Redistribués mais non joués, ils portent les mêmes obligations que les
 autres ; le détail fichier par fichier est au §1.
 
-*Active library (root of `vrma/`): 111 clips, 19.58 MB. Spare (`extra/`, never
-loaded): 17 clips, 4.51 MB, all Overte — 128 files and 24.09 MB of clips in all, 126
+*Active library (root of `vrma/`): 113 clips, 21.15 MB. Spare (`extra/`, never
+loaded): 15 clips, 4.11 MB, all Overte — 128 files and 25.26 MB of clips in all, 126
 of them Overte. Redistributed though never played, they carry the same obligations.*
 
 **Deux sources, et une seule licence à respecter** : Apache-2.0 pour Overte, le
