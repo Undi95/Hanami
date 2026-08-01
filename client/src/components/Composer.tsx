@@ -25,6 +25,13 @@ interface Props {
    * l'éditer ; le composer se contente de le demander.
    */
   onEditLast: () => void
+  /**
+   * L'utilisateur est en train d'écrire, ou a cessé. Deux transitions
+   * seulement, jamais une notification par frappe (cf. TYPING_IDLE_MS).
+   * Le composer ne sait pas ce qu'on en fait — la scène, elle, y met le socle
+   * d'écoute du personnage.
+   */
+  onTyping: (on: boolean) => void
   onStop: () => void
 }
 
@@ -46,6 +53,16 @@ const COMMAND_RE = /^\/(compact|clean|clear)(?:\s+([\s\S]*))?$/
 function canonical(name: string): CommandName {
   return name === 'clear' ? 'clean' : (name as CommandName)
 }
+
+/**
+ * Silence au clavier au-delà duquel « il écrit » cesse d'être vrai. Trois
+ * secondes : assez pour couvrir le temps qu'on passe à chercher un mot (la
+ * pause typique entre deux salves de frappe est sous la seconde), assez court
+ * pour qu'un champ laissé à moitié rempli ne retienne pas le personnage en
+ * écoute indéfiniment. Le champ VIDÉ, lui, coupe tout de suite : plus rien
+ * n'est en train de s'écrire.
+ */
+const TYPING_IDLE_MS = 3000
 
 // Plafonds côté client — le serveur les revalide (4 images, ~2 Mo chacune).
 const MAX_IMAGES = 4
@@ -153,7 +170,16 @@ function joinSpoken(base: string, spoken: string): string {
   return base === '' || /\s$/.test(base) ? base + said : `${base} ${said}`
 }
 
-export default function Composer({ disabled, streaming, vision, onSend, onCommand, onEditLast, onStop }: Props) {
+export default function Composer({
+  disabled,
+  streaming,
+  vision,
+  onSend,
+  onCommand,
+  onEditLast,
+  onTyping,
+  onStop,
+}: Props) {
   const { t, lang } = useI18n()
   const [text, setText] = useState('')
   // Images en attente d'envoi (data URLs déjà réduites) — vidées à l'envoi.
@@ -175,6 +201,43 @@ export default function Composer({ disabled, streaming, vision, onSend, onComman
 
   // Démonter le composer coupe le micro : rien ne continue d'écouter dans le vide.
   useEffect(() => () => recRef.current?.abort(), [])
+
+  // ── « Il est en train d'écrire » ───────────────────────────────────────────
+  // Le callback est gardé dans une ref, PAS mis en dépendance de l'effet : le
+  // parent le recrée à chaque rendu (fonction fléchée écrite sur place), et le
+  // minuteur d'inactivité repartirait donc de zéro à chaque rendu de
+  // l'application — y compris pendant qu'une réponse s'écrit, où il y en a un
+  // par jeton reçu. Cet effet-ci est déclaré AVANT celui qui lit la ref : React
+  // exécute les effets dans l'ordre de déclaration, la valeur est donc à jour.
+  const typingCb = useRef(onTyping)
+  useEffect(() => {
+    typingCb.current = onTyping
+  })
+
+  // La dernière valeur ANNONCÉE : l'appelant reçoit deux transitions, pas une
+  // notification par touche enfoncée.
+  const typingRef = useRef(false)
+  function emitTyping(on: boolean) {
+    if (on === typingRef.current) return
+    typingRef.current = on
+    typingCb.current(on)
+  }
+
+  // Champ vide ↔ non vide, plus un minuteur d'inactivité relancé à chaque
+  // frappe (`text` change à chaque touche, donc l'effet rejoue et le minuteur
+  // précédent est annulé par le nettoyage).
+  useEffect(() => {
+    if (text === '') {
+      emitTyping(false)
+      return
+    }
+    emitTyping(true)
+    const timer = window.setTimeout(() => emitTyping(false), TYPING_IDLE_MS)
+    return () => window.clearTimeout(timer)
+  }, [text])
+
+  // Démontage (bascule vers le mode VN, fermeture) : on n'écrit plus.
+  useEffect(() => () => emitTyping(false), [])
 
   // Commandes dont le nom commence par ce qui est tapé — « / » les montre toutes.
   const typing = TYPING_RE.exec(text)

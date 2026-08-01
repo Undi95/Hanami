@@ -1680,6 +1680,10 @@ function AppInner() {
           // Flèche haut dans un champ vide : le fil rouvre le dernier message
           // envoyé. Sans effet en mode VN, où le fil n'est pas monté.
           onEditLast={() => setEditLastSignal((n) => n + 1)}
+          // Il écrit → le personnage ÉCOUTE. Sans clip d'écoute dans sa famille
+          // (c'est le cas d'Overte), la scène ne fait strictement rien de cet
+          // appel : le socle de repos continue de tourner.
+          onTyping={(on) => stageRef.current?.setListening(on)}
           onStop={stopStreaming}
         />
       </div>
