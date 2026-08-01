@@ -71,6 +71,7 @@ la taille du fichier a changé (**un autre agent a remplacé le clip**) ou non
 | `index.html` | la page : scène, contrôles, affichage. Aucune logique de mesure |
 | `sonde.mjs` | contrôle headless |
 | `verif-syntaxe.mjs` | `node verif-syntaxe.mjs` : fait analyser le module inline d'`index.html` par node, sans navigateur. À lancer après toute retouche de la page |
+| `verif-catalogue.mjs` | `node verif-catalogue.mjs` : le **câblage**, pas les clips. Chaque clef de `WORLD_NEEDED` (vrmStage) a-t-elle des fichiers, chaque clef des tables assises (`SIT_EMOTES`, `SIT_REACTIONS` de wander) est-elle déclarée ? Une clef morte ne produit aucune erreur, juste un personnage qui ne fait rien — c'est ce qui a rendu `world-walk-stop-small` dormant. Sort en code 1 s'il en reste une |
 | `/diagnostic/` (URL) | fiches biomécaniques + planches PNG par clip, `RAPPORT.md`, `index.json` — écrits par `../diagnostic/diagnostic.mjs` dans `devtools/diagnostic-out/` (gitignoré), servis ici, affichés par l'onglet **Diagnostic** (voir la section dédiée) |
 
 ### La prise console
