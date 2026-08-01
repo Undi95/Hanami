@@ -1560,6 +1560,7 @@ function AppInner() {
       {dialog === 'chats' && character && (
         <ChatsDialog
           characterId={character.id}
+          characterName={character.name}
           activeChatId={chatMeta?.id ?? null}
           onSelect={(chatId) => {
             openChat(character, chatId).catch((e) => console.error('[chats]', e))

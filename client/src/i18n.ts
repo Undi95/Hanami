@@ -158,10 +158,16 @@ const FR = {
   renameChat: 'Renommer la conversation',
   renameChatHint: 'Entrée pour enregistrer, Échap pour annuler.',
   deleteChat: 'Supprimer',
+  exportChat: 'Exporter la conversation (.md)',
+  exportChatHeader: '{character} · {messages} · commencée le {date}',
   forkChat: 'Dupliquer',
   forkSuffix: 'branche',
   messagesOne: '{n} message',
   messagesMany: '{n} messages',
+  // Ligne posée à la place des images d'un message dans le fichier exporté : les
+  // vignettes sont des data URLs, les recopier pèserait des mégaoctets par image.
+  exportImagesOne: '{n} image jointe',
+  exportImagesMany: '{n} images jointes',
   // « Notre histoire » : ligne unique en pied des conversations, montée à partir
   // des trois fragments ci-dessous (chacun accordé avec isPlural).
   statsLine: '💗 {days} · {messages} · {activeDays}',
@@ -510,10 +516,14 @@ const EN: Record<Key, string> = {
   renameChat: 'Rename conversation',
   renameChatHint: 'Enter to save, Esc to cancel.',
   deleteChat: 'Delete',
+  exportChat: 'Export conversation (.md)',
+  exportChatHeader: '{character} · {messages} · started on {date}',
   forkChat: 'Duplicate',
   forkSuffix: 'branch',
   messagesOne: '{n} message',
   messagesMany: '{n} messages',
+  exportImagesOne: '{n} attached image',
+  exportImagesMany: '{n} attached images',
   statsLine: '💗 {days} · {messages} · {activeDays}',
   statsDaysOne: '{n} day together',
   statsDaysMany: '{n} days together',

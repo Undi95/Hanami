@@ -2,11 +2,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatMeta } from '../../../shared/types'
 import * as api from '../api'
+import { stripEmotionTags } from '../emotions'
 import { chatDisplayTitle, isPlural, localeOf, useI18n, type Lang } from '../i18n'
 import Dialog from './Dialog'
 
 interface Props {
   characterId: string
+  characterName: string
   activeChatId: string | null
   onSelect: (chatId: string) => void
   onDeleted: (chatId: string) => void
@@ -29,8 +31,35 @@ function fmtDate(iso: string, lang: Lang): string {
   )
 }
 
+/**
+ * Horodatage du fichier exporté : date COMPLÈTE, année comprise — contrairement
+ * à la liste, où « 30 juil. » suffit parce qu'on la lit aujourd'hui. Un fichier
+ * exporté, lui, se relit dans deux ans.
+ */
+function fmtExportDate(iso: string, lang: Lang): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString(localeOf(lang), { dateStyle: 'short', timeStyle: 'short' })
+}
+
+/**
+ * Nom de fichier sûr, toutes plateformes : les caractères interdits par Windows
+ * (le plus strict) deviennent des tirets, et le tout est plafonné. Un titre
+ * entièrement fait de ces caractères tombe sur un repli neutre.
+ */
+function safeFileName(title: string): string {
+  const clean = title
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80)
+    .replace(/[. ]+$/, '')
+  return clean || 'conversation'
+}
+
 export default function ChatsDialog({
   characterId,
+  characterName,
   activeChatId,
   onSelect,
   onDeleted,
@@ -105,6 +134,62 @@ export default function ChatsDialog({
       await api.forkChat(characterId, chat.id, `${chatDisplayTitle(chat, lang, t)} (${t('forkSuffix')})`)
       load()
       loadStats()
+    } catch (e) {
+      setError(api.errorMessage(e))
+    }
+  }
+
+  /**
+   * Exporte une conversation en Markdown LISIBLE — le fil tel qu'on le lit, pas
+   * un dump : tags d'émotion retirés (comme dans les bulles), raisonnement du
+   * modèle laissé de côté (il n'est pas la conversation), images remplacées par
+   * une mention (ce sont des data URLs, les recopier pèserait des mégaoctets).
+   *
+   * Le format brut, lui, existe déjà : c'est l'archive de sauvegarde des
+   * Réglages, qui emporte les .jsonl du disque. Ici on veut un fichier qui
+   * s'ouvre, se lit et se partage.
+   *
+   * Tout se fait côté client (aucune route de plus) ; le fichier est offert au
+   * navigateur par un <a download> créé à la volée, comme la sauvegarde.
+   */
+  async function exportChat(chat: ChatMeta) {
+    try {
+      const { meta, messages } = await api.getChat(characterId, chat.id)
+      const title = chatDisplayTitle(meta, lang, t)
+      const lines: string[] = [
+        `# ${title}`,
+        '',
+        t('exportChatHeader', {
+          character: characterName,
+          messages: t(isPlural(lang, messages.length) ? 'messagesMany' : 'messagesOne', {
+            n: messages.length,
+          }),
+          date: new Date(meta.createdAt).toLocaleDateString(localeOf(lang)),
+        }),
+      ]
+      for (const m of messages) {
+        const who = m.role === 'user' ? t('vnYou') : characterName
+        lines.push('', '---', '', `**${who}** — ${fmtExportDate(m.ts, lang)}`, '')
+        if (m.images && m.images.length > 0) {
+          lines.push(
+            `_${t(isPlural(lang, m.images.length) ? 'exportImagesMany' : 'exportImagesOne', {
+              n: m.images.length,
+            })}_`,
+            '',
+          )
+        }
+        lines.push(m.role === 'user' ? m.content : stripEmotionTags(m.content))
+      }
+      const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/markdown;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${safeFileName(title)}.md`
+      // Dans le document : Firefox ignore le clic d'un lien détaché.
+      document.body.append(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (e) {
       setError(api.errorMessage(e))
     }
@@ -233,6 +318,20 @@ export default function ChatsDialog({
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17z" />
+                    </svg>
+                  </button>
+                  {/* Emporter UNE conversation, lisible : l'archive des Réglages
+                      sauvegarde tout, elle ne se lit pas. Même discrétion que le
+                      crayon — révélé au survol de la rangée. */}
+                  <button
+                    className="item-edit"
+                    title={t('exportChat')}
+                    aria-label={t('exportChat')}
+                    onClick={() => exportChat(c).catch((e) => console.error('[chats]', e))}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 4v10m0 0l-3.6-3.6M12 14l3.6-3.6" />
+                      <path d="M5 16.5v2a1.8 1.8 0 001.8 1.8h10.4A1.8 1.8 0 0019 18.5v-2" />
                     </svg>
                   </button>
                 </>
