@@ -949,6 +949,15 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     }
   }
 
+  // Pose de la caméra au DÉBUT du geste. OrbitControls n'a aucun seuil de
+  // mouvement : onPointerUp émet 'end' à chaque relâché, et le bouton gauche est
+  // mappé PAN — un simple clic immobile faisait donc 'start' + 'end', donc
+  // écrivait une vue. Le seuil de 6 px du projet ne protège que onSceneClick.
+  const gestureStart = { pos: new Vector3(), target: new Vector3() }
+  // Déplacement cumulé (position + cible) sous lequel le geste n'a rien composé :
+  // 0,1 mm, soit trois ordres de grandeur sous le moindre geste volontaire.
+  const CAM_GESTURE_EPS = 1e-4
+
   // 'end' ne se déclenche qu'à la fin d'une interaction UTILISATEUR — jamais
   // sur un setView/frameCamera programmatique.
   controls.addEventListener('end', () => {
@@ -966,6 +975,12 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // chargement via setView, qui pose defaultFramed = false — le cadrage par
     // défaut du personnage n'a alors plus jamais lieu.
     if (!lastFrame) return
+    // Geste qui n'a RIEN bougé (un clic) : rien à mémoriser. La molette, elle,
+    // est bien enregistrée — _handleMouseWheel appelle update() lui-même avant
+    // le 'end' de onMouseWheel, le dolly est déjà appliqué au moment du test.
+    const moved =
+      camera.position.distanceTo(gestureStart.pos) + controls.target.distanceTo(gestureStart.target)
+    if (moved < CAM_GESTURE_EPS) return
     viewChangeCb?.(currentView())
   })
   // 'start' est utilisateur lui aussi. Le cadrage cesse d'être « celui par
@@ -974,6 +989,8 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   controls.addEventListener('start', () => {
     defaultFramed = false
     camGrabbed = true
+    gestureStart.pos.copy(camera.position)
+    gestureStart.target.copy(controls.target)
   })
 
   /**
