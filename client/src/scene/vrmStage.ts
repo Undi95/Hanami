@@ -637,6 +637,22 @@ const WORLD_NEEDED: readonly string[] = [
   'sit-talking',
   'sit-look',
   'sit-shift',
+  // Les gestes d'ÉMOTION assis (table SIT_EMOTES de wander.ts) et l'acquiescement
+  // assis (SIT_REACTIONS). Une clef, pas un fichier : `catalogFromUrls` retire le
+  // suffixe numérique de variante, donc `sit-clap` en apporte trois (clap, -2, -3)
+  // et `sit-nod` trois aussi — dix clefs pour quatorze fichiers, 2,0 Mo. Sans
+  // cette liste, `host.has()` rend false et la table entière est dormante : le
+  // personnage assis n'a jamais que son visage pour dire ce qu'il ressent.
+  'sit-clap',
+  'sit-cheer',
+  'sit-sad',
+  'sit-shake',
+  'sit-dismiss',
+  'sit-lean',
+  'sit-legs',
+  'sit-nod',
+  'sit-disbelief',
+  'sit-ack',
 ]
 
 function worldUrlsNeeded(cat: VrmaCatalog, on: boolean): string[] {

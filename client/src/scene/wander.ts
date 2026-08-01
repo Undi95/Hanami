@@ -15,6 +15,7 @@
 // l'autre. C'est exactement la convention de vrma/world.json.
 import type { Seat } from './sceneMap' // type seul — sceneMap est pur lui aussi
 import type { Waypoint } from './pathfind' // idem
+import type { Emotion } from '../../../shared/types' // idem : rien qu'une union de chaînes
 
 // ── Constantes mesurées ─────────────────────────────────────────────────────
 /** Pivots : vitesse angulaire des clips, `deplacement.vitesseRotationDegS`. */
@@ -334,6 +335,43 @@ const MANEUVER_M = 0.7
  */
 const SEAT_PULL_STEP = 0.05
 
+/**
+ * CE QUE LE CORPS ASSIS DIT D'UNE ÉMOTION.
+ *
+ * Debout, une émotion joue son geste (`happy.vrma`…) ; assis, le socle EST une
+ * allure du domaine `world-`, et la garde de playGesture refusait donc TOUT
+ * geste — le visage portait l'émotion à lui seul, sur les ~40 % du temps que la
+ * scène vivante passe assise. Ces clips-là existent pourtant, mesurés contre le
+ * maintien assis (`world-sit-idle`) : c'est cette table qui les rattache.
+ *
+ * LES CLEFS SONT CELLES DU CATALOGUE, pas des noms de fichiers : `catalogFromUrls`
+ * (vrmStage) retire le suffixe NUMÉRIQUE de variante, donc `sit-clap` compte
+ * trois fichiers (clap, -2, -3), `sit-nod` trois aussi (nod, -2, -3), et c'est
+ * `worldAction` qui tire le fichier. Réclamer `sit-clap-2` ne rendrait rien.
+ *
+ * Le choix de chaque clip est celui d'Overte pour le même rôle (leurs noms de
+ * nœuds sont dans `source.noeudOverte`, vrma/world.json) : applaudir et se
+ * réjouir pour la joie, baisser la tête pour la tristesse, secouer la tête et
+ * balayer d'un geste pour la colère, se pencher et agiter les jambes pour la
+ * détente, hocher la tête pour le neutre. `surprised` est le seul cas où le
+ * catalogue offre exactement le mot : `sit-disbelief`, l'incrédulité.
+ */
+const SIT_EMOTES: Record<Emotion, readonly string[]> = {
+  happy: ['sit-clap', 'sit-cheer'],
+  sad: ['sit-sad'],
+  angry: ['sit-shake', 'sit-dismiss'],
+  relaxed: ['sit-lean', 'sit-legs'],
+  neutral: ['sit-nod'],
+  surprised: ['sit-disbelief'],
+}
+/**
+ * Réaction au clic sur le personnage, ASSIS — le pendant de `nod.vrma` debout.
+ * Deux clefs, donc quatre fichiers (ack + les trois hochements assis).
+ */
+const SIT_REACTIONS: readonly string[] = ['sit-ack', 'sit-nod']
+/** Rôle de l'anti-répétition pour le clic. Le `@` le met hors d'atteinte d'une émotion. */
+const SIT_ROLE_CLICK = '@clic'
+
 // ── Déambulation ────────────────────────────────────────────────────────────
 // L'utilisateur discute avec quelqu'un, pas avec un personnage agité : ces
 // durées sont volontairement LONGUES. Un compagnon qui se déplace toutes les dix
@@ -500,6 +538,16 @@ export interface Wander {
    * effet s'il est occupé (marche, assise) : on ne coupe pas ce qu'il fait.
    */
   poke(): void
+  /**
+   * Une émotion VIENT DE SE PRODUIRE. Assis et au repos, le corps la joue par
+   * le canal des gestes assis et rend true — la scène n'a rien d'autre à faire.
+   * Rend false partout ailleurs (debout, en marche, en pleine transition
+   * d'assise, geste assis déjà à l'écran) : c'est alors à la scène de décider,
+   * exactement comme avant.
+   */
+  emote(emotion: Emotion): boolean
+  /** Idem pour le clic sur le personnage : l'acquiescement, version assise. */
+  react(): boolean
   /** Ramène le personnage au point d'accueil, sans clip. `fade` : fondu du retour au socle. */
   home(fade?: number): void
 }
@@ -1086,6 +1134,67 @@ export function createWander(host: WanderHost): Wander {
   }
 
   /**
+   * Dernière clef jouée PAR RÔLE (une émotion, ou le clic) — l'anti-répétition.
+   * Par rôle et non globale, pour la raison de `lastGesture` (vrmStage) : `happy`
+   * puis `sad` puis `happy` ne doit pas pouvoir rejouer le même applaudissement,
+   * alors qu'une mémoire unique aurait été effacée par le `sad` intercalé.
+   */
+  const lastSeatClip = new Map<string, string>()
+
+  /**
+   * Une clef de la table, tirée parmi celles RÉELLEMENT chargées, en écartant
+   * celle qui vient d'être jouée pour ce rôle tant qu'il en reste une autre.
+   * C'est la règle de `pickAction` (vrmStage, cf. 23cde13) appliquée un cran
+   * au-dessus : ici on tire le CLIP, `worldAction` tirera ensuite le fichier
+   * parmi les variantes numérotées de ce clip.
+   */
+  function pickSeatClip(role: string, pool: readonly string[]): string | null {
+    const ready = pool.filter((name) => host.has(name))
+    if (ready.length === 0) return null
+    const last = lastSeatClip.get(role)
+    const draw = ready.length > 1 ? ready.filter((name) => name !== last) : ready
+    const clip = draw[Math.floor(Math.random() * draw.length)]
+    lastSeatClip.set(role, clip)
+    return clip
+  }
+
+  /**
+   * UN GESTE PAR-DESSUS LE SOCLE ASSIS — la même porte que les gestes d'assise
+   * (sit-look, sit-shift, cf. l'état 'seated') : `host.once` promeut le clip en
+   * transition, ce qui retire le socle des jambes le temps du cycle et le rend
+   * ensuite. C'est le SEUL canal qui sache poser un clip sur un corps assis
+   * sans que la machine d'état perde le fil.
+   *
+   * Les refus, dans l'ordre :
+   * - pas assis POUR DE BON (marche, pivot, sit-enter/sit-exit) : un geste à
+   *   poids 1 sur tout le squelette casserait les jambes ou le glissement ;
+   * - un geste assis déjà à l'écran : on JETTE, on n'empile pas — il n'y a pas
+   *   de file d'attente debout non plus, et un geste retardé de trois secondes
+   *   ne répond plus à rien ;
+   * - aucun fichier chargé pour ce rôle : le visage suffit, comme debout.
+   */
+  function seatGesture(role: string, pool: readonly string[]): boolean {
+    if (state !== 'seated' || host.transitioning()) return false
+    const clip = pickSeatClip(role, pool)
+    if (!clip) return false
+    // LE RETOUR SE FAIT SUR `sit-idle`, JAMAIS SUR LE SOCLE DE PAROLE, et c'est
+    // mesuré : le pire os parcourt 7,0 à 9,9 cm pendant un fondu de sortie vers
+    // world-sit-talking (la limite du projet est à 10) contre 0,6 à 6,6 cm vers
+    // world-sit-idle — les mains de la parole sont loin du maintien assis. Si
+    // une réponse est en cours, l'état 'seated' rebascule sur sit-talking à
+    // l'image suivante, avec SON fondu à lui (SIT_TALK_FADE), celui qui a été
+    // mesuré pour cette jonction-là.
+    // Le livre des socles doit donc l'apprendre ici, sinon une parole en cours
+    // croirait sit-talking encore en place et ne le reposerait jamais.
+    seatBase = 'sit-idle'
+    host.once(clip, BASE_SWAP_FADE, 'sit-idle', BASE_SWAP_FADE)
+    // Le geste TIENT LIEU de geste d'assise : enchaîner un sit-look juste
+    // derrière lirait comme de l'agitation, pas comme une réponse.
+    fidgetT = rand(FIDGET_MIN_S, FIDGET_MAX_S)
+    return true
+  }
+
+  /**
    * Avance le corps de ce que l'ANIMATION vient de dépeindre, borné par les
    * obstacles. Rend la distance réellement parcourue.
    */
@@ -1434,6 +1543,8 @@ export function createWander(host: WanderHost): Wander {
     poke(): void {
       if (state === 'rest' || state === 'pivot') attentiveUntil = now + ATTENTIVE_S
     },
+    emote: (emotion) => seatGesture(emotion, SIT_EMOTES[emotion]),
+    react: () => seatGesture(SIT_ROLE_CLICK, SIT_REACTIONS),
     /**
      * Retour au point d'accueil. Les clips en place sont rendus au socle avec ce
      * `fade` (l'extinction de la scène vivante en veut un long, un changement de
