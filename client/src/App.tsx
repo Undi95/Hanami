@@ -927,7 +927,9 @@ function AppInner() {
       ttsFromIndex = acc.length
     }
     let thinkingAcc = ''
-    let emotionFound = false
+    // Émotion posée EN COURS de flux (null tant qu'aucun tag n'est arrivé) —
+    // gardée pour la re-poser à la fin, cf. l'événement `done`.
+    let liveEmotion: string | null = null
     let finished = false
 
     try {
@@ -942,10 +944,10 @@ function AppInner() {
           if (ev.type === 'delta') {
             acc += ev.text
             pokeSpeaking(ev.text.length)
-            if (!emotionFound) {
+            if (!liveEmotion) {
               const em = extractEmotion(acc)
               if (em) {
-                emotionFound = true
+                liveEmotion = em
                 applyEmotion(em, true)
               }
             }
@@ -968,7 +970,15 @@ function AppInner() {
           } else if (ev.type === 'done') {
             finished = true
             setBackendDown(false)
-            if (!emotionFound) {
+            if (liveEmotion) {
+              // Le tag arrive EN TÊTE de réponse : l'émotion a donc été posée au
+              // tout début, et la scène la laisse s'éteindre au bout de quelques
+              // secondes sans nouvelle (EMOTION_HOLD, scene/idle.ts) — une réponse
+              // un peu longue se terminait sur un visage déjà revenu au neutre.
+              // On la re-pose à la fin, SANS geste (live = false) : le visage
+              // repart pour un cycle complet, le corps ne rejoue rien.
+              applyEmotion(liveEmotion)
+            } else {
               const em = ev.message.emotion ?? extractEmotion(ev.message.content)
               // Réponse terminée sans aucun tag : en mode simple, le visage suit
               // une heuristique de texte plutôt que de rester figé (les petits
