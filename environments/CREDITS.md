@@ -132,6 +132,33 @@ outside the model.
 
 ---
 
+## 6. `japanese-classroom.glb`
+
+|  |  |
+|---|---|
+| **Titre / Title** | Japanese Classroom |
+| **Auteur / Author** | T I A N (`@Tian96`) |
+| **Profil / Profile** | <https://sketchfab.com/Tian96> |
+| **Page du modèle / Model page** | <https://sketchfab.com/3d-models/japanese-classroom-2a1e3b294c1e4e91bed794bfa520c4f4> |
+| **Licence / License** | CC Attribution 4.0 International (CC BY 4.0) — <https://creativecommons.org/licenses/by/4.0/> |
+| **Source** | Sketchfab |
+| **Publié le / Published** | 2018-03-21 |
+
+**Attribution requise (FR) :**
+> « Japanese Classroom » par T I A N, licence CC-BY 4.0, via Sketchfab.
+
+**Required attribution (EN):**
+> "Japanese Classroom" by T I A N, licensed under CC-BY 4.0, via Sketchfab.
+
+**Modifications / Modifications :** aucune, hormis le nom du fichier
+(`japanese-classroom.glb`, pour ne pas le confondre avec `anime-classroom.glb`) ; le contenu est
+l'export Sketchfab d'origine, octet pour octet. Le placement vit dans le sidecar
+`japanese-classroom.json`. / none beyond the file name (`japanese-classroom.glb`, so it is not
+confused with `anime-classroom.glb`); the contents are the original Sketchfab export, byte for
+byte. Placement lives in the `japanese-classroom.json` sidecar.
+
+---
+
 ## Bloc d'attribution prêt à coller / Ready-to-paste attribution block
 
 **FR — Décors 3D**
@@ -141,6 +168,7 @@ outside the model.
 - « Rustic Bedroom » par Bársh, licence CC-BY 4.0, via Sketchfab.
 - « Low Poly Restaurant Interior Scene » par GameAssetsFin, licence CC-BY 4.0, via Sketchfab.
 - « Small Cafe » par dylanheyes, licence CC-BY 4.0, via Sketchfab.
+- « Japanese Classroom » par T I A N, licence CC-BY 4.0, via Sketchfab.
 
 **EN — 3D environments**
 
@@ -149,6 +177,7 @@ outside the model.
 - "Rustic Bedroom" by Bársh, licensed under CC-BY 4.0, via Sketchfab.
 - "Low Poly Restaurant Interior Scene" by GameAssetsFin, licensed under CC-BY 4.0, via Sketchfab.
 - "Small Cafe" by dylanheyes, licensed under CC-BY 4.0, via Sketchfab.
+- "Japanese Classroom" by T I A N, licensed under CC-BY 4.0, via Sketchfab.
 
 ---
 
@@ -173,6 +202,7 @@ contains one decorative animation ("Take 001").
 | `rustic-bedroom.glb` | 21 828 | 12 213 | 3,9 Mo | ×1,1 | 2,70 × 3,00 m, murs 2,42 m | 1,67 m² | 5 |
 | `lowpoly-restaurant.glb` | 64 750 | 35 698 | 4,5 Mo | ×1 | 7,80 × 14,80 m, plafond 3,33 m | 46,21 m² | 29 |
 | `small-cafe.glb` | 62 260 | 31 420 | 5,4 Mo | ×0,87 | 5,70 × 16,30 m, plafond 2,67 m | 51,35 m² | 21 |
+| `japanese-classroom.glb` | 326 040 | 169 861 | 19,0 Mo | ×1 | 12,50 × 8,40 m, plafond 3,17 m | 75,13 m² | 62 |
 
 **FR —** Les modèles sont orientés Y-up (conversion effectuée par l'export Sketchfab).
 Les trois premiers ne sont pas livrés à l'échelle métrique ; les facteurs ci-dessus sont
@@ -220,3 +250,22 @@ them: with the key at 1.1 and the fill at 0.35 (the "environment loaded" regime)
 turned towards the light renders about 1.5× the baked value. No `exposure` is written in its
 sidecar until somebody has seen it on screen: should the café look washed out, `"exposure":
 0.75` is the first thing to try — it scales base colour AND emissive by the same factor.
+
+**FR —** `japanese-classroom.glb` est le décor le plus LOURD du dossier : 19,0 Mo et 326 040
+faces, soit 2,1 fois le précédent record (`anime-classroom.glb`) et cinq fois le restaurant
+pour une surface utile comparable. C'est le prix de ses 421 maillages et de ses 18 textures.
+Ses onze matériaux déclarent tous `metallicFactor: 1`, ce qui, sans carte d'environnement,
+rendrait un décor noir — mais la mesure des textures dit l'inverse : la métallicité vit dans
+le canal bleu de la carte `metallicRoughness`, et elle y vaut en moyenne 0,03 à 0,10 sur les
+murs, le sol et les pupitres (0,48 sur le seul `StingrayPBS1`, les huisseries). Ses albédos
+sont en moyenne cinq fois plus clairs que ceux d'`anime-classroom.glb` : aucun `exposure`
+n'est posé.
+
+**EN —** `japanese-classroom.glb` is the HEAVIEST environment here: 19.0 MB and 326,040 faces
+— 2.1× the previous record (`anime-classroom.glb`) and five times the restaurant for a
+comparable usable floor area. That is the price of its 421 meshes and 18 textures. All eleven
+of its materials declare `metallicFactor: 1`, which without an environment map would render a
+black room — but measuring the textures says otherwise: metalness lives in the blue channel of
+the `metallicRoughness` map, and there it averages 0.03 to 0.10 on walls, floor and desks
+(0.48 on `StingrayPBS1` alone, the window frames). Its base colours average five times
+brighter than `anime-classroom.glb`'s: no `exposure` is set.
