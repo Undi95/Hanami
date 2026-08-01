@@ -306,9 +306,12 @@ cadre par défaut ne touchait aucune géométrie** — que du fond de page, et e
 de l'horizon. D'où les quatre panneaux de fond du sidecar, qui forment une boîte de 14 × 14 m
 autour du point d'accueil : le cadre est ensuite couvert à 100 % sous huit azimuts de caméra et
 à trois reculs (1,89 · 3 · 4 m). Ils tiennent dans le plan lointain de 20 m — un panneau posé
-plus loin serait tronqué et rouvrirait le trou. Ses neuf matériaux sont TOUS
-`KHR_materials_unlit` : ils ignorent les lumières, comme les panneaux, et se rendent à la
-valeur de leurs textures.
+plus loin serait tronqué et rouvrirait le trou. Leur couleur est un GRIS NEUTRE à peine froid
+(`[0.24, 0.245, 0.26]`, linéaire) et non le bleu du loft : ici le panneau ne joue pas « ciel
+derrière une fenêtre » mais « tout ce qui est au-dessus de 1,20 m », c'est-à-dire la moitié
+haute du cadre d'accueil — un bleu clair y lisait « toit arraché » au lieu de « fond de pièce ».
+Ses neuf matériaux sont TOUS `KHR_materials_unlit` : ils ignorent les lumières, comme les
+panneaux, et se rendent à la valeur de leurs textures.
 
 **EN —** `apartment-floorplan.glb` is a CUTAWAY PLAN: its walls stop at 1.20 m, below the eye
 line of the home camera (1.23 m). Measured by ray casting, **50.5% of the default frame hit no
@@ -316,5 +319,8 @@ geometry at all** — nothing but page background, entirely above the horizon. H
 backdrop panels in the sidecar, forming a 14 × 14 m box around the spawn point: the frame is
 then 100% covered across eight camera azimuths and three pullbacks (1.89 · 3 · 4 m). They fit
 inside the 20 m far plane — a panel placed further out would be clipped and would reopen the
-hole. All nine of its materials are `KHR_materials_unlit`: they ignore the lights, as the
-panels do, and render at their texture values.
+hole. Their colour is a NEUTRAL, barely cool grey (`[0.24, 0.245, 0.26]`, linear) rather than
+the loft's blue: here the panel does not play "sky behind a window" but "everything above
+1.20 m", i.e. the upper half of the home frame — a pale blue read as "the roof is missing"
+instead of "the back of the room". All nine of its materials are `KHR_materials_unlit`: they
+ignore the lights, as the panels do, and render at their texture values.
