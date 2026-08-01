@@ -16,6 +16,26 @@
 import type { Seat } from './sceneMap' // type seul — sceneMap est pur lui aussi
 import type { Waypoint } from './pathfind' // idem
 import type { Emotion } from '../../../shared/types' // idem : rien qu'une union de chaînes
+// Les FONDUS de la scène vivante viennent de la table d'Overte (fades.ts). Ce
+// module reste pur : `fades.ts` n'est que des nombres, comme les deux imports
+// ci-dessus.
+import {
+  HOME_OUT,
+  NO_FADE,
+  SIT_GESTURE_IN,
+  SIT_GESTURE_OUT,
+  SIT_IN,
+  SIT_LAND,
+  SIT_TALK,
+  STOP_IN,
+  STOP_OUT,
+  STOP_SMALL_IN,
+  TURN_IN,
+  TURN_OUT,
+  WALK_CYCLE_IN,
+  WALK_START_IN,
+} from './fades'
+import type { Fade } from './fades'
 
 // ── Constantes mesurées ─────────────────────────────────────────────────────
 /** Pivots : vitesse angulaire des clips, `deplacement.vitesseRotationDegS`. */
@@ -43,21 +63,17 @@ const TURN_ENTER_RIGHT_S = 0.033
 const TURN_CLIP_THRESHOLD = 25 * (Math.PI / 180)
 /** Vitesse du glissement silencieux — la moitié d'un pivot joué. */
 const TURN_GLIDE_RATE = 30 * (Math.PI / 180)
-/** Fondu d'ENTRÉE d'un pivot — l'entrée a un contrat de phase (TURN_ENTER_*_S). */
-const TURN_FADE = 0.3
-/**
- * Fondu de SORTIE d'un pivot. La sortie tombe où le cap l'arrête : aucune
- * phase ne peut la sauver (pire 19,2 cm / moy 13,9 contre l'idle, mesuré sur
- * toutes les phases des deux clips), seul le fondu adoucit. Mesures aux pires
- * phases, pointe du pire os (cm/s), 0,3–0,4 → 0,5 :
- *   pivot → idle        97–109 → 74–104
- *   pivot → walk-start 250–272 → 212–231
- *   pivot → sit-enter  150–160 → 111–143
- * 0,5 s est la fourchette basse d'Overte (turns 0,5 ; entrée d'idle 0,667 —
- * avec easeInOutQuad, que nous n'avons pas : un fondu linéaire plus long
- * étale davantage, on reste donc au bas de la fourchette).
- */
-const TURN_FADE_OUT = 0.5
+// Les FONDUS du pivot sont TURN_IN / TURN_OUT (fades.ts). Ce qui reste ici est
+// le contrat de PHASE, qui n'a rien à voir : TURN_ENTER_*_S ci-dessus dit à
+// quelle image du clip on entre, TURN_IN dit en combien de temps son poids monte.
+//
+// La sortie de pivot tombe où le cap l'arrête : aucune phase ne peut la sauver
+// (pire 19,2 cm / moy 13,9 contre l'idle, mesuré sur toutes les phases des deux
+// clips), seul le fondu adoucit. Mesures aux pires phases, pointe du pire os
+// (cm/s), 0,3–0,4 → 0,5 :
+//   pivot → idle        97–109 → 74–104
+//   pivot → walk-start 250–272 → 212–231
+//   pivot → sit-enter  150–160 → 111–143
 
 /**
  * Sous cet écart de cap, on ne fait RIEN. Sans zone morte, le moindre pan de
@@ -215,10 +231,9 @@ export const GAIT_CHANGE_PHASES: Record<string, { exitS: number; enterS: number;
   'walk>walk-fast': { exitS: 0.733, enterS: 0.6, ecartCm: 3.9 },
   'walk-slow>walk-fast': { exitS: 1.2, enterS: 0.8, ecartCm: 6.4 },
 }
-/** Fondus des transitions de marche. */
-const WALK_FADE = 0.4
-const STOP_FADE = 0.35
-const AFTER_STOP_FADE = 0.2
+// Les FONDUS de la marche sont WALK_START_IN / WALK_CYCLE_IN / STOP_IN /
+// STOP_SMALL_IN / STOP_OUT (fades.ts). Les PHASES d'entrée et de sortie des
+// cycles, elles, restent les contrats de vrma/world.json ci-dessus.
 /** Vitesse de correction du cap PENDANT la marche (le clip va tout droit). */
 const WALK_TURN_RATE = 60 * (Math.PI / 180)
 /** Écart de cap au-delà duquel on pivote SUR PLACE avant de partir. */
@@ -277,34 +292,19 @@ const SIT_BACKUP_FRAC = 0.2672 / 1.0167
  * lit et non en son milieu — une chaise entière tient dans cette profondeur.
  */
 const SEAT_INSET_FRAC = 0.22
-/** Fondu d'ENTRÉE des transitions assises (l'autre extrémité est ancrée : 0). */
-const SIT_FADE = 0.3
-/**
- * Fondu d'ATTERRISSAGE d'assise : fin de `world-sit-enter` → la variante de
- * `world-sit-idle` que le tirage a choisie. L'ancrage « la dernière image de
- * sit-enter EST sit-idle@0 » n'est vrai QUE de la variante canonique : les
- * quatre autres en sont à 1,6–4,4 cm (et jusqu'à 92° de poignet), et l'ancien
- * enchaînement SANS fondu les claquait en une image (98 à 235 cm/s mesurés au
- * banc). Une seconde de fondu les ramène à 1,7–4 cm/s — le rythme propre des
- * clips assis — et ne coûte RIEN à la variante canonique (1,1 cm/s : fondre
- * deux poses identiques ne se voit pas). C'est la durée d'Overte entre
- * variantes assises (seatedIdle01–05, fonduS 1,0).
- */
-const SIT_LAND_FADE = 1.0
-/** Fondu des gestes assis (sit-look, sit-shift) : entrées mesurées à 1,7–2,4 cm. */
-const BASE_SWAP_FADE = 0.4
-/**
- * Bascule assise sit-idle ↔ sit-talking. Les deux socles sont tirés parmi des
- * variantes à phases quelconques : la pire paire mesurée est à 26,8 cm
- * (rightHand — l'amplitude des mains de la parole). À 0,4 s le fondu culminait
- * à 82 cm/s, 3,4 fois le rythme propre du clip de parole (p95 24 cm/s) ; à
- * 0,8 s il tombe à 62 cm/s et la pointe angulaire est divisée par deux
- * (326 → 163 °/s). C'est la durée d'Overte pour la même bascule
- * (seatedTalkOverlay 0,833 s ; les variantes de parole entre elles : 1,0 s).
- * La latence ajoutée au début d'une réponse (+0,4 s de fondu) est invisible :
- * le clip de parole est déjà en train de monter pendant qu'elle s'écrit.
- */
-const SIT_TALK_FADE = 0.8
+// Les FONDUS de l'assise sont SIT_IN / SIT_LAND / SIT_TALK / SIT_GESTURE_*
+// (fades.ts). Ce que les mesures d'ici disaient, et qui reste vrai :
+// - l'ancrage « la dernière image de sit-enter EST sit-idle@0 » n'est vrai QUE
+//   de la variante canonique : les quatre autres en sont à 1,6–4,4 cm (jusqu'à
+//   92° de poignet), et l'enchaînement SANS fondu les claquait en une image
+//   (98 à 235 cm/s au banc) — d'où SIT_LAND, la seconde pleine d'Overte ;
+// - la bascule sit-idle ↔ sit-talking tire deux socles à phases quelconques :
+//   pire paire à 26,8 cm (rightHand, l'amplitude des mains de la parole). À
+//   0,4 s le fondu culminait à 82 cm/s, 3,4 fois le rythme propre du clip de
+//   parole (p95 24 cm/s) ; à 0,8 s il tombe à 62 cm/s — d'où SIT_TALK ;
+// - les entrées de sit-look / sit-shift sont mesurées à 1,7–2,4 cm : rien à
+//   rattraper de ce côté, c'est la SORTIE qui manquait de temps.
+// La PHASE d'entrée de sit-idle (0) reste, elle, un contrat de raccord.
 /** Durée passée assis (s), tirée uniformément. On s'assoit pour de bon. */
 const SIT_MIN_S = 90
 const SIT_MAX_S = 240
@@ -448,11 +448,11 @@ export interface WanderHost {
    * normal. `phase` pose le temps du clip à l'entrée — c'est par lui que le
    * contrat de phase se tient.
    */
-  gait(name: string | null, fade: number, phase?: number): void
+  gait(name: string | null, fade: Fade, phase?: number): void
   /** Temps courant du clip d'allure (s), ou -1 s'il n'y en a pas. */
   gaitTime(): number
   /** Clip à cycle unique, puis `then` (null = socle voulu), posé à `thenPhase`. */
-  once(name: string, fadeIn: number, then: string | null, fadeThen: number, thenPhase?: number): void
+  once(name: string, fadeIn: Fade, then: string | null, fadeThen: Fade, thenPhase?: number): void
   /** Ce clip du domaine `world-` est-il chargé ? */
   has(name: string): boolean
   /**
@@ -488,7 +488,7 @@ export interface WanderHost {
    * Coupe la transition en cours et rend l'écran au socle voulu. N'est appelé
    * que par home() : un changement de décor peut tomber au milieu d'une assise.
    */
-  interrupt(fade: number): void
+  interrupt(fade: Fade): void
   /**
    * Régime des pieds pour la cinématique inverse : 'planted' debout (on ne fait
    * que remonter un pied qui traverse), 'reach' assis (le pied VISE le sol —
@@ -561,7 +561,7 @@ export interface Wander {
   /** Idem pour le clic sur le personnage : l'acquiescement, version assise. */
   react(): boolean
   /** Ramène le personnage au point d'accueil, sans clip. `fade` : fondu du retour au socle. */
-  home(fade?: number): void
+  home(fade?: Fade): void
 }
 
 export function createWander(host: WanderHost): Wander {
@@ -572,7 +572,7 @@ export function createWander(host: WanderHost): Wander {
   let turnDir: 1 | -1 = 1
   /**
    * Un clip de pivot tient l'écran. C'est lui qui choisit le fondu de la
-   * SORTIE (TURN_FADE_OUT) là où la même jonction sans pivot garde son fondu
+   * SORTIE (TURN_OUT) là où la même jonction sans pivot garde son fondu
    * court — un départ de marche depuis l'idle est excellent (2,0 cm), depuis
    * un pivot il part de 19 cm.
    */
@@ -660,7 +660,7 @@ export function createWander(host: WanderHost): Wander {
     // Clip absent (dossier vrma/ incomplet) : on glisse, on ne bloque pas.
     // La phase d'entrée est le contrat de raccord — cf. TURN_ENTER_*_S.
     if (Math.abs(d) >= FACE_DEADZONE * 0.5 && host.has(clip)) {
-      host.gait(clip, TURN_FADE, turnDir > 0 ? TURN_ENTER_LEFT_S : TURN_ENTER_RIGHT_S)
+      host.gait(clip, TURN_IN, turnDir > 0 ? TURN_ENTER_LEFT_S : TURN_ENTER_RIGHT_S)
       turnClipUp = true
     }
     state = next
@@ -874,15 +874,22 @@ export function createWander(host: WanderHost): Wander {
   function launchGait(): void {
     wantStop = false
     lastGaitTime = -1
-    // Sortie de pivot (état 'align') : fondu long — cf. TURN_FADE_OUT. Depuis
-    // l'idle, la jonction est excellente (2,0 cm) : le fondu court suffit.
-    const fade = turnClipUp ? TURN_FADE_OUT : WALK_FADE
+    // TROIS entrées différentes, trois fondus différents (cf. fades.ts) :
+    // - depuis un pivot (état 'align'), la jonction part de 19 cm : fondu de
+    //   SORTIE de pivot, long et adouci ;
+    // - depuis l'idle vers le clip de DÉPART, la jonction est excellente
+    //   (2,0 cm) et le lever de pied doit rester sec : le fondu court et
+    //   linéaire d'Overte (`idleToWalkFwd`) ;
+    // - depuis l'idle DIRECTEMENT dans un cycle (la flânerie), c'est l'entrée
+    //   de cycle d'Overte (`WALKFWD`), linéaire elle aussi.
+    const viaStart = plan.start !== null && host.has(plan.start)
+    const fade = turnClipUp ? TURN_OUT : viaStart ? WALK_START_IN : WALK_CYCLE_IN
     turnClipUp = false
-    if (plan.start && host.has(plan.start)) {
+    if (plan.start && viaStart) {
       // Départ : la dernière image de `world-walk-start` EST la pose du cycle à
       // t = 0,200 s. On l'y enchaîne donc SANS fondu et à cette phase exacte —
       // c'est le contrat mesuré à 0 cm.
-      host.once(plan.start, fade, plan.clip, 0, plan.enterS)
+      host.once(plan.start, fade, plan.clip, NO_FADE, plan.enterS)
       state = 'starting'
       return
     }
@@ -911,13 +918,16 @@ export function createWander(host: WanderHost): Wander {
   function beginStop(): void {
     wantStop = false
     const midStop = route.length > 0 || seatRun !== null
-    const stop = midStop && host.has('walk-stop-small') ? 'walk-stop-small' : 'walk-stop'
+    const small = midStop && host.has('walk-stop-small')
+    const stop = small ? 'walk-stop-small' : 'walk-stop'
     if (host.has(stop)) {
-      host.once(stop, STOP_FADE, null, AFTER_STOP_FADE)
+      // Overte fait EXACTEMENT la même distinction que ce choix de clip :
+      // `idleSettleSmall` a un fondu d'entrée plus court que `idleSettle`.
+      host.once(stop, small ? STOP_SMALL_IN : STOP_IN, null, STOP_OUT)
       state = 'stopping'
       return
     }
-    host.gait(null, STOP_FADE)
+    host.gait(null, STOP_IN)
     endLeg()
   }
 
@@ -1121,14 +1131,14 @@ export function createWander(host: WanderHost): Wander {
     slide = { fx: p.x, fy: run.groundY, fz: p.z, tx: run.sitX, ty: run.seatedY, tz: run.sitZ }
     host.feet('reach')
     // On arrive de seatAlign : si le pivot a joué, sa sortie veut le fondu
-    // long (150–160 cm/s à 0,3 s, 111–143 à 0,5 — cf. TURN_FADE_OUT).
-    const fadeIn = turnClipUp ? TURN_FADE_OUT : SIT_FADE
+    // long (150–160 cm/s à 0,3 s, 111–143 à 0,5 — cf. TURN_OUT).
+    const fadeIn = turnClipUp ? TURN_OUT : SIT_IN
     turnClipUp = false
     // Le socle assis est TIRÉ parmi cinq variantes (pickAction) : l'atterrissage
-    // se fait donc en fondu d'une seconde, pas en claquant — cf. SIT_LAND_FADE.
+    // se fait donc en fondu d'une seconde, pas en claquant — cf. SIT_LAND.
     // La phase 0 reste le contrat : c'est là que chaque variante est le plus
     // près de la fin de sit-enter (mesuré ×5).
-    host.once('sit-enter', fadeIn, 'sit-idle', SIT_LAND_FADE, 0)
+    host.once('sit-enter', fadeIn, 'sit-idle', SIT_LAND, 0)
     seatBase = 'sit-idle'
     state = 'sitDown'
   }
@@ -1141,7 +1151,7 @@ export function createWander(host: WanderHost): Wander {
       return
     }
     slide = { fx: run.sitX, fy: run.seatedY, fz: run.sitZ, tx: run.outX, ty: run.groundY, tz: run.outZ }
-    host.once('sit-exit', SIT_FADE, null, AFTER_STOP_FADE)
+    host.once('sit-exit', SIT_IN, null, STOP_OUT)
     state = 'sitUp'
   }
 
@@ -1194,12 +1204,12 @@ export function createWander(host: WanderHost): Wander {
     // world-sit-talking (la limite du projet est à 10) contre 0,6 à 6,6 cm vers
     // world-sit-idle — les mains de la parole sont loin du maintien assis. Si
     // une réponse est en cours, l'état 'seated' rebascule sur sit-talking à
-    // l'image suivante, avec SON fondu à lui (SIT_TALK_FADE), celui qui a été
+    // l'image suivante, avec SON fondu à lui (SIT_TALK), celui qui a été
     // mesuré pour cette jonction-là.
     // Le livre des socles doit donc l'apprendre ici, sinon une parole en cours
     // croirait sit-talking encore en place et ne le reposerait jamais.
     seatBase = 'sit-idle'
-    host.once(clip, BASE_SWAP_FADE, 'sit-idle', BASE_SWAP_FADE)
+    host.once(clip, SIT_GESTURE_IN, 'sit-idle', SIT_GESTURE_OUT)
     // Le geste TIENT LIEU de geste d'assise : enchaîner un sit-look juste
     // derrière lirait comme de l'agitation, pas comme une réponse.
     fidgetT = rand(FIDGET_MIN_S, FIDGET_MAX_S)
@@ -1356,7 +1366,7 @@ export function createWander(host: WanderHost): Wander {
         // autour) : sans ça, elle finirait son angle puis en redemanderait un.
         if (!host.userBusy()) yawTarget = restingYaw()
         if (turnStep(delta, yawTarget)) {
-          host.gait(null, TURN_FADE_OUT)
+          host.gait(null, TURN_OUT)
           turnClipUp = false
           state = 'rest'
         }
@@ -1430,7 +1440,7 @@ export function createWander(host: WanderHost): Wander {
       }
       case 'seatAlign': {
         if (!seatRun) {
-          host.gait(null, TURN_FADE_OUT)
+          host.gait(null, TURN_OUT)
           turnClipUp = false
           state = 'rest'
           break
@@ -1470,7 +1480,7 @@ export function createWander(host: WanderHost): Wander {
         const want = host.speaking() && host.has('sit-talking') ? 'sit-talking' : 'sit-idle'
         if (want !== seatBase) {
           seatBase = want
-          host.gait(want, SIT_TALK_FADE)
+          host.gait(want, SIT_TALK)
         }
         // Pendant une réponse, RIEN d'autre ne bouge : ni geste, ni lever.
         if (host.speaking()) break
@@ -1488,7 +1498,7 @@ export function createWander(host: WanderHost): Wander {
           // un tirage sans geste joué fausserait la mémoire du rôle.
           if (seatBase === 'sit-idle') {
             const gesture = pickSeatClip(SIT_ROLE_FIDGET, SIT_FIDGETS)
-            if (gesture) host.once(gesture, BASE_SWAP_FADE, 'sit-idle', BASE_SWAP_FADE)
+            if (gesture) host.once(gesture, SIT_GESTURE_IN, 'sit-idle', SIT_GESTURE_OUT)
           }
         }
         break
@@ -1565,7 +1575,7 @@ export function createWander(host: WanderHost): Wander {
      * peut tomber au milieu d'une assise, le personnage ne doit pas rester
      * assis dans le vide de la pièce suivante.
      */
-    home(fade = 0.25): void {
+    home(fade: Fade = HOME_OUT): void {
       p.x = 0
       p.y = 0
       p.z = 0

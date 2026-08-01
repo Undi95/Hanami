@@ -57,6 +57,8 @@ import { buildEnvBvh, raycastFirst } from './bvh'
 import type { EnvBvh } from './bvh'
 import { createGaze } from './gaze'
 import { applyRelaxedHands } from './handPoses'
+import { BASE_SWAP, GESTURE_IN, GESTURE_OUT, NO_FADE } from './fades'
+import type { Fade } from './fades'
 import { fetchSceneMap } from './sceneMap'
 import type { SceneMap, Seat } from './sceneMap'
 import { mergeEnvironment } from './envMerge'
@@ -535,10 +537,9 @@ const TRACKED_BONES: readonly VRMHumanBoneName[] = [
 // — le dossier vrma/ contient aussi de la matière première pour la suite (marche,
 // nage, saut…), qui ne doit surtout pas se déclencher toute seule.
 
-/** Fondus (secondes) : entrée d'un geste, retour au socle, changement de socle. */
-const GESTURE_FADE = 0.3
-const GESTURE_RETURN = 0.4
-const BASE_FADE = 0.5
+// Les fondus sont dans `fades.ts` — la table de correspondance avec la machine à
+// états d'Overte (`vrma/transitions.json`) : une durée et une courbe PAR
+// jonction, avec l'état d'Overte d'où le chiffre vient.
 
 /** Socle de remplacement pendant qu'une réponse s'écrit. */
 const TALKING_STEM = 'idle-talking'
@@ -958,7 +959,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     to: AnimationAction
     from: Map<AnimationAction, number> // poids relevés au déclenchement
     elapsed: number
-    duration: number
+    spec: Fade // durée ET courbe de CE fondu (cf. fades.ts)
   } | null = null
   let weightSumWarned = false
   // Un socle vient d'être posé : recadrer à la PROCHAINE image évaluée par le
@@ -1523,7 +1524,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    * Un fondu encore en cours est ABANDONNÉ, pas empilé : ses poids de l'image
    * courante deviennent le point de départ du nouveau.
    */
-  function fadeTo(next: AnimationAction, duration: number): void {
+  function fadeTo(next: AnimationAction, spec: Fade): void {
     if (activeAction === next) return
     const from = new Map(weights)
     // `paused` : un geste figé par clampWhenFinished redevient pilotable.
@@ -1532,20 +1533,28 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     next.play()
     activeAction = next
     // Rien en place (premier socle) ou fondu nul : poids 1 tout de suite.
-    if (from.size === 0 || duration <= 0) {
+    if (from.size === 0 || spec.s <= 0) {
       fade = null
       poseWeights(fadeWeights(from, next, 1))
       return
     }
-    fade = { to: next, from, elapsed: 0, duration }
+    fade = { to: next, from, elapsed: 0, spec }
     poseWeights(fadeWeights(from, next, 0))
   }
 
-  /** Avance le fondu en cours d'une image (appelé JUSTE AVANT mixer.update). */
+  /**
+   * Avance le fondu en cours d'une image (appelé JUSTE AVANT mixer.update).
+   *
+   * La COURBE du fondu (cf. fades.ts) n'est pas encore appliquée ici : cette
+   * étape ne porte que les DURÉES d'Overte, pour que la mesure les isole. Le
+   * `fadeCurve` arrive à l'étape suivante — et il ne touchera pas l'invariant :
+   * `fadeWeights` rend une somme de 1 pour N'IMPORTE QUEL `p` de [0, 1], donc
+   * courber `p` ne peut pas la faire bouger.
+   */
   function advanceFade(delta: number): void {
     if (!fade) return
     fade.elapsed += delta
-    const p = Math.min(1, fade.elapsed / fade.duration)
+    const p = Math.min(1, fade.elapsed / fade.spec.s)
     poseWeights(fadeWeights(fade.from, fade.to, p))
     if (p >= 1) fade = null
   }
@@ -1572,12 +1581,12 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    * Réaligne le socle. Pendant un geste, le changement se fait EN COULISSE : le
    * geste garde l'écran, et son fondu de sortie ira sur le nouveau socle.
    */
-  function syncBase(duration: number): void {
+  function syncBase(spec: Fade): void {
     const next = desiredBase()
     if (!next || next === baseAction) return
     const prev = baseAction
     baseAction = next
-    if (activeAction === prev) fadeTo(next, duration)
+    if (activeAction === prev) fadeTo(next, spec)
   }
 
   // ── Domaine `world-` : ce que la scène vivante peut demander ──────────────
@@ -1622,7 +1631,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    * contrat de raccord tient : un cycle de marche repris à une phase quelconque
    * tombe jusqu'à 46 cm de la pose d'arrêt, repris sur sa couture il tombe à 0.
    */
-  function setGait(name: string | null, fade: number, phase?: number): void {
+  function setGait(name: string | null, spec: Fade, phase?: number): void {
     const next = name ? asBase(worldAction(name)) : null
     if (next === gaitAction) return
     gaitAction = next
@@ -1630,7 +1639,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       next.reset()
       next.time = phase
     }
-    syncBase(fade)
+    syncBase(spec)
   }
 
   /** Hauteur de hanches au repos du modèle (m) — l'unité de tout le mouvement. */
@@ -1747,13 +1756,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    * s'asseoir), suivi de `then`. La file est à un seul cran — une transition ne
    * se met jamais en attente d'une autre, elle est remplacée.
    */
-  let onceThen: { name: string | null; fade: number; phase?: number } | null = null
+  let onceThen: { name: string | null; fade: Fade; phase?: number } | null = null
 
   function playOnce(
     name: string,
-    fadeIn: number,
+    fadeIn: Fade,
     then: string | null,
-    fadeThen: number,
+    fadeThen: Fade,
     thenPhase?: number,
   ): void {
     const action = worldAction(name)
@@ -1823,7 +1832,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     action.clampWhenFinished = true
     // Un geste pendant un geste enchaîne depuis l'action COURANTE, pas depuis le
     // socle — sinon la transition passerait par une pose que personne ne voit.
-    fadeTo(action, GESTURE_FADE)
+    fadeTo(action, GESTURE_IN)
   }
 
   /**
@@ -1842,7 +1851,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     action.reset()
     action.setLoop(LoopOnce, 1)
     action.clampWhenFinished = true
-    fadeTo(action, GESTURE_FADE)
+    fadeTo(action, GESTURE_IN)
   }
 
   /** Jette mixer et actions : les clips sont liés à CETTE instance de VRM. */
@@ -1942,7 +1951,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
         return
       }
       // Un geste d'émotion rend l'écran au socle.
-      if (baseAction) fadeTo(baseAction, GESTURE_RETURN)
+      if (baseAction) fadeTo(baseAction, GESTURE_OUT)
     })
     for (const [url, clip] of clips) actions.set(url, mixer.clipAction(clip))
     idleAction = asBase(actions.get(idleUrl) ?? null)
@@ -1952,7 +1961,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     listenAction = listening ? asBase(pickAction(cat.listening)) : null
     lastListen = listenAction
     postureAction = asBase(postureName ? pickAction(cat.postures.get(postureName)) : null)
-    syncBase(0)
+    syncBase(NO_FADE)
     // Le socle est posé mais PAS ENCORE ÉVALUÉ : le squelette est toujours dans la
     // pose de repos, recadrer maintenant ne gagnerait rien. C'est la boucle de
     // rendu qui s'en charge, une fois le mixer passé (cf. reframeAfterMixer).
@@ -2357,7 +2366,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // une pièce peut-être identique (le rechargement du décor n'est pas
       // garanti d'arriver, ni d'arriver après). Fondu nul : les clips du
       // nouveau modèle ne sont pas encore là.
-      wander?.home(0)
+      wander?.home(NO_FADE)
       lastFrame = { vrm, h: height }
       frameCamera(vrm, height)
       // Les .vrma partent APRÈS le cadrage, sans être attendues : l'avatar est
@@ -2515,7 +2524,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       if (speaking === talking) return
       talking = speaking
       // Socle « parle » le temps de la réponse (idle-talking.vrma), s'il existe.
-      syncBase(BASE_FADE)
+      syncBase(BASE_SWAP)
     },
 
     setListening(on: boolean): void {
@@ -2531,7 +2540,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // Aucun clip d'écoute (famille Overte, ou fichiers absents) : listenAction
       // reste null, desiredBase l'ignore, RIEN ne change. Le fondu ci-dessous
       // n'a alors rien à faire — syncBase ne bouge que si le socle voulu change.
-      syncBase(BASE_FADE)
+      syncBase(BASE_SWAP)
     },
 
     setAnimationFamily(family: AnimationFamily): void {
@@ -2579,7 +2588,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // défaut, que reframeAfterMixer n'appliquera que si l'utilisateur n'a pas
       // composé le sien. Les lignes après home() sont la ceinture ET les
       // bretelles : home() a déjà rendu l'écran au socle via le contrat.
-      wander?.home(BASE_FADE)
+      wander?.home(BASE_SWAP)
       wander = null
       clickMarks.clear() // plus d'interaction : plus de marque à l'écran
       onceThen = null
@@ -2589,7 +2598,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       avatarGroup.position.set(0, 0, 0)
       avatarGroup.rotation.y = 0
       springSettle = true // retour à l'origine = saut (cf. springSettle)
-      syncBase(BASE_FADE)
+      syncBase(BASE_SWAP)
       reframePending = true
     },
 
@@ -2598,7 +2607,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // Nom inconnu = aucune posture (retour au socle) : la phase interactive
       // pourra nommer ses postures sans jamais risquer de figer l'avatar.
       postureAction = asBase(postureName ? pickAction(catalog?.postures.get(postureName)) : null)
-      syncBase(BASE_FADE)
+      syncBase(BASE_SWAP)
     },
 
     setView(view: StageView): void {
