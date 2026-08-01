@@ -119,6 +119,11 @@
         "imageOptimale": 17,
         "tS": 0.567,
         "ecartCm": 15.7
+      },
+      "entreeMoteurS": {
+        "tS": 0.167,
+        "ecartPireCm": 7.2,
+        "commentaire": "Phase posée par wander.startPivot (le moteur LISAIT ce contrat nulle part : entré à sa phase rassise, un pivot tombait à 19,2 cm de l’idle au pire, moy 13,9). Minimax re-mesuré sur le rig de la sonde (reference-2.vrm, hanches 0,9045 m) sur toutes les phases d’idle — cohérent avec depuisIdle ci-dessus (rig Overte)."
       }
     },
     "world-turn-right": {
@@ -132,6 +137,11 @@
         "imageOptimale": 25,
         "tS": 0.833,
         "ecartCm": 12.2
+      },
+      "entreeMoteurS": {
+        "tS": 0.033,
+        "ecartPireCm": 7.8,
+        "commentaire": "Comme world-turn-left. Sur le rig de la sonde le balayage donne 0,033 s (7,8 cm) là où le rig Overte donnait 0 s (9,0) : un cran de grille d’écart, le moteur suit le rig du projet (à t=0 il ferait 8,6)."
       }
     },
     "world-jog": {

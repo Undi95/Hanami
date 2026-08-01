@@ -20,6 +20,17 @@ import type { Waypoint } from './pathfind' // idem
 /** Pivots : vitesse angulaire des clips, `deplacement.vitesseRotationDegS`. */
 const TURN_LEFT_RATE = 48.4 // °/s, world-turn-left (angleParCycleDeg 53,2 / dureeS 1,1)
 const TURN_RIGHT_RATE = -52.1 // °/s, world-turn-right (−52,1 / 1,0)
+/**
+ * Phase (s) à laquelle ENTRER dans chaque clip de pivot — le contrat
+ * `depuisIdle` / `entreeMoteurS` de vrma/world.json. Sans elle, l'action
+ * gardait son temps RASSIS (three fige `time` à poids nul) : chaque pivot
+ * après le premier entrait à une phase arbitraire, jusqu'à 19,2 cm de la pose
+ * d'idle (moy 13,9 — échec au seuil des 10 cm). À sa phase de contrat, le
+ * pire cas sur toutes les phases d'idle tombe à 7,2 / 7,8 cm (minimax mesuré,
+ * rig de la sonde).
+ */
+const TURN_ENTER_LEFT_S = 0.167
+const TURN_ENTER_RIGHT_S = 0.033
 
 /**
  * En dessous de cet écart, on tourne SANS clip : le corps glisse dans l'idle à
@@ -541,7 +552,10 @@ export function createWander(host: WanderHost): Wander {
     yawTarget = want
     const clip = turnDir > 0 ? 'turn-left' : 'turn-right'
     // Clip absent (dossier vrma/ incomplet) : on glisse, on ne bloque pas.
-    if (host.has(clip)) host.gait(clip, TURN_FADE)
+    // La phase d'entrée est le contrat de raccord — cf. TURN_ENTER_*_S.
+    if (host.has(clip)) {
+      host.gait(clip, TURN_FADE, turnDir > 0 ? TURN_ENTER_LEFT_S : TURN_ENTER_RIGHT_S)
+    }
     state = next
   }
 
