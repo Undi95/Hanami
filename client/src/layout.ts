@@ -67,6 +67,32 @@ export function vnTextHeight(): number | null {
   return saved === undefined ? null : clamp(saved, VN_TEXT_MIN_H, vnTextMax())
 }
 
+/**
+ * Repose les préférences que le client ne peut PAS appliquer telles quelles.
+ *
+ * Le serveur accepte n'importe quelle taille (sa validation ne connaît que le
+ * type), le client la borne. Une largeur de panneau à 280 px était donc acceptée,
+ * persistée, et renvoyée par un GET /api/ui… pendant que l'écran en affichait
+ * 320 : la préférence enregistrée et la mise en page divergeaient en silence.
+ * Elle est reposée à la valeur RÉELLEMENT appliquée.
+ *
+ * Seul le bornage BAS est reposé : il ne dépend que de constantes. Le bornage
+ * haut dépend de la fenêtre (0,6 × sa largeur) — réécrire 941 px depuis un écran
+ * de 1569 px effacerait le réglage d'un écran plus grand.
+ *
+ * À appeler une fois, APRÈS loadServerPrefs() : pendant l'application des valeurs
+ * venues du serveur, prefs.ts avale les écritures pour ne pas boucler, et le PUT
+ * ne partirait jamais.
+ */
+export function healLayoutPrefs(): void {
+  const panel = getPref('chatPanelWidth')
+  if (panel !== undefined && panel < CHAT_PANEL_MIN_W) setPref({ chatPanelWidth: CHAT_PANEL_MIN_W })
+  const vnWidth = getPref('vnBoxWidth')
+  if (vnWidth !== undefined && vnWidth < VN_BOX_MIN_W) setPref({ vnBoxWidth: VN_BOX_MIN_W })
+  const vnHeight = getPref('vnBoxHeight')
+  if (vnHeight !== undefined && vnHeight < VN_TEXT_MIN_H) setPref({ vnBoxHeight: VN_TEXT_MIN_H })
+}
+
 // ── Variables CSS ──────────────────────────────────────────────────────────
 
 function setVar(name: string, px: number | null): void {

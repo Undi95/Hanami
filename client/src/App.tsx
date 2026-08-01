@@ -35,7 +35,7 @@ import {
   subscribePrefs,
   type ViewMode,
 } from './prefs'
-import { chatPanelWidth, saveChatPanelWidth, saveVnBoxWidth, saveVnTextHeight } from './layout'
+import { chatPanelWidth, healLayoutPrefs, saveChatPanelWidth, saveVnBoxWidth, saveVnTextHeight } from './layout'
 import { I18nProvider, chatDisplayTitle, getLang, localeOf, useI18n } from './i18n'
 import TopBar, { AUTO_COMPACT_AT, CtxBadge, type DialogKind } from './components/TopBar'
 import { ChatPanelGrip } from './components/ResizeGrips'
@@ -647,6 +647,10 @@ function AppInner() {
       // foi et remplacent le cache — l'abonnement ci-dessous applique langue,
       // thème et mode VN si elles diffèrent, la sélection est lue juste après.
       await loadServerPrefs()
+      // Une taille de panneau hors bornes est reposée à celle qui est réellement
+      // appliquée : sans ça, le serveur garde une valeur que l'écran ne montre
+      // nulle part (voir healLayoutPrefs).
+      healLayoutPrefs()
       const chars = await api.listCharacters()
       setCharacters(chars)
       const saved = getPref('activeCharacter')
