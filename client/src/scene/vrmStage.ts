@@ -994,6 +994,28 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   })
 
   /**
+   * Vide les deltas résiduels d'OrbitControls AVANT d'écrire une pose de caméra.
+   *
+   * OrbitControls garde `_sphericalDelta` et `_panOffset` et continue de les
+   * appliquer image après image tant que l'amortissement tourne (facteur 0,05,
+   * soit la totalité du reliquat étalée sur ~60 images, une seconde à 60 Hz).
+   * Un cadrage posé dans la seconde qui suit un glissement rapide se faisait donc
+   * reprendre par la queue du geste — un déplacement souris de 20 px sur un
+   * canvas de 800 px vaut 9° d'orbite appliqués APRÈS le recadrage, ce qui à
+   * l'écran ressemble beaucoup à « le double-clic n'a pas marché ».
+   *
+   * `enableDamping = false` puis `update()` applique le reliquat ET le remet à
+   * zéro (OrbitControls.js:396-403). L'appelant réarme l'amortissement après
+   * avoir écrit sa pose. Pas d'API plus propre : la classe Controls de r170
+   * n'expose que connect/disconnect/dispose/update, il n'y a pas de stop(), et
+   * toucher `_sphericalDelta` serait s'accrocher à un champ privé.
+   */
+  function flushDamping(): void {
+    controls.enableDamping = false
+    controls.update()
+  }
+
+  /**
    * Le bouton de réinitialisation et le double-clic. Il rend TOUJOURS une vue :
    * c'est la seule sortie d'une orbite partie dans un mur, et un no-op y laisse
    * l'utilisateur devant un écran noir sans autre issue que F5.
@@ -1008,12 +1030,14 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   function resetView(): void {
     if (lastFrame) frameCamera(lastFrame.vrm, lastFrame.h)
     else {
+      flushDamping()
       camera.position.set(...CAM_HOME_POS)
       controls.target.set(...CAM_HOME_TARGET)
       applyEnvLimits() // sans lastFrame : h = 1,6 m, le gabarit par défaut
       applyViewOffset()
       camera.updateProjectionMatrix()
       controls.update()
+      controls.enableDamping = true
     }
     viewChangeCb?.(null)
   }
@@ -1698,6 +1722,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       advance > 0
         ? Math.min(distance, Math.max(0.375 * h, Math.max(distance, envPullback() ?? 0) - advance))
         : distance
+    // AVANT d'écrire la pose : sinon le reliquat du geste précédent s'applique
+    // PAR-DESSUS le cadrage qu'on vient de poser (cf. flushDamping).
+    flushDamping()
     controls.target.set(headPos.x, headPos.y - 0.12, headPos.z)
     // Le `z` de la caméra est DEVANT la tête, pas à une abscisse absolue : sans
     // ça, un double-clic ne retrouverait plus le personnage dès qu'il s'écarte du
@@ -1711,6 +1738,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     applyViewOffset()
     camera.updateProjectionMatrix()
     controls.update()
+    controls.enableDamping = true // réarmé après l'écriture (cf. flushDamping)
     defaultFramed = true
   }
 
