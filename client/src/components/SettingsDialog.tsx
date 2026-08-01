@@ -3,9 +3,16 @@
 // les champs démarrent vides ('' = conserver la valeur configurée) et le bouton
 // « Retirer » envoie la sentinelle CLEAR_SECRET.
 import { useState } from 'react'
-import type { ModelMode, Settings, VisionMode } from '../../../shared/types'
+import type {
+  ModelMode,
+  RestorePreview,
+  RestoreResult,
+  RestoreWarning,
+  Settings,
+  VisionMode,
+} from '../../../shared/types'
 import * as api from '../api'
-import { isPlural, useI18n, type Key, type Lang } from '../i18n'
+import { isPlural, localeOf, useI18n, type Key, type Lang } from '../i18n'
 import {
   THEMES,
   THEME_DOTS,
@@ -181,6 +188,190 @@ function Seg<T extends string>({
   )
 }
 
+// Les avertissements arrivent du serveur en CODES : les phrases, elles, sont
+// écrites dans les deux langues ici (shared/types.ts ne porte aucun texte).
+const WARNING_LABELS: Record<RestoreWarning, Key> = {
+  configReplaced: 'restoreWarnConfig',
+  passwordChanges: 'restoreWarnPassword',
+  noManifest: 'restoreWarnNoManifest',
+  emptyInstance: 'restoreWarnEmpty',
+}
+
+const STATUS_LABELS: Record<RestorePreview['characters'][number]['status'], Key> = {
+  added: 'restoreStatusAdded',
+  replaced: 'restoreStatusReplaced',
+  identical: 'restoreStatusIdentical',
+}
+
+/**
+ * RESTAURATION — deux temps, jamais un seul.
+ *
+ * 1. L'archive choisie part au serveur, qui la lit, la vérifie et rend un
+ *    APERÇU : ce qu'elle contient, et le diff avec l'existant. Rien n'est écrit,
+ *    et le fichier reste déposé côté serveur sous un jeton.
+ * 2. Le bouton rouge ARME (premier clic, avec le résumé du diff), puis exécute
+ *    (second clic) — la grammaire des suppressions du reste de l'app.
+ *
+ * Après coup, le chemin du filet est affiché : c'est l'état d'AVANT, archivé
+ * juste avant l'écriture, et le seul retour en arrière possible.
+ */
+function RestoreBlock({ done, onDone }: { done: RestoreResult | null; onDone: (r: RestoreResult) => void }) {
+  const { lang, t } = useI18n()
+  const [preview, setPreview] = useState<RestorePreview | null>(null)
+  const [reading, setReading] = useState(false)
+  const [armed, setArmed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const plural = (n: number, one: Key, many: Key) => t(isPlural(lang, n) ? many : one, { n })
+
+  async function choose(file: File) {
+    setReading(true)
+    setError(null)
+    setPreview(null)
+    setArmed(false)
+    try {
+      setPreview(await api.previewRestore(file))
+    } catch (e) {
+      setError(api.errorMessage(e))
+    } finally {
+      setReading(false)
+    }
+  }
+
+  async function restore() {
+    if (!preview) return
+    // Premier clic : on arme, et le bouton devient rouge avec le résumé du diff.
+    if (!armed) {
+      setArmed(true)
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      onDone(await api.applyRestore(preview.stagedId))
+      setPreview(null)
+      setArmed(false)
+    } catch (e) {
+      setError(api.errorMessage(e))
+      setArmed(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Après la restauration, le bloc ne montre plus que le résultat et le filet :
+  // relancer une seconde restauration sur un client dont l'état est périmé n'a
+  // aucun sens — le rechargement est dans le pied de page du dialog.
+  if (done) {
+    return (
+      <div className="restore-done">
+        <p className="msg-ok">{t('restoreDone', { files: plural(done.files.total, 'restoreFilesOne', 'restoreFilesMany') })}</p>
+        <p className="hint">{t('restoreNet')}</p>
+        <p className="restore-net-path">{done.net.file}</p>
+        <p className="hint">{t('restoreNoRestart')}</p>
+        {done.passwordChanged && <p className="warn-text">{t('restorePasswordChanged')}</p>}
+      </div>
+    )
+  }
+
+  const items = preview
+    ? [
+        preview.counts.characters > 0 && plural(preview.counts.characters, 'restoreCharsOne', 'restoreCharsMany'),
+        preview.counts.chats > 0 && plural(preview.counts.chats, 'restoreChatsOne', 'restoreChatsMany'),
+        preview.counts.memory > 0 && plural(preview.counts.memory, 'restoreMemoryOne', 'restoreMemoryMany'),
+        preview.counts.portraits > 0 && plural(preview.counts.portraits, 'restorePortraitsOne', 'restorePortraitsMany'),
+        preview.counts.config && t('restoreConfigItem'),
+        preview.counts.ui && t('restoreUiItem'),
+      ].filter((x): x is string => typeof x === 'string')
+    : []
+
+  return (
+    <>
+      <div className="row">
+        <label className={`btn file-btn${reading || busy ? ' disabled' : ''}`}>
+          {reading ? t('restoreReading') : t('restoreChoose')}
+          {/* Le corps part en application/zip (exigé par la route) ; c'est le
+              serveur qui décide si ce zip est une sauvegarde Hanami. */}
+          <input
+            type="file"
+            accept=".zip,application/zip"
+            hidden
+            disabled={reading || busy}
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (f) choose(f).catch((err) => console.error('[restore]', err))
+            }}
+          />
+        </label>
+      </div>
+      <span className="hint">{t('restoreHint')}</span>
+      {error && <p className="msg-err">{error}</p>}
+
+      {preview && (
+        <>
+          <div className="restore-preview">
+            <p className="restore-head">
+              {preview.archive.createdAt
+                ? t('restoreFrom', { date: new Date(preview.archive.createdAt).toLocaleString(localeOf(lang)) })
+                : t('restoreFromUnknown')}
+            </p>
+            <p className="restore-items">{items.join(' · ')}</p>
+            <ul className="restore-diff">
+              <li className="add">{plural(preview.files.added, 'restoreAddedOne', 'restoreAddedMany')}</li>
+              <li className="rep">{plural(preview.files.replaced, 'restoreReplacedOne', 'restoreReplacedMany')}</li>
+              <li>{plural(preview.files.identical, 'restoreIdenticalOne', 'restoreIdenticalMany')}</li>
+            </ul>
+            {preview.characters.length > 0 && (
+              <ul className="restore-chars">
+                {preview.characters.map((c) => (
+                  <li key={c.id}>
+                    <span className={`restore-tag ${c.status}`}>{t(STATUS_LABELS[c.status])}</span>
+                    {c.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {preview.kept.characters.length > 0 && (
+              <p className="hint">{t('restoreKept', { names: preview.kept.characters.join(', ') })}</p>
+            )}
+            {preview.warnings.map((w) => (
+              <p key={w} className="warn-text">
+                {t(WARNING_LABELS[w])}
+              </p>
+            ))}
+          </div>
+
+          <div className="danger-zone">
+            <p className="warn-text">
+              {armed
+                ? t('restoreArmed', {
+                    added: plural(preview.files.added, 'restoreAddedOne', 'restoreAddedMany'),
+                    replaced: plural(preview.files.replaced, 'restoreReplacedOne', 'restoreReplacedMany'),
+                  })
+                : t('restoreWarn')}
+            </p>
+            <button
+              className="btn danger"
+              type="button"
+              disabled={busy}
+              onClick={() => restore().catch((e) => console.error('[restore]', e))}
+            >
+              {busy ? t('restoreBusy') : armed ? t('restoreConfirm') : t('restoreArm')}
+            </button>
+            {armed && !busy && (
+              <button className="btn small" type="button" style={{ marginLeft: 8 }} onClick={() => setArmed(false)}>
+                {t('cancel')}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
 const LANG_OPTIONS: readonly Lang[] = ['fr', 'en']
 const MODEL_MODE_OPTIONS: readonly ModelMode[] = ['full', 'simple']
 const VISION_MODE_OPTIONS: readonly VisionMode[] = ['auto', 'on', 'off']
@@ -266,6 +457,10 @@ export default function SettingsDialog({
   // Sauvegarde : le zip arrive par fetch (l'en-tête d'authentification est
   // obligatoire), il n'y a donc rien à afficher pendant l'attente sauf l'état du bouton.
   const [downloading, setDownloading] = useState(false)
+  // Restauration faite : le serveur porte maintenant les réglages de l'archive,
+  // et ce formulaire porte ceux d'AVANT. Enregistrer les réécrirait par-dessus
+  // ce qu'on vient de restaurer : le bouton disparaît au profit du rechargement.
+  const [restored, setRestored] = useState<RestoreResult | null>(null)
 
   // Indicateurs de présence des secrets — la réponse serveur les porte (type local api.SettingsView),
   // shared/types.ts reste intact, d'où la lecture défensive.
@@ -372,21 +567,39 @@ export default function SettingsDialog({
     }
   }
 
+  /**
+   * Après une restauration, la page repart de zéro : c'est le moyen le plus sûr
+   * de resynchroniser TOUT (réglages, personnages, conversations, préférences)
+   * sans réécrire un état périmé. Le jeton de session est jeté si le mot de
+   * passe de l'archive diffère — il ne vaut plus rien, le LoginGate prendra la
+   * main. Aucun redémarrage du serveur : il relit data/ à chaque requête.
+   */
+  function reloadAfterRestore() {
+    if (restored?.passwordChanged) api.setToken(null)
+    window.location.reload()
+  }
+
   return (
     <Dialog
       title={t('settings')}
-      onClose={onClose}
-      guardClose={() => !dirty || window.confirm(t('unsavedConfirm'))}
+      onClose={restored ? reloadAfterRestore : onClose}
+      guardClose={() => Boolean(restored) || !dirty || window.confirm(t('unsavedConfirm'))}
       footer={
-        <>
-          {saveError && <span className="msg-err">{saveError}</span>}
-          <button className="btn" onClick={onClose} disabled={saving}>
-            {t('cancel')}
+        restored ? (
+          <button className="btn primary" onClick={reloadAfterRestore}>
+            {t('restoreReload')}
           </button>
-          <button className="btn primary" onClick={() => save().catch((e) => console.error('[settings]', e))} disabled={saving}>
-            {saving ? t('saving') : t('save')}
-          </button>
-        </>
+        ) : (
+          <>
+            {saveError && <span className="msg-err">{saveError}</span>}
+            <button className="btn" onClick={onClose} disabled={saving}>
+              {t('cancel')}
+            </button>
+            <button className="btn primary" onClick={() => save().catch((e) => console.error('[settings]', e))} disabled={saving}>
+              {saving ? t('saving') : t('save')}
+            </button>
+          </>
+        )
       }
     >
       {/* Barre d'onglets : un simple filtre d'affichage devant un formulaire
@@ -864,6 +1077,12 @@ export default function SettingsDialog({
               </button>
             </div>
             <span className="hint">{t('backupHint')}</span>
+          </div>
+
+          {/* Le chemin inverse, juste en dessous : reprendre une archive. */}
+          <div className="field">
+            <label>{t('restoreTitle')}</label>
+            <RestoreBlock done={restored} onDone={setRestored} />
           </div>
         </>
       )}

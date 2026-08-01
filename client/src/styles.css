@@ -2489,6 +2489,110 @@ select {
   margin: 0 0 10px;
 }
 
+/* ── Restauration d'une sauvegarde (Réglages ▸ Données) ───────────────── */
+/* L'aperçu : sobre et dense, il doit se lire d'un coup d'œil AVANT d'armer
+   le bouton rouge. Aucune couleur d'alerte ici — la zone de danger, juste
+   en dessous, est la seule à porter le rouge. */
+
+.restore-preview {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  background: var(--accent-soft);
+}
+
+.restore-head {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.restore-items {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.restore-diff {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+/* Les deux seuls chiffres qui écrivent quelque chose ressortent. */
+.restore-diff .add,
+.restore-diff .rep {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.restore-chars {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+}
+
+.restore-chars li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.restore-tag {
+  flex: none;
+  min-width: 72px;
+  text-align: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.restore-tag.replaced {
+  border-color: rgba(255, 122, 144, 0.5);
+  color: var(--danger);
+}
+
+.restore-tag.added {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Le chemin du filet : à recopier ou à retrouver dans l'explorateur — il ne
+   doit ni déborder ni être tronqué (une coupure le rendrait inutilisable). */
+.restore-net-path {
+  margin: 2px 0 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.restore-done {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-top: 6px;
+}
+
+/* Un <label> ne se grise pas tout seul : sans ça, « Choisir une archive »
+   resterait cliquable pendant la lecture de la précédente. */
+.file-btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 /* ── Grille de personnages ────────────────────────────────────────────── */
 
 .char-grid {

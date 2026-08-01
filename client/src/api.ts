@@ -9,6 +9,8 @@ import type {
   ChatMeta,
   GreetingMode,
   MemoryFile,
+  RestorePreview,
+  RestoreResult,
   Settings,
   UiPrefs,
   UiPrefsPatch,
@@ -423,6 +425,34 @@ export async function downloadBackup(): Promise<{ blob: Blob; filename: string }
   }
   if (!res.ok) return throwFromResponse(res)
   return { blob: await res.blob(), filename: backupFilename(res.headers.get('content-disposition')) }
+}
+
+/**
+ * APERÇU d'une restauration : l'archive part telle quelle, le serveur la lit, la
+ * vérifie et rend le diff. AUCUNE écriture n'a lieu — et le `stagedId` rendu
+ * désigne CE fichier, déposé côté serveur : la confirmation n'aura donc rien à
+ * retéléverser, et portera sur exactement ce que cet aperçu décrit.
+ * Le type application/zip est exigé par la route (un type quelconque ouvrirait
+ * la porte aux requêtes cross-site « simples »).
+ */
+export async function previewRestore(file: Blob): Promise<RestorePreview> {
+  let res: Response
+  try {
+    res = await fetch('/api/backup/restore/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/zip', ...authHeaders() },
+      body: file,
+    })
+  } catch {
+    throw new ApiError(t('serverUnreachable'), 0)
+  }
+  if (!res.ok) return throwFromResponse(res)
+  return (await res.json()) as RestorePreview
+}
+
+/** CONFIRMATION : le serveur pose le filet, puis écrit. Irréversible sans ce filet. */
+export function applyRestore(stagedId: string): Promise<RestoreResult> {
+  return req('POST', '/api/backup/restore', { stagedId })
 }
 
 // ── Assets ─────────────────────────────────────────────────────────────────

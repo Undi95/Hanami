@@ -358,6 +358,58 @@ const FR = {
   backupHint:
     'Un zip de data/ et des portraits — modèles 3D, fonds, décors et animations non inclus.',
 
+  // ── Restauration d'une sauvegarde ────────────────────────────────────────
+  // Deux temps, toujours dans cet ordre : l'aperçu (qui n'écrit rien) puis la
+  // confirmation armée. Les phrases disent ce qui sera REMPLACÉ, et surtout ce
+  // qui ne le sera pas — une restauration ne supprime jamais.
+  restoreTitle: 'Restaurer une sauvegarde',
+  restoreChoose: 'Choisir une archive .zip',
+  restoreReading: 'Lecture de l’archive…',
+  restoreHint:
+    'Un aperçu s’affiche avant toute écriture. Rien n’est supprimé : les personnages absents de l’archive sont conservés.',
+  restoreFrom: 'Sauvegarde du {date}',
+  restoreFromUnknown: 'Sauvegarde sans date',
+  restoreFilesOne: '{n} fichier',
+  restoreFilesMany: '{n} fichiers',
+  restoreCharsOne: '{n} personnage',
+  restoreCharsMany: '{n} personnages',
+  restoreChatsOne: '{n} conversation',
+  restoreChatsMany: '{n} conversations',
+  restoreMemoryOne: '{n} fichier mémoire',
+  restoreMemoryMany: '{n} fichiers mémoire',
+  restorePortraitsOne: '{n} portrait',
+  restorePortraitsMany: '{n} portraits',
+  restoreConfigItem: 'les réglages',
+  restoreUiItem: 'les préférences d’interface',
+  restoreAddedOne: '{n} fichier ajouté',
+  restoreAddedMany: '{n} fichiers ajoutés',
+  restoreReplacedOne: '{n} fichier remplacé',
+  restoreReplacedMany: '{n} fichiers remplacés',
+  restoreIdenticalOne: '{n} fichier déjà identique',
+  restoreIdenticalMany: '{n} fichiers déjà identiques',
+  restoreStatusAdded: 'ajouté',
+  restoreStatusReplaced: 'remplacé',
+  restoreStatusIdentical: 'inchangé',
+  restoreKept: 'Conservés tels quels (absents de l’archive) : {names}',
+  restoreWarnConfig:
+    'data/config.json sera remplacé : backend, clé API et mot de passe d’accès seront ceux de la sauvegarde.',
+  restoreWarnPassword:
+    'Le mot de passe d’accès de la sauvegarde est différent : toutes les sessions tomberont, il faudra se reconnecter avec CE mot de passe.',
+  restoreWarnNoManifest:
+    'Archive faite par une version d’Hanami antérieure au manifeste — reconnue à sa structure.',
+  restoreWarnEmpty: 'Cette installation est vide : la restauration ne remplacera rien.',
+  restoreArm: 'Restaurer…',
+  restoreConfirm: 'Confirmer la restauration',
+  restoreWarn:
+    'La restauration écrase les fichiers que l’archive apporte. L’état actuel sera archivé juste avant, dans backups/.',
+  restoreArmed: 'Confirmer : {added} et {replaced}. Cliquez une seconde fois pour écrire.',
+  restoreBusy: 'Restauration…',
+  restoreDone: 'Restauration faite — {files}.',
+  restoreNet: 'L’état d’avant est archivé ici (jamais supprimé automatiquement) :',
+  restoreNoRestart: 'Aucun redémarrage du serveur n’est nécessaire — rechargez simplement la page.',
+  restorePasswordChanged: 'Le mot de passe d’accès a changé : reconnectez-vous après le rechargement.',
+  restoreReload: 'Recharger Hanami',
+
   // ── Import SillyTavern ───────────────────────────────────────────────────
   importFromSt: 'Importer depuis SillyTavern',
   cardSection: 'Carte de personnage (PNG ou .json)',
@@ -727,6 +779,54 @@ const EN: Record<Key, string> = {
   backupDownloading: 'Preparing…',
   backupHint:
     'A zip of data/ and the portraits — 3D models, backgrounds, environments and animations not included.',
+
+  // ── Restoring a backup ───────────────────────────────────────────────────
+  restoreTitle: 'Restore a backup',
+  restoreChoose: 'Choose a .zip archive',
+  restoreReading: 'Reading the archive…',
+  restoreHint:
+    'A preview is shown before anything is written. Nothing is deleted: characters missing from the archive are kept.',
+  restoreFrom: 'Backup from {date}',
+  restoreFromUnknown: 'Backup with no date',
+  restoreFilesOne: '{n} file',
+  restoreFilesMany: '{n} files',
+  restoreCharsOne: '{n} character',
+  restoreCharsMany: '{n} characters',
+  restoreChatsOne: '{n} conversation',
+  restoreChatsMany: '{n} conversations',
+  restoreMemoryOne: '{n} memory file',
+  restoreMemoryMany: '{n} memory files',
+  restorePortraitsOne: '{n} portrait',
+  restorePortraitsMany: '{n} portraits',
+  restoreConfigItem: 'the settings',
+  restoreUiItem: 'the interface preferences',
+  restoreAddedOne: '{n} file added',
+  restoreAddedMany: '{n} files added',
+  restoreReplacedOne: '{n} file replaced',
+  restoreReplacedMany: '{n} files replaced',
+  restoreIdenticalOne: '{n} file already identical',
+  restoreIdenticalMany: '{n} files already identical',
+  restoreStatusAdded: 'added',
+  restoreStatusReplaced: 'replaced',
+  restoreStatusIdentical: 'unchanged',
+  restoreKept: 'Kept as they are (missing from the archive): {names}',
+  restoreWarnConfig:
+    'data/config.json will be replaced: backend, API key and access password will be the ones from the backup.',
+  restoreWarnPassword:
+    'The backup carries a different access password: every session will drop, and you will have to sign in with THAT password.',
+  restoreWarnNoManifest: 'Archive made by a Hanami older than the manifest — recognised by its structure.',
+  restoreWarnEmpty: 'This installation is empty: the restore will not replace anything.',
+  restoreArm: 'Restore…',
+  restoreConfirm: 'Confirm the restore',
+  restoreWarn:
+    'Restoring overwrites the files the archive carries. The current state is archived right before, into backups/.',
+  restoreArmed: 'Confirm: {added} and {replaced}. Click a second time to write.',
+  restoreBusy: 'Restoring…',
+  restoreDone: 'Restore done — {files}.',
+  restoreNet: 'The previous state is archived here (never removed automatically):',
+  restoreNoRestart: 'No server restart needed — just reload the page.',
+  restorePasswordChanged: 'The access password changed: sign in again after reloading.',
+  restoreReload: 'Reload Hanami',
 
   // ── SillyTavern import ───────────────────────────────────────────────────
   importFromSt: 'Import from SillyTavern',
