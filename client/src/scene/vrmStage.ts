@@ -57,7 +57,7 @@ import { createGaze } from './gaze'
 import { createHandRelax } from './handPoses'
 import type { HandRelax } from './handPoses'
 import { fetchSceneMap } from './sceneMap'
-import type { SceneMap } from './sceneMap'
+import type { SceneMap, Seat } from './sceneMap'
 import { mergeEnvironment } from './envMerge'
 
 // Pose de repos (anti T-pose : les VRM chargent bras en croix) — rotation Z par os.
@@ -1068,14 +1068,31 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     if (!onEnv || !sceneMap) return
     const hit = onEnv.point
     // Une ASSISE visée ? La nappe à hauteur du point cliqué : il va s'y asseoir.
+    // PLUSIEURS peuvent contenir le point : une chaise glissée sous son pupitre
+    // n'est qu'à 0,267 m de son plateau, moins que la fenêtre de 0,30 m. On
+    // retient alors celle dont l'altitude est la PLUS PROCHE du point touché, et
+    // non la première du tableau — où les pupitres précèdent les chaises, si
+    // bien que cliquer le tiers avant d'une chaise faisait grimper le
+    // personnage SUR LE PLATEAU. Mesuré sur les nappes échantillonnées à 2 cm :
+    // 13,6 % des points de la classe, 12,5 % du loft et 2,4 % de la chambre
+    // désignaient une autre assise ; par altitude la plus proche, 0 % partout.
+    let seatHit: Seat | null = null
+    let seatDy = Infinity
     for (const seat of sceneMap.seats) {
-      if (Math.abs(hit.y - seat.y) > 0.3) continue
+      const dy = Math.abs(hit.y - seat.y)
+      // Même fenêtre qu'avant (0,30 m) ; à égalité, la première du tableau reste
+      // choisie — on ne départage que ce qui était arbitraire.
+      if (dy > 0.3 || dy >= seatDy) continue
       const b = seat.bounds
       const inSheet = b
         ? hit.x >= b[0] - 0.08 && hit.x <= b[2] + 0.08 && hit.z >= b[1] - 0.08 && hit.z <= b[3] + 0.08
         : Math.hypot(hit.x - seat.center[0], hit.z - seat.center[1]) < 0.45
       if (!inSheet) continue
-      wander.goSit(seat)
+      seatHit = seat
+      seatDy = dy
+    }
+    if (seatHit) {
+      wander.goSit(seatHit)
       return
     }
     // Sinon, le SOL — seulement si le point cliqué en est un (praticable et à
@@ -1658,6 +1675,29 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const desired = envFrameDist ?? headPos.y * 1.4
     const distance = Math.min(2.5 * h, Math.max(0.375 * h, desired))
     frameDist = distance // AVANT applyEnvLimits : c'est le plancher du clamp de recul
+    // Recul EFFECTIF. Le cadrage par défaut se pose sur l'axe +Z de la tête sans
+    // aucun test de dégagement : en scène vivante, où il suit le personnage
+    // (`headPos.z` plus bas), il finit derrière le mur du fond dès que celui-ci a
+    // avancé. Mesuré sur cozy-loft-room : cadrage à 1,89 m contre 2,20 m de
+    // dégagement mesuré sur l'axe +Z et un mur à z = 2,415 — au-delà du mur dès
+    // z > 0,31 m, sur une bande praticable qui va jusqu'à z = 2,3 m. Le
+    // double-clic et le bouton rendaient alors un écran noir, donc « rien ».
+    //
+    // La règle : la caméra ne recule jamais, en z, PLUS LOIN que là où le cadrage
+    // du point d'accueil l'avait posée — un recul qui, lui, a toujours été jugé
+    // bon. Le dégagement mesuré de la pièce (envPullback) peut relever ce
+    // plafond, jamais l'abaisser : c'est déjà la doctrine d'applyEnvLimits, qui
+    // ne descend pas maxDistance sous frameDist.
+    //
+    // `advance` est lu sur avatarGroup (le déplacement du personnage dans la
+    // pièce, nul au point d'accueil), pas sur la tête (dont la stance d'idle
+    // avance de quelques millimètres) : à l'accueil, sans carte et scène vivante
+    // éteinte, `framed` vaut `distance` — comme aujourd'hui, à l'octet près.
+    const advance = interactive ? Math.max(0, avatarGroup.position.z) : 0
+    const framed =
+      advance > 0
+        ? Math.min(distance, Math.max(0.375 * h, Math.max(distance, envPullback() ?? 0) - advance))
+        : distance
     controls.target.set(headPos.x, headPos.y - 0.12, headPos.z)
     // Le `z` de la caméra est DEVANT la tête, pas à une abscisse absolue : sans
     // ça, un double-clic ne retrouverait plus le personnage dès qu'il s'écarte du
@@ -1665,7 +1705,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // ne vaut pas exactement 0 (la stance d'idle.vrma avance la tête de quelques
     // millimètres), et l'écrire sans garde changerait la distance de cadrage par
     // défaut de TOUS les modèles, scène vivante éteinte comprise.
-    camera.position.set(headPos.x, controls.target.y, (interactive ? headPos.z : 0) + distance)
+    camera.position.set(headPos.x, controls.target.y, (interactive ? headPos.z : 0) + framed)
     controls.minDistance = 0.3 * h
     applyEnvLimits(h)
     applyViewOffset()
