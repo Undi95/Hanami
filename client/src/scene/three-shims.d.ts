@@ -102,6 +102,14 @@ declare module 'three' {
     setFromUnitVectors(from: Vector3, to: Vector3): this
   }
 
+  export class Matrix4 {
+    copy(m: Matrix4): this
+    invert(): this
+    multiply(m: Matrix4): this
+    multiplyMatrices(a: Matrix4, b: Matrix4): this
+    determinant(): number
+  }
+
   export class Object3D {
     name: string
     position: Vector3
@@ -114,6 +122,12 @@ declare module 'three' {
     visible: boolean
     parent: Object3D | null
     children: Object3D[]
+    matrixWorld: Matrix4
+    // Les deux verrous du GEL des décors (cf. envMerge) : sans recomposition
+    // locale par image, et sans descente du parcours de scene.updateMatrixWorld
+    // dans la branche (three r144+).
+    matrixAutoUpdate: boolean
+    matrixWorldAutoUpdate: boolean
     add(...objects: Object3D[]): this
     remove(...objects: Object3D[]): this
     traverse(callback: (object: Object3D) => void): void
@@ -184,6 +198,8 @@ declare module 'three' {
     dispose(): void
   }
   export class BufferGeometry {
+    clone(): this
+    applyMatrix4(matrix: Matrix4): this
     dispose(): void
   }
   export class Mesh extends Object3D {
@@ -325,6 +341,17 @@ declare module 'three/examples/jsm/loaders/GLTFLoader.js' {
     ): void
     loadAsync(url: string, onProgress?: (event: ProgressEvent) => void): Promise<GLTF>
   }
+}
+
+declare module 'three/examples/jsm/utils/BufferGeometryUtils.js' {
+  import { BufferGeometry } from 'three'
+
+  /**
+   * Fusionne des géométries HOMOGÈNES (mêmes attributs, même indexation) en une
+   * seule ; null en cas d'échec — envMerge regroupe par signature précisément
+   * pour ne jamais lui présenter un lot hétérogène.
+   */
+  export function mergeGeometries(geometries: BufferGeometry[], useGroups?: boolean): BufferGeometry | null
 }
 
 declare module 'three/examples/jsm/controls/OrbitControls.js' {

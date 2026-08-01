@@ -58,6 +58,7 @@ import { createHandRelax } from './handPoses'
 import type { HandRelax } from './handPoses'
 import { fetchSceneMap } from './sceneMap'
 import type { SceneMap } from './sceneMap'
+import { mergeEnvironment } from './envMerge'
 
 // Pose de repos (anti T-pose : les VRM chargent bras en croix) — rotation Z par os.
 const REST_POSE_Z: ReadonlyArray<readonly [VRMHumanBoneName, number]> = [
@@ -122,16 +123,23 @@ interface EnvPlacement {
   exposure?: number // multiplicateur de luminosité des MATÉRIAUX du décor (cf. applyEnvMaterials)
   frameDistance?: number // distance du cadrage par défaut (m) voulue par CE décor (cf. frameCamera)
   /**
-   * Réparation d'albédo par NOM de matériau glTF : `{ "Floor": [r, g, b] }`,
-   * composantes LINÉAIRES 0..1 (la convention de baseColorFactor, pas du sRGB).
-   * C'est le remède au cas « asset abîmé » : rustic-bedroom a perdu ses textures
-   * à l'export Sketchfab et ses sols sont un baseColorFactor quasi noir (0,024
-   * de luminance) qu'aucune exposition ne peut rattraper — à la borne 4, le sol
-   * n'atteint que 0,096 pendant que le lit texturé brûle à 0,98. La valeur
-   * REMPLACE l'albédo (ce n'est pas un gain) ; l'exposition s'applique ensuite
-   * par-dessus, comme sur tout matériau. Nom inconnu du décor : sans effet.
+   * Réparations par NOM de matériau glTF. Forme courte `[r, g, b]` = albédo de
+   * remplacement, composantes LINÉAIRES 0..1 (la convention de baseColorFactor,
+   * pas du sRGB) ; forme longue `{ color?, transmission? }`.
+   * C'est le remède au cas « asset abîmé », deux fois mesuré :
+   * - rustic-bedroom a perdu ses textures à l'export Sketchfab et ses sols sont
+   *   un baseColorFactor quasi noir (0,024 de luminance) qu'aucune exposition ne
+   *   peut rattraper — à la borne 4, le sol n'atteint que 0,096 pendant que le
+   *   lit texturé brûle à 0,98. `color` REMPLACE l'albédo (ce n'est pas un
+   *   gain) ; l'exposition s'applique ensuite par-dessus, comme partout.
+   * - cozy-loft-room porte KHR_materials_transmission sur TROIS BOCAUX
+   *   décoratifs : three re-rend alors toute la scène opaque dans une passe
+   *   dédiée, à chaque image — mesuré, +112 appels de dessin et +0,8 ms de
+   *   rendu CPU pour l'effet de réfraction de 2 % du cadre. `transmission: 0`
+   *   rend les bocaux à leur simple verre teinté (l'alpha BLEND reste).
+   * Nom inconnu du décor : sans effet.
    */
-  materials?: Record<string, [number, number, number]>
+  materials?: Record<string, EnvMaterialRepair>
   /**
    * Panneaux de fond posés DERRIÈRE les ouvertures du décor (fenêtre sans
    * vitrage, fente de mur) : sans eux, le fond de page de l'appli se voit au
@@ -143,6 +151,12 @@ interface EnvPlacement {
    * autour de la verticale, 0 = le quad regarde +Z du décor.
    */
   backdrop?: EnvBackdrop[]
+}
+
+/** Une réparation de matériau (cf. EnvPlacement.materials). */
+interface EnvMaterialRepair {
+  color?: [number, number, number]
+  transmission?: number
 }
 
 /** Un panneau de fond (cf. EnvPlacement.backdrop). */
@@ -183,18 +197,28 @@ function parsePlacement(raw: unknown): EnvPlacement {
   // repli sur la distance automatique — jamais une erreur.
   const frameDistance = asNumberIn(o.frameDistance, 0.5, 8)
   if (frameDistance !== undefined) out.frameDistance = frameDistance
-  // Réparations d'albédo : validées ENTRÉE PAR ENTRÉE, comme les assises de la
-  // carte — une valeur abîmée est jetée, les autres réparent quand même. Un
+  // Réparations de matériaux : validées ENTRÉE PAR ENTRÉE, comme les assises de
+  // la carte — une valeur abîmée est jetée, les autres réparent quand même. Un
   // albédo vit dans [0, 1] par nature (une surface ne renvoie pas plus qu'elle
-  // ne reçoit) : c'est la borne, pas un goût.
+  // ne reçoit), une transmission aussi : ce sont les bornes, pas un goût.
   if (o.materials && typeof o.materials === 'object' && !Array.isArray(o.materials)) {
-    const materials: Record<string, [number, number, number]> = {}
+    const materials: Record<string, EnvMaterialRepair> = {}
     let any = false
     for (const [name, value] of Object.entries(o.materials as Record<string, unknown>)) {
-      if (!Array.isArray(value) || value.length !== 3) continue
-      const c = value.map((v) => asNumberIn(v, 0, 1))
-      if (!c.every((v): v is number => v !== undefined)) continue
-      materials[name] = [c[0], c[1], c[2]]
+      const repair: EnvMaterialRepair = {}
+      const long =
+        value && typeof value === 'object' && !Array.isArray(value)
+          ? (value as Record<string, unknown>)
+          : null
+      const colorRaw = Array.isArray(value) ? value : long?.color
+      if (Array.isArray(colorRaw) && colorRaw.length === 3) {
+        const c = colorRaw.map((v) => asNumberIn(v, 0, 1))
+        if (c.every((v): v is number => v !== undefined)) repair.color = [c[0], c[1], c[2]]
+      }
+      const transmission = long ? asNumberIn(long.transmission, 0, 1) : undefined
+      if (transmission !== undefined) repair.transmission = transmission
+      if (repair.color === undefined && repair.transmission === undefined) continue
+      materials[name] = repair
       any = true
     }
     if (any) out.materials = materials
@@ -314,6 +338,8 @@ interface ShadedMaterial {
   emissive?: Color
   map?: unknown
   emissiveMap?: unknown
+  /** MeshPhysicalMaterial seulement (KHR_materials_transmission) — cf. tunedClone. */
+  transmission?: number
 }
 
 /**
@@ -367,10 +393,16 @@ function tunedClone(
   // `name` passe par ShadedMaterial : comme `color`, la propriété existe à
   // l'exécution mais échappe au typage inféré du build JS de three.
   const repair = shaded.name !== undefined ? repairs?.[shaded.name] : undefined
-  if (repair && shaded.color) {
-    shaded.color.r = repair[0]
-    shaded.color.g = repair[1]
-    shaded.color.b = repair[2]
+  if (repair?.color && shaded.color) {
+    shaded.color.r = repair.color[0]
+    shaded.color.g = repair.color[1]
+    shaded.color.b = repair.color[2]
+  }
+  // Transmission : écrite AVANT toute compilation (le clone n'a jamais été
+  // rendu, aucun needsUpdate à poser). Seul un matériau qui la porte déjà est
+  // touché — sur un unlit, la clé est simplement sans objet.
+  if (repair?.transmission !== undefined && typeof shaded.transmission === 'number') {
+    shaded.transmission = repair.transmission
   }
   if (factor !== 1) {
     if (shaded.color) scaleColor(shaded.color, factor, !shaded.map)
@@ -1618,9 +1650,15 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // limites articulaires ne doit pas contaminer la pose suivante
     // (l'équivalent du clearIKJointLimitHistory d'Overte).
     jointLimits?.clearHistory()
+    // Dégel de la branche décor (le gel est posé par loadEnvironment après la
+    // fusion) : les remises à zéro ci-dessous doivent recomposer la matrice, et
+    // le prochain décor repart d'un groupe qui vit normalement.
+    envGroup.matrixAutoUpdate = true
+    envGroup.matrixWorldAutoUpdate = true
     envGroup.position.set(0, 0, 0)
     envGroup.rotation.set(0, 0, 0)
     envGroup.scale.setScalar(1)
+    envGroup.updateMatrixWorld(true)
     applyLightRegime()
     applyEnvLimits()
     // Le décor emportait peut-être sa distance de cadrage : si la caméra tenait
@@ -1700,6 +1738,19 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       envGroup.add(envRoot)
       fitEnvironment(envRoot, placement)
       addEnvBackdrops(envRoot, placement.backdrop)
+      // Fusion des opaques par matériau, puis GEL de toute la branche décor :
+      // matrices monde recalculées une dernière fois (le placement de
+      // fitEnvironment est final), et le parcours par image de
+      // scene.updateMatrixWorld s'arrête désormais À envGroup — geler envRoot
+      // seul ne suffirait pas, l'updateMatrix automatique d'envGroup relèverait
+      // matrixWorldNeedsUpdate à chaque image et le `force` en cascade
+      // redescendrait dans les centaines de nœuds du décor. Dégel symétrique
+      // dans unloadEnvironment. Tout ce bloc est synchrone : aucune image ne
+      // part entre l'ajout du décor et sa fusion.
+      mergeEnvironment(envRoot)
+      envGroup.updateMatrixWorld(true)
+      envGroup.matrixAutoUpdate = false
+      envGroup.matrixWorldAutoUpdate = false
       // APRÈS unloadEnvironment, qui remet la carte à null et ramène le
       // personnage chez lui : sinon la carte du nouveau décor serait effacée
       // aussitôt posée.
