@@ -2049,7 +2049,7 @@
       "osAnimes": 20,
       "doigtsAnimes": false,
       "amplitudeDoigtsDeg": 0,
-      "tailleOctets": 206448,
+      "tailleOctets": 167972,
       "hanchesFraction": {
         "min": 0.5408,
         "max": 0.541,
@@ -2058,8 +2058,9 @@
       },
       "assise": {
         "hanchesFraction": 0.541,
-        "raccordAWorldSitIdleCm": 11.6,
-        "verdict": "echoue"
+        "raccordAWorldSitIdleCm": 4,
+        "verdict": "passe",
+        "commentaire": "Re-mesuré après la greffe de jambes de 14a79eb (le clip a changé : 206448 → 167972 octets). Rig de la sonde (reference-2.vrm, hanches 0,9045 m) faute des archives du rig Overte : pire image contre la pose de référence du socle, 4,0 cm (rightHand) — dans la famille (les variantes 2-4 font 1,7-4,9 sur ce rig). L’ancien chiffre (11,6, echoue, rightToes, rig Overte) datait d’avant la retouche ; les jonctions moteur qui échouaient par lui (atterrissage 10,8, lever 10,8, retours de geste 10,7-10,8) mesurent désormais 3,9-6,3 cm."
       },
       "coutureBoucleDeg": 0,
       "raccordVitesse": {
