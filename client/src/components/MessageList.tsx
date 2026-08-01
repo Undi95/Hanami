@@ -304,7 +304,9 @@ export default function MessageList({
     switch (item.kind) {
       case 'msg': {
         const isUser = item.msg.role === 'user'
-        const text = isUser ? item.msg.content : stripEmotionTags(item.msg.content)
+        // `item.pending` : la réponse s'écrit encore, un tag d'émotion à moitié
+        // arrivé n'a rien à faire à l'écran (cf. stripEmotionTags).
+        const text = isUser ? item.msg.content : stripEmotionTags(item.msg.content, item.pending)
         const isEditing = ordinal !== null && editing === ordinal
         return (
           <div className={`msg ${isUser ? 'user' : 'assistant'}`}>
@@ -624,7 +626,7 @@ export function VnBox({ items, characterName }: { items: FeedItem[]; characterNa
         ? stripEmotionTags(last.text)
         : isUser
           ? last.msg.content
-          : stripEmotionTags(last.msg.content)
+          : stripEmotionTags(last.msg.content, pending)
   // Heure de la réplique : un greeting n'en a pas (pas de message sauvegardé),
   // et pendant l'attente du premier delta la boîte ne montre que les points.
   const ts = last !== null && last.kind === 'msg' && !(pending && !text) ? fmtTime(last.msg.ts, lang) : ''

@@ -11,9 +11,27 @@ export function extractEmotion(text: string): Emotion | null {
   return m ? (m[1].toLowerCase() as Emotion) : null
 }
 
-/** Retire TOUS les tags d'émotion pour l'affichage (le texte stocké reste intégral). */
-export function stripEmotionTags(text: string): string {
-  return text.replace(ALL_TAGS, '').replace(/^[ \t]+/, '')
+/**
+ * Tag ENCORE INCOMPLET d'une réponse en cours d'écriture : « [ », « [ha »,
+ * « [ happ ». Le flux SSE livre le tag en plusieurs morceaux — « [ » + « happy »
+ * + « ] » est la découpe habituelle d'un backend local — et un tag incomplet
+ * n'est reconnaissable par aucune des expressions ci-dessus : la bulle affichait
+ * donc « [ » puis « [happy » pendant 25 à 150 ms avant que le tag ne devienne
+ * retirable.
+ * ANCRÉ EN TÊTE et sur le message ENTIER : tant que la réponse n'est QUE ce
+ * début de tag, il n'y a rien d'autre à montrer. Un crochet ailleurs dans le
+ * texte reste un crochet ordinaire.
+ */
+const PARTIAL_TAG = /^\[\s*[a-z]*\s*$/i
+
+/**
+ * Retire TOUS les tags d'émotion pour l'affichage (le texte stocké reste intégral).
+ * `streaming` : la réponse s'écrit encore — un tag incomplet est masqué le temps
+ * qu'il s'achève (la bulle garde ses points d'attente au lieu de clignoter).
+ */
+export function stripEmotionTags(text: string, streaming = false): string {
+  const clean = text.replace(ALL_TAGS, '').replace(/^[ \t]+/, '')
+  return streaming && PARTIAL_TAG.test(clean) ? '' : clean
 }
 
 // ── Repli du mode simple ───────────────────────────────────────────────────
