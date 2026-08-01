@@ -115,8 +115,19 @@ interface EnvPlacement {
   scale?: number // échelle explicite — DÉSACTIVE l'ajustement automatique
   rotationY?: number // degrés autour de la verticale
   spawn?: [number, number, number] // point du décor où poser le personnage (mètres, y depuis le sol)
-  exposure?: number // multiplicateur de luminosité des MATÉRIAUX du décor (cf. applyEnvExposure)
+  exposure?: number // multiplicateur de luminosité des MATÉRIAUX du décor (cf. applyEnvMaterials)
   frameDistance?: number // distance du cadrage par défaut (m) voulue par CE décor (cf. frameCamera)
+  /**
+   * Réparation d'albédo par NOM de matériau glTF : `{ "Floor": [r, g, b] }`,
+   * composantes LINÉAIRES 0..1 (la convention de baseColorFactor, pas du sRGB).
+   * C'est le remède au cas « asset abîmé » : rustic-bedroom a perdu ses textures
+   * à l'export Sketchfab et ses sols sont un baseColorFactor quasi noir (0,024
+   * de luminance) qu'aucune exposition ne peut rattraper — à la borne 4, le sol
+   * n'atteint que 0,096 pendant que le lit texturé brûle à 0,98. La valeur
+   * REMPLACE l'albédo (ce n'est pas un gain) ; l'exposition s'applique ensuite
+   * par-dessus, comme sur tout matériau. Nom inconnu du décor : sans effet.
+   */
+  materials?: Record<string, [number, number, number]>
 }
 
 /** Nombre fini dans des bornes larges — on ne refuse que l'absurde. */
@@ -146,6 +157,22 @@ function parsePlacement(raw: unknown): EnvPlacement {
   // repli sur la distance automatique — jamais une erreur.
   const frameDistance = asNumberIn(o.frameDistance, 0.5, 8)
   if (frameDistance !== undefined) out.frameDistance = frameDistance
+  // Réparations d'albédo : validées ENTRÉE PAR ENTRÉE, comme les assises de la
+  // carte — une valeur abîmée est jetée, les autres réparent quand même. Un
+  // albédo vit dans [0, 1] par nature (une surface ne renvoie pas plus qu'elle
+  // ne reçoit) : c'est la borne, pas un goût.
+  if (o.materials && typeof o.materials === 'object' && !Array.isArray(o.materials)) {
+    const materials: Record<string, [number, number, number]> = {}
+    let any = false
+    for (const [name, value] of Object.entries(o.materials as Record<string, unknown>)) {
+      if (!Array.isArray(value) || value.length !== 3) continue
+      const c = value.map((v) => asNumberIn(v, 0, 1))
+      if (!c.every((v): v is number => v !== undefined)) continue
+      materials[name] = [c[0], c[1], c[2]]
+      any = true
+    }
+    if (any) out.materials = materials
+  }
   if (Array.isArray(o.spawn) && o.spawn.length === 3) {
     const t = o.spawn.map((n) => asNumberIn(n, -1000, 1000))
     if (t.every((n): n is number => n !== undefined)) out.spawn = [t[0], t[1], t[2]]
@@ -194,6 +221,7 @@ function compressionError(e: unknown): Error | null {
  * dans l'esprit du ViewOffsetCamera plus bas.
  */
 interface ShadedMaterial {
+  name?: string
   color?: Color
   emissive?: Color
   map?: unknown
@@ -225,51 +253,76 @@ function scaleColor(color: Color, factor: number, clampToGamut: boolean): void {
 }
 
 /**
- * Clone exposé d'un matériau. Le CLONE est obligatoire : three mutualise
- * volontiers un matériau entre plusieurs meshes, et sans copie la couleur serait
- * multipliée une fois par mesh qui la partage — puis encore à chaque rechargement
- * du décor, l'effet se cumulant jusqu'au blanc.
+ * Clone réglé d'un matériau : réparation d'albédo (sidecar `materials`) PUIS
+ * exposition. La réparation d'abord — elle REMPLACE l'albédo abîmé de l'asset,
+ * et c'est ce matériau réparé que l'exposition éclaire ensuite, comme les
+ * autres. Composantes écrites telles quelles : la convention du sidecar est
+ * celle de baseColorFactor (linéaire), aucun passage par du sRGB.
+ * Le CLONE est obligatoire : three mutualise volontiers un matériau entre
+ * plusieurs meshes, et sans copie la couleur serait multipliée une fois par
+ * mesh qui la partage — puis encore à chaque rechargement du décor, l'effet se
+ * cumulant jusqu'au blanc.
  * Un seul clone par matériau d'ORIGINE (d'où le cache) : les meshes qui
  * partageaient un matériau continuent d'en partager un, le nombre de programmes
  * GPU et le regroupement des appels de dessin restent ceux d'avant.
  */
-function exposedClone(source: Material, factor: number, cache: Map<Material, Material>): Material {
+function tunedClone(
+  source: Material,
+  factor: number,
+  repairs: EnvPlacement['materials'],
+  cache: Map<Material, Material>,
+): Material {
   const known = cache.get(source)
   if (known) return known
   const clone = source.clone()
   const shaded = clone as unknown as ShadedMaterial
-  if (shaded.color) scaleColor(shaded.color, factor, !shaded.map)
-  // L'émissif suit le même facteur : sinon une lampe du décor garderait sa
-  // luminosité propre pendant que tout le reste change, et l'exposition
-  // déplacerait l'équilibre de la pièce au lieu de la rendre plus lisible.
-  // Nul sur les matériaux unlit (MeshBasicMaterial n'a pas d'émissif du tout).
-  if (shaded.emissive) scaleColor(shaded.emissive, factor, !shaded.emissiveMap)
+  // `name` passe par ShadedMaterial : comme `color`, la propriété existe à
+  // l'exécution mais échappe au typage inféré du build JS de three.
+  const repair = shaded.name !== undefined ? repairs?.[shaded.name] : undefined
+  if (repair && shaded.color) {
+    shaded.color.r = repair[0]
+    shaded.color.g = repair[1]
+    shaded.color.b = repair[2]
+  }
+  if (factor !== 1) {
+    if (shaded.color) scaleColor(shaded.color, factor, !shaded.map)
+    // L'émissif suit le même facteur : sinon une lampe du décor garderait sa
+    // luminosité propre pendant que tout le reste change, et l'exposition
+    // déplacerait l'équilibre de la pièce au lieu de la rendre plus lisible.
+    // Nul sur les matériaux unlit (MeshBasicMaterial n'a pas d'émissif du tout).
+    if (shaded.emissive) scaleColor(shaded.emissive, factor, !shaded.emissiveMap)
+  }
   cache.set(source, clone)
   return clone
 }
 
 /**
- * Applique l'exposition du sidecar aux MATÉRIAUX du décor, et non à l'intensité
- * des lumières comme avant : `anime-classroom.glb` et `rustic-bedroom.glb`
- * déclarent l'extension glTF `KHR_materials_unlit`, donc GLTFLoader les charge en
- * MeshBasicMaterial et ils IGNORENT totalement les lumières de la scène — le
- * réglage n'avait aucun effet sur deux décors sur trois, dont celui qui en a le
- * plus besoin. Multiplier la couleur marche à l'identique pour l'unlit et le PBR.
+ * Applique les réglages de matériaux du sidecar au décor : réparations
+ * d'albédo (`materials`) et exposition (`exposure`) — aux MATÉRIAUX, et non à
+ * l'intensité des lumières comme avant : `anime-classroom.glb` et
+ * `rustic-bedroom.glb` déclarent l'extension glTF `KHR_materials_unlit`, donc
+ * GLTFLoader les charge en MeshBasicMaterial et ils IGNORENT totalement les
+ * lumières de la scène — le réglage n'avait aucun effet sur deux décors sur
+ * trois, dont celui qui en a le plus besoin. Multiplier la couleur marche à
+ * l'identique pour l'unlit et le PBR.
  * Pas de `renderer.toneMapping` / `toneMappingExposure` : ils toucheraient tout le
  * rendu, avatar compris, y compris quand aucun décor n'est chargé.
- * Facteur 1 (le cas de très loin le plus courant — sidecar absent) : on ne touche
- * à RIEN, pas même un clone, donc rendu strictement identique à avant.
+ * Sidecar muet (exposition 1, aucune réparation — le cas de très loin le plus
+ * courant) : on ne touche à RIEN, pas même un clone, donc rendu strictement
+ * identique à avant.
  */
-function applyEnvExposure(root: Object3D, factor: number): void {
-  if (factor === 1) return
+function applyEnvMaterials(root: Object3D, placement: EnvPlacement): void {
+  const factor = placement.exposure ?? 1
+  const repairs = placement.materials
+  if (factor === 1 && !repairs) return
   const cache = new Map<Material, Material>()
   root.traverse((node) => {
     const mesh = node as Mesh
     const material = mesh.material
     if (!material) return // un Object3D quelconque (nœud de transformation, os…)
     mesh.material = Array.isArray(material)
-      ? material.map((one) => exposedClone(one, factor, cache))
-      : exposedClone(material, factor, cache)
+      ? material.map((one) => tunedClone(one, factor, repairs, cache))
+      : tunedClone(material, factor, repairs, cache)
   })
 }
 
@@ -1440,7 +1493,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    * pièce, il « décollerait » du fond. C'est le seul rôle qui leur reste.
    *
    * En revanche l'exposition du sidecar n'y touche PLUS (elle est passée sur les
-   * matériaux du décor, cf. applyEnvExposure), pour deux raisons :
+   * matériaux du décor, cf. applyEnvMaterials), pour deux raisons :
    * 1. elle décrit la clarté des TEXTURES DE LA PIÈCE ; en faire dépendre
    *    l'éclairage du personnage est une confusion de genres — sur les deux décors
    *    unlit, cela n'éclaircissait que l'avatar, jamais le décor visé ;
@@ -1553,9 +1606,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       }
       unloadEnvironment()
       envRoot = gltf.scene
-      // Exposition AVANT l'ajout à la scène : les matériaux clonés sont en place
-      // dès la première image, jamais un éclair à la couleur d'origine.
-      applyEnvExposure(envRoot, placement.exposure ?? 1)
+      // Réglages de matériaux AVANT l'ajout à la scène : les clones sont en
+      // place dès la première image, jamais un éclair à la couleur d'origine.
+      applyEnvMaterials(envRoot, placement)
       envGroup.add(envRoot)
       fitEnvironment(envRoot, placement)
       // APRÈS unloadEnvironment, qui remet la carte à null et ramène le
