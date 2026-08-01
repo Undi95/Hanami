@@ -1252,12 +1252,24 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     return action
   }
 
-  /** Une variante au hasard parmi celles réellement chargées. */
-  function pickAction(urls: readonly string[] | undefined): AnimationAction | null {
+  /**
+   * Une variante au hasard parmi celles réellement chargées. `avoid` : la
+   * variante qui vient d'être jouée pour ce rôle — écartée du tirage tant qu'il
+   * en reste une autre. Sans elle, un tirage uniforme rejoue le clip précédent
+   * une fois sur `1/n` : 48 % pour un rôle à deux variantes (`angry`), 24 % pour
+   * `happy` à quatre (mesuré sur 1 000 tirages) — et c'est ce qui se lit comme
+   * un tic, pas comme un geste. Un rôle à une seule variante n'a pas le choix :
+   * `avoid` est alors sans effet.
+   */
+  function pickAction(
+    urls: readonly string[] | undefined,
+    avoid: AnimationAction | null = null,
+  ): AnimationAction | null {
     const ready = (urls ?? [])
       .map((url) => actions.get(url))
       .filter((a): a is AnimationAction => a !== undefined)
-    return ready.length > 0 ? pickOne(ready) : null
+    const pool = avoid !== null && ready.length > 1 ? ready.filter((a) => a !== avoid) : ready
+    return pool.length > 0 ? pickOne(pool) : null
   }
 
   /** Poids effectif d'une action, et livre tenu à jour. */
@@ -1521,6 +1533,16 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     fadeTo(action, fadeIn)
   }
 
+  /**
+   * Dernière variante jouée, PAR RÔLE — la mémoire de l'anti-répétition. Par
+   * émotion et non globale : `happy` puis `sad` puis `happy` ne doit pas pouvoir
+   * rejouer le même applaudissement, alors que le `sad` intercalé aurait effacé
+   * une mémoire unique. Les actions appartiennent au mixer courant : la table est
+   * vidée avec lui (disposeAnimations).
+   */
+  const lastGesture = new Map<Emotion, AnimationAction>()
+  let lastReaction: AnimationAction | null = null
+
   /** Geste d'émotion : joué UNE fois, variante tirée à chaque déclenchement. */
   function playGesture(emotion: Emotion): void {
     if (!mixer) return
@@ -1531,8 +1553,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // Le VISAGE, lui, continue de s'appliquer — setEmotion écrit l'expression
     // avant d'arriver ici, et c'est ce qui porte l'émotion.
     if (gaitAction || onceThen) return
-    const action = pickAction(catalog?.gestures.get(emotion))
+    const action = pickAction(catalog?.gestures.get(emotion), lastGesture.get(emotion) ?? null)
     if (!action) return // aucun fichier pour cette émotion : le visage suffit
+    lastGesture.set(emotion, action)
     action.reset()
     action.setLoop(LoopOnce, 1)
     // clampWhenFinished est INDISPENSABLE, et le raisonnement inverse (« le fondu
@@ -1560,8 +1583,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
    */
   function playReaction(): void {
     if (!mixer || gaitAction || onceThen) return
-    const action = pickAction(catalog?.reactions)
+    const action = pickAction(catalog?.reactions, lastReaction)
     if (!action) return
+    lastReaction = action
     action.reset()
     action.setLoop(LoopOnce, 1)
     action.clampWhenFinished = true
@@ -1578,6 +1602,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     }
     mixer = null
     actions.clear()
+    // Les variantes mémorisées par l'anti-répétition appartenaient à CE mixer.
+    lastGesture.clear()
+    lastReaction = null
     idleAction = null
     talkingAction = null
     postureAction = null
