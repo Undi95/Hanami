@@ -113,6 +113,37 @@ const ENV_MAX_EXPOSURE = 4
 const CAM_WALL_MARGIN = 0.3
 const CAM_ROSE_FRONT = [14, 15, 0, 1, 2] as const
 
+// Marge laissée devant le premier obstacle par la SONDE DE CADRAGE
+// (cf. reculDegage) : l'objectif se pose à `obstacle − marge`, jamais dessus.
+// 0,30 m, comme CAM_WALL_MARGIN, mais ce n'est PAS la même grandeur et les deux
+// ne doivent pas fusionner : celle-là compense la résolution de la grille de la
+// rose (une mesure au pas de cellule), celle-ci est un recul physique — assez
+// pour que l'obstacle reste DERRIÈRE le plan de l'objectif, et non dans le cadre.
+const CAM_PROBE_MARGIN = 0.3
+// Rayon de la BULLE de l'objectif. Un objectif n'est pas un point : sonder le
+// dégagement par un rayon unique est un tirage à pile ou face dès qu'une
+// surface affleure la hauteur d'œil, et c'est exactement le cas mesuré —
+// lowpoly-restaurant, dossiers de chaise à 1,030 m, objectif d'un personnage de
+// 1,39 m à 1,033 m : le rayon d'axe passait 3 MILLIMÈTRES au-dessus et
+// déclarait la voie libre sur 11 m, pendant que la moitié basse du cadre était
+// bouchée par un dossier à 35 cm de la lentille.
+// La valeur se lit dans la mesure (devtools/banc-cadrage.mjs --rayons=…) : sur
+// les 7 décors × 2 rigs, TOUT est inchangé jusqu'à 0,20 m inclus, sauf le cas
+// fautif qui bascule dès 0,02 m. 0,12 m est au milieu de cet intervalle — six
+// fois la marge du côté où il faut voir, presque le double du côté où il ne
+// faut rien changer.
+const CAM_PROBE_RADIUS = 0.12
+// La bulle, échantillonnée : l'axe, puis quatre jantes (bas, haut, gauche,
+// droite) en fractions du rayon. Cinq rayons contre un cylindre balayé exact —
+// cinq requêtes à 0,004 ms, une fois par cadrage, jamais dans le tick.
+const CAM_PROBE_RIM = [
+  [0, 0],
+  [0, -1],
+  [0, 1],
+  [-1, 0],
+  [1, 0],
+] as const
+
 // Caméra de CONSTRUCTION : la pose de départ, avant tout cadrage. Deux
 // constantes de module parce qu'elles servent à DEUX endroits — la création de
 // la scène et le repli de resetView, quand aucun modèle n'est cadré — et que
@@ -2081,17 +2112,29 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       advance > 0
         ? Math.min(distance, Math.max(0.375 * h, Math.max(distance, envPullback() ?? 0) - advance))
         : distance
+    // Hauteur de l'objectif, et abscisse d'où il recule. Le `z` de la caméra est
+    // DEVANT la tête, pas à une abscisse absolue : sans ça, un double-clic ne
+    // retrouverait plus le personnage dès qu'il s'écarte du point d'accueil. Le
+    // ternaire est nécessaire et non cosmétique — `headPos.z` ne vaut pas
+    // exactement 0 (la stance d'idle.vrma avance la tête de quelques
+    // millimètres), et l'écrire sans garde changerait la distance de cadrage par
+    // défaut de TOUS les modèles, scène vivante éteinte comprise.
+    const eyeY = headPos.y - 0.12
+    const baseZ = interactive ? headPos.z : 0
+    // Et le DERNIER mot sur le recul : le dégagement réel, sondé à la hauteur
+    // réelle de l'objectif (cf. reculDegage). Rien au-dessus n'a jamais regardé
+    // cette hauteur-là — ni la rose de la carte, mesurée à 1,30 m fixe, ni la
+    // formule, qui ne connaît que le modèle. Le plancher de plausibilité tient :
+    // un obstacle collé au personnage rapproche l'objectif jusqu'à 0,375 h et
+    // pas plus près, sinon un décor mal fichu rendrait un gros plan de narine.
+    const clearance = reculDegage(headPos.x, eyeY, baseZ)
+    const recul =
+      clearance === null ? framed : Math.min(framed, Math.max(0.375 * h, clearance - CAM_PROBE_MARGIN))
     // AVANT d'écrire la pose : sinon le reliquat du geste précédent s'applique
     // PAR-DESSUS le cadrage qu'on vient de poser (cf. flushDamping).
     flushDamping()
-    controls.target.set(headPos.x, headPos.y - 0.12, headPos.z)
-    // Le `z` de la caméra est DEVANT la tête, pas à une abscisse absolue : sans
-    // ça, un double-clic ne retrouverait plus le personnage dès qu'il s'écarte du
-    // point d'accueil. Le ternaire est nécessaire et non cosmétique — `headPos.z`
-    // ne vaut pas exactement 0 (la stance d'idle.vrma avance la tête de quelques
-    // millimètres), et l'écrire sans garde changerait la distance de cadrage par
-    // défaut de TOUS les modèles, scène vivante éteinte comprise.
-    camera.position.set(headPos.x, controls.target.y, (interactive ? headPos.z : 0) + framed)
+    controls.target.set(headPos.x, eyeY, headPos.z)
+    camera.position.set(headPos.x, eyeY, baseZ + recul)
     controls.minDistance = 0.3 * h
     applyEnvLimits(h)
     applyViewOffset()
@@ -2099,6 +2142,76 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     controls.update()
     controls.enableDamping = true // réarmé après l'écriture (cf. flushDamping)
     defaultFramed = true
+  }
+
+  // Sonde de cadrage : deux vecteurs de module, jamais réalloués (frameCamera
+  // passe à chaque chargement, à chaque double-clic et à chaque recadrage).
+  const probeOrigin = new Vector3()
+  const probeDir = new Vector3(0, 0, 1)
+
+  /**
+   * Dégagement RÉEL sur l'axe de recul, à la hauteur RÉELLE de l'objectif.
+   * Rend la distance du premier obstacle, ou `null` quand il n'y a rien à dire.
+   *
+   * POURQUOI ELLE EXISTE. Le cadrage par défaut pose l'objectif à la hauteur de
+   * la tête du modèle, moins 12 cm. Tout ce qui décidait du recul jusqu'ici
+   * ignorait cette hauteur :
+   * - la rose de la carte (`camera.clearance`) est sondée par l'analyse à une
+   *   hauteur d'œil FIXE de 1,30 m (cf. server/lib/envScene, EYE_HEIGHT) ;
+   * - la formule (`headPos.y * 1,4`) et le `frameDistance` du sidecar ne
+   *   connaissent que le modèle, ou que le décor, jamais les deux ensemble.
+   *
+   * Or la hauteur d'objectif VARIE de 20 % d'un modèle à l'autre : 1,243 m
+   * pour un personnage de 1,82 m, 1,033 m pour un de 1,39 m. Mesuré sur
+   * lowpoly-restaurant, dont les dossiers de chaise culminent à 1,030 m : à
+   * 1,243 m ils sont 21 cm sous l'objectif et le plan large du sidecar (3,20 m)
+   * est superbe ; à 1,033 m ils l'affleurent, et les mêmes 3,20 m posaient la
+   * lentille 35 cm DERRIÈRE un dossier — moitié basse du cadre d'accueil en
+   * masse noire. Ce n'est pas le `frameDistance` qui a tort, c'est le fait de
+   * n'avoir jamais regardé à la bonne hauteur.
+   *
+   * POURQUOI UNE BULLE ET PAS UN RAYON. Mesuré aussi : le rayon d'axe passait
+   * 3 mm AU-DESSUS du dossier et annonçait 11 m de dégagement. Un objectif n'est
+   * pas un point — il lui faut du vide autour, sans quoi ce qui l'effleure
+   * remplit le cadre. La bulle est balayée sur +Z ; sa taille et sa marge sont
+   * documentées avec leurs constantes.
+   *
+   * POURQUOI ICI, ET PAS DANS L'ANALYSE. Le serveur ne connaît pas le modèle :
+   * il faudrait qu'il sonde toutes les hauteurs, ou qu'il devine. Le CLIENT, lui,
+   * a les deux au moment du cadrage — la hauteur d'objectif qu'il vient de
+   * calculer, et l'arbre du décor (cf. scene/bvh) dont un rayon coûte 0,004 ms.
+   * Cinq rayons, une fois par cadrage : le tick n'est pas touché.
+   *
+   * CE QU'ELLE NE REMPLACE PAS. La rose garde le clamp du zoom arrière
+   * (`applyEnvLimits`), qui borne une ORBITE — l'utilisateur tourne autour du
+   * personnage, et un dégagement sondé sur le seul axe +Z ne dirait rien des
+   * quinze autres directions. La sonde ne parle que du CADRAGE PAR DÉFAUT, qui
+   * est toujours de face.
+   *
+   * CE QU'ELLE NE VOIT PAS, et pourquoi c'est sans danger : `envBvh.rest` — les
+   * Line/Points/Sprite et la géométrie que l'arbre refuse d'indexer — n'est pas
+   * interrogé. `viser` les interroge parce qu'un clic doit rencontrer tout ce
+   * que three rencontre ; un dégagement, non. Le seuil de `Raycaster.params.Line`
+   * vaut 1 mètre par défaut : les segments décoratifs de lowpoly-restaurant
+   * auraient arrêté la caméra à un mètre d'un trait sans épaisseur. Un obstacle
+   * manqué laisse le comportement d'avant, jamais moins.
+   *
+   * CYCLE DE VIE. `envBvh` n'existe qu'après le chargement du décor — mais
+   * frameCamera est rejoué à ce moment-là (loadEnvironment, même garde que
+   * reframeAfterMixer), et rejoué encore au déchargement. Sans arbre : `null`,
+   * et le cadrage est exactement celui d'avant, au millimètre.
+   */
+  function reculDegage(x: number, y: number, z: number): number | null {
+    if (!envBvh) return null
+    let first = Infinity
+    for (const [rx, ry] of CAM_PROBE_RIM) {
+      probeOrigin.set(x + rx * CAM_PROBE_RADIUS, y + ry * CAM_PROBE_RADIUS, z)
+      // `far = first` : chaque jante élague sur la meilleure déjà trouvée, le
+      // parcours de l'arbre s'arrête donc plus tôt à chaque rayon de plus.
+      const hit = raycastFirst(envBvh, probeOrigin, probeDir, estOpaqueAuClic, 0, first)
+      if (hit) first = hit.distance
+    }
+    return first === Infinity ? null : first
   }
 
   /**
