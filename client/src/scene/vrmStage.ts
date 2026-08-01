@@ -5,13 +5,17 @@ import {
   Box3,
   Clock,
   DirectionalLight,
+  DoubleSide,
   Group,
   HemisphereLight,
   LoopOnce,
   LoopRepeat,
+  Mesh,
+  MeshBasicMaterial,
   MOUSE,
   Object3D,
   PerspectiveCamera,
+  PlaneGeometry,
   Quaternion,
   Raycaster,
   Scene,
@@ -21,7 +25,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three'
-import type { AnimationAction, AnimationClip, Color, Material, Mesh } from 'three'
+import type { AnimationAction, AnimationClip, Color, Material } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
@@ -128,7 +132,29 @@ interface EnvPlacement {
    * par-dessus, comme sur tout matériau. Nom inconnu du décor : sans effet.
    */
   materials?: Record<string, [number, number, number]>
+  /**
+   * Panneaux de fond posés DERRIÈRE les ouvertures du décor (fenêtre sans
+   * vitrage, fente de mur) : sans eux, le fond de page de l'appli se voit au
+   * travers — 20,3 % du cadre par défaut du loft. Chaque panneau est un quad
+   * unlit de la couleur donnée (linéaire 0..1), décrit dans le REPÈRE BRUT du
+   * .glb — celui des outils d'inspection de l'asset — parce qu'il appartient au
+   * décor : changer ensuite l'échelle ou la rotation du sidecar le suit sans
+   * retouche, ce qu'un repère « scène » ne permettrait pas. `yawY` en degrés
+   * autour de la verticale, 0 = le quad regarde +Z du décor.
+   */
+  backdrop?: EnvBackdrop[]
 }
+
+/** Un panneau de fond (cf. EnvPlacement.backdrop). */
+interface EnvBackdrop {
+  color: [number, number, number]
+  center: [number, number, number]
+  size: [number, number]
+  yawY?: number
+}
+
+/** Nombre maximal de panneaux de fond lus — au-delà, c'est un autre outil qu'il faut. */
+const ENV_MAX_BACKDROPS = 8
 
 /** Nombre fini dans des bornes larges — on ne refuse que l'absurde. */
 function asNumberIn(value: unknown, min: number, max: number): number | undefined {
@@ -177,7 +203,69 @@ function parsePlacement(raw: unknown): EnvPlacement {
     const t = o.spawn.map((n) => asNumberIn(n, -1000, 1000))
     if (t.every((n): n is number => n !== undefined)) out.spawn = [t[0], t[1], t[2]]
   }
+  // Panneaux de fond : un objet seul est accepté comme liste d'un élément, et
+  // chaque entrée est validée SÉPARÉMENT — une entrée abîmée est jetée, les
+  // autres bouchent quand même leur trou. Les bornes sont celles du repère brut
+  // d'un asset (un décor exporté en millimètres a des coordonnées à 5 chiffres).
+  const rawBackdrops = Array.isArray(o.backdrop) ? o.backdrop : o.backdrop ? [o.backdrop] : []
+  const backdrops: EnvBackdrop[] = []
+  for (const entry of rawBackdrops.slice(0, ENV_MAX_BACKDROPS)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const b = entry as Record<string, unknown>
+    const color =
+      Array.isArray(b.color) && b.color.length === 3 ? b.color.map((v) => asNumberIn(v, 0, 1)) : []
+    const center =
+      Array.isArray(b.center) && b.center.length === 3
+        ? b.center.map((v) => asNumberIn(v, -100000, 100000))
+        : []
+    const size =
+      Array.isArray(b.size) && b.size.length === 2
+        ? b.size.map((v) => asNumberIn(v, 0.001, 100000))
+        : []
+    if (color.length !== 3 || !color.every((v): v is number => v !== undefined)) continue
+    if (center.length !== 3 || !center.every((v): v is number => v !== undefined)) continue
+    if (size.length !== 2 || !size.every((v): v is number => v !== undefined)) continue
+    const backdrop: EnvBackdrop = {
+      color: [color[0], color[1], color[2]],
+      center: [center[0], center[1], center[2]],
+      size: [size[0], size[1]],
+    }
+    const yawY = asNumberIn(b.yawY, -3600, 3600)
+    if (yawY !== undefined) backdrop.yawY = yawY
+    backdrops.push(backdrop)
+  }
+  if (backdrops.length > 0) out.backdrop = backdrops
   return out
+}
+
+/**
+ * Pose les panneaux de fond du sidecar derrière les ouvertures du décor.
+ * APRÈS fitEnvironment et applyEnvMaterials, et cet ordre porte du sens :
+ * - enfants d'envRoot ajoutés après la mesure, ils n'entrent ni dans la boîte
+ *   englobante (le calage au sol et envMetrics ne bougent pas), ni dans la
+ *   carte d'analyse (un mur plein à 0,5 m derrière la fenêtre, donc dehors) ;
+ * - jamais traversés par applyEnvMaterials : l'exposition ne les touche pas,
+ *   la couleur du sidecar est la couleur rendue, point.
+ * MeshBasicMaterial : unlit, comme un ciel — les régimes d'éclairage lui sont
+ * indifférents. DoubleSide : un yawY posé de dos reste un fond, pas un trou.
+ * Un clic qui passe par la fenêtre touche le panneau : hors grille de la
+ * carte, le personnage n'y va pas — même sort qu'un clic sur un mur.
+ */
+function addEnvBackdrops(root: Object3D, backdrops: readonly EnvBackdrop[] | undefined): void {
+  if (!backdrops) return
+  for (const b of backdrops) {
+    const material = new MeshBasicMaterial()
+    // Composantes écrites telles quelles : linéaires, comme baseColorFactor.
+    material.color.r = b.color[0]
+    material.color.g = b.color[1]
+    material.color.b = b.color[2]
+    material.side = DoubleSide
+    const quad = new Mesh(new PlaneGeometry(b.size[0], b.size[1]), material)
+    quad.position.set(b.center[0], b.center[1], b.center[2])
+    quad.rotation.y = (b.yawY ?? 0) * DEG2RAD
+    quad.name = 'env-backdrop'
+    root.add(quad)
+  }
 }
 
 /**
@@ -1611,6 +1699,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       applyEnvMaterials(envRoot, placement)
       envGroup.add(envRoot)
       fitEnvironment(envRoot, placement)
+      addEnvBackdrops(envRoot, placement.backdrop)
       // APRÈS unloadEnvironment, qui remet la carte à null et ramène le
       // personnage chez lui : sinon la carte du nouveau décor serait effacée
       // aussitôt posée.

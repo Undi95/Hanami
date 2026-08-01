@@ -183,12 +183,29 @@ declare module 'three' {
     clone(): this
     dispose(): void
   }
+  export class BufferGeometry {
+    dispose(): void
+  }
   export class Mesh extends Object3D {
     // Un mesh porte UN matériau, ou un par groupe de faces — l'exposition des
     // décors doit gérer les deux cas.
+    constructor(geometry?: BufferGeometry, material?: Material | Material[])
+    geometry: BufferGeometry
     material: Material | Material[]
   }
   export class SkinnedMesh extends Mesh {}
+
+  // ── Panneaux de fond des décors (cf. vrmStage/addEnvBackdrops) ────────────
+  export class PlaneGeometry extends BufferGeometry {
+    constructor(width?: number, height?: number)
+  }
+  export class MeshBasicMaterial extends Material {
+    constructor(parameters?: Record<string, unknown>)
+    color: Color
+    side: number
+  }
+  /** Faces visibles des deux côtés (Material.side). */
+  export const DoubleSide: number
 
   // ── Animation (.vrma) ──────────────────────────────────────────────────────
   // Les pistes ne sont JAMAIS construites ici : elles arrivent des .vrma via
