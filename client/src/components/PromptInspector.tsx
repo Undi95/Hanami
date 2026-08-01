@@ -1,6 +1,10 @@
 // Inspecteur de prompt : montre EXACTEMENT ce que Hanami envoie au backend.
 // Héberge aussi la compaction manuelle (façon /compact, instruction optionnelle)
 // et l'édition du résumé — le fil de messages, lui, reste toujours intégral.
+// L'onglet « Prompt système » ÉDITE le prompt du personnage : c'est ici qu'on
+// vient le lire, c'est donc ici qu'on doit pouvoir le corriger (avant, la seule
+// porte était Personnages → Modifier, et ce bloc en lecture seule ressemblait
+// à s'y méprendre aux deux onglets voisins, eux éditables).
 import { useEffect, useState } from 'react'
 import * as api from '../api'
 import { useI18n } from '../i18n'
@@ -34,6 +38,8 @@ export default function PromptInspector({
   const { t } = useI18n()
   const [data, setData] = useState<{
     systemText: string
+    characterPrompt: string
+    injected: string
     payload: object
     tokens: number
     contextSize: number
@@ -51,6 +57,11 @@ export default function PromptInspector({
   const [sceneDirty, setSceneDirty] = useState(false)
   const [savingScene, setSavingScene] = useState(false)
   const [sceneError, setSceneError] = useState<string | null>(null)
+  // Prompt du personnage : même mécanique de brouillon que le résumé et la scène.
+  const [promptDraft, setPromptDraft] = useState('')
+  const [promptDirty, setPromptDirty] = useState(false)
+  const [savingPrompt, setSavingPrompt] = useState(false)
+  const [promptError, setPromptError] = useState<string | null>(null)
 
   // Rechargé quand une compaction aboutit (le résumé change → payload différent),
   // et quand les notes de scène changent (leur bloc vit dans le prompt système).
@@ -73,13 +84,22 @@ export default function PromptInspector({
     if (!sceneDirty) setSceneDraft(sceneNotes)
   }, [sceneNotes, sceneDirty])
 
+  // Et pour le prompt du personnage : le brouillon suit l'aperçu tant qu'on n'y
+  // a pas touché (rechargement, changement de personnage, édition faite ailleurs).
+  useEffect(() => {
+    if (data && !promptDirty) setPromptDraft(data.characterPrompt)
+  }, [data, promptDirty])
+
   // Résumé vidé (compaction annulée) : l'onglet Résumé disparaît — ne pas
   // rester sur un onglet fantôme.
   useEffect(() => {
     if (tab === 'summary' && !summary) setTab('system')
   }, [tab, summary])
 
-  const current = data === null ? '' : tab === 'system' ? data.systemText : JSON.stringify(data.payload, null, 2)
+  // Copier rend ce qui est À L'ÉCRAN : dans l'onglet système, le brouillon en
+  // cours suivi des blocs ajoutés — pas la version enregistrée d'il y a dix secondes.
+  const current =
+    data === null ? '' : tab === 'system' ? promptDraft + data.injected : JSON.stringify(data.payload, null, 2)
 
   function copy() {
     navigator.clipboard
@@ -104,6 +124,26 @@ export default function PromptInspector({
     }
   }
 
+  /**
+   * Écrit le prompt du personnage (même route que Personnages → Modifier) puis
+   * recharge l'aperçu : le texte assemblé et la jauge de tokens suivent, et le
+   * PROCHAIN message part avec le nouveau prompt (buildPayload relit le
+   * personnage à chaque envoi — rien n'est figé dans la conversation).
+   */
+  async function savePrompt() {
+    setSavingPrompt(true)
+    setPromptError(null)
+    try {
+      await api.updateCharacter(characterId, { systemPrompt: promptDraft })
+      setPromptDirty(false)
+      setData(await api.getPromptPreview(characterId, chatId))
+    } catch (e) {
+      setPromptError(api.errorMessage(e))
+    } finally {
+      setSavingPrompt(false)
+    }
+  }
+
   async function saveScene() {
     setSavingScene(true)
     setSceneError(null)
@@ -124,13 +164,16 @@ export default function PromptInspector({
 
   const summaryDirty = draftDirty && summaryDraft !== summary
   const sceneNotesDirty = sceneDirty && sceneDraft !== sceneNotes
+  const promptNotesDirty = promptDirty && data !== null && promptDraft !== data.characterPrompt
 
   return (
     <Dialog
       title={t('promptInspectorTitle')}
       onClose={onClose}
       wide
-      guardClose={() => (!summaryDirty && !sceneNotesDirty) || window.confirm(t('unsavedConfirm'))}
+      guardClose={() =>
+        (!summaryDirty && !sceneNotesDirty && !promptNotesDirty) || window.confirm(t('unsavedConfirm'))
+      }
     >
       <p className="hint" style={{ marginTop: 0 }}>
         {t('promptInspectorNote')}
@@ -243,7 +286,46 @@ export default function PromptInspector({
                   {copied ? t('copied') : t('copy')}
                 </button>
               </div>
-              <pre className="code-block">{current}</pre>
+              {tab === 'system' ? (
+                <>
+                  {/* Le prompt du personnage : ÉDITABLE ici, là où on vient le lire. */}
+                  <p className="hint" style={{ marginTop: 0 }}>
+                    {t('characterPromptHint')}
+                  </p>
+                  <textarea
+                    className="prompt-edit"
+                    value={promptDraft}
+                    rows={14}
+                    aria-label={t('systemPromptTab')}
+                    spellCheck={false}
+                    style={{ width: '100%' }}
+                    onChange={(e) => {
+                      setPromptDirty(true)
+                      setPromptDraft(e.target.value)
+                    }}
+                  />
+                  <div className="row" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
+                    {promptError && <span className="msg-err">{promptError}</span>}
+                    <button
+                      className="btn small primary"
+                      disabled={savingPrompt || promptDraft === data.characterPrompt}
+                      onClick={() => savePrompt().catch((e) => console.error('[prompt]', e))}
+                    >
+                      {savingPrompt ? t('saving') : t('save')}
+                    </button>
+                  </div>
+                  {/* Ce que Hanami ajoute derrière : montré tel quel, jamais mélangé
+                      au champ du dessus — chaque bloc s'édite là où il vit. */}
+                  {data.injected !== '' && (
+                    <>
+                      <p className="hint">{t('injectedHint')}</p>
+                      <pre className="code-block">{data.injected}</pre>
+                    </>
+                  )}
+                </>
+              ) : (
+                <pre className="code-block">{current}</pre>
+              )}
             </>
           )}
         </>

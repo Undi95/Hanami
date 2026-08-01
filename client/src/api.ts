@@ -480,10 +480,24 @@ export function probeTts(url: string): Promise<TtsProbe> {
 
 // ── Inspecteur de prompt ───────────────────────────────────────────────────
 
+/**
+ * Aperçu du prochain envoi. `systemText` est le texte système COMPLET ;
+ * `characterPrompt` et `injected` en sont les deux morceaux (systemText =
+ * characterPrompt + injected), pour que l'inspecteur rende le prompt du
+ * personnage éditable sur place et laisse les blocs ajoutés par Hanami
+ * (mémoire, résumé, scène, heure) en lecture seule.
+ */
 export function getPromptPreview(
   characterId: string,
   chatId: string,
-): Promise<{ systemText: string; payload: object; tokens: number; contextSize: number }> {
+): Promise<{
+  systemText: string
+  characterPrompt: string
+  injected: string
+  payload: object
+  tokens: number
+  contextSize: number
+}> {
   return req(
     'GET',
     `/api/prompt-preview?characterId=${encodeURIComponent(characterId)}&chatId=${encodeURIComponent(chatId)}`,

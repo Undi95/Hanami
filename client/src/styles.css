@@ -2812,6 +2812,29 @@ select {
   margin: 0;
 }
 
+/* Prompt du personnage dans l'inspecteur : l'allure du bloc de code qu'il
+   remplace — c'est le même texte, à la même place — mais c'est un CHAMP, et ça
+   doit se voir : poignée de redimensionnement et bordure d'accent au focus. */
+.prompt-edit {
+  display: block;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 220px;
+}
+
+.prompt-edit:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
 /* ── Écran de connexion ───────────────────────────────────────────────── */
 
 .login-gate {

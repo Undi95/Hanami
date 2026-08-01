@@ -143,6 +143,12 @@ function timeBlock(lastMessageTs: string | null): string {
 /**
  * Construit le payload EXACT envoyé au backend (aussi renvoyé tel quel par
  * /api/prompt-preview, et réutilisé par le moteur de messages spontanés).
+ *
+ * Le texte système est rendu en DEUX morceaux en plus du tout :
+ * `characterPrompt` (le prompt du personnage, celui qui s'écrit et se corrige)
+ * et `injected` (ce que Hanami ajoute : mémoire, résumé, notes de scène,
+ * heure). L'inspecteur s'en sert pour rendre le premier ÉDITABLE sur place,
+ * sans avoir à deviner où finit l'un et où commence l'autre.
  */
 export function buildPayload(
   characterId: string,
@@ -151,20 +157,22 @@ export function buildPayload(
   // string = message (ou consigne) purement textuel ; tableau = message courant
   // accompagné d'images (content multimodal OpenAI).
   pendingUserContent?: string | ContentPart[],
-): { systemText: string; payload: BackendPayload } {
+): { systemText: string; characterPrompt: string; injected: string; payload: BackendPayload } {
   const character = getCharacter(characterId)
   if (!character) throw new Error(`Personnage introuvable : ${characterId}`)
-  let systemText = character.systemPrompt
-  if (settings.memoryEnabled) systemText += buildMemoryBlock(characterId, settings.modelMode === 'simple')
+  const characterPrompt = character.systemPrompt
+  let injected = ''
+  if (settings.memoryEnabled) injected += buildMemoryBlock(characterId, settings.modelMode === 'simple')
 
   const { meta, messages: history } = readChat(characterId, chatId)
   // Conversation compactée : le résumé (dans le system) remplace les messages qu'il couvre.
   const upto = meta.summary ? Math.min(meta.summaryUpto ?? 0, history.length) : 0
-  if (meta.summary) systemText += summaryBlock(meta.summary)
-  if (meta.sceneNotes) systemText += sceneNotesBlock(meta.sceneNotes)
+  if (meta.summary) injected += summaryBlock(meta.summary)
+  if (meta.sceneNotes) injected += sceneNotesBlock(meta.sceneNotes)
   if (settings.timeAwareness) {
-    systemText += timeBlock(history.length > 0 ? history[history.length - 1].ts : null)
+    injected += timeBlock(history.length > 0 ? history[history.length - 1].ts : null)
   }
+  const systemText = characterPrompt + injected
   const live = history.slice(upto)
   const recent = settings.maxHistoryMessages > 0 ? live.slice(-settings.maxHistoryMessages) : []
   const messages: unknown[] = [
@@ -192,7 +200,7 @@ export function buildPayload(
     max_tokens: settings.maxTokens,
   }
   if (tools.length > 0) payload.tools = tools
-  return { systemText, payload }
+  return { systemText, characterPrompt, injected, payload }
 }
 
 function toAssistantMessage(text: string, thinking?: string): ChatMessage {
@@ -1040,9 +1048,13 @@ chatRouter.get('/api/prompt-preview', (req, res) => {
   }
   try {
     const settings = loadSettings()
-    const { systemText, payload } = buildPayload(characterId, chatId, settings)
+    const { systemText, characterPrompt, injected, payload } = buildPayload(characterId, chatId, settings)
     res.json({
       systemText,
+      // Les deux morceaux du texte système, pour que l'inspecteur puisse rendre
+      // le prompt du personnage éditable et laisser le reste en lecture seule.
+      characterPrompt,
+      injected,
       payload,
       // Jauge de contexte : estimation du prochain envoi + limite configurée.
       // Les définitions d'outils partent aussi dans le payload (et l'usage réel

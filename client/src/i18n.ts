@@ -364,6 +364,10 @@ const FR = {
   sceneHint:
     'Notes propres à cette conversation, ajoutées telles quelles au prompt système. Vide = rien n’est envoyé.',
   scenePlaceholder: 'Lieu, ambiance, contexte de la scène…',
+  characterPromptHint:
+    'Le prompt du personnage — écrivez-le ici, il part tel quel au modèle. Le prochain message envoyé s’en sert déjà (c’est le même champ que « Prompt système » dans Personnages).',
+  injectedHint:
+    'Ajouté par Hanami à la suite du prompt, à chaque envoi : mémoire, résumé de compaction, notes de scène, heure. Chaque bloc s’édite là où il vit (panneau Mémoire, onglets Résumé et Scène, réglages).',
 }
 
 export type Key = keyof typeof FR
@@ -699,6 +703,10 @@ const EN: Record<Key, string> = {
   sceneHint:
     'Notes for this conversation only, added as-is to the system prompt. Empty = nothing is sent.',
   scenePlaceholder: 'Place, mood, context of the scene…',
+  characterPromptHint:
+    'The character’s prompt — write it here, it goes to the model as-is. The very next message already uses it (same field as “System prompt” in Characters).',
+  injectedHint:
+    'Appended by Hanami after the prompt on every request: memory, compaction summary, scene notes, time. Each block is edited where it lives (Memory panel, Summary and Scene tabs, settings).',
 }
 
 const DICT: Record<Lang, Record<Key, string>> = { fr: FR, en: EN }
