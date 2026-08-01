@@ -188,6 +188,13 @@ declare module 'three' {
     r: number
     g: number
     b: number
+    /**
+     * Pose une couleur donnée dans un ESPACE nommé (three la convertit vers son
+     * espace de travail linéaire). Les marqueurs de clic lisent la couleur
+     * d'accent dans le CSS, donc en sRGB : sans le troisième argument, three
+     * prendrait ces composantes pour du linéaire et l'anneau sortirait délavé.
+     */
+    setRGB(r: number, g: number, b: number, colorSpace?: string): this
   }
 
   // Référencés par les .d.ts de @pixiv/three-vrm (skipLibCheck, mais les noms doivent exister).
@@ -215,10 +222,16 @@ declare module 'three' {
   export class PlaneGeometry extends BufferGeometry {
     constructor(width?: number, height?: number)
   }
+  /** Anneau plat dans le plan XY (cf. scene/clickMark.ts — les marqueurs de clic). */
+  export class RingGeometry extends BufferGeometry {
+    constructor(innerRadius?: number, outerRadius?: number, thetaSegments?: number)
+  }
   export class MeshBasicMaterial extends Material {
     constructor(parameters?: Record<string, unknown>)
     color: Color
     side: number
+    /** Écrite par image pendant l'estompage d'un marqueur de clic. */
+    opacity: number
   }
   /** Faces visibles des deux côtés (Material.side). */
   export const DoubleSide: number

@@ -59,6 +59,7 @@ import type { HandRelax } from './handPoses'
 import { fetchSceneMap } from './sceneMap'
 import type { SceneMap, Seat } from './sceneMap'
 import { mergeEnvironment } from './envMerge'
+import { createClickMarks } from './clickMark'
 
 // Pose de repos (anti T-pose : les VRM chargent bras en croix) — rotation Z par os.
 const REST_POSE_Z: ReadonlyArray<readonly [VRMHumanBoneName, number]> = [
@@ -1049,29 +1050,47 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
   // ── Interactions au clic (scène vivante) ──────────────────────────────────
   // Un lancer de rayon À L'ÉVÉNEMENT DE CLIC uniquement, jamais en continu —
-  // intersecter la géométrie du décor par image est interdit par l'architecture.
+  // intersecter la géométrie du décor par image est interdit par l'architecture,
+  // et le curseur contextuel qu'on a voulu au survol s'est heurté au même mur
+  // (mesuré : 5,9 ms au 95e centile sur la classe, cf. l'en-tête de clickMark).
   // Le geste principal (glisser = pan) reste intact : un clic n'est retenu que
   // si le pointeur n'a pas bougé de plus de 6 px entre l'appui et le relâché.
-  // Sobre : aucun curseur qui change, aucun marqueur posé au sol.
   const raycaster = new Raycaster()
   const ndc = new Vector2()
+  // Marqueurs de clic : deux anneaux réutilisés, posés dans la SCÈNE (le groupe
+  // du décor est gelé au chargement, cf. envMerge). Ils sont construits même
+  // quand la scène vivante est éteinte — deux meshes invisibles, jamais rendus,
+  // et rien du tout dans le tick, qui ne les touche que sous `interactive`.
+  const clickMarks = createClickMarks(scene)
   let downX = 0
   let downY = 0
   function onPointerDown(e: PointerEvent): void {
     downX = e.clientX
     downY = e.clientY
   }
-  function onSceneClick(e: MouseEvent): void {
-    if (!interactive || !wander || !currentVrm) return
-    if (e.detail > 1) return // deuxième clic d'un double : le double-clic recadre
-    const moved = (e.clientX - downX) ** 2 + (e.clientY - downY) ** 2
-    if (moved > 36) return // c'était un glisser de caméra, pas un clic
+
+  /**
+   * Ce qu'un point de l'écran vise, dans le vocabulaire des interactions.
+   * `point` est l'impact dans le décor : il porte le marqueur, y compris quand
+   * il n'y a rien à y faire (« refusé » a besoin d'un endroit où se poser).
+   */
+  type CibleVisee =
+    | { quoi: 'avatar' }
+    | { quoi: 'assise'; assise: Seat; point: Vector3 }
+    | { quoi: 'sol'; point: Vector3 }
+    | { quoi: 'inerte'; point: Vector3 }
+
+  /**
+   * Le lancer de rayon et sa lecture, séparés de l'action : la même passe sert
+   * à décider quoi faire ET où poser la marque. `null` = le rayon n'a rien
+   * rencontré (le vide au-dessus de la pièce) — il n'existe alors aucun point
+   * du monde où marquer quoi que ce soit, et le clic reste muet à dessein.
+   */
+  function viser(clientX: number, clientY: number): CibleVisee | null {
+    if (!currentVrm) return null
     const rect = renderer.domElement.getBoundingClientRect()
-    if (rect.width < 1 || rect.height < 1) return
-    ndc.set(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1,
-    )
+    if (rect.width < 1 || rect.height < 1) return null
+    ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1)
     raycaster.setFromCamera(ndc, camera)
     // Le personnage d'abord : lui cliquer dessus prime sur le sol derrière lui.
     // Des DEUX côtés, on retient le premier impact qui montre quelque chose :
@@ -1081,16 +1100,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const onEnv = envRoot ? premierImpactVisible(raycaster.intersectObject(envRoot, true)) : null
     const dAvatar = onAvatar ? onAvatar.distance : Infinity
     const dEnv = onEnv ? onEnv.distance : Infinity
-    if (dAvatar < dEnv) {
-      // Les yeux suivent déjà la caméra : il acquiesce (debout, au repos) et se
-      // met bien en face quelques secondes. Assis ou en mouvement, les gardes de
-      // playReaction et poke laissent l'attention aux seuls yeux.
-      playReaction()
-      wander.poke()
-      return
-    }
-    if (!onEnv || !sceneMap) return
+    if (dAvatar < dEnv) return { quoi: 'avatar' }
+    if (!onEnv) return null
     const hit = onEnv.point
+    // Sans carte, le décor n'est qu'un fond : tout impact est inerte. La marque
+    // de refus, elle, se pose quand même — l'utilisateur doit apprendre que la
+    // pièce ne répond pas, pas croire que son clic s'est perdu.
+    if (!sceneMap) return { quoi: 'inerte', point: hit }
     // Une ASSISE visée ? La nappe à hauteur du point cliqué : il va s'y asseoir.
     // PLUSIEURS peuvent contenir le point : une chaise glissée sous son pupitre
     // n'est qu'à 0,267 m de son plateau, moins que la fenêtre de 0,30 m. On
@@ -1115,15 +1131,45 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       seatHit = seat
       seatDy = dy
     }
-    if (seatHit) {
-      wander.goSit(seatHit)
-      return
-    }
+    if (seatHit) return { quoi: 'assise', assise: seatHit, point: hit }
     // Sinon, le SOL — seulement si le point cliqué en est un (praticable et à
     // sa hauteur) : cliquer un mur ou une table n'envoie personne dedans.
     const floor = sceneMap.floorAt(hit.x, hit.z)
-    if (floor === null || Math.abs(floor - hit.y) > 0.35) return
-    wander.goTo(hit.x, hit.z)
+    if (floor === null || Math.abs(floor - hit.y) > 0.35) return { quoi: 'inerte', point: hit }
+    return { quoi: 'sol', point: hit }
+  }
+
+  function onSceneClick(e: MouseEvent): void {
+    if (!interactive || !wander || !currentVrm) return
+    if (e.detail > 1) return // deuxième clic d'un double : le double-clic recadre
+    const moved = (e.clientX - downX) ** 2 + (e.clientY - downY) ** 2
+    if (moved > 36) return // c'était un glisser de caméra, pas un clic
+    const cible = viser(e.clientX, e.clientY)
+    if (!cible) return
+    if (cible.quoi === 'avatar') {
+      // Les yeux suivent déjà la caméra : il acquiesce (debout, au repos) et se
+      // met bien en face quelques secondes. Assis ou en mouvement, les gardes de
+      // playReaction et poke laissent l'attention aux seuls yeux.
+      //
+      // AUCUN marqueur ici, et c'est délibéré : l'anneau est une marque AU SOL,
+      // le poser sur un buste inventerait un second vocabulaire. Le personnage
+      // répond de son corps, ou bien il est visiblement occupé — dans les deux
+      // cas l'écran a déjà dit quelque chose.
+      playReaction()
+      wander.poke()
+      return
+    }
+    // Le retour de goTo/goSit fait foi : c'est LE seul endroit qui sache si le
+    // clic a lancé quelque chose (carte absente, point impraticable, chemin
+    // inexistant, personnage déjà en plein mouvement).
+    const lance =
+      cible.quoi === 'assise'
+        ? wander.goSit(cible.assise)
+        : cible.quoi === 'sol'
+          ? wander.goTo(cible.point.x, cible.point.z)
+          : false
+    if (lance) clickMarks.accept(cible.point, camera.position)
+    else clickMarks.refuse(cible.point, camera.position)
   }
   renderer.domElement.addEventListener('pointerdown', onPointerDown)
   renderer.domElement.addEventListener('click', onSceneClick)
@@ -1824,6 +1870,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     envMetrics = null
     sceneMap = null
     envFrameDist = null
+    // La pièce qui portait la marque n'existe plus : l'anneau flotterait dans
+    // le vide, ou dans le mur de la suivante.
+    clickMarks.clear()
     // Le personnage rentre chez lui : la pièce où il s'était déplacé n'existe
     // plus, et le laisser à ses coordonnées d'avant le poserait au hasard dans
     // la suivante — ou dans le vide s'il n'y en a pas.
@@ -2106,6 +2155,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
         currentVrm.springBoneManager?.reset()
       }
     }
+    // Marqueurs de clic. Sous `interactive` uniquement : éteinte, la scène ne
+    // paie littéralement pas un appel de plus qu'avant. Allumée mais sans
+    // anneau en vie, update() sort sur un test entier.
+    if (interactive) clickMarks.update(delta)
     controls.update()
     renderer.render(scene, camera)
   }
@@ -2115,6 +2168,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     if (document.hidden) {
       cancelAnimationFrame(rafId)
       rafId = 0
+      // Un anneau figé en plein estompage reprendrait sa course au retour, une
+      // heure plus tard, sans le clic qui l'explique. Il s'efface avec l'image.
+      clickMarks.clear()
     } else if (!disposed && rafId === 0) {
       clock.getDelta() // purge le delta accumulé pendant la pause
       tick()
@@ -2199,6 +2255,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // bretelles : home() a déjà rendu l'écran au socle via le contrat.
       wander?.home(BASE_FADE)
       wander = null
+      clickMarks.clear() // plus d'interaction : plus de marque à l'écran
       onceThen = null
       gaitAction = null
       footMode = 'planted'
@@ -2253,6 +2310,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       renderer.domElement.removeEventListener('dblclick', onDblClick)
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('click', onSceneClick)
+      clickMarks.dispose()
       controls.dispose()
       unloadCurrent()
       // Le décor part AVANT le renderer : c'est lui qui porte le contexte WebGL
