@@ -83,6 +83,22 @@ export function pireVerdict(...noms) {
   return pire
 }
 
+// ── Lecture normalisée : le cm-adulte ───────────────────────────────────────
+//
+// Les seuils ci-dessus sont en cm ABSOLUS : c'est le contrat du propriétaire
+// (10 cm, posé sur le rig de référence) et il ne bouge pas. Mais sur la matrice
+// multi-modèles, le même défaut angulaire de clip mesure 4 cm sur un chibi de
+// 0,33 m et 14 cm sur un géant de 1,25 m : la colonne « échoue sur n/N » compte
+// alors la taille des modèles, pas la qualité des clips (r(bras, échecs)=0,83
+// sur 94 modèles). Le cm-adulte retire l'échelle : l'écart ramené à un adulte
+// dont la hanche est à 0,93 m — la même convention que le juge biomécanique
+// (devtools/diagnostic/juge/rig.mjs). Un défaut de clip donne alors le MÊME
+// chiffre sur tous les gabarits, et « échoue sur 65/94 » se lit comme UN défaut.
+// AFFICHAGE SEULEMENT : aucun verdict n'en dépend.
+export const HANCHES_ADULTE_M = 0.93
+export const cmAdulte = (cm, hanchesReposM) =>
+  isFinite(cm) && isFinite(hanchesReposM) && hanchesReposM > 0 ? cm * (HANCHES_ADULTE_M / hanchesReposM) : NaN
+
 // ── Outils quaternion ───────────────────────────────────────────────────────
 
 /**

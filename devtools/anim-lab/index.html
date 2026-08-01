@@ -2313,9 +2313,14 @@
               matrice.clips.set(a.nom, { famille: a.famille, ref: refCourt(a), verdicts: [] })
             }
             const c = chiffresReferentiel(a)
+            const cm = c ? +Math.max(isFinite(c.e) ? c.e : 0, isFinite(c.s) ? c.s : 0).toFixed(1) : NaN
             matrice.clips.get(a.nom).verdicts[colonne] = {
               v: a.verdict,
-              cm: c ? +Math.max(isFinite(c.e) ? c.e : 0, isFinite(c.s) ? c.s : 0).toFixed(1) : NaN,
+              cm,
+              // Le même écart en cm-ADULTE (× 0,93/hanches, convention du juge) :
+              // une lecture débarrassée de la taille du modèle. AFFICHAGE seul —
+              // le verdict est pris sur les cm réels, seuils du propriétaire.
+              a: M.arr1(M.cmAdulte(cm, hanchesRepos)),
             }
           }
           sansCasser('matrice', dessinerMatrice)
@@ -2360,6 +2365,12 @@
           ligne.nbEchoue = vs.filter((v) => v.v === 'echoue').length
           ligne.nbLimite = vs.filter((v) => v.v === 'limite').length
           ligne.nbMauvais = ligne.nbEchoue + ligne.nbLimite
+          // Médiane des cas mauvais en cm-adulte : SI elle est quasi constante
+          // d'un modèle à l'autre, « échoue sur n/N » est UN défaut de clip vu
+          // à travers n gabarits — pas n problèmes distincts.
+          const adultes = vs.filter((v) => (v.v === 'echoue' || v.v === 'limite') && isFinite(v.a))
+            .map((v) => v.a).sort((x, y) => x - y)
+          ligne.medianeAdulte = adultes.length ? adultes[Math.floor(adultes.length / 2)] : NaN
           if (pire === 'echoue' || pire === 'limite') aRegarder.push(nomC)
           else if (vs.length) partout++
         }
@@ -2415,9 +2426,13 @@
           ajouter(
             ligne.pire === 'echoue' || ligne.pire === 'limite'
               ? [ligne.nbEchoue ? `✗ ${ligne.nbEchoue}` : '', ligne.nbLimite ? `~ ${ligne.nbLimite}` : '']
-                  .filter(Boolean).join(' · ') + ` / ${vs.length}`
+                  .filter(Boolean).join(' · ') + ` / ${vs.length}` +
+                (isFinite(ligne.medianeAdulte) ? ` · ≈${ligne.medianeAdulte} ad` : '')
               : vs.length ? 'passe partout' : '—',
             classeV(ligne.pire),
+            isFinite(ligne.medianeAdulte)
+              ? `médiane des cas en cm-ADULTE (écart × 0,93/hanches) : ${ligne.medianeAdulte} cm — quasi constante d'un modèle à l'autre = UN défaut du clip, que les grands gabarits font passer le seuil absolu`
+              : undefined,
           )
           matrice.modeles.forEach((m, i) => {
             if (m.echec) { ajouter('·') ; return }
@@ -2426,7 +2441,7 @@
             ajouter(
               `${SYMBOLE_V[v.v] ?? '?'} ${isFinite(v.cm) ? v.cm : ''}`,
               classeV(v.v),
-              `${nomC} sur ${m.nom} : ${texteV(v.v)}${isFinite(v.cm) ? ` (${v.cm} cm)` : ''}`,
+              `${nomC} sur ${m.nom} : ${texteV(v.v)}${isFinite(v.cm) ? ` (${v.cm} cm réels` : ''}${isFinite(v.a) ? ` · ${v.a} cm-adulte)` : isFinite(v.cm) ? ')' : ''}`,
             )
           })
           tbody.appendChild(trc)
@@ -2438,21 +2453,27 @@
         lg.textContent =
           '✓✓ excellent · ✓ passe · ~ limite · ✗ échoue — le chiffre est l\'écart (cm) qui a décidé du verdict, ' +
           'sur le référentiel de la colonne « jugé contre ». Survole une case ou un en-tête pour le détail (taille du modèle). ' +
-          'Les lignes sont triées : pires d\'abord.'
+          'Les lignes sont triées : pires d\'abord. ' +
+          '« ≈n ad » (colonne partout ?) et l\'infobulle des cases donnent le même écart en cm-ADULTE (× 0,93/hanches, la ' +
+          'convention du juge) : débarrassé de la taille du modèle, un défaut de clip y est quasi constant sur tous les ' +
+          'gabarits — « échoue sur n/N » se lit alors comme UN défaut, pas n. Les verdicts, eux, restent pris sur les cm ' +
+          'réels : les seuils 2/7/10 du propriétaire ne bougent pas.'
         boite.appendChild(lg)
       }
 
       el('btnMatrice').onclick = () => passeMultiModeles().catch((e) => journal(`multi-modèles : ${texteErreur(e)}`, 'err'))
       el('btnMatriceTsv').onclick = async () => {
         if (!matrice || !matrice.modeles.length) return
-        const entete = ['clip', 'famille', 'jugé contre', 'pire', ...matrice.modeles.map((m) => m.nom)].join('\t')
+        const entete = ['clip', 'famille', 'jugé contre', 'pire', 'médiane cm-adulte', ...matrice.modeles.map((m) => m.nom)].join('\t')
         const corps = [...matrice.clips.entries()].map(([nomC, ligne]) =>
           [
             nomC, ligne.famille, ligne.ref, texteV(ligne.pire ?? 'inconnu'),
+            isFinite(ligne.medianeAdulte) ? ligne.medianeAdulte : '',
             ...matrice.modeles.map((m, i) => {
               if (m.echec) return 'modèle illisible'
               const v = ligne.verdicts[i]
-              return v ? `${texteV(v.v)}${isFinite(v.cm) ? ` (${v.cm})` : ''}` : ''
+              // cm réels, puis le même écart en cm-adulte (« ad ») : lecture sans gabarit
+              return v ? `${texteV(v.v)}${isFinite(v.cm) ? ` (${v.cm}${isFinite(v.a) ? ` · ${v.a} ad` : ''})` : ''}` : ''
             }),
           ].join('\t'),
         ).join('\n')

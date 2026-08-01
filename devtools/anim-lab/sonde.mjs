@@ -487,7 +487,10 @@ if (args.has('modeles')) {
     for (const r of res.clips) {
       if (!parClip.has(r.slug)) parClip.set(r.slug, { famille: r.famille, referentiel: r.referentiel, verdicts: [] })
       const c = chiffresVerdict(r)
-      parClip.get(r.slug).verdicts[col] = { v: r.verdict, cm: Math.max(+c.e || 0, +c.s || 0) }
+      const cm = Math.max(+c.e || 0, +c.s || 0)
+      // `a` = le même écart en cm-adulte (× 0,93/hanches, convention du juge) :
+      // une LECTURE sans l'échelle du modèle — le verdict reste pris sur `cm`.
+      parClip.get(r.slug).verdicts[col] = { v: r.verdict, cm, a: M.arr1(M.cmAdulte(cm, res.hanchesRepos)) }
     }
     const parV = {}
     for (const r of res.clips) parV[r.verdict] = (parV[r.verdict] ?? 0) + 1
@@ -506,9 +509,14 @@ if (args.has('modeles')) {
     if (mauvais.length) aProblemes.push({ slug, ligne, mauvais })
   }
   console.log(`   ${parClip.size - aProblemes.length} clips passent PARTOUT · ${aProblemes.length} clips en limite/échec quelque part`)
+  console.log('   (entre parenthèses : le même écart en cm-ADULTE, × 0,93/hanches — quasi constant')
+  console.log('    d\'un modèle à l\'autre = défaut DU CLIP, un seul ; croissant avec le gabarit = seuil absolu franchi par les grands)')
   for (const p of aProblemes.sort((a, b) => b.mauvais.length - a.mauvais.length)) {
-    console.log(`   ${pad(p.slug, 26)} (${p.ligne.referentiel}) : ` +
-      p.mauvais.map((m) => `${m.modele.nom} ${SYMBOLE[m.v].trim()} ${m.cm} cm`).join(' · '))
+    const adultes = p.mauvais.map((m) => m.a).filter((x) => isFinite(x)).sort((x, y) => x - y)
+    const mediane = adultes.length ? adultes[Math.floor(adultes.length / 2)] : NaN
+    console.log(`   ${pad(p.slug, 26)} (${p.ligne.referentiel})` +
+      (isFinite(mediane) ? ` — ${adultes.length} cas, médiane ${mediane} cm-adulte : ` : ' : ') +
+      p.mauvais.map((m) => `${m.modele.nom} ${SYMBOLE[m.v].trim()} ${m.cm} cm (${isFinite(m.a) ? m.a : '?'})`).join(' · '))
   }
   if (args.has('json')) {
     const dest = path.resolve(LAB, args.get('json') === '1' ? 'sonde-matrice.json' : args.get('json'))

@@ -339,6 +339,18 @@ compter quelques minutes. À la fin, la page recharge le modèle de départ.
 Le pendant headless est `node sonde.mjs --modeles=tous` : squelettes montés
 depuis le glTF sans mesh ni texture, mêmes appels, mêmes chiffres, en minutes.
 
+**Lire la matrice sans se faire avoir par la taille des modèles.** Les seuils
+sont en cm ABSOLUS (le contrat du propriétaire, mesuré sur le rig de
+référence) ; or le même défaut angulaire de clip mesure 4 cm sur un chibi de
+0,33 m et 14 cm sur un géant de 1,25 m — sur 94 modèles, r(bras, nb échecs)
+= 0,83 : la colonne « échoue sur n/N » compte en partie des gabarits, pas des
+défauts. La matrice affiche donc AUSSI le même écart en **cm-adulte**
+(écart × 0,93/hanches, la convention du juge biomécanique) : médiane par ligne
+dans la colonne « partout ? » (`≈n ad`), détail par case dans l'infobulle et
+dans le TSV. Un défaut de clip y est quasi constant d'un gabarit à l'autre —
+« échoue sur 65/94 » se lit alors comme UN défaut, pas 65. **Aucun verdict n'en
+dépend** : le juge de paix reste l'écart en cm réels, seuils 2/7/10.
+
 ---
 
 # Les deux domaines
