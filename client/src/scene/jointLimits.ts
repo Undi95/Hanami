@@ -713,6 +713,68 @@ export interface JointLimits {
   readonly boneCount: number
 }
 
+// ── LE SENS DU REPÈRE NORMALISÉ, MESURÉ ────────────────────────────────────
+//
+// La table ci-dessus est écrite dans le repère « +Z devant, +X à gauche ».
+// Ce n'est PAS toujours celui des os normalisés : `VRMHumanoidRig` les bâtit
+// dans l'espace PROPRE du modèle, et un VRM 0.x y regarde le −Z — la rotation
+// de π que `VRMUtils.rotateVRM0` pose sur la scène emmène la racine du rig avec
+// elle, mais ne touche aucun repère LOCAL. Sur les 94 modèles du dossier, 89
+// sont en 0.x. C'est exactement le piège qui avait renversé la nuque du regard
+// (cf. gaze.ts, `measureFaceAxis`), et il mordait ici aussi : dans un repère
+// retourné, la flexion du genou se présente à la table comme de
+// l'HYPEREXTENSION, et l'enveloppe la ramenait à sa butée d'extension.
+//
+// Le remède est le changement de base, pas un retouche de la table : un
+// demi-tour autour de Y échange (+X, +Z) et (−X, −Z), c'est précisément
+// l'écart entre les deux repères. On conjugue donc la rotation avant de la
+// borner, et on revient après. Les enveloppes symétriques (cônes, ellipses de
+// `setEllipticalSwingLimits`) n'en voient rien ; celles qui distinguent l'avant
+// de l'arrière — genou, coude, hanche — retrouvent leur sens.
+const DEMI_TOUR_Y = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), PI)
+const DEMI_TOUR_Y_INV = DEMI_TOUR_Y.clone().invert()
+
+/** Conjugue une contrainte par un demi-tour : le repère du modèle → celui de la table. */
+class MirroredConstraint implements RotationConstraint {
+  constructor(private readonly inner: RotationConstraint) {}
+  apply(q: Quaternion): boolean {
+    q.premultiply(DEMI_TOUR_Y).multiply(DEMI_TOUR_Y_INV)
+    const changed = this.inner.apply(q)
+    q.premultiply(DEMI_TOUR_Y_INV).multiply(DEMI_TOUR_Y)
+    return changed
+  }
+  clearHistory(): void {
+    this.inner.clearHistory()
+  }
+}
+
+/**
+ * L'avant du personnage vaut-il +Z dans le repère des os normalisés ?
+ * MESURÉ, jamais supposé, et par le même témoin que le regard : up × (épaule
+ * droite − épaule gauche) est l'avant géométrique, il ne dépend d'aucune
+ * convention de format. Repli sur `metaVersion` quand les épaules manquent.
+ */
+function normalizedFacesPlusZ(vrm: VRM): boolean {
+  const left = vrm.humanoid.getNormalizedBoneNode('leftUpperArm')
+  const right = vrm.humanoid.getNormalizedBoneNode('rightUpperArm')
+  const ref = vrm.humanoid.getNormalizedBoneNode('hips') ?? left
+  if (left && right && ref) {
+    left.updateWorldMatrix(true, false)
+    right.updateWorldMatrix(true, false)
+    ref.updateWorldMatrix(true, false)
+    const a = left.getWorldPosition(new Vector3())
+    const b = right.getWorldPosition(new Vector3())
+    const cote = b.sub(a)
+    cote.y = 0
+    if (cote.lengthSq() > 1e-8) {
+      const avant = new Vector3().crossVectors(UNIT_Y, cote.normalize()).normalize()
+      const zLocal = new Vector3(0, 0, 1).applyQuaternion(ref.getWorldQuaternion(new Quaternion()))
+      return avant.dot(zLocal) >= 0
+    }
+  }
+  return vrm.meta?.metaVersion !== '0'
+}
+
 /**
  * Prépare la table pour un modèle. Ne contraint que les os PRÉSENTS — un
  * squelette sans upperChest a simplement une vertèbre de moins.
@@ -738,11 +800,12 @@ export function createJointLimits(vrm: VRM): JointLimits | null {
     'leftFoot',
     'rightFoot',
   ] as VRMHumanBoneName[]
+  const enPlusZ = normalizedFacesPlusZ(vrm)
   for (const bone of BONES) {
     const node = vrm.humanoid.getNormalizedBoneNode(bone)
     if (!node) continue
     const constraint = constraintFor(bone)
-    if (constraint) entries.push({ node, constraint })
+    if (constraint) entries.push({ node, constraint: enPlusZ ? constraint : new MirroredConstraint(constraint) })
   }
   if (entries.length === 0) return null
   return {

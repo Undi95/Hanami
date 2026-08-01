@@ -863,9 +863,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // Limites articulaires humaines (table d'Overte, cf. jointLimits.ts) :
   // TOUTE pose sortie du mixer est bornée à l'enveloppe humaine avant que
   // l'IK, l'idle et le rendu ne la voient. Mesuré : 3,5 µs par image pour les
-  // 17 os, et 0 retouche au-delà de 0,9° sur les 52 clips chargés — la table
+  // 17 os, et 0 retouche au-delà de 0,9° sur les 54 clips chargés — la table
   // n'existe que pour l'impossible (retargeting sur un modèle exotique,
   // mélange qui part en vrille), pas pour restyler la bibliothèque.
+  // Ce « 0 retouche » avait été mesuré dans un repère normalisé regardant le
+  // +Z : il n'était vrai que des 5 modèles VRM 1.x du dossier. Depuis que
+  // createJointLimits mesure le sens du repère, il l'est aussi des 89 en 0.x
+  // (0,9° max, vérifié sur les deux formats).
   let jointLimits: JointLimits | null = null
   // Mains détendues (60 quaternions de handTouch.js, cf. handPoses.ts) : quand
   // aucun clip ne pilote les doigts — idle et domaine `world-` n'ont AUCUNE
