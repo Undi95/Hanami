@@ -277,8 +277,20 @@ const SIT_FADE = 0.3
  * variantes assises (seatedIdle01–05, fonduS 1,0).
  */
 const SIT_LAND_FADE = 1.0
-/** Fondu d'un échange de socle assis (sit-idle ↔ sit-talking) et des gestes assis. */
+/** Fondu des gestes assis (sit-look, sit-shift) : entrées mesurées à 1,7–2,4 cm. */
 const BASE_SWAP_FADE = 0.4
+/**
+ * Bascule assise sit-idle ↔ sit-talking. Les deux socles sont tirés parmi des
+ * variantes à phases quelconques : la pire paire mesurée est à 26,8 cm
+ * (rightHand — l'amplitude des mains de la parole). À 0,4 s le fondu culminait
+ * à 82 cm/s, 3,4 fois le rythme propre du clip de parole (p95 24 cm/s) ; à
+ * 0,8 s il tombe à 62 cm/s et la pointe angulaire est divisée par deux
+ * (326 → 163 °/s). C'est la durée d'Overte pour la même bascule
+ * (seatedTalkOverlay 0,833 s ; les variantes de parole entre elles : 1,0 s).
+ * La latence ajoutée au début d'une réponse (+0,4 s de fondu) est invisible :
+ * le clip de parole est déjà en train de monter pendant qu'elle s'écrit.
+ */
+const SIT_TALK_FADE = 0.8
 /** Durée passée assis (s), tirée uniformément. On s'assoit pour de bon. */
 const SIT_MIN_S = 90
 const SIT_MAX_S = 240
@@ -1225,7 +1237,7 @@ export function createWander(host: WanderHost): Wander {
         const want = host.speaking() && host.has('sit-talking') ? 'sit-talking' : 'sit-idle'
         if (want !== seatBase) {
           seatBase = want
-          host.gait(want, BASE_SWAP_FADE)
+          host.gait(want, SIT_TALK_FADE)
         }
         // Pendant une réponse, RIEN d'autre ne bouge : ni geste, ni lever.
         if (host.speaking()) break
