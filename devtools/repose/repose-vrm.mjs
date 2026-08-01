@@ -342,10 +342,8 @@ function corriger(i) {
         if (angle < 1e-7) break
         // monde → local : L' = inv(Wparent) · Rw · Wparent · L
         const Wp = o.parent ? o.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion()
-        const WpInv = Wp.clone().invert()
         o.quaternion.premultiply(Wp.clone().invert().multiply(Rw).multiply(Wp))
         o.updateWorldMatrix(true, true)
-        void WpInv
       }
       if (angleTotal > 1e-5) {
         const deja = corriges.get(i)
