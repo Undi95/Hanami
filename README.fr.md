@@ -298,7 +298,7 @@ qu'aucune licence n'oblige à citer**, parce qu'un crédit caché n'honore perso
 
 ### Décors 3D
 
-Six pièces d'intérieur, toutes en **CC BY 4.0** — la seule licence de ce projet qui *impose*
+Sept pièces d'intérieur, toutes en **CC BY 4.0** — la seule licence de ce projet qui *impose*
 l'attribution. Via [Sketchfab](https://sketchfab.com) :
 
 - « **Anime Class Room** » par **AnixMoonLight** ([profil](https://sketchfab.com/ani111)) — la salle
@@ -312,6 +312,8 @@ l'attribution. Via [Sketchfab](https://sketchfab.com) :
 - « **Small Cafe** » par **dylanheyes** ([profil](https://sketchfab.com/dylanheyes)) — le café.
 - « **Japanese Classroom** » par **T I A N** ([profil](https://sketchfab.com/Tian96)) — la grande
   salle de classe japonaise.
+- « **apartment floor plan** » par **SrMonteiro**
+  ([profil](https://sketchfab.com/crispimrafael)) — l'appartement en plan de coupe.
 
 ### Police
 

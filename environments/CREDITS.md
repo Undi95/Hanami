@@ -159,6 +159,33 @@ byte. Placement lives in the `japanese-classroom.json` sidecar.
 
 ---
 
+## 7. `apartment-floorplan.glb`
+
+|  |  |
+|---|---|
+| **Titre / Title** | apartment floor plan |
+| **Auteur / Author** | SrMonteiro (`@crispimrafael`) |
+| **Profil / Profile** | <https://sketchfab.com/crispimrafael> |
+| **Page du modèle / Model page** | <https://sketchfab.com/3d-models/apartment-floor-plan-2e85bf66e2dd4d48b683d6843e040a2b> |
+| **Licence / License** | CC Attribution 4.0 International (CC BY 4.0) — <https://creativecommons.org/licenses/by/4.0/> |
+| **Source** | Sketchfab |
+| **Publié le / Published** | 2025-08-06 |
+
+**Attribution requise (FR) :**
+> « apartment floor plan » par SrMonteiro, licence CC-BY 4.0, via Sketchfab.
+
+**Required attribution (EN):**
+> "apartment floor plan" by SrMonteiro, licensed under CC-BY 4.0, via Sketchfab.
+
+**Modifications / Modifications :** aucune — le `.glb` est l'export Sketchfab d'origine, octet
+pour octet. Les quatre panneaux de fond qui ferment le plan de coupe sont posés par le sidecar
+`apartment-floorplan.json`, en dehors du modèle, et ne sont pas redistribués comme faisant
+partie de l'œuvre. / none — the `.glb` is the original Sketchfab export, byte for byte. The four
+backdrop panels that close the cutaway plan are placed by the `apartment-floorplan.json`
+sidecar, outside the model, and are not redistributed as part of the work.
+
+---
+
 ## Bloc d'attribution prêt à coller / Ready-to-paste attribution block
 
 **FR — Décors 3D**
@@ -169,6 +196,7 @@ byte. Placement lives in the `japanese-classroom.json` sidecar.
 - « Low Poly Restaurant Interior Scene » par GameAssetsFin, licence CC-BY 4.0, via Sketchfab.
 - « Small Cafe » par dylanheyes, licence CC-BY 4.0, via Sketchfab.
 - « Japanese Classroom » par T I A N, licence CC-BY 4.0, via Sketchfab.
+- « apartment floor plan » par SrMonteiro, licence CC-BY 4.0, via Sketchfab.
 
 **EN — 3D environments**
 
@@ -178,6 +206,7 @@ byte. Placement lives in the `japanese-classroom.json` sidecar.
 - "Low Poly Restaurant Interior Scene" by GameAssetsFin, licensed under CC-BY 4.0, via Sketchfab.
 - "Small Cafe" by dylanheyes, licensed under CC-BY 4.0, via Sketchfab.
 - "Japanese Classroom" by T I A N, licensed under CC-BY 4.0, via Sketchfab.
+- "apartment floor plan" by SrMonteiro, licensed under CC-BY 4.0, via Sketchfab.
 
 ---
 
@@ -203,6 +232,7 @@ contains one decorative animation ("Take 001").
 | `lowpoly-restaurant.glb` | 64 750 | 35 698 | 4,5 Mo | ×1 | 7,80 × 14,80 m, plafond 3,33 m | 46,21 m² | 29 |
 | `small-cafe.glb` | 62 260 | 31 420 | 5,4 Mo | ×0,87 | 5,70 × 16,30 m, plafond 2,67 m | 51,35 m² | 21 |
 | `japanese-classroom.glb` | 326 040 | 169 861 | 19,0 Mo | ×1 | 12,50 × 8,40 m, plafond 3,17 m | 75,13 m² | 62 |
+| `apartment-floorplan.glb` | 133 767 | 76 585 | 8,8 Mo | ×1 | 8,10 × 5,50 m, murs 1,20 m | 17,94 m² | 28 |
 
 **FR —** Les modèles sont orientés Y-up (conversion effectuée par l'export Sketchfab).
 Les trois premiers ne sont pas livrés à l'échelle métrique ; les facteurs ci-dessus sont
@@ -269,3 +299,22 @@ black room — but measuring the textures says otherwise: metalness lives in the
 the `metallicRoughness` map, and there it averages 0.03 to 0.10 on walls, floor and desks
 (0.48 on `StingrayPBS1` alone, the window frames). Its base colours average five times
 brighter than `anime-classroom.glb`'s: no `exposure` is set.
+
+**FR —** `apartment-floorplan.glb` est un PLAN DE COUPE : ses murs s'arrêtent à 1,20 m,
+au-dessous du regard de la caméra d'accueil (1,23 m). Mesuré au lancer de rayons, **50,5 % du
+cadre par défaut ne touchait aucune géométrie** — que du fond de page, et entièrement au-dessus
+de l'horizon. D'où les quatre panneaux de fond du sidecar, qui forment une boîte de 14 × 14 m
+autour du point d'accueil : le cadre est ensuite couvert à 100 % sous huit azimuts de caméra et
+à trois reculs (1,89 · 3 · 4 m). Ils tiennent dans le plan lointain de 20 m — un panneau posé
+plus loin serait tronqué et rouvrirait le trou. Ses neuf matériaux sont TOUS
+`KHR_materials_unlit` : ils ignorent les lumières, comme les panneaux, et se rendent à la
+valeur de leurs textures.
+
+**EN —** `apartment-floorplan.glb` is a CUTAWAY PLAN: its walls stop at 1.20 m, below the eye
+line of the home camera (1.23 m). Measured by ray casting, **50.5% of the default frame hit no
+geometry at all** — nothing but page background, entirely above the horizon. Hence the four
+backdrop panels in the sidecar, forming a 14 × 14 m box around the spawn point: the frame is
+then 100% covered across eight camera azimuths and three pullbacks (1.89 · 3 · 4 m). They fit
+inside the 20 m far plane — a panel placed further out would be clipped and would reopen the
+hole. All nine of its materials are `KHR_materials_unlit`: they ignore the lights, as the
+panels do, and render at their texture values.

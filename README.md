@@ -285,7 +285,7 @@ no licence obliges us to name**, because a credit that is hidden honours nobody.
 
 ### 3D environments
 
-Six interior rooms, all under **CC BY 4.0** — the only licence in this project that *requires*
+Seven interior rooms, all under **CC BY 4.0** — the only licence in this project that *requires*
 attribution. Via [Sketchfab](https://sketchfab.com):
 
 - "**Anime Class Room**" by **AnixMoonLight** ([profile](https://sketchfab.com/ani111)) — the
@@ -299,6 +299,8 @@ attribution. Via [Sketchfab](https://sketchfab.com):
 - "**Small Cafe**" by **dylanheyes** ([profile](https://sketchfab.com/dylanheyes)) — the café.
 - "**Japanese Classroom**" by **T I A N** ([profile](https://sketchfab.com/Tian96)) — the large
   Japanese classroom.
+- "**apartment floor plan**" by **SrMonteiro**
+  ([profile](https://sketchfab.com/crispimrafael)) — the cutaway apartment.
 
 ### Typeface
 
