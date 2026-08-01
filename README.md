@@ -285,7 +285,7 @@ no licence obliges us to name**, because a credit that is hidden honours nobody.
 
 ### 3D environments
 
-Four interior rooms, all under **CC BY 4.0** — the only licence in this project that *requires*
+Five interior rooms, all under **CC BY 4.0** — the only licence in this project that *requires*
 attribution. Via [Sketchfab](https://sketchfab.com):
 
 - "**Anime Class Room**" by **AnixMoonLight** ([profile](https://sketchfab.com/ani111)) — the
@@ -296,6 +296,7 @@ attribution. Via [Sketchfab](https://sketchfab.com):
   bedroom.
 - "**Low Poly Restaurant Interior Scene**" by **GameAssetsFin**
   ([profile](https://sketchfab.com/MarkoJantti)) — the restaurant.
+- "**Small Cafe**" by **dylanheyes** ([profile](https://sketchfab.com/dylanheyes)) — the café.
 
 ### Typeface
 

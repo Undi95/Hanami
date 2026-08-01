@@ -106,6 +106,32 @@ en dehors du modèle. / none — the `.glb` is the original Sketchfab export, by
 
 ---
 
+## 5. `small-cafe.glb`
+
+|  |  |
+|---|---|
+| **Titre / Title** | Small Cafe |
+| **Auteur / Author** | dylanheyes (`@dylanheyes`) |
+| **Profil / Profile** | <https://sketchfab.com/dylanheyes> |
+| **Page du modèle / Model page** | <https://sketchfab.com/3d-models/small-cafe-0c4d6d98c48c46e6b71f2914fd049c8e> |
+| **Licence / License** | CC Attribution 4.0 International (CC BY 4.0) — <https://creativecommons.org/licenses/by/4.0/> |
+| **Source** | Sketchfab |
+| **Publié le / Published** | 2023-04-09 |
+
+**Attribution requise (FR) :**
+> « Small Cafe » par dylanheyes, licence CC-BY 4.0, via Sketchfab.
+
+**Required attribution (EN):**
+> "Small Cafe" by dylanheyes, licensed under CC-BY 4.0, via Sketchfab.
+
+**Modifications / Modifications :** aucune — le `.glb` est l'export Sketchfab d'origine, octet
+pour octet. Le placement (échelle, rotation, point d'accueil) vit dans le sidecar
+`small-cafe.json`, en dehors du modèle. / none — the `.glb` is the original Sketchfab export,
+byte for byte. Placement (scale, rotation, spawn) lives in the `small-cafe.json` sidecar,
+outside the model.
+
+---
+
 ## Bloc d'attribution prêt à coller / Ready-to-paste attribution block
 
 **FR — Décors 3D**
@@ -114,6 +140,7 @@ en dehors du modèle. / none — the `.glb` is the original Sketchfab export, by
 - « Cute Isometric Room ✿ » par JaDe.Dfr, licence CC-BY 4.0, via Sketchfab.
 - « Rustic Bedroom » par Bársh, licence CC-BY 4.0, via Sketchfab.
 - « Low Poly Restaurant Interior Scene » par GameAssetsFin, licence CC-BY 4.0, via Sketchfab.
+- « Small Cafe » par dylanheyes, licence CC-BY 4.0, via Sketchfab.
 
 **EN — 3D environments**
 
@@ -121,6 +148,7 @@ en dehors du modèle. / none — the `.glb` is the original Sketchfab export, by
 - "Cute Isometric Room ✿" by JaDe.Dfr, licensed under CC-BY 4.0, via Sketchfab.
 - "Rustic Bedroom" by Bársh, licensed under CC-BY 4.0, via Sketchfab.
 - "Low Poly Restaurant Interior Scene" by GameAssetsFin, licensed under CC-BY 4.0, via Sketchfab.
+- "Small Cafe" by dylanheyes, licensed under CC-BY 4.0, via Sketchfab.
 
 ---
 
@@ -144,6 +172,7 @@ contains one decorative animation ("Take 001").
 | `cozy-loft-room.glb` | 74 904 | 40 230 | 5,5 Mo | ×0,031 | 2,60 × 3,00 m, plafond 2,98 m | 3,34 m² | 6 |
 | `rustic-bedroom.glb` | 21 828 | 12 213 | 3,9 Mo | ×1,1 | 2,70 × 3,00 m, murs 2,42 m | 1,67 m² | 5 |
 | `lowpoly-restaurant.glb` | 64 750 | 35 698 | 4,5 Mo | ×1 | 7,80 × 14,80 m, plafond 3,33 m | 46,21 m² | 29 |
+| `small-cafe.glb` | 62 260 | 31 420 | 5,4 Mo | ×0,87 | 5,70 × 16,30 m, plafond 2,67 m | 51,35 m² | 21 |
 
 **FR —** Les modèles sont orientés Y-up (conversion effectuée par l'export Sketchfab).
 Les trois premiers ne sont pas livrés à l'échelle métrique ; les facteurs ci-dessus sont
@@ -175,3 +204,19 @@ aucun effet sur ces deux décors.
 **EN —** `anime-classroom.glb` and `rustic-bedroom.glb` use `KHR_materials_unlit`: their
 materials ignore the scene lights. An exposure setting must therefore act on material
 colours rather than light intensity, otherwise it does nothing at all on those two.
+
+**FR —** `small-cafe.glb` est un décor à **éclairage cuit** : ses six matériaux portent la
+même texture en albédo ET en émissif, `emissiveFactor` à [1, 1, 1]. Il s'éclaire donc
+lui-même et ne dépend pas des lumières de la scène — mais le calcul dit qu'il s'ajoute à
+elles : avec la clé à 1,1 et l'appoint à 0,35 (le régime « décor chargé »), une face tournée
+vers la lumière rend environ 1,5 fois la valeur cuite. Aucun `exposure` n'est posé dans son
+sidecar tant que personne ne l'a vu à l'écran : si le café paraît lavé, `"exposure": 0.75`
+est le premier réglage à essayer — il multiplie l'albédo ET l'émissif du même facteur.
+
+**EN —** `small-cafe.glb` ships with **baked lighting**: all six materials carry the same
+texture as base colour AND as emissive, with `emissiveFactor` at [1, 1, 1]. It therefore
+lights itself and does not depend on the scene lights — but the arithmetic says it adds to
+them: with the key at 1.1 and the fill at 0.35 (the "environment loaded" regime), a face
+turned towards the light renders about 1.5× the baked value. No `exposure` is written in its
+sidecar until somebody has seen it on screen: should the café look washed out, `"exposure":
+0.75` is the first thing to try — it scales base colour AND emissive by the same factor.
