@@ -343,10 +343,11 @@ const FR = {
 
   // ── Import SillyTavern ───────────────────────────────────────────────────
   importFromSt: 'Importer depuis SillyTavern',
-  cardSection: 'Carte de personnage (PNG)',
-  cardSectionHint: 'Le personnage, son prompt et son message d’accueil sont extraits de la carte.',
+  cardSection: 'Carte de personnage (PNG ou .json)',
+  cardSectionHint:
+    'Le personnage, son prompt et ses messages d’accueil sont extraits de la carte. Le PNG sert en plus de portrait ; un .json n’a pas d’image.',
   importing: 'Import…',
-  choosePng: 'Choisir un fichier PNG',
+  choosePng: 'Choisir un PNG ou un .json',
   characterImported: 'Personnage « {name} » importé.',
   chatSection: 'Historique de chat (.jsonl)',
   importNeedCharacter: 'Importez ou créez d’abord un personnage cible.',
@@ -697,10 +698,11 @@ const EN: Record<Key, string> = {
 
   // ── SillyTavern import ───────────────────────────────────────────────────
   importFromSt: 'Import from SillyTavern',
-  cardSection: 'Character card (PNG)',
-  cardSectionHint: 'The character, its prompt and its greeting are read from the card.',
+  cardSection: 'Character card (PNG or .json)',
+  cardSectionHint:
+    'The character, its prompt and its greetings are read from the card. A PNG doubles as the portrait; a .json carries no image.',
   importing: 'Importing…',
-  choosePng: 'Choose a PNG file',
+  choosePng: 'Choose a PNG or .json',
   characterImported: 'Character “{name}” imported.',
   chatSection: 'Chat history (.jsonl)',
   importNeedCharacter: 'Import or create a target character first.',

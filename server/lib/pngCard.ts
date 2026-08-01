@@ -1,4 +1,6 @@
-// Parseur de character card SillyTavern embarquée dans un PNG (chunks tEXt).
+// Parseur de character card SillyTavern : embarquée dans un PNG (chunks tEXt),
+// ou nue dans un fichier .json — les deux formes circulent, et une card exportée
+// sans image n'est qu'un JSON.
 // PUR : Buffer en entrée, objet en sortie — aucun accès fs, aucune dépendance.
 
 export interface ParsedCard {
@@ -59,6 +61,23 @@ export function parseCharacterCard(buf: Buffer): ParsedCard | null {
   let parsed: unknown
   try {
     parsed = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'))
+  } catch {
+    return null
+  }
+  return normalizeCard(parsed)
+}
+
+/**
+ * Card d'un fichier .json (V1 à plat, V2/V3 avec `data`) — même normalisation
+ * que celle du PNG, à ceci près qu'il n'y a pas d'image à en tirer.
+ * Retourne null si le buffer n'est pas du JSON, ou pas une card.
+ */
+export function parseCardJson(buf: Buffer): ParsedCard | null {
+  let parsed: unknown
+  try {
+    // BOM retiré : un .json écrit par un éditeur Windows en porte souvent un,
+    // et JSON.parse le refuse.
+    parsed = JSON.parse(buf.toString('utf8').replace(/^\uFEFF/, ''))
   } catch {
     return null
   }

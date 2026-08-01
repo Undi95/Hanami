@@ -1,4 +1,5 @@
-// Import SillyTavern : carte de personnage (PNG) et historiques de chat (.jsonl).
+// Import SillyTavern : carte de personnage (PNG ou .json) et historiques de
+// chat (.jsonl).
 import { useState } from 'react'
 import type { CharacterMeta } from '../../../shared/types'
 import * as api from '../api'
@@ -32,7 +33,9 @@ export default function ImportDialog({ characters, defaultCharacterId, onCharact
     setCardBusy(true)
     setCardMsg(null)
     try {
-      const name = file.name.replace(/\.png$/i, '')
+      // Le nom du fichier sert de nom par défaut : son extension, quelle qu'elle
+      // soit, n'en fait pas partie (le serveur retombe sur celui de la card).
+      const name = file.name.replace(/\.(png|json)$/i, '')
       const r = await api.importCard(name, file)
       setCardMsg({ ok: true, text: t('characterImported', { name: r.character.name }) })
       onCharacterImported(r.character)
@@ -75,7 +78,9 @@ export default function ImportDialog({ characters, defaultCharacterId, onCharact
           {cardBusy ? t('importing') : t('choosePng')}
           <input
             type="file"
-            accept="image/png,.png"
+            // Le corps part en application/octet-stream dans les deux cas : c'est
+            // le serveur qui reconnaît un PNG à sa signature, sinon il tente le JSON.
+            accept="image/png,.png,application/json,.json"
             hidden
             disabled={cardBusy}
             onChange={(e) => {

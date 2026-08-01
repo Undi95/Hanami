@@ -1,6 +1,6 @@
-// Router import : character cards PNG SillyTavern + chats JSONL SillyTavern.
+// Router import : character cards SillyTavern (PNG ou .json) + chats JSONL.
 import express, { Router, type Response } from 'express'
-import { parseCharacterCard, type ParsedCard } from '../lib/pngCard'
+import { parseCardJson, parseCharacterCard, type ParsedCard } from '../lib/pngCard'
 import { convertStChat } from '../lib/stChat'
 import { createCharacter, getCharacter, savePortrait, updateCharacter, writeImportedChat } from '../lib/storage'
 
@@ -48,12 +48,18 @@ importRouter.post(
     try {
       const buf = req.body as unknown
       if (!Buffer.isBuffer(buf) || buf.length === 0) {
-        res.status(400).json({ error: 'Corps de requête PNG requis' })
+        res.status(400).json({ error: 'Corps de requête requis (PNG ou .json de card)' })
         return
       }
-      const card = parseCharacterCard(buf)
+      // PNG d'abord (le cas courant), puis .json nu. Le PNG lu avec succès est
+      // AUSSI l'image du personnage — un .json n'en porte aucune.
+      const fromPng = parseCharacterCard(buf)
+      const card = fromPng ?? parseCardJson(buf)
       if (!card) {
-        res.status(400).json({ error: 'PNG sans character card (chunk tEXt chara/ccv3 absent ou invalide)' })
+        res.status(400).json({
+          error:
+            'Aucune character card lisible : PNG sans chunk tEXt chara/ccv3, ou .json qui n’est pas une card (V1/V2/V3)',
+        })
         return
       }
       const name = queryString(req.query.name) || card.name || 'Importé'
@@ -65,14 +71,18 @@ importRouter.post(
         greetings: card.alternateGreetings,
         systemPrompt: composeSystemPrompt(card),
       })
-      // La card EST une image : on la garde comme portrait du personnage, seule
-      // représentation visuelle possible tant qu'aucun VRM n'est choisi. L'échec
-      // d'écriture ne fait pas rater l'import (le personnage, lui, est créé).
+      // La card PNG EST une image : on la garde comme portrait du personnage,
+      // seule représentation visuelle possible tant qu'aucun VRM n'est choisi.
+      // L'échec d'écriture ne fait pas rater l'import (le personnage, lui, est
+      // créé). Une card .json n'a pas d'image : le personnage naît sans portrait,
+      // et l'initiale teintée en tient lieu jusqu'à ce qu'on lui en donne un.
       let saved = character
-      try {
-        saved = updateCharacter(character.id, { portrait: savePortrait(character.id, buf) })
-      } catch (e) {
-        console.warn('[import] portrait non conservé :', e)
+      if (fromPng) {
+        try {
+          saved = updateCharacter(character.id, { portrait: savePortrait(character.id, buf) })
+        } catch (e) {
+          console.warn('[import] portrait non conservé :', e)
+        }
       }
       res.json({ character: saved })
     } catch (e) {
