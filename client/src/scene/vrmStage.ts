@@ -1281,7 +1281,29 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // Des DEUX côtés, on retient le premier impact qui montre quelque chose :
     // une surface invisible n'est pas ce que l'utilisateur a visé (cf.
     // estOpaqueAuClic — le plafond alpha 0 du loft rendait le sol incliquable).
+    //
+    // Et des deux côtés, jamais plus près que le plan de coupe : sous
+    // camera.near, la surface n'est PAS dessinée — l'écran montre ce qu'il y a
+    // derrière, le rayon doit donc y aller aussi. Même principe que la règle de
+    // transparence, appliqué à l'autre façon d'être invisible.
+    //
+    // Le DÉCOR, lui, ne compte pas non plus sous controls.minDistance : la
+    // caméra refuse elle-même de prendre pour sujet quoi que ce soit de plus
+    // proche (frameCamera la borne à 0,3 h), donc une surface de la pièce collée
+    // à l'objectif est du premier plan qui bouche la vue, pas une cible. Le cas
+    // extrême est la caméra ENCASTRÉE dans un meuble — OrbitControls traverse
+    // les murs sans collision, et dans rustic-bedroom un azimut entier d'orbite
+    // passe dans une commode : l'écran se remplit de sa paroi, et plus AUCUN
+    // clic au sol ne répondait (mesuré : de 63/85 et 53/85 rayons servis selon
+    // la famille de caméras, à 70/85 et 57/85 — et rien ne recule : un impact
+    // qui déclenche est à ≥ 0,9 m d'un œil à hauteur de tête, jamais sous ces
+    // seuils). L'AVATAR garde le seul near : il est le sujet même de l'orbite,
+    // son épaule à 20 cm de l'objectif reste ce que l'utilisateur regarde.
+    // La praticabilité de la carte reste le filet : traverser un premier plan
+    // ne mène jamais qu'à du sol qu'elle reconnaît.
+    raycaster.near = camera.near
     const onAvatar = premierImpactVisible(raycaster.intersectObject(currentVrm.scene, true))
+    raycaster.near = Math.max(camera.near, controls.minDistance)
     const onEnv = viserDecor()
     const dAvatar = onAvatar ? onAvatar.distance : Infinity
     const dEnv = onEnv ? onEnv.distance : Infinity
