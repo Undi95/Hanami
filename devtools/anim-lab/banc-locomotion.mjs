@@ -223,11 +223,12 @@ function clicVersPremierPas(angleDeg, distance = 6) {
  * chronomètre du clic au RETOUR AU REPOS (l'arrêt compris, c'est ce que l'œil
  * voit), et on relève la suite des allures posées.
  */
-function trajet(distance, { couloir = false, cible = null } = {}) {
+function trajet(distance, { couloir = false, cible = null, angleDeg = 0 } = {}) {
   const b = creerBanc({ capRepos: 0, couloir })
   b.image()
   const t0 = b.temps()
-  const but = cible ?? { x: 0, z: distance }
+  const a = (angleDeg * Math.PI) / 180
+  const but = cible ?? { x: Math.sin(a) * distance, z: Math.cos(a) * distance }
   if (!b.w.goTo(but.x, but.z)) return { distance, refus: true }
   let parcouru = 0
   let prev = { ...b.pose() }
@@ -272,6 +273,16 @@ const trajets = DISTANCES.map((d) => trajet(d))
 // Le couloir en L : 6 m de branche, un coude, puis 2 / 4 / 6 m — soit un CHEMIN
 // de 8 à 12 m fait d'étapes dont aucune ne dépasse 6 m. C'est le cas où
 // l'allure se choisissait sur le segment et non sur le trajet.
+// Trajets QUI TOURNENT, en pièce ouverte : c'est là que se voit ce que coûte
+// (ou rapporte) la courbe des premiers pas. Le `reste` dit si le personnage
+// arrive encore là où on a cliqué.
+const VIRAGES = [
+  [6, 90],
+  [6, 180],
+  [3, 90],
+  [3, 180],
+]
+const trajetsVirage = VIRAGES.map(([d, a]) => Object.assign(trajet(d, { angleDeg: a }), { angleDeg: a }))
 const COUDES = [2, 4, 6]
 const trajetsCouloir = COUDES.map((x) =>
   Object.assign(trajet(COULOIR.longueurZ + x, { couloir: true, cible: { x, z: COULOIR.longueurZ } }), { cheminM: COULOIR.longueurZ + x }),
@@ -303,6 +314,20 @@ for (const t of trajets) {
       `   ${String((t.vitesseMoyMS ?? 0).toFixed(2) + ' m/s').padStart(8)}   ${t.allures.join(' → ')}`,
   )
 }
+console.log('\n── trajet QUI TOURNE (pièce ouverte) ──')
+console.log('   demandé   cap   parcouru   reste   durée      1er pas')
+for (const t of trajetsVirage) {
+  if (t.refus) {
+    console.log(`   ${String(t.distance + ' m').padStart(7)}   ${String(t.angleDeg + '°').padStart(4)}   REFUSÉ`)
+    continue
+  }
+  console.log(
+    `   ${String(t.distance + ' m').padStart(7)}   ${String(t.angleDeg + '°').padStart(4)}` +
+      `   ${String(t.parcouruM.toFixed(2) + ' m').padStart(8)}   ${String(t.resteM.toFixed(2) + ' m').padStart(6)}` +
+      `   ${String((t.trajetS ?? 0).toFixed(2) + ' s').padStart(7)}   ${String((t.premierPasS ?? 0).toFixed(2) + ' s').padStart(7)}`,
+  )
+}
+
 console.log('\n── trajet À ÉTAPES (couloir en L, coude à 6 m) ──')
 console.log('   chemin   parcouru   reste   durée      moy      arrêts   allures')
 for (const t of trajetsCouloir) {
@@ -320,6 +345,6 @@ console.log('')
 
 if (args.has('json')) {
   const dest = path.join(LAB, path.basename(args.get('json')))
-  fs.writeFileSync(dest, JSON.stringify({ borne: BORNE, demarrages, trajets, trajetsCouloir }, null, 1))
+  fs.writeFileSync(dest, JSON.stringify({ borne: BORNE, demarrages, trajets, trajetsVirage, trajetsCouloir }, null, 1))
   console.log(`écrit : ${dest}\n`)
 }

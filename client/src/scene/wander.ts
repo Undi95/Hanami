@@ -42,6 +42,42 @@ import type { Fade } from './fades'
 const TURN_LEFT_RATE = 48.4 // °/s, world-turn-left (angleParCycleDeg 53,2 / dureeS 1,1)
 const TURN_RIGHT_RATE = -52.1 // °/s, world-turn-right (−52,1 / 1,0)
 /**
+ * LE CAP TOURNE PLUS VITE QUE LE CLIP — et voilà ce que ça coûte.
+ *
+ * Un pivot est joué SUR PLACE : le clip fait tourner les PIEDS autour du corps,
+ * et c'est le code qui reporte la rotation sur le cap. Tant que le cap tourne à
+ * la vitesse que le clip dépeint, le pied posé reste immobile dans le monde.
+ * Au-delà, il est TRAÎNÉ de `bras de levier × Δcap × durée d'appui`.
+ *
+ * Mesuré sur le rig de la sonde (reference-2.vrm, hanches 0,9045 m),
+ * en rejouant les clips image par image : le pied porteur d'un pivot tourne à
+ * 9,1 cm (turn-left) / 10,8 cm (turn-right) de l'axe du corps, et une phase
+ * d'appui dure au plus un demi-cycle, soit ~0,5 s. Le traîné AJOUTÉ vaut donc :
+ *
+ *     Δcap    +12 °/s   +24 °/s   +36 °/s   +48 °/s   +96 °/s
+ *     traîné    1,0 cm    2,1 cm    3,1 cm    4,2 cm    8,4 cm
+ *
+ * Les seuils du banc sont 3 cm (normal) / 8 cm (défaut). ×2 laisse 4,2 cm
+ * (le rejeu complet donne 4,7 sur turn-left), donc la bande « à regarder » ;
+ * ×3 atteint le défaut. ×2 est le dernier cran acceptable, et il faut le
+ * prendre : c'est lui qui met le demi-tour sous 1,8 s.
+ *
+ * CE QU'IL FAUT SAVOIR POUR JUGER CES 4,7 cm : un clip de pivot n'est pas un
+ * clip où le pied doit rester fixe. Ses semelles balaient 135 cm par cycle —
+ * elles se REPOSENT, c'est un pivot pas à pas. Les 4,7 cm ajoutés sont 3,5 % de
+ * ce que le pied fait déjà de lui-même. Le banc le dit d'ailleurs à sa façon :
+ * il marque les pivots d'un † et refuse de les colorier au seuil des 3 cm.
+ * Sur une MARCHE, où le pied d'appui doit rester planté, la même mesure vaut
+ * 0,4 cm à cap fixe — et c'est elle qui borne WALK_TURN_RATE, plus bas.
+ *
+ * CE QUI SERAIT MIEUX, et qui n'est pas ici : jouer le CLIP plus vite
+ * (`timeScale`), comme le fait `AnimBlendLinearMove` chez Overte. Le traîné
+ * tomberait à zéro. Mais la vitesse de lecture appartient au mixer, donc à
+ * vrmStage, et le contrat `WanderHost` n'expose que le nom d'un clip et sa
+ * phase.
+ */
+const TURN_RATE_BOOST = 2
+/**
  * Phase (s) à laquelle ENTRER dans chaque clip de pivot — le contrat
  * `depuisIdle` / `entreeMoteurS` de vrma/world.json. Sans elle, l'action
  * gardait son temps RASSIS (three fige `time` à poids nul) : chaque pivot
@@ -323,10 +359,51 @@ export const GAIT_CHANGE_PHASES: Record<string, { exitS: number; enterS: number;
 // Les FONDUS de la marche sont WALK_START_IN / WALK_CYCLE_IN / STOP_IN /
 // STOP_SMALL_IN / STOP_OUT (fades.ts). Les PHASES d'entrée et de sortie des
 // cycles, elles, restent les contrats de vrma/world.json ci-dessus.
-/** Vitesse de correction du cap PENDANT la marche (le clip va tout droit). */
+/**
+ * Vitesse de correction du cap PENDANT la marche (le clip va tout droit).
+ *
+ * ELLE NE PEUT PAS MONTER, et c'est mesuré. Rejeu image par image de
+ * `world-walk` avec le corps qui avance de l'odométrie et le cap qui tourne :
+ * le pied d'appui glisse de 0,4 cm par appui à cap fixe (l'odométrie fait son
+ * travail), puis 3,7 cm à 30 °/s, 5,4 à 45, 7,1 à 60, 8,8 à 75, 10,6 à 90.
+ * Le seuil « défaut » du banc est 8 cm : 60 °/s tient déjà le haut de la bande
+ * « à regarder », et 75 °/s la franchit. On garde 60.
+ * Le rayon de virage qui en découle vaut 1,29 m à 1,35 m/s — un quart de tour
+ * en une seconde et demie, sans lever le pied autrement que pour marcher.
+ */
 const WALK_TURN_RATE = 60 * (Math.PI / 180)
-/** Écart de cap au-delà duquel on pivote SUR PLACE avant de partir. */
-const WALK_ALIGN = 40 * (Math.PI / 180)
+/**
+ * Écart de cap que la MARCHE sait absorber en courbant sa trajectoire. En
+ * dessous, aucun pivot sur place : on part, et le cap se corrige dans les
+ * premiers pas — c'est ce que fait un corps, et c'est déjà ce que le moteur
+ * savait faire (l'état 'walking' tourne à WALK_TURN_RATE depuis toujours).
+ *
+ * 40° → 55°. La borne n'est pas un goût : à 60 °/s, 55° se courbent en 0,92 s,
+ * pendant lesquelles le personnage AVANCE — là où le même écart pivoté sur
+ * place coûtait 1,14 s plantée. Au-delà, la courbe deviendrait un dérapage
+ * (l'écart initial se paie en trajectoire, pas seulement en temps).
+ */
+const WALK_ALIGN = 55 * (Math.PI / 180)
+/**
+ * Écart de cap qu'un pivot d'ALIGNEMENT a le droit de laisser derrière lui : la
+ * marche le finira en courbant ses premiers pas. Ce n'est pas WALK_ALIGN, et la
+ * différence se paie en MÈTRES.
+ *
+ * Une trajectoire qui courbe est plus longue que la corde qu'elle remplace, de
+ * R(θ − sin θ) — R = vitesse ÷ WALK_TURN_RATE = 1,36 m pour `world-walk`. Or le
+ * plan de marche compte des foulées ENTIÈRES sur une ligne DROITE : tout retard
+ * sur ce compte fait manquer la couture de sortie, et le personnage repart pour
+ * un cycle COMPLET — 1,42 m de trop. Mesuré en laissant 55° à la marche :
+ * l'arrivée passait de 0,20 m à 1,03 m du point cliqué, et le trajet de 6 m ne
+ * gagnait que 0,27 s au total (l'élan gagné au départ, repris par le cycle en
+ * trop). À 25°, la rallonge vaut 1,8 cm — un huitième de foulée, elle ne peut
+ * pas faire manquer de couture, et l'arrivée ne bouge pas.
+ *
+ * Le pivot couvre donc au moins WALK_ALIGN − PIVOT_SLACK = 30° : assez pour
+ * qu'un clip de pivot existe vraiment, là où un jeu plus large aurait posé un
+ * clip pour deux degrés de rotation.
+ */
+const PIVOT_SLACK = 25 * (Math.PI / 180)
 /** Pas d'échantillonnage d'un chemin lors de sa vérification (m). */
 const PATH_STEP = 0.15
 
@@ -659,6 +736,8 @@ export function createWander(host: WanderHost): Wander {
   // Cap visé pendant un pivot, et sens du clip en cours (+1 = gauche).
   let yawTarget = 0
   let turnDir: 1 | -1 = 1
+  /** Écart de cap que le pivot en cours a le droit de laisser derrière lui. */
+  let pivotSlack = FACE_DEADZONE * 0.5
   /**
    * Un clip de pivot tient l'écran. C'est lui qui choisit le fondu de la
    * SORTIE (TURN_OUT) là où la même jonction sans pivot garde son fondu
@@ -758,19 +837,27 @@ export function createWander(host: WanderHost): Wander {
     return host.camYaw(p.x, p.z)
   }
 
-  function startPivot(want: number, next: State): void {
+  /**
+   * `slack` : écart de cap qu'on accepte de LAISSER au pivot, parce que la suite
+   * saura le finir. Un pivot d'alignement rend la main dès qu'il en reste assez
+   * peu pour que la marche le courbe (WALK_ALIGN) ; un pivot de repos ou
+   * d'assise, lui, n'a personne derrière pour finir et va jusqu'au bout.
+   * Par défaut, la demi-zone morte — c'est-à-dire le comportement de toujours.
+   */
+  function startPivot(want: number, next: State, slack = FACE_DEADZONE * 0.5): void {
     const d = shortAngle(want - p.yaw)
     turnDir = d > 0 ? 1 : -1
     yawTarget = want
+    pivotSlack = slack
     const clip = turnDir > 0 ? 'turn-left' : 'turn-right'
-    // GARDE D'ANGLE : sous la demi-zone morte, turnStep rendra la main à sa
+    // GARDE D'ANGLE : sous le jeu accordé, turnStep rendra la main à sa
     // première image — le clip posé quand même prenait ~5 % de poids UNE image
     // avant d'être remplacé (flash mécanique du seatAlign d'un personnage déjà
     // aligné, endLeg → tryGoSit). Le seuil est EXACTEMENT la condition de fin
     // immédiate de turnStep : les deux ne peuvent pas se contredire.
     // Clip absent (dossier vrma/ incomplet) : on glisse, on ne bloque pas.
     // La phase d'entrée est le contrat de raccord — cf. TURN_ENTER_*_S.
-    if (Math.abs(d) >= FACE_DEADZONE * 0.5 && host.has(clip)) {
+    if (Math.abs(d) >= slack && host.has(clip)) {
       host.gait(clip, TURN_IN, turnDir > 0 ? TURN_ENTER_LEFT_S : TURN_ENTER_RIGHT_S)
       turnClipUp = true
     }
@@ -779,9 +866,9 @@ export function createWander(host: WanderHost): Wander {
 
   /** Avance le cap vers `want` au taux du clip de pivot. Rend true quand c'est fini. */
   function turnStep(delta: number, want: number): boolean {
-    const rate = (turnDir > 0 ? TURN_LEFT_RATE : TURN_RIGHT_RATE) * DEG2RAD
+    const rate = (turnDir > 0 ? TURN_LEFT_RATE : TURN_RIGHT_RATE) * TURN_RATE_BOOST * DEG2RAD
     const left = shortAngle(want - p.yaw)
-    if (left * turnDir <= 0 || Math.abs(left) < FACE_DEADZONE * 0.5) return true
+    if (left * turnDir <= 0 || Math.abs(left) < pivotSlack) return true
     // `rate` porte déjà le signe du sens ; le bornage empêche le dépassement.
     p.yaw += clamp(rate * delta, -Math.abs(left), Math.abs(left))
     return false
@@ -1054,12 +1141,27 @@ export function createWander(host: WanderHost): Wander {
     return false
   }
 
-  /** Démarre la marche préparée : pivot d'alignement si l'écart de cap est franc. */
+  /**
+   * Démarre la marche préparée.
+   *
+   * QUELQU'UN QUI SE TOURNE POUR MARCHER, IL SE TOURNE — il ne glisse pas sur
+   * lui-même à 90° pendant trois secondes. Le pivot sur place n'est donc gardé
+   * que pour ce que la marche ne sait pas absorber, et il RELÂCHE dès que le
+   * reste est marchable : les derniers degrés se courbent dans les premiers pas,
+   * en avançant. Mesuré au banc (clic → premier pas), avant → après :
+   *   30°   0,02 s → 0,02 s   (aucun pivot, ni avant ni après)
+   *   90°   1,78 s → 0,69 s
+   *   180°  3,38 s → 1,51 s
+   * Le pivot ne part qu'au-dessus de ce que la marche sait courber (WALK_ALIGN),
+   * et il rend la main dès qu'il en reste assez peu pour qu'elle finisse
+   * (PIVOT_SLACK) — les deux bornes sont mesurées, l'une au glissement du pied,
+   * l'autre à la rallonge de trajectoire.
+   */
   function beginWalk(): void {
     walked = 0
     const want = Math.atan2(destX - p.x, destZ - p.z)
     if (Math.abs(shortAngle(want - p.yaw)) >= WALK_ALIGN) {
-      startPivot(want, 'align')
+      startPivot(want, 'align', PIVOT_SLACK)
       return
     }
     launchGait()
@@ -1504,6 +1606,20 @@ export function createWander(host: WanderHost): Wander {
     }
   }
 
+  /**
+   * Le cap se corrige DOUCEMENT pendant qu'on marche : le clip va tout droit,
+   * un virage serré se verrait comme un dérapage — WALK_TURN_RATE porte la
+   * mesure. Sous 20 cm du but, on ne corrige plus : l'angle diverge quand la
+   * distance tend vers zéro, et le personnage se mettrait à tournoyer sur place
+   * pour viser un point qu'il touche déjà.
+   */
+  function aimWhileWalking(delta: number): void {
+    if (Math.hypot(destX - p.x, destZ - p.z) <= 0.2) return
+    const want = Math.atan2(destX - p.x, destZ - p.z)
+    const dYaw = shortAngle(want - p.yaw)
+    p.yaw += clamp(dYaw, -WALK_TURN_RATE * delta, WALK_TURN_RATE * delta)
+  }
+
   /** Le cycle vient-il de franchir sa phase de sortie ? */
   function crossedExit(): boolean {
     const t = host.gaitTime()
@@ -1579,6 +1695,14 @@ export function createWander(host: WanderHost): Wander {
         // `world-walk-start` porte lui-même son élan : on ne fait qu'avancer de
         // ce qu'il dépeint. C'est `once` qui rendra la main au cycle, à la
         // bonne phase, sur son événement de fin.
+        //
+        // LE CAP SE CORRIGE DÈS CE PREMIER PAS, au même taux que la marche :
+        // c'est la moitié de « partir en tournant ». Sans ça, le clip de départ
+        // (0,4 s, 0,4 m) partait tout droit à côté du but, et la courbe ne
+        // commençait qu'après. Le pied d'appui du départ est court : le
+        // glissement ajouté y est plus petit que celui du cycle, déjà mesuré à
+        // 7,1 cm par appui à ce taux.
+        aimWhileWalking(delta)
         advance()
         if (!host.transitioning()) {
           // La transition s'est achevée : le cycle a pris la main, à sa phase.
@@ -1588,13 +1712,7 @@ export function createWander(host: WanderHost): Wander {
         break
       }
       case 'walking': {
-        // Le cap se corrige DOUCEMENT pendant la marche : le clip va tout droit,
-        // un virage serré se verrait comme un dérapage.
-        const want = Math.atan2(destX - p.x, destZ - p.z)
-        const dYaw = shortAngle(want - p.yaw)
-        if (Math.hypot(destX - p.x, destZ - p.z) > 0.2) {
-          p.yaw += clamp(dYaw, -WALK_TURN_RATE * delta, WALK_TURN_RATE * delta)
-        }
+        aimWhileWalking(delta)
         const crossed = crossedExit() // AVANT tout : tient `lastGaitTime` à jour
         // L'arrêt décidé à un tour PRÉCÉDENT part sur cette couture-ci. L'ordre
         // compte : décider et s'arrêter dans la même image ferait perdre le
@@ -1810,7 +1928,12 @@ export function createWander(host: WanderHost): Wander {
 export const WANDER_CONSTANTS = {
   TURN_LEFT_RATE,
   TURN_RIGHT_RATE,
+  TURN_RATE_BOOST,
   TURN_CLIP_THRESHOLD,
   TURN_GLIDE_RATE,
   FACE_DEADZONE,
+  WALK_TURN_RATE,
+  WALK_ALIGN,
+  PIVOT_SLACK,
+  WALK_OVER_STROLL_M,
 } as const
