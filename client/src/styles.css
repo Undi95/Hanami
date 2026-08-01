@@ -334,14 +334,16 @@ select {
 .scene-hint {
   position: fixed;
   z-index: 6;
-  bottom: 18px;
+  /* AU-DESSUS du bouton de recadrage plutôt qu'à côté : il occupe le coin bas
+     gauche jusqu'à 44 px du bord (30 px de disque à 14 px de marge). Passer
+     par-dessus laisse la phrase respirer sur toute la bande — la contourner
+     par la gauche lui aurait coûté 100 px de largeur sur les 480 disponibles à
+     900 px de fenêtre, la plus étroite qui puisse l'afficher. */
+  bottom: 54px;
   left: 0;
-  /* Centrée dans la bande laissée par la colonne de chat, et jamais sous le
-     bouton de recadrage (30 px au coin, plus sa marge) : le retrait latéral
-     tient les deux à distance même sur la fenêtre la plus étroite qui puisse
-     l'afficher (900 px). */
+  /* Centrée dans la bande laissée par la colonne de chat. */
   right: var(--chat-col-w);
-  padding: 0 76px;
+  padding: 0 24px;
   color: var(--text-dim);
   font-size: 12.5px;
   line-height: 1.45;
@@ -355,12 +357,14 @@ select {
 }
 
 /* Mode visual novel : la boîte de dialogue occupe le bas de l'écran et la
-   colonne de chat n'existe plus — l'astuce monte en haut, où seul le
-   quick-menu d'icônes vit, dans le coin droit. */
+   colonne de chat n'existe plus — l'astuce monte en haut. Le retrait latéral
+   la tient à l'écart du quick-menu d'icônes, en colonne dans le coin droit
+   (et en rangée sur écran court, d'où le retrait des DEUX côtés). */
 .scene-hint.vn {
   top: 18px;
   bottom: auto;
   right: 0;
+  padding: 0 76px;
 }
 
 /* Fondu d'entrée court, longue tenue, sortie douce. Aucun mouvement : une
