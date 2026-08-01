@@ -195,6 +195,10 @@ export default function MessageList({
   const [pinOpen, setPinOpen] = useState(false)
   // Image affichée en grand (null = aucune) — calque fermé au clic.
   const [zoom, setZoom] = useState<string | null>(null)
+  // Message dont le texte vient d'être copié (ordinal) : l'icône devient une
+  // coche pendant deux secondes, puis redevient elle-même. Même grammaire que le
+  // bouton « Copier » de l'Inspecteur, en version icône.
+  const [copied, setCopied] = useState<number | null>(null)
   // Recherche : rien à l'écran tant qu'elle n'est pas ouverte (Ctrl+F).
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -290,6 +294,22 @@ export default function MessageList({
     setEditError(null)
   }
 
+  /**
+   * Copie le texte AFFICHÉ du message (tags d'émotion retirés pour l'assistant,
+   * comme dans la bulle) — pas la source brute : on copie ce qu'on lit.
+   * Un presse-papiers refusé (contexte non sécurisé) ne dit rien à l'écran : le
+   * bouton ne coche simplement pas.
+   */
+  function copyMessage(ordinal: number, text: string) {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(ordinal)
+        window.setTimeout(() => setCopied((c) => (c === ordinal ? null : c)), 2000)
+      })
+      .catch((e) => console.error('[copy]', e))
+  }
+
   function submitEdit() {
     if (editing === null || !draft.trim()) return
     setSaving(true)
@@ -354,6 +374,26 @@ export default function MessageList({
               <div className="msg-ts">
                 {editable && ordinal !== null && (
                   <>
+                    {/* Copier : la seule action qui ne touche à rien — d'où sa
+                        place en tête de rangée. La coche remplace l'icône deux
+                        secondes, c'est tout le retour visuel. */}
+                    <button
+                      className="msg-edit"
+                      title={copied === ordinal ? t('copied') : t('copyMessage')}
+                      aria-label={copied === ordinal ? t('copied') : t('copyMessage')}
+                      onClick={() => copyMessage(ordinal, text)}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        {copied === ordinal ? (
+                          <path d="M5 12.5l4.5 4.5L19 6.5" />
+                        ) : (
+                          <>
+                            <path d="M11 9.5h6.5A1.5 1.5 0 0119 11v6.5a1.5 1.5 0 01-1.5 1.5H11a1.5 1.5 0 01-1.5-1.5V11A1.5 1.5 0 0111 9.5z" />
+                            <path d="M6.5 14.5H6A1.5 1.5 0 014.5 13V6A1.5 1.5 0 016 4.5h7A1.5 1.5 0 0114.5 6v.5" />
+                          </>
+                        )}
+                      </svg>
+                    </button>
                     <button
                       className="msg-edit"
                       title={t('editMessage')}
