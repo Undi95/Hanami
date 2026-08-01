@@ -507,7 +507,7 @@ export function listerModeles() {
  * Résout un nom de modèle en chemin complet : chemin existant, puis NOM EXACT
  * (avec ou sans .vrm, insensible à la casse), puis sous-chaîne — mais si
  * PLUSIEURS fichiers répondent, on refuse en les listant au lieu de prendre le
- * premier (« sakura » attrapait « ModeleAmbigu.vrm » selon l'ordre du
+ * premier (« sakura » attrapait un autre modèle dont le nom la contient, selon l'ordre du
  * disque). Sans nom : reference.vrm, le modèle épinglé du diagnostic.
  */
 export function resoudreModele(nom) {

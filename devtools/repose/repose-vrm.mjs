@@ -2,7 +2,7 @@
 // repose-vrm.mjs — RÉPARER LA POSE DE REPOS d'un .vrm à partir d'un modèle de
 // référence au même squelette.
 //
-// Le cas qui a motivé l'outil : ModelePoseCuite.vrm. Son export a cuit une pose
+// Le cas qui a motivé l'outil : un export qui a cuit une pose
 // « bras baissés » dans les TRANSLATIONS des os du bras (rotations toutes
 // identité, liaison du maillage cohérente avec cette pose — nœuds = inverse des
 // IBM à 0,0 cm près). Le squelette est identique à celui de modele-sain.vrm
@@ -45,7 +45,7 @@
 // segment, invisible ici.
 //
 // Usage (depuis la racine du dépôt) :
-//   node devtools/repose/repose-vrm.mjs vrm/ModelePoseCuite.vrm --ref=vrm/modele-sain.vrm
+//   node devtools/repose/repose-vrm.mjs vrm/modele-casse.vrm --ref=vrm/modele-sain.vrm
 //                                        → DIAGNOSTIC seul (aucune écriture)
 //   … --sortie=<chemin.vrm>              → écrit le fichier corrigé LÀ, et le revérifie
 //   … --appliquer                        → remplace le fichier d'origine, après

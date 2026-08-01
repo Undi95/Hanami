@@ -135,7 +135,7 @@ node devtools/diagnostic/diagnostic.mjs --rapport              # refond index.js
 Options : `--modele=<nom>`
 (défaut **EtalonChibi** — épinglé : deux exécutions ne se comparent qu'à
 modèle égal ; nom **exact** d'abord, une sous-chaîne ambiguë est **refusée**
-avec la liste des candidats — « sakura » attrapait « ModeleAmbigu.vrm »
+avec la liste des candidats — « sakura » attrapait un autre modèle dont le nom la contient
 selon l'ordre du disque), `--sans-images` (fiches seules, rapide), `--poses=N`.
 
 ## Ce que chaque sortie signifie
@@ -359,7 +359,7 @@ comme des défauts de clips (inventaire de la passe des 94, 2026-08-01) :
 | modèle | hanches | particularité |
 | --- | --- | --- |
 | `5661047213623940145.vrm` | 0,328 m | chibi : écartement des pieds « défaut » au juge (jusqu'à 37 cm-adulte), c'est son bassin |
-| `RigMascotte.vrm` | 0,547 m | rig mascotte : **sans os `neck`**, jambes 0,68 × hanches — traverse son tronc en course, charnière de genou jusqu'à 50° |
+| une mascotte non humanoïde | 0,547 m | rig mascotte : **sans os `neck`**, jambes 0,68 × hanches — traverse son tronc en course, charnière de genou jusqu'à 50° |
 | `7312138852387622699.vrm` | 0,628 m | proportions enfant, jambes 0,82 × hanches |
 
 Les fourchettes anthropométriques du juge (écartement, hauteur de pas…) ne leur

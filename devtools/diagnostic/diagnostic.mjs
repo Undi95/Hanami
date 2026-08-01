@@ -429,7 +429,7 @@ async function principal() {
 
   // UN modèle pour tout : la fiche et les images parlent du même squelette.
   // EtalonChibi est ÉPINGLÉ (nom exact — « sakura » attrapait
-  // « ModeleAmbigu.vrm » selon l'ordre du disque).
+  // un autre modèle dont le nom la contient, selon l'ordre du disque).
   const modeleFichier = REN.scene.resoudreModele(opt.get('modele') ?? 'EtalonChibi')
   const rig = JR.chargerRig(modeleFichier)
   console.log(`modèle : ${rig.nom} — hanches ${rig.hanchesM.toFixed(3)} m, échelle ${rig.echelle.toFixed(3)}`)

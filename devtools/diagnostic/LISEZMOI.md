@@ -30,7 +30,7 @@ directement dans `devtools/diagnostic-out/RAPPORT.md`, lisible sans navigateur.
 Modèle épinglé par défaut : **`reference.vrm`** (hanches 0,755 m).
 Toute mesure ne se compare qu'à modèle égal — il est écrit dans chaque fiche.
 `--modele=<nom>` : nom **exact** d'abord ; une sous-chaîne ambiguë est refusée
-avec la liste des candidats (« sakura » attrapait « ModeleAmbigu.vrm »
+avec la liste des candidats (« sakura » attrapait un autre modèle dont le nom la contient
 selon l'ordre du disque).
 
 ## Les pièges déjà payés (ne pas les réintroduire)

@@ -14,7 +14,7 @@ baissés, poignets tournés — en la brûlant dans les **translations** des os
 cohérent en interne, donc aucun outil ne proteste). Sur un tel modèle, chaque
 clip retargeté place les mains à côté, systématiquement, du même angle.
 
-Le cas fondateur : `ModelePoseCuite.vrm` — 17 échecs et 17 limites à la matrice du
+Le cas fondateur : un export à pose cuite — 17 échecs et 17 limites à la matrice du
 banc, seul hors-série sur 94 modèles, `idle` à 9,4 cm de son propre socle. Son
 squelette est identique à celui de `modele-sain.vrm` (169 nœuds de mêmes
 noms, longueurs égales au dixième de millimètre) ; seule la pose de repos des
@@ -47,7 +47,7 @@ démarrage rejoue ce cas réel depuis).
 
 ```
 # diagnostic seul (aucune écriture)
-node devtools/repose/repose-vrm.mjs vrm/ModelePoseCuite.vrm --ref=vrm/modele-sain.vrm
+node devtools/repose/repose-vrm.mjs vrm/modele-casse.vrm --ref=vrm/modele-sain.vrm
 
 # écrire le fichier corrigé AILLEURS, pour le mesurer d'abord
 … --sortie=<chemin.vrm>
@@ -71,7 +71,7 @@ fondateur, après application (clips dans l'état du 2026-08-01) :
 
 | mesure | avant | après |
 | --- | --- | --- |
-| sonde 111 clips (`--rig=vrm --vrm=vrm/ModelePoseCuite.vrm`) | 14 échecs · 16 limites | **0 échec · 3 limites** — bilan identique à ModeleSain, clip par clip, au dixième de cm |
+| sonde 111 clips (`--rig=vrm --vrm=vrm/modele-casse.vrm`) | 14 échecs · 16 limites | **0 échec · 3 limites** — bilan identique au modèle de référence sain, clip par clip, au dixième de cm |
 | `idle` contre son propre socle | 9,4 cm | **1,0 cm (excellent)** |
 | juge `world-walk`, opposition bras/jambes | ✗ r = +0,66 | ✓ r = −0,98 |
 | juge `world-run`, hyperextension coude G | ✗ 44° | ✓ disparue |

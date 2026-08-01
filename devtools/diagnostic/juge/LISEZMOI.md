@@ -200,7 +200,7 @@ tous produisaient des chiffres **crédibles et faux**.
   ne normalise pas. À lire comme « à la limite haute », pas comme un défaut ferme.
 - **Trois modèles sont HORS-GABARIT anthropométrique** et les fourchettes du juge ne leur sont pas
   opposables : `5661047213623940145.vrm` (chibi, hanches 0,328 m — écartement jusqu'à 37 cm-adulte),
-  `RigMascotte.vrm` (rig mascotte 0,547 m, SANS os `neck`, jambes 0,68 × hanches —
+  une mascotte non humanoïde (rig mascotte 0,547 m, SANS os `neck`, jambes 0,68 × hanches —
   traverse son tronc en course, charnière de genou jusqu'à 50°), `7312138852387622699.vrm` (0,628 m).
   Leurs « défauts » sur ces critères sont des proportions de modèle, pas des défauts de clips — à
   étiqueter, jamais à corriger (liste détaillée : `devtools/anim-lab/LISEZMOI.md`, passe des 94).

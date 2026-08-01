@@ -229,7 +229,7 @@ export function chargerRig(fichier) {
  * Résolution : chemin existant, puis NOM EXACT (avec ou sans .vrm, insensible à
  * la casse), puis sous-chaîne — mais si PLUSIEURS fichiers répondent, on refuse
  * en les listant au lieu de prendre le premier. Le raccourci « premier qui
- * contient » faisait résoudre « sakura » vers « ModeleAmbigu.vrm » au
+ * contient » faisait résoudre « sakura » vers un autre modèle dont le nom la contient, au
  * lieu de « reference.vrm » : c'était l'ordre du disque qui choisissait le
  * modèle jugé, et toutes les mesures avec.
  */
