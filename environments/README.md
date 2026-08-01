@@ -7,10 +7,12 @@ Dépose ici des fichiers `.glb` (ou `.gltf`) — ils apparaissent dans Hanami
 ## Format attendu
 
 - **Unités : mètres**, axe **Y vers le haut** (convention glTF).
-- **Origine au sol**, à l'endroit où le personnage doit se tenir. Hanami cale
-  quand même le décor sur le sol et ne corrige l'échelle que si elle est absurde
-  (hauteur hors de l'intervalle 1,5 m – 12 m), mais un modèle propre évite tout
-  ajustement automatique.
+- **Origine au sol** à l'endroit où le personnage doit se tenir : **recommandé,
+  plus obligatoire**. C'est votre choix qui fait foi tant qu'il tient debout ;
+  sinon (un quai posé au-dessus de sa voie, un diorama sur son socle) l'analyse
+  **cale le décor toute seule** — voir « Calage automatique » plus bas. Hanami
+  pose de toute façon le décor sur le sol et ne corrige l'échelle que si elle est
+  absurde (hauteur hors de l'intervalle 1,5 m – 12 m).
 - **Autoportant** : textures embarquées dans le `.glb`. Les fichiers `.gltf` qui
   référencent des textures externes doivent avoir ces fichiers à côté d'eux.
 - **Compression Draco / meshopt / KTX2 non prise en charge** : le décor est
@@ -47,6 +49,49 @@ Dépose ici des fichiers `.glb` (ou `.gltf`) — ils apparaissent dans Hanami
 Toutes les clés sont facultatives ; une clé inconnue ou une valeur invalide est
 ignorée en silence.
 
+## Calage automatique du point d'accueil
+
+Un décor dont le sol praticable n'est pas à l'origine du modèle posait le
+personnage **sous son plancher** et la caméra **dans la géométrie** : un écran
+sombre, sans un mot. Il fallait mesurer le décor à la main et écrire un `spawn`.
+
+Plus maintenant. Quand le sidecar **ne donne pas de `spawn`** et que le point
+d'accueil obtenu est inhabitable — sol de la pièce à plus de 10 cm des pieds du
+personnage, objectif bouché dans les 16 directions, ou origine hors de la pièce
+— l'analyse **choisit elle-même** un point d'accueil et se rejoue autour de lui.
+Elle le note dans `placement.spawnAuto`, et l'application l'applique exactement
+comme un `spawn` de sidecar. Toutes les autres mesures du fichier (carte,
+assises, sol, dégagement) le supposent déjà appliqué : il n'y a rien à corriger
+en le lisant.
+
+Le choix, dans cet ordre :
+
+1. **la pièce** — la plus grande étendue d'un seul tenant où l'on marche, pas
+   celle qui touche l'origine (sur un quai de métro, c'est la voie ferrée) ;
+2. **tenir debout** — au moins 40 cm autour des pieds, sinon le personnage est
+   encastré et ne peut pas partir ;
+3. **reculer** — au moins 2,5 m de champ sur +Z, l'axe où la caméra se pose ;
+4. **avoir quelque chose à cadrer** — et c'est ce qui départage : le fond le plus
+   proche DERRIÈRE le personnage, car c'est lui que la caméra montre. Un point
+   « bien au milieu » d'une grande salle est un point où l'on ne voit que du
+   vide. Les sept points d'accueil réglés à la main des décors livrés ont tous
+   leur fond à moins de 2,7 m ; à égalité, le décor bouge du moins possible.
+
+Trois choses qu'il **ne fait pas** :
+
+- il n'écrase **jamais** un `spawn` de sidecar — votre valeur est la parole de
+  l'auteur, elle passe avant tout, même si elle est mauvaise ;
+- il ne déplace **pas** un décor dont l'origine fait l'affaire : un décor propre
+  rend exactement le même fichier d'analyse qu'avant que ce mécanisme existe ;
+- il ne **remplace** pas un réglage à la main : pour le figer (ou choisir un
+  autre endroit), recopiez la valeur trouvée en `spawn` dans le sidecar.
+  `npm run env:scene -- <nom>` l'affiche, prête à copier.
+
+S'il reste malgré tout un décor mal calé — un `spawn` de sidecar erroné, un
+décor sans aucun point d'accueil praticable — l'application le **dit** dans un
+bandeau discret à côté de la scène, avec la valeur à écrire. Un écran sombre ne
+doit jamais rester muet.
+
 ## Analyse automatique (`<nom>.scene.json`)
 
 Un décor déposé ici est **mesuré tout seul**, une fois, et le résultat est écrit
@@ -64,6 +109,8 @@ l'interface d'afficher « en préparation » puis « prêt ».
 
 L'analyse est **refaite** quand le `.glb` change, quand `scale`, `rotationY` ou
 `spawn` changent dans le sidecar, ou quand le format du fichier d'analyse évolue.
+Une analyse antérieure au calage automatique, sur un décor qui en aurait besoin,
+est refaite **une fois** — puis plus jamais, que le calage ait abouti ou non.
 Changer la seule `exposure` ne la refait pas : elle ne déplace rien.
 Un `.glb` illisible ou compressé n'est **jamais** une erreur bruyante : le décor
 reste un fond, et la raison est écrite dans l'état.
@@ -86,6 +133,9 @@ coordonnées se posent donc telles quelles dans la scène :
 
   // Fraîcheur : si l'un de ces champs ne colle plus, l'analyse est refaite.
   "source":    { "file": "chambre.glb", "bytes": 5544308, "mtimeMs": 1785401140995, "sha256": "059d66e37e5846" },
+  // `spawnAuto` n'apparaît que si le calage automatique a eu à se prononcer
+  // (pas de `spawn` au sidecar ET origine inhabitable) ; `null` = il a cherché
+  // sans rien trouver, le décor reste un fond. Cf. « Calage automatique ».
   "placement": { "scale": 0.031, "rotationY": 330, "spawn": [0.287, 0.256, -0.296], "fingerprint": "247decca1cfc09e9" },
 
   "frame": { "units": "m", "up": "+Y", "forward": "+Z", "origin": "spawn — pieds de l’avatar, y = 0" },
@@ -231,9 +281,12 @@ the avatar stands INSIDE the room.
 ## Expected format
 
 - **Units: meters**, **Y up** (glTF convention).
-- **Origin on the floor**, where the character should stand. Hanami still snaps
-  the environment to the ground and only fixes absurd scaling (height outside the
-  1.5 m – 12 m range), but a clean model avoids any automatic adjustment.
+- **Origin on the floor** where the character should stand: **recommended, no
+  longer required**. Your choice wins as long as it stands up; otherwise (a
+  platform sitting above its tracks, a diorama on its base) the analysis **snaps
+  the environment on its own** — see “Automatic spawn placement” below. Hanami
+  still puts the environment on the ground and only fixes absurd scaling (height
+  outside the 1.5 m – 12 m range).
 - **Self-contained**: textures embedded in the `.glb`. A `.gltf` referencing
   external textures needs those files next to it.
 - **Draco / meshopt / KTX2 compression is not supported**: such a file is
@@ -269,6 +322,49 @@ Next to `room.glb`, a `room.json` tunes placement without touching the model:
 
 Every key is optional; an unknown key or an invalid value is silently ignored.
 
+## Automatic spawn placement
+
+An environment whose walkable floor is not at the model origin used to put the
+character **under its own floor** and the camera **inside the geometry**: a dark
+screen, without a word. The only cure was measuring the model by hand and
+writing a `spawn`.
+
+Not any more. When the sidecar gives **no `spawn`** and the resulting spawn point
+is unusable — room floor more than 10 cm away from the character's feet, lens
+blocked in all 16 directions, or origin outside the room — the analysis **picks a
+spawn point itself** and re-runs around it. It records it in
+`placement.spawnAuto`, and the app applies it exactly like a sidecar `spawn`.
+Every other measurement in the file (map, seats, floor, clearance) already
+assumes it applied: there is nothing to correct when reading them.
+
+How it picks, in that order:
+
+1. **the room** — the largest single walkable stretch, not the one touching the
+   origin (on a subway platform, that one is the track bed);
+2. **standing up** — at least 40 cm of clear floor around the feet, or the
+   character is wedged in and cannot walk off;
+3. **pulling back** — at least 2.5 m of clearance along +Z, where the camera sits;
+4. **having something to frame** — and this is the tie-breaker: the closest
+   backdrop BEHIND the character, because that is what the camera shows. A spot
+   “right in the middle” of a large hall is a spot where you only see emptiness.
+   All seven hand-tuned spawn points of the shipped environments have their
+   backdrop within 2.7 m; on a tie, the environment moves as little as it can.
+
+Three things it does **not** do:
+
+- it **never** overrides a sidecar `spawn` — your value is the author's word and
+  comes first, even when it is wrong;
+- it does **not** move an environment whose origin does the job: a clean model
+  yields exactly the same analysis file as before this mechanism existed;
+- it does **not** replace a hand-tuned setting: to freeze it (or pick another
+  spot), copy the value into `spawn` in the sidecar.
+  `npm run env:scene -- <name>` prints it, ready to copy.
+
+Should an environment still end up misplaced — a wrong sidecar `spawn`, an
+environment with no walkable spawn point at all — the app **says so** in a
+discreet banner next to the scene, with the value to write. A dark screen must
+never stay silent.
+
 ## Automatic analysis (`<name>.scene.json`)
 
 An environment dropped here is **measured on its own**, once, and the result is
@@ -284,7 +380,9 @@ without interaction. `GET /api/environments` reports each one's state (`pending`
 “ready”.
 
 The analysis is **redone** when the `.glb` changes, when `scale`, `rotationY` or
-`spawn` change in the sidecar, or when the analysis format itself moves on.
+`spawn` change in the sidecar, or when the analysis format itself moves on. An
+analysis predating the automatic spawn placement, on an environment that would
+need it, is redone **once** — then never again, whether or not it succeeded.
 Changing only `exposure` does not: it moves nothing. An unreadable or compressed
 `.glb` is **never** a loud error: the environment stays a backdrop and the reason
 is recorded in its state.
@@ -307,6 +405,9 @@ coordinate can therefore be used as-is in the scene:
 
   // Freshness: if any of these no longer matches, the analysis is redone.
   "source":    { "file": "room.glb", "bytes": 5544308, "mtimeMs": 1785401140995, "sha256": "059d66e37e5846" },
+  // `spawnAuto` only shows up when the automatic placement had a say (no sidecar
+  // `spawn` AND an unusable origin); `null` means it looked and found nowhere to
+  // stand, so the environment stays a backdrop. See “Automatic spawn placement”.
   "placement": { "scale": 0.031, "rotationY": 330, "spawn": [0.287, 0.256, -0.296], "fingerprint": "247decca1cfc09e9" },
 
   "frame": { "units": "m", "up": "+Y", "forward": "+Z", "origin": "spawn — avatar feet, y = 0" },
