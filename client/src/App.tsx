@@ -125,6 +125,9 @@ function AppInner() {
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [dialog, setDialog] = useState<DialogKind | null>(null)
+  // Onglet d'ouverture de l'Inspecteur : 'system' par la barre du haut, 'scene'
+  // quand on vient de la liste des conversations chercher ses notes de scène.
+  const [inspectorTab, setInspectorTab] = useState<'system' | 'scene'>('system')
   // Loupe de la TopBar : un compteur, incrémenté à chaque clic, que MessageList
   // observe pour ouvrir (ou refermer) sa barre de recherche. Le Ctrl+F, lui, reste
   // entièrement géré dans MessageList.
@@ -1392,7 +1395,12 @@ function AppInner() {
             setCollapsed(false) // on ne revient jamais du mode VN sur un panneau replié
           }}
           onToggleSearch={() => setSearchSignal((n) => n + 1)}
-          onOpen={setDialog}
+          onOpen={(kind) => {
+            // Par la barre du haut, l'Inspecteur s'ouvre toujours sur son premier
+            // onglet (le chemin « notes de scène » repose l'onglet lui-même).
+            if (kind === 'inspector') setInspectorTab('system')
+            setDialog(kind)
+          }}
         />
 
         {backendDown && settings && (
@@ -1627,6 +1635,20 @@ function AppInner() {
           onSelect={(chatId) => {
             openChat(character, chatId).catch((e) => console.error('[chats]', e))
           }}
+          // Notes de scène d'une conversation : elle devient d'abord la
+          // conversation active (elles n'ont de sens que sur le fil auquel
+          // elles appartiennent), PUIS l'Inspecteur s'ouvre sur son onglet.
+          // L'ordre compte : ouvrir le dialog d'abord le montrerait une frame
+          // sur l'ancien fil.
+          onOpenScene={(chatId) => {
+            const ready = chatMeta?.id === chatId ? Promise.resolve() : openChat(character, chatId)
+            ready
+              .then(() => {
+                setInspectorTab('scene')
+                setDialog('inspector')
+              })
+              .catch((e) => console.error('[chats]', e))
+          }}
           onDeleted={(chatId) => {
             handleChatDeleted(chatId).catch((e) => console.error('[chats]', e))
           }}
@@ -1696,6 +1718,7 @@ function AppInner() {
         <PromptInspector
           characterId={character.id}
           chatId={chatMeta.id}
+          initialTab={inspectorTab}
           summary={chatMeta.summary ?? ''}
           sceneNotes={chatMeta.sceneNotes ?? ''}
           compacting={compacting}

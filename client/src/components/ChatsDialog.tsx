@@ -11,6 +11,13 @@ interface Props {
   characterName: string
   activeChatId: string | null
   onSelect: (chatId: string) => void
+  /**
+   * Ouvre les notes de scène de CETTE conversation (l'onglet dédié de
+   * l'Inspecteur, sur ce fil-là). Elles se cherchent ici — à côté de la
+   * conversation à laquelle elles appartiennent — mais s'écrivent là-bas :
+   * un seul éditeur, jamais deux formulaires pour le même champ.
+   */
+  onOpenScene: (chatId: string) => void
   onDeleted: (chatId: string) => void
   // Conversation renommée : si c'est la conversation active, la barre du haut doit suivre.
   onRenamed: (chatId: string, title: string) => void
@@ -62,6 +69,7 @@ export default function ChatsDialog({
   characterName,
   activeChatId,
   onSelect,
+  onOpenScene,
   onDeleted,
   onRenamed,
   onClose,
@@ -318,6 +326,25 @@ export default function ChatsDialog({
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17z" />
+                    </svg>
+                  </button>
+                  {/* NOTES DE SCÈNE — elles appartiennent à une conversation, et
+                      c'est ici qu'on les cherchait ; le seul chemin était
+                      l'Inspecteur, qu'on n'ouvre pas pour ça. Le bouton amène à
+                      l'onglet dédié, sur CE fil (il l'active au passage s'il ne
+                      l'est pas). Une conversation qui EN A le montre sans
+                      attendre le survol : c'est le seul état qu'on aurait envie
+                      de repérer d'un coup d'œil dans la liste. */}
+                  <button
+                    className={c.sceneNotes ? 'item-edit on' : 'item-edit'}
+                    title={c.sceneNotes ? t('sceneNotesOpenSet') : t('sceneNotesOpen')}
+                    aria-label={c.sceneNotes ? t('sceneNotesOpenSet') : t('sceneNotesOpen')}
+                    onClick={() => onOpenScene(c.id)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6.8 3.8h7.4L18.5 8v12.2H6.8z" />
+                      <path d="M14 3.8V8h4.3" />
+                      <path d="M9.4 12.4h5.6M9.4 15.6h3.6" />
                     </svg>
                   </button>
                   {/* Emporter UNE conversation, lisible : l'archive des Réglages

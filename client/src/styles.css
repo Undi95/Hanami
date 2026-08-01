@@ -2630,6 +2630,13 @@ select {
   color: var(--accent);
 }
 
+/* Icône ALLUMÉE : la conversation porte déjà quelque chose (des notes de scène).
+   Visible sans survol — le double sélecteur l'emporte sur la règle souris. */
+.item-edit.on {
+  opacity: 1;
+  color: var(--accent);
+}
+
 /* Souris : le crayon n'existe qu'au survol de la rangée. */
 @media (pointer: fine) {
   .item-edit {
@@ -2641,7 +2648,9 @@ select {
   .item-edit:focus-visible {
     opacity: 0.55;
   }
-  .item-row:hover .item-edit:hover {
+  .item-row:hover .item-edit:hover,
+  .item-row:hover .item-edit.on,
+  .item-row:focus-within .item-edit.on {
     opacity: 1;
   }
 }

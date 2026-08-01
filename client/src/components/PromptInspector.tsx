@@ -10,9 +10,14 @@ import * as api from '../api'
 import { useI18n } from '../i18n'
 import Dialog from './Dialog'
 
+/** Onglets de l'inspecteur — 'summary' n'existe que si la conversation est compactée. */
+type InspectorTab = 'system' | 'payload' | 'summary' | 'scene'
+
 interface Props {
   characterId: string
   chatId: string
+  /** Onglet ouvert d'emblée (la liste des conversations amène directement aux notes de scène). */
+  initialTab?: InspectorTab
   summary: string // résumé de compaction courant ('' = pas encore compacté)
   sceneNotes: string // notes de scène de la conversation ('' = aucun bloc injecté)
   compacting: boolean
@@ -26,6 +31,7 @@ interface Props {
 export default function PromptInspector({
   characterId,
   chatId,
+  initialTab,
   summary,
   sceneNotes,
   compacting,
@@ -45,7 +51,7 @@ export default function PromptInspector({
     contextSize: number
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'system' | 'payload' | 'summary' | 'scene'>('system')
+  const [tab, setTab] = useState<InspectorTab>(initialTab ?? 'system')
   const [copied, setCopied] = useState(false)
   const [instruction, setInstruction] = useState('')
   const [compactError, setCompactError] = useState<string | null>(null)
