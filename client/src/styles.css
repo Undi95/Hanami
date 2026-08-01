@@ -274,11 +274,16 @@ select {
 }
 
 /* Tactile : aucun survol pour le révéler — il reste en demi-teinte, avec une
-   zone de toucher confortable (même esprit que .msg-edit). */
-@media (pointer: coarse) {
+   zone de toucher confortable (même esprit que .msg-edit). La largeur d'écran
+   compte AUTANT que le type de pointeur : un écran de 768 px ou moins se touche,
+   que le navigateur l'avoue ou non (un bureau qui simule un téléphone ne change
+   pas `pointer`, et c'est pourtant là qu'on vise au doigt). 44 px et non 38 : le
+   bouton est isolé sur la scène, aucun voisin ne rattrape un doigt qui rate —
+   c'était 900 px² utiles contre 1 600 attendus, soit -44 % de surface. */
+@media (pointer: coarse), (max-width: 768px) {
   .scene-reset {
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
     opacity: 0.55;
   }
 }
@@ -583,7 +588,14 @@ select {
    pixel de débordement. Aucun palier de largeur ne pouvait tenir cette promesse :
    8 × 44 = 352 px passe tout juste à 375 px, plus du tout à 360 — ni dans la
    colonne de droite réduite à sa largeur minimale (320 px), que la largeur de la
-   FENÊTRE ne raconte pas. La hauteur de touche, elle, reste à 44 px partout. */
+   FENÊTRE ne raconte pas. La hauteur de touche, elle, reste à 44 px partout.
+   À 320 px les boutons tombent à 37,25 px de large (298 px de rangée à huit) et
+   on n'y peut RIEN : 8 × 40 = 320 px, la largeur entière de l'écran, retraits
+   compris. Ce qui est perdu tient dans le chiffre : 2,75 px sur une dimension,
+   pour 37,25 x 44 = 1 639 px² de surface touchable, au-dessus des 1 600 px²
+   d'une cible de 40 x 40 ; et les boutons se touchent, donc pas un pixel mort
+   entre eux — un doigt qui glisse ouvre le dialog voisin, aucun n'est
+   destructeur. Le mode VN, lui, a de quoi les servir en plein (voir plus bas). */
 .topbar nav {
   display: flex;
   gap: 0;
@@ -1373,18 +1385,25 @@ select {
    doigt elles sont chiches : on les élargit d'un cran, sans jamais toucher au
    dessin. Placé APRÈS les règles concernées — à spécificité égale, c'est
    l'ordre qui tranche, et un @media n'y change rien. */
-@media (pointer: coarse) {
-  /* Recherche : deux flèches + la croix de fermeture. La barre grandit de 40 à
-     44 px, donc le ruban épinglé qui se range dessous suit (8 + 44 + 8). */
+@media (pointer: coarse), (max-width: 768px) {
+  /* Recherche : deux flèches + la croix de fermeture, COLLÉES l'une à l'autre —
+     rater « Suivant » c'est fermer la recherche. 36 px restaient sous le seuil
+     dans les deux dimensions : elles passent à 40, et l'écart entre elles de 2 à
+     4 px. La barre grandit de 40 à 48 px, donc le ruban épinglé qui se range
+     dessous suit (8 + 48 + 8). Coût pour le champ à 320 px de large : 30 + 6 =
+     36 px, il lui reste 147 px utiles pour un libellé qui en demande 84,3. */
   .search-nav {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
+  }
+  .search-bar {
+    gap: 4px;
   }
   .search-bar input {
-    min-height: 36px;
+    min-height: 40px;
   }
   .pin-ribbon.under-search {
-    margin-top: 60px;
+    margin-top: 64px;
   }
   .pin-ribbon-close,
   .reply-quote-close {
@@ -1399,6 +1418,25 @@ select {
   .shot-remove svg {
     width: 12px;
     height: 12px;
+  }
+  /* Trombone et micro : 36 px de large, 4 px sous le seuil. Les 8 px repris au
+     champ de saisie ne lui coûtent plus rien depuis que le libellé affiché est
+     court : il reste 92 px utiles au pire (mode VN à 320 px) pour 69,3 px de
+     « Message… ». La hauteur, elle, était déjà à 44. */
+  .clip-btn,
+  .mic-btn {
+    width: 40px;
+  }
+  /* Commandes secondaires des dialogs : gabarit uniforme de 36 px, dessiné pour
+     la souris. Seule la HAUTEUR manque (les libellés font 56 à 158 px de large),
+     et rien ne dépend de cette hauteur : les groupes segmentés passent déjà à la
+     ligne, le corps du dialog défile. `.dialog-card` en tête donne à la règle la
+     spécificité qu'il faut, où qu'elle soit lue — et laisse tranquilles les
+     mêmes boutons hors dialog (la bande basse du mode VN, où 4 px de plus
+     remonteraient la boîte de dialogue). */
+  .dialog-card .seg-btn,
+  .dialog-card .btn.small {
+    min-height: 40px;
   }
 }
 
@@ -2228,6 +2266,11 @@ select {
   color: var(--text-dim);
 }
 
+/* 44 x 26 : c'est le DESSIN de l'interrupteur, pas sa cible. Toute la ligne est
+   un <label> — 44 px de haut au minimum sur toute la largeur du corps du dialog
+   (339 px à 375 px d'écran, retraits de 18 px déduits), soit 14 916 px² contre
+   les 1 600 px² d'une cible de 40 x 40. L'agrandir reviendrait à dessiner un
+   interrupteur difforme pour une surface qu'on a déjà neuf fois. */
 .toggle input {
   appearance: none;
   -webkit-appearance: none;
