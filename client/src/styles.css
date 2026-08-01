@@ -302,6 +302,17 @@ select {
   }
 }
 
+/* Écran COURT en mode VN : le quick-menu repasse en RANGÉE et occupe le bandeau
+   du haut (12 → 62 px, voir la section visual novel). Le bouton descend juste
+   dessous. Le partager avec la rangée était exclu, arithmétiquement : 7 icônes +
+   ce bouton, à 40 px chacun, demandent 8 × 40 = 320 px, soit la largeur ENTIÈRE
+   d'un écran de 320 px, retraits compris. */
+@media (max-height: 700px) and (max-width: 1099px) {
+  .scene-reset.vn {
+    top: 70px;
+  }
+}
+
 /* ── Portrait 2D (personnage sans modèle VRM) ─────────────────────────── */
 
 /* Image de la card importée posée dans la scène, à la place du canvas 3D vide.
@@ -1506,6 +1517,21 @@ select {
 
 .composer textarea:disabled {
   opacity: 0.5;
+}
+
+/* Écran COURT : le champ ne prend pas le tiers de l'écran. À 568 px de haut, la
+   feuille de chat fait 52 dvh = 295 px — un composer de 176 px n'y laisse que
+   75 px de fil. En mode VN c'est la boîte de dialogue qui reculait : le champ
+   grandit vers le HAUT et poussait la boîte de 116 px, jusque dans la rangée
+   d'icônes. Plafond à 96 px (≈ 4 lignes) : le pire empilement VN mesurable à
+   320 × 568 — texte au maximum (227) + boîte (23) + composer plein (112) +
+   bande basse (31) + marge (10) + vignettes d'images (64) = 467 px — laisse
+   encore 39 px sous la rangée. Le JS d'auto-agrandissement n'a rien à savoir :
+   il écrit `height` en style, max-height le borne. */
+@media (max-height: 700px) {
+  .composer textarea {
+    max-height: 96px;
+  }
 }
 
 .send-btn {
@@ -2846,9 +2872,14 @@ select {
 }
 
 /* Icônes en COLONNE dans le coin haut droit (quick-menu de visual novel) :
-   la zone au-dessus de la boîte de dialogue reste entièrement à la scène. */
+   la zone au-dessus de la boîte de dialogue reste entièrement à la scène.
+   z-index : le quick-menu est le SEUL jeu de commandes du mode VN. Sans lui il
+   se faisait peindre par la boîte de dialogue (elle le suit dans le DOM) et le
+   hit-test le confirmait — elementFromPoint renvoyait div.vn-text au centre de
+   « Réglages ». Quoi qu'il arrive maintenant, les icônes restent cliquables. */
 .chat-panel.vn .topbar nav {
   position: fixed;
+  z-index: 5;
   top: 12px;
   right: 12px;
   flex-direction: column;
@@ -2867,6 +2898,38 @@ select {
   flex: none;
   width: 44px;
   max-width: none;
+}
+
+/* Écran COURT : la colonne ne tient plus, et ça se mesure. 7 × 44 + 6 = 314 px
+   d'icônes posées à 12 px du haut s'arrêtent à 326 px ; la boîte de dialogue est
+   ancrée en BAS et monte à leur rencontre sans jamais les voir. À 320 × 568,
+   hauteur par défaut : haut de boîte à 308,7 px, « Réglages » mangé sur
+   44 × 14,3 px ; à la hauteur maximale que le client autorise (0,4 × 568 =
+   227 px de texte) le haut tombe à 217 px et deux boutons entiers passent
+   dessous. Rien à gagner horizontalement : la boîte fait 100 % − 28 px = 292 px
+   de large, elle passe forcément sous une colonne collée à droite.
+   Les icônes repassent donc en RANGÉE : 50 px de haut au lieu de 314, pour une
+   occultation de la scène IDENTIQUE (296 × 50 = 14 800 px² contre 48 × 314 =
+   15 072 px²) et 246 px de dégagement sous elles au lieu de −14,3. Les boutons
+   se partagent alors 290 px à sept, soit 41,4 px chacun : la hauteur reste à
+   44 px et la largeur au-dessus du seuil tactile de 40 px.
+   Seuil à 700 px : il ne touche AUCUN des cinq formats mesurés sains (812, 768,
+   800, 910, 1024 px de haut) — la collision n'apparaît qu'en dessous de ~673 px. */
+@media (max-height: 700px) {
+  .chat-panel.vn .topbar nav {
+    left: 12px;
+    flex-direction: row;
+    /* 7 × 44 + 4 (retraits) + 2 (bordures) = 314 px : au-delà ce ne serait que
+       du vide. Marge gauche automatique = la rangée reste calée à droite. */
+    max-width: 314px;
+    margin-left: auto;
+  }
+  .chat-panel.vn .topbar nav .icon-btn {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: 44px;
+  }
 }
 
 /* Saisie : section médiane de la boîte — même largeur, mêmes bords, ton
