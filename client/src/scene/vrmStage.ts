@@ -25,7 +25,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three'
-import type { AnimationAction, AnimationClip, Color, Material } from 'three'
+import type { AnimationAction, AnimationClip, Color, Intersection, Material } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
@@ -275,6 +275,58 @@ function parsePlacement(raw: unknown): EnvPlacement {
  * Un clic qui passe par la fenêtre touche le panneau : hors grille de la
  * carte, le personnage n'y va pas — même sort qu'un clic sur un mur.
  */
+/**
+ * Une surface peut-elle ARRÊTER un clic ? Non si elle ne montre rien : un nœud
+ * masqué (ou dont un ancêtre l'est), ou un matériau entièrement transparent.
+ *
+ * three ne le fait PAS tout seul : `Raycaster.intersectObject` ne teste que les
+ * calques (`layers`), jamais `visible` ni l'opacité — un plan invisible reste un
+ * mur pour le rayon. Le loft en portait un : `pPlane8_plafond_0`, matériau
+ * `plafond` en `alphaMode: BLEND` avec un alpha de 0, tendu au-dessus de toute
+ * la pièce. Il ne se voit pas, il ne se dessine pas, et il mangeait les clics au
+ * sol — MESURÉ : 74 clics sur 185 finissaient dessus, et sous deux azimuts de
+ * caméra sur cinq, plus AUCUN clic ne passait.
+ *
+ * La règle est volontairement géométrique-agnostique : rien sur les normales,
+ * rien sur la position de la caméra, rien qui suppose « un plafond ». Le
+ * front-end doit encaisser SEUL n'importe quel décor importé, et la seule chose
+ * dont on soit sûr, c'est qu'une surface que l'utilisateur ne peut pas voir ne
+ * peut pas être ce qu'il a visé. Un verre à 30 % d'opacité, lui, reste solide :
+ * il se voit, donc il se clique.
+ *
+ * Le seuil (2 %) et non zéro strict : un exportateur qui écrit 0,004 au lieu de
+ * 0 dit la même chose.
+ */
+interface RaycastableMaterial {
+  transparent?: boolean
+  opacity?: number
+}
+interface RaycastableObject {
+  visible?: boolean
+  parent?: RaycastableObject | null
+  material?: RaycastableMaterial | RaycastableMaterial[]
+}
+const OPACITE_INVISIBLE = 0.02
+
+function estOpaqueAuClic(object: Object3D): boolean {
+  for (let n: RaycastableObject | null | undefined = object as RaycastableObject; n; n = n.parent) {
+    if (n.visible === false) return false
+  }
+  const material = (object as RaycastableObject).material
+  if (!material) return true // pas un mesh, ou mesh sans matériau : on ne présume rien
+  const efface = (one: RaycastableMaterial): boolean =>
+    one.transparent === true && (one.opacity ?? 1) <= OPACITE_INVISIBLE
+  // Groupes multi-matériaux : le mesh n'est traversé que si TOUS ses matériaux
+  // sont effacés — sinon on ne saurait pas dire quel groupe porte la face.
+  return Array.isArray(material) ? !material.every(efface) : !efface(material)
+}
+
+/** Premier impact qui montre quelque chose, ou null. La liste est déjà triée. */
+function premierImpactVisible(hits: readonly Intersection[]): Intersection | null {
+  for (const hit of hits) if (estOpaqueAuClic(hit.object)) return hit
+  return null
+}
+
 function addEnvBackdrops(root: Object3D, backdrops: readonly EnvBackdrop[] | undefined): void {
   if (!backdrops) return
   for (const b of backdrops) {
@@ -943,10 +995,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     )
     raycaster.setFromCamera(ndc, camera)
     // Le personnage d'abord : lui cliquer dessus prime sur le sol derrière lui.
-    const onAvatar = raycaster.intersectObject(currentVrm.scene, true)
-    const onEnv = envRoot ? raycaster.intersectObject(envRoot, true) : []
-    const dAvatar = onAvatar.length > 0 ? onAvatar[0].distance : Infinity
-    const dEnv = onEnv.length > 0 ? onEnv[0].distance : Infinity
+    // Des DEUX côtés, on retient le premier impact qui montre quelque chose :
+    // une surface invisible n'est pas ce que l'utilisateur a visé (cf.
+    // estOpaqueAuClic — le plafond alpha 0 du loft rendait le sol incliquable).
+    const onAvatar = premierImpactVisible(raycaster.intersectObject(currentVrm.scene, true))
+    const onEnv = envRoot ? premierImpactVisible(raycaster.intersectObject(envRoot, true)) : null
+    const dAvatar = onAvatar ? onAvatar.distance : Infinity
+    const dEnv = onEnv ? onEnv.distance : Infinity
     if (dAvatar < dEnv) {
       // Les yeux suivent déjà la caméra : il acquiesce (debout, au repos) et se
       // met bien en face quelques secondes. Assis ou en mouvement, les gardes de
@@ -955,8 +1010,8 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       wander.poke()
       return
     }
-    if (dEnv === Infinity || !sceneMap) return
-    const hit = onEnv[0].point
+    if (!onEnv || !sceneMap) return
+    const hit = onEnv.point
     // Une ASSISE visée ? La nappe à hauteur du point cliqué : il va s'y asseoir.
     for (const seat of sceneMap.seats) {
       if (Math.abs(hit.y - seat.y) > 0.3) continue
