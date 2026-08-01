@@ -1080,6 +1080,30 @@ function AppInner() {
     })
   }
 
+  // Suppression d'un message du fil — même ordinal que l'édition. Le serveur
+  // recale l'épingle et la frontière du résumé, et renvoie l'épingle d'après.
+  // Rien n'est retiré à l'écran tant que le serveur n'a pas répondu : un échec
+  // laisse le fil exactement tel qu'il est sur le disque.
+  async function handleDeleteMessage(ordinal: number) {
+    const char = character
+    const chat = chatMeta
+    if (!char || !chat) return
+    const out = await api.deleteChatMessage(char.id, chat.id, ordinal)
+    setFeed((f) => {
+      let n = -1
+      return f.filter((it) => {
+        if (it.kind !== 'msg') return true
+        n++
+        return n !== ordinal
+      })
+    })
+    setChatMeta((m) =>
+      m && m.id === chat.id
+        ? { ...m, messageCount: out.messageCount, pinned: out.pinned ?? undefined }
+        : m,
+    )
+  }
+
   // Épingle : gadget d'affichage seulement (l'ordinal vit dans l'en-tête du chat,
   // jamais dans le payload envoyé au modèle). Optimiste : le bandeau suit le clic,
   // et repart à l'état serveur si l'appel échoue.
@@ -1378,6 +1402,7 @@ function AppInner() {
             searchSignal={searchSignal}
             pinned={chatMeta?.pinned ?? null}
             onSaveEdit={handleEditMessage}
+            onDeleteMessage={handleDeleteMessage}
             onReply={setReplyTo}
             onPin={(ordinal) => {
               handlePin(ordinal).catch((e) => console.error('[pin]', e))

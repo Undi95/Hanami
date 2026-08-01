@@ -946,6 +946,52 @@ chatRouter.put('/api/chat/message', (req, res) => {
   res.json({ index, message: updated })
 })
 
+// DELETE /api/chat/message {characterId, chatId, index} — retire UN message du fil.
+// Le pendant de l'édition : « Régénérer » ne sait défaire que la dernière réponse,
+// une bulle ratée au milieu du fil n'avait aucune sortie.
+//
+// Les deux repères de l'en-tête qui comptent des messages doivent suivre le
+// décalage, sans quoi le prochain envoi partirait de travers :
+//   · `pinned` — l'ordinal épinglé (le message supprimé perd son épingle) ;
+//   · `summaryUpto` — la frontière du résumé de compaction, qui décide de la
+//     tranche d'historique envoyée au modèle.
+chatRouter.delete('/api/chat/message', (req, res) => {
+  const body = (req.body ?? {}) as { characterId?: unknown; chatId?: unknown; index?: unknown }
+  const characterId = typeof body.characterId === 'string' ? body.characterId : ''
+  const chatId = typeof body.chatId === 'string' ? body.chatId : ''
+  const index = typeof body.index === 'number' && Number.isInteger(body.index) ? body.index : -1
+  if (!characterId || !chatId || index < 0) {
+    res.status(400).json({ error: 'characterId, chatId et index sont requis' })
+    return
+  }
+  let meta
+  try {
+    meta = readChat(characterId, chatId).meta
+  } catch {
+    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    return
+  }
+  if (index >= meta.messageCount) {
+    res.status(404).json({ error: `Message introuvable : ${index}` })
+    return
+  }
+  rewriteChatMessages(characterId, chatId, (msgs) => msgs.filter((_, i) => i !== index))
+  // Épingle et frontière de résumé recalées sur le fil raccourci.
+  const pinned =
+    typeof meta.pinned !== 'number' ? undefined : meta.pinned === index ? undefined : meta.pinned > index ? meta.pinned - 1 : meta.pinned
+  const summaryUpto =
+    meta.summary && typeof meta.summaryUpto === 'number' && meta.summaryUpto > index
+      ? meta.summaryUpto - 1
+      : meta.summaryUpto
+  if (pinned !== meta.pinned || summaryUpto !== meta.summaryUpto) {
+    updateChatHeader(characterId, chatId, {
+      pinned,
+      ...(meta.summary ? { summaryUpto } : {}),
+    })
+  }
+  res.json({ index, messageCount: meta.messageCount - 1, pinned: pinned ?? null })
+})
+
 // PUT /api/chat/summary {characterId, chatId, summary} — édition (ou retrait) du résumé.
 chatRouter.put('/api/chat/summary', (req, res) => {
   const body = (req.body ?? {}) as { characterId?: unknown; chatId?: unknown; summary?: unknown }

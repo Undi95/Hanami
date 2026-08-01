@@ -525,6 +525,19 @@ export function editChatMessage(
   return req('PUT', '/api/chat/message', { characterId, chatId, index, content })
 }
 
+/**
+ * Retire un message du fil (index = position dans le fichier). Le serveur recale
+ * l'épingle et la frontière du résumé de compaction, et renvoie l'épingle telle
+ * qu'elle est après coup.
+ */
+export function deleteChatMessage(
+  characterId: string,
+  chatId: string,
+  index: number,
+): Promise<{ index: number; messageCount: number; pinned: number | null }> {
+  return req('DELETE', '/api/chat/message', { characterId, chatId, index })
+}
+
 /** Épingle un message du chat (ordinal) ou le désépingle (null) — pur affichage. */
 export function pinChatMessage(
   characterId: string,

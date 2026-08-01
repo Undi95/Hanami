@@ -962,6 +962,13 @@ select {
   color: var(--accent);
 }
 
+/* Corbeille armée : un clic de plus et le message s'en va — elle le dit en rouge. */
+.msg-edit.armed,
+.msg-edit.armed:hover {
+  opacity: 1;
+  color: var(--danger);
+}
+
 .msg-edit svg {
   width: 11px;
   height: 11px;
@@ -982,7 +989,9 @@ select {
   }
   .msg:hover .msg-edit:hover,
   .msg:hover .msg-edit.pinned,
-  .msg:focus-within .msg-edit.pinned {
+  .msg:focus-within .msg-edit.pinned,
+  .msg:hover .msg-edit.armed,
+  .msg:focus-within .msg-edit.armed {
     opacity: 1;
   }
 }

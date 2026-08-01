@@ -34,6 +34,8 @@ interface Props {
   pinned: number | null
   /** Sauvegarde une édition — ordinal = position parmi les messages sauvegardés. */
   onSaveEdit: (ordinal: number, content: string) => Promise<void>
+  /** Retire un message du fil — même ordinal que l'édition. */
+  onDeleteMessage: (ordinal: number) => Promise<void>
   /** « Retiens ça » : épingle le contenu du message dans la mémoire. */
   onRemember: (msg: ChatMessage) => void
   /** Cible le message dans le composer (la citation sera écrite dans l'envoi). */
@@ -179,6 +181,7 @@ export default function MessageList({
   searchSignal,
   pinned,
   onSaveEdit,
+  onDeleteMessage,
   onRemember,
   onReply,
   onPin,
@@ -199,6 +202,9 @@ export default function MessageList({
   // coche pendant deux secondes, puis redevient elle-même. Même grammaire que le
   // bouton « Copier » de l'Inspecteur, en version icône.
   const [copied, setCopied] = useState<number | null>(null)
+  // Corbeille armée (ordinal) : le premier clic arme, le second supprime — même
+  // grammaire que les suppressions des dialogs. Désarmée dès qu'on la quitte.
+  const [armed, setArmed] = useState<number | null>(null)
   // Recherche : rien à l'écran tant qu'elle n'est pas ouverte (Ctrl+F).
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -310,6 +316,16 @@ export default function MessageList({
       .catch((e) => console.error('[copy]', e))
   }
 
+  /** Premier clic : la corbeille passe au rouge. Second : le message s'en va. */
+  function removeMessage(ordinal: number) {
+    if (armed !== ordinal) {
+      setArmed(ordinal)
+      return
+    }
+    setArmed(null)
+    onDeleteMessage(ordinal).catch((e) => console.error('[delete]', e))
+  }
+
   function submitEdit() {
     if (editing === null || !draft.trim()) return
     setSaving(true)
@@ -329,7 +345,13 @@ export default function MessageList({
         const text = isUser ? item.msg.content : stripEmotionTags(item.msg.content, item.pending)
         const isEditing = ordinal !== null && editing === ordinal
         return (
-          <div className={`msg ${isUser ? 'user' : 'assistant'}`}>
+          <div
+            className={`msg ${isUser ? 'user' : 'assistant'}`}
+            // Quitter la bulle désarme la corbeille : à la souris les icônes
+            // disparaissent, une corbeille restée armée sous le curseur suivant
+            // supprimerait au premier clic.
+            onMouseLeave={() => setArmed((a) => (a !== null && a === ordinal ? null : a))}
+          >
             {!isUser && showThoughts && item.msg.thinking && (
               <details className="thoughts">
                 <summary>{t('thoughts')}</summary>
@@ -451,6 +473,21 @@ export default function MessageList({
                         </svg>
                       </button>
                     )}
+                    {/* Corbeille EN DERNIER, comme la zone dangereuse d'un
+                        formulaire : c'est la seule action irréversible du lot. */}
+                    <button
+                      className={armed === ordinal ? 'msg-edit armed' : 'msg-edit'}
+                      title={armed === ordinal ? t('deleteMessageArmed') : t('deleteMessage')}
+                      aria-label={armed === ordinal ? t('deleteMessageArmed') : t('deleteMessage')}
+                      onClick={() => removeMessage(ordinal)}
+                      onBlur={() => setArmed((a) => (a === ordinal ? null : a))}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 7.2h12" />
+                        <path d="M9.7 7.2V5.4h4.6v1.8" />
+                        <path d="M7.6 7.2l.8 11.4h7.2l.8-11.4" />
+                      </svg>
+                    </button>
                   </>
                 )}
               </div>
