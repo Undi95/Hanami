@@ -109,6 +109,13 @@ const ENV_MAX_EXPOSURE = 4
 const CAM_WALL_MARGIN = 0.3
 const CAM_ROSE_FRONT = [14, 15, 0, 1, 2] as const
 
+// Caméra de CONSTRUCTION : la pose de départ, avant tout cadrage. Deux
+// constantes de module parce qu'elles servent à DEUX endroits — la création de
+// la scène et le repli de resetView, quand aucun modèle n'est cadré — et que
+// les laisser diverger rendrait le bouton de réinitialisation menteur.
+const CAM_HOME_POS = [0, 1.35, 1.8] as const
+const CAM_HOME_TARGET = [0, 1.25, 0] as const
+
 const DEG2RAD = Math.PI / 180
 
 /**
@@ -753,7 +760,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   scene.add(avatarGroup, envGroup)
 
   const camera = new PerspectiveCamera(30, 1, 0.1, 20)
-  camera.position.set(0, 1.35, 1.8)
+  camera.position.set(...CAM_HOME_POS)
 
   // Lumière principale de face/haut + appoint doux (ne pas écraser le toon).
   const keyLight = new DirectionalLight(0xffffff, KEY_LIGHT_SOLO)
@@ -776,7 +783,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   controls.maxDistance = 4
   controls.minPolarAngle = Math.PI * 0.15
   controls.maxPolarAngle = Math.PI * 0.85
-  controls.target.set(0, 1.25, 0)
+  controls.target.set(...CAM_HOME_TARGET)
 
   const loader = new GLTFLoader()
   loader.register((parser) => new VRMLoaderPlugin(parser))
@@ -961,9 +968,28 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     camGrabbed = true
   })
 
+  /**
+   * Le bouton de réinitialisation et le double-clic. Il rend TOUJOURS une vue :
+   * c'est la seule sortie d'une orbite partie dans un mur, et un no-op y laisse
+   * l'utilisateur devant un écran noir sans autre issue que F5.
+   *
+   * Sans modèle cadré (lastFrame null), le repli est la caméra de construction.
+   * Cet état est atteignable et pas rare : le décor est chargé dès que le
+   * personnage DÉCLARE un .vrm, par un effet indépendant de celui du modèle
+   * (App.tsx), donc la pièce est orbitable pendant tout le vol du .vrm — 14 à
+   * 24 Mo — et pendant les deux nouvelles tentatives (1 s puis 3 s) qui
+   * précèdent le moindre bandeau d'erreur.
+   */
   function resetView(): void {
-    if (!lastFrame) return
-    frameCamera(lastFrame.vrm, lastFrame.h)
+    if (lastFrame) frameCamera(lastFrame.vrm, lastFrame.h)
+    else {
+      camera.position.set(...CAM_HOME_POS)
+      controls.target.set(...CAM_HOME_TARGET)
+      applyEnvLimits() // sans lastFrame : h = 1,6 m, le gabarit par défaut
+      applyViewOffset()
+      camera.updateProjectionMatrix()
+      controls.update()
+    }
     viewChangeCb?.(null)
   }
 
