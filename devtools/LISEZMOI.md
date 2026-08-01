@@ -14,6 +14,7 @@ les `node_modules` du projet, en lecture seule. Node seul suffit.
 | [`anim-lab/`](anim-lab/LISEZMOI.md) | **le banc d'essai**, dans le navigateur : rejoue les clips sur un vrai `.vrm`, mesure les raccords (*idle → anim → idle*, en centimètres), joue des séquences, essaie les décors, et affiche le diagnostic ci-dessous. Sert la page et relaie les assets vers le serveur de l'app. |
 | [`diagnostic/`](diagnostic/LISEZMOI.md) | **le diagnostic biomécanique**, sans navigateur : pour chaque clip, une fiche en français (est-ce *plausible* ?) et cinq PNG (planches contact, traces, phase) qui le **montrent**. |
 | `diagnostic-out/` | ce que le diagnostic écrit. **Gitignoré** : ~150 Mo de PNG, régénérables d'une commande. |
+| [`matrice-scene/`](matrice-scene/LISEZMOI.md) | **le harnais des transitions de scène**, joué DANS la page de l'app : il clique les vrais dialogs pour dérouler toutes les combinaisons atteignables (fond 2D ↔ décor 3D, modèle ↔ portrait, animations, scène vivante, familles, largeur d'écran, rechargement, import d'un décor) et vérifie après chacune que l'image est peinte, que l'API dit la même chose que l'écran, et que la console est vide. |
 | [`repose/`](repose/LISEZMOI.md) | **la réparation de modèle** : redonne sa T-pose à un `.vrm` exporté avec une pose cuite dans le squelette (le cas fondateur : un export à pose cuite, 17 échecs à la matrice → 0), à partir d'un modèle de référence au même squelette. BIN intact octet pour octet, refus nets sinon. |
 
 ## Lancer le banc

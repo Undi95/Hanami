@@ -46,6 +46,12 @@ devtools/anim-lab/sonde-*.json
 devtools/anim-lab/matrice-*.json
 devtools/diagnostic-out/
 
+# Empreinte du décor jetable de la matrice de scène : l'inventaire de
+# environments/ relevé AVANT la pose d'un .glb d'essai, pour savoir quoi retirer.
+# Elle vit le temps d'un essai et s'efface au retrait. Chemin ancré, comme
+# au-dessus.
+devtools/matrice-scene/.decor-jetable.json
+
 *.log
 .env
 .env.*
