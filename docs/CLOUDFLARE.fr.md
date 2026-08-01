@@ -2,7 +2,7 @@
 
 # Accès distant via Cloudflare Tunnel
 
-Objectif : accéder à Hanami depuis l'extérieur (4G, en déplacement, au travail) **sans ouvrir de port**
+Objectif : accéder à Hanami depuis l'extérieur (4G, en déplacement, travail) **sans ouvrir de port**
 sur ta box, avec HTTPS automatique.
 
 À lire aussi : [MOBILE.fr.md](MOBILE.fr.md) · [retour au README](../README.fr.md)

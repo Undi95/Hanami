@@ -8,7 +8,7 @@ Related: [CLOUDFLARE.md](CLOUDFLARE.md) · [back to the README](../README.md)
 
 - **Same Wi-Fi as the PC**: open `http://<pc-ip>:7788`. The LAN address is printed in the
   console when Hanami starts.
-- **From anywhere else** (4G/5G, on the move…): through a Cloudflare Tunnel →
+- **From anywhere else** (4G/5G, on the go…): through a Cloudflare Tunnel →
   [CLOUDFLARE.md](CLOUDFLARE.md).
 
 ## Installing it as an app (PWA)

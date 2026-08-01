@@ -38,6 +38,12 @@ portraits/*
 # --lot ». Un chemin de DOSSIER, pas une règle par extension (cf. ci-dessus).
 # Le reste de devtools/ est suivi, notes-visuelles.json compris : c'est le
 # commentaire écrit à la main devant les images, il ne se régénère pas.
+
+# Archives de sonde du banc (anim-lab) : régénérables, et surtout elles listent
+# les noms des .vrm PERSONNELS de l'utilisateur — jamais dans le dépôt. Motifs
+# ancrés au dossier, pas de règle par extension (garde-fou habituel).
+devtools/anim-lab/sonde-*.json
+devtools/anim-lab/matrice-*.json
 devtools/diagnostic-out/
 
 *.log

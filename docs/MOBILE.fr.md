@@ -32,7 +32,7 @@
   un tunnel Cloudflare c'est bon ; sur une simple adresse réseau `http://<ip-du-pc>:7788` le
   bouton peut ne pas apparaître du tout.
 - Le rendu 3D se met en pause quand l'app passe en arrière-plan (économie de batterie).
-- Si la connexion est lente (Wi-Fi public…), le chat fonctionne même pendant le chargement du
+- Si la connexion est lente (wifi public…), le chat fonctionne même pendant le chargement du
   modèle 3D : le texte n'attend jamais l'avatar.
 - Si tu exposes Hanami hors de ton réseau, mets d'abord un mot de passe d'accès — voir la
   section sécurité de [CLOUDFLARE.fr.md](CLOUDFLARE.fr.md).

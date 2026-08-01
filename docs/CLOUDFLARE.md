@@ -2,7 +2,7 @@
 
 # Remote access with Cloudflare Tunnel
 
-Goal: reach Hanami from outside your home (mobile data, on the move, the office) **without opening a
+Goal: reach Hanami from outside your home (mobile data, on the go, office) **without opening a
 port** on your router, with automatic HTTPS.
 
 Related: [MOBILE.md](MOBILE.md) · [back to the README](../README.md)
