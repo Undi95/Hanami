@@ -236,6 +236,14 @@ const FR = {
   tabModel: 'Modèle',
   tabFeatures: 'Fonctions',
   sectionConversation: 'Conversation',
+  // Persona de l'utilisateur : deux champs, valables pour tous les personnages.
+  sectionPersona: 'Vous',
+  personaName: 'Votre nom',
+  personaNamePlaceholder: 'comment le personnage vous appelle',
+  personaDescription: 'Qui vous êtes (en deux lignes)',
+  personaDescriptionPlaceholder: 'Ce que le personnage sait de vous : métier, goûts, façon d’être…',
+  personaHint:
+    'Optionnel, et injecté dans le prompt de tous vos personnages (visible dans l’Inspecteur). Le nom remplace aussi {{user}} dans les cartes importées.',
   sectionBackend: 'Backend LLM',
   backendUrl: 'URL du backend (compatible OpenAI)',
   apiKey: 'Clé API',
@@ -375,9 +383,9 @@ const FR = {
     'Notes propres à cette conversation, ajoutées telles quelles au prompt système. Vide = rien n’est envoyé.',
   scenePlaceholder: 'Lieu, ambiance, contexte de la scène…',
   characterPromptHint:
-    'Le prompt du personnage — écrivez-le ici, il part tel quel au modèle. Le prochain message envoyé s’en sert déjà (c’est le même champ que « Prompt système » dans Personnages).',
+    'Le prompt du personnage — écrivez-le ici, le prochain message envoyé s’en sert déjà (c’est le même champ que « Prompt système » dans Personnages). Seules {{char}} et {{user}} sont remplacées à l’envoi : l’onglet « Payload complet » montre le texte réellement transmis.',
   injectedHint:
-    'Ajouté par Hanami à la suite du prompt, à chaque envoi : mémoire, résumé de compaction, notes de scène, heure. Chaque bloc s’édite là où il vit (panneau Mémoire, onglets Résumé et Scène, réglages).',
+    'Ajouté par Hanami à la suite du prompt, à chaque envoi : vous (persona), mémoire, résumé de compaction, notes de scène, heure. Chaque bloc s’édite là où il vit (panneau Mémoire, onglets Résumé et Scène, réglages).',
 }
 
 export type Key = keyof typeof FR
@@ -589,6 +597,13 @@ const EN: Record<Key, string> = {
   tabModel: 'Model',
   tabFeatures: 'Features',
   sectionConversation: 'Conversation',
+  sectionPersona: 'You',
+  personaName: 'Your name',
+  personaNamePlaceholder: 'what the character calls you',
+  personaDescription: 'Who you are (in two lines)',
+  personaDescriptionPlaceholder: 'What the character knows about you: work, tastes, the way you are…',
+  personaHint:
+    'Optional, and injected into every character’s prompt (visible in the Inspector). The name also replaces {{user}} in imported cards.',
   sectionBackend: 'LLM backend',
   backendUrl: 'Backend URL (OpenAI-compatible)',
   apiKey: 'API key',
@@ -722,9 +737,9 @@ const EN: Record<Key, string> = {
     'Notes for this conversation only, added as-is to the system prompt. Empty = nothing is sent.',
   scenePlaceholder: 'Place, mood, context of the scene…',
   characterPromptHint:
-    'The character’s prompt — write it here, it goes to the model as-is. The very next message already uses it (same field as “System prompt” in Characters).',
+    'The character’s prompt — write it here, the very next message already uses it (same field as “System prompt” in Characters). Only {{char}} and {{user}} are replaced on send: the “Full payload” tab shows the text actually transmitted.',
   injectedHint:
-    'Appended by Hanami after the prompt on every request: memory, compaction summary, scene notes, time. Each block is edited where it lives (Memory panel, Summary and Scene tabs, settings).',
+    'Appended by Hanami after the prompt on every request: you (persona), memory, compaction summary, scene notes, time. Each block is edited where it lives (Memory panel, Summary and Scene tabs, settings).',
 }
 
 const DICT: Record<Lang, Record<Key, string>> = { fr: FR, en: EN }

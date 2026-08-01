@@ -12,6 +12,11 @@ export const settingsRouter = Router()
 // Sentinelle côté PUT : '' = secret inchangé, CLEAR_SECRET = secret effacé.
 const CLEAR_SECRET = '__clear__'
 
+// Persona : une présentation, pas un second prompt système — d'où des plafonds
+// posés à l'écriture (le bloc injecté vaut alors exactement ce qui est stocké).
+const PERSONA_NAME_MAX = 60
+const PERSONA_DESCRIPTION_MAX = 1000
+
 /** Vue publique des réglages : secrets masqués + indicateurs de présence. */
 function publicView(s: Settings): Settings & { passwordSet: boolean; apiKeySet: boolean } {
   return {
@@ -37,6 +42,13 @@ settingsRouter.put('/api/settings', (req, res) => {
     if (value !== undefined && typeof value === typeof DEFAULT_SETTINGS[key]) {
       ;(patch as Record<string, unknown>)[key] = value
     }
+  }
+  // Persona : plafonnée ici, une fois pour toutes (le nom sert aussi de {{user}}).
+  if (typeof patch.personaName === 'string') {
+    patch.personaName = patch.personaName.trim().slice(0, PERSONA_NAME_MAX)
+  }
+  if (typeof patch.personaDescription === 'string') {
+    patch.personaDescription = patch.personaDescription.trim().slice(0, PERSONA_DESCRIPTION_MAX)
   }
   // Secrets : '' = inchangé (le client affiche les champs vides), sentinelle = effacé.
   for (const key of ['password', 'apiKey'] as const) {

@@ -41,6 +41,11 @@ interface Props {
   onClose: () => void
 }
 
+// Plafonds de la persona — les MÊMES que le serveur (api/settings.ts) : le
+// champ s'arrête de lui-même plutôt que de faire tronquer en silence.
+const PERSONA_NAME_MAX = 60
+const PERSONA_DESCRIPTION_MAX = 1000
+
 // Les champs numériques sont édités en texte puis parsés à l'enregistrement.
 interface FormState {
   backendUrl: string
@@ -61,6 +66,8 @@ interface FormState {
   spontaneousEnabled: boolean
   spontaneousStartHour: string
   spontaneousEndHour: string
+  personaName: string
+  personaDescription: string
   timeAwareness: boolean
   showThoughts: boolean
   notifySound: boolean
@@ -91,6 +98,9 @@ function toForm(s: Settings): FormState {
     spontaneousEnabled: s.spontaneousEnabled,
     spontaneousStartHour: String(s.spontaneousStartHour),
     spontaneousEndHour: String(s.spontaneousEndHour),
+    // Persona : champs optionnels, absents des config.json d'avant le réglage.
+    personaName: s.personaName ?? '',
+    personaDescription: s.personaDescription ?? '',
     timeAwareness: s.timeAwareness,
     showThoughts: s.showThoughts,
     // Réglage optionnel (config.json d'avant le réglage) : absent = éteint.
@@ -126,6 +136,8 @@ function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassw
     spontaneousEnabled: f.spontaneousEnabled,
     spontaneousStartHour: Math.round(num(f.spontaneousStartHour, base.spontaneousStartHour)),
     spontaneousEndHour: Math.round(num(f.spontaneousEndHour, base.spontaneousEndHour)),
+    personaName: f.personaName.trim(),
+    personaDescription: f.personaDescription.trim(),
     timeAwareness: f.timeAwareness,
     showThoughts: f.showThoughts,
     notifySound: f.notifySound,
@@ -719,6 +731,34 @@ export default function SettingsDialog({
 
       {tab === 'features' && (
         <>
+          {/* PERSONA — qui parle, de l'autre côté. Deux champs, pas un système
+              de personas multiples : c'est le même utilisateur qui écrit à tous
+              ses personnages. Le nom alimente aussi la macro {{user}} des cards. */}
+          <h3 className="section-title">{t('sectionPersona')}</h3>
+          <div className="field">
+            <label htmlFor="set-persona-name">{t('personaName')}</label>
+            <input
+              id="set-persona-name"
+              type="text"
+              value={form.personaName}
+              maxLength={PERSONA_NAME_MAX}
+              placeholder={t('personaNamePlaceholder')}
+              onChange={(e) => set('personaName', e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="set-persona-desc">{t('personaDescription')}</label>
+            <textarea
+              id="set-persona-desc"
+              rows={3}
+              value={form.personaDescription}
+              maxLength={PERSONA_DESCRIPTION_MAX}
+              placeholder={t('personaDescriptionPlaceholder')}
+              onChange={(e) => set('personaDescription', e.target.value)}
+            />
+            <span className="hint">{t('personaHint')}</span>
+          </div>
+
           <h3 className="section-title">{t('sectionConversation')}</h3>
           <Toggle
             label={t('timeAwareness')}

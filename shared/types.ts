@@ -26,6 +26,13 @@ export interface Settings {
   contextSize: number // taille de contexte du modèle (tokens) — sert à la jauge et à l'auto-compaction
   autoCompact: boolean // compacte automatiquement la conversation à ~80 % du contexte
   timeAwareness: boolean // injecte date/heure + temps écoulé depuis le dernier message
+  // Persona de l'utilisateur : qui il est, pour TOUS ses personnages. Deux
+  // champs libres, tous deux optionnels ('' = rien d'injecté). Le nom alimente
+  // aussi la macro {{user}} des cards importées (shared/macros.ts).
+  // Volontairement UNE seule persona : pas de collection à gérer, pas de
+  // sélecteur de plus dans l'interface — c'est le même utilisateur qui parle.
+  personaName: string
+  personaDescription: string
   showThoughts: boolean // affiche le raisonnement du modèle dans le fil (bloc repliable)
   ttsEnabled: boolean // lit les réponses à voix haute via le serveur TTS
   ttsUrl: string // base OpenAI-compat du serveur TTS (POST {ttsUrl}/audio/speech)

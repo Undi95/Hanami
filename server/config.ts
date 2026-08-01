@@ -22,6 +22,9 @@ export const DEFAULT_SETTINGS: Settings = {
   contextSize: 8192,
   autoCompact: true,
   timeAwareness: true,
+  // Persona : vide = aucun bloc injecté, et {{user}} retombe sur « User ».
+  personaName: '',
+  personaDescription: '',
   showThoughts: false,
   ttsEnabled: false,
   ttsUrl: '',

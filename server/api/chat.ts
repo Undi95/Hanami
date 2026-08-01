@@ -61,9 +61,22 @@ export function multimodalContent(text: string, images: string[]): ContentPart[]
 // ce qui PART vers le modèle est résolu. Le prompt du personnage renvoyé à
 // l'inspecteur reste donc la source, éditable telle quelle.
 
-/** Noms substitués pour ce personnage (côté utilisateur : « User » par défaut). */
-function macroNamesFor(characterName: string): MacroNames {
-  return { char: characterName, user: userName() }
+/** Noms substitués : le personnage, et l'utilisateur tel que sa persona le nomme. */
+function macroNamesFor(characterName: string, settings: Settings): MacroNames {
+  return { char: characterName, user: userName(settings.personaName) }
+}
+
+/**
+ * Bloc persona : qui est l'utilisateur, tel qu'il s'est décrit dans les
+ * réglages. Faits bruts (en anglais, langue de travail des prompts), AUCUNE
+ * directive ajoutée — comme le bloc heure et les notes de scène. Les deux
+ * champs sont indépendants : un nom seul, une description seule, ou les deux.
+ */
+function personaBlock(name: string, description: string): string {
+  let block = '\n\n## The user (persona, set by the user in Hanami settings)\n'
+  if (name) block += `The user's name is ${name}.\n`
+  if (description) block += `${description}\n`
+  return block
 }
 
 /** Substitution dans un content OpenAI : texte seul, ou parties texte d'un multimodal. */
@@ -182,6 +195,11 @@ export function buildPayload(
   if (!character) throw new Error(`Personnage introuvable : ${characterId}`)
   const characterPrompt = character.systemPrompt
   let injected = ''
+  // La persona vient EN TÊTE des blocs ajoutés : savoir à qui l'on parle
+  // précède ce dont on se souvient de lui.
+  const personaName = settings.personaName.trim()
+  const personaDescription = settings.personaDescription.trim()
+  if (personaName || personaDescription) injected += personaBlock(personaName, personaDescription)
   if (settings.memoryEnabled) injected += buildMemoryBlock(characterId, settings.modelMode === 'simple')
 
   const { meta, messages: history } = readChat(characterId, chatId)
@@ -196,7 +214,7 @@ export function buildPayload(
   // personnage ET blocs ajoutés — une note de scène peut dire « {{char}} »),
   // l'historique et le message courant. `characterPrompt` reste brut plus bas :
   // c'est la source que l'inspecteur rend éditable.
-  const names = macroNamesFor(character.name)
+  const names = macroNamesFor(character.name, settings)
   const systemText = substituteMacros(characterPrompt + injected, names)
   const live = history.slice(upto)
   const recent = settings.maxHistoryMessages > 0 ? live.slice(-settings.maxHistoryMessages) : []
@@ -779,7 +797,7 @@ async function runCompaction(
 
   // Mode simple : pas de passe agentique, donc rien à annoncer sur les outils mémoire.
   const simple = settings.modelMode === 'simple'
-  const names = macroNamesFor(character.name)
+  const names = macroNamesFor(character.name, settings)
   let systemText = character.systemPrompt
   if (settings.memoryEnabled) systemText += buildMemoryBlock(characterId, simple)
   if (meta.summary) systemText += summaryBlock(meta.summary)
