@@ -1384,9 +1384,35 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
   // ── Domaine `world-` : ce que la scène vivante peut demander ──────────────
 
-  /** Action d'un clip `world-<name>` réellement chargé, ou null. */
+  /**
+   * Dernière variante jouée PAR CLEF `world-` — la mémoire de pickAction,
+   * appliquée au tirage du FICHIER. Sans elle, un tirage uniforme rejouait la
+   * variante précédente une fois sur n : une sur trois pour `sit-nod` (le geste
+   * assis du neutre ET du clic) ou `sit-clap`, une sur cinq pour `sit-idle`.
+   * Les actions appartiennent au mixer courant : la table est vidée avec lui
+   * (disposeAnimations).
+   */
+  const lastWorld = new Map<string, AnimationAction>()
+
+  /**
+   * Action d'un clip `world-<name>` réellement chargé, ou null. Chaque appel
+   * est UN TIRAGE, mémorisé pour l'anti-répétition — le simple test de
+   * présence passe par worldHas, qui ne tire rien.
+   */
   function worldAction(name: string): AnimationAction | null {
-    return pickAction(catalog?.world.get(name))
+    const action = pickAction(catalog?.world.get(name), lastWorld.get(name) ?? null)
+    if (action) lastWorld.set(name, action)
+    return action
+  }
+
+  /**
+   * Un clip `world-<name>` a-t-il au moins un fichier réellement chargé ?
+   * SANS tirage, et ce n'est pas un détail : le comportement consulte `has`
+   * jusqu'à chaque image (l'état assis, entre autres). Tirer ici brûlerait un
+   * aléa par image et écraserait la mémoire de worldAction.
+   */
+  function worldHas(name: string): boolean {
+    return (catalog?.world.get(name) ?? []).some((url) => actions.has(url))
   }
 
   /**
@@ -1481,7 +1507,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     once(name, fadeIn, then, fadeThen, thenPhase) {
       playOnce(name, fadeIn, then, fadeThen, thenPhase)
     },
-    has: (name) => worldAction(name) !== null,
+    has: worldHas,
     // La foulée est MESURÉE UNE FOIS PAR IMAGE dans la boucle de rendu, pas ici :
     // l'odométrie compare deux images consécutives, et un appelant qui la
     // consulterait deux fois (ou pas du tout) fausserait la comparaison.
@@ -1634,6 +1660,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // Les variantes mémorisées par l'anti-répétition appartenaient à CE mixer.
     lastGesture.clear()
     lastReaction = null
+    lastWorld.clear()
     idleAction = null
     talkingAction = null
     postureAction = null
