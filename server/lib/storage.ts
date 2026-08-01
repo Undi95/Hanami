@@ -12,6 +12,7 @@ import type {
   ChatMeta,
   GreetingMode,
   MemoryFile,
+  MessageVariant,
 } from '../../shared/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -376,6 +377,57 @@ function normalizeHeader(raw: ChatHeader): ChatHeader {
   return header
 }
 
+/**
+ * Une variante lue sur le disque : texte obligatoire, heure de repli sur celle
+ * du message (data/ s'édite à la main). null = entrée inexploitable, écartée.
+ */
+function normalizeVariant(raw: unknown, fallbackTs: string): MessageVariant | null {
+  if (raw === null || typeof raw !== 'object') return null
+  const v = raw as Partial<MessageVariant>
+  if (typeof v.content !== 'string') return null
+  const out: MessageVariant = { content: v.content, ts: typeof v.ts === 'string' ? v.ts : fallbackTs }
+  if (typeof v.emotion === 'string' && v.emotion) out.emotion = v.emotion
+  if (typeof v.thinking === 'string' && v.thinking) out.thinking = v.thinking
+  return out
+}
+
+/**
+ * Message lu sur le disque. Sans `variants`, il ressort IDENTIQUE — aucune clé
+ * inventée, c'est ce qui rend les chats d'avant les variantes valides tels quels.
+ *
+ * Avec `variants`, l'invariant du format est REJOUÉ ici (cf. shared/types.ts) :
+ * les entrées illisibles sont écartées, l'indice est ramené dans les bornes, et
+ * le corps du message (texte, heure, émotion, raisonnement) recopie la variante
+ * affichée. Moins de deux variantes valides = les deux clés disparaissent : un
+ * message à variante unique est simplement un message.
+ */
+function normalizeMessage(raw: ChatMessage): ChatMessage {
+  if (raw.variants === undefined && raw.variant === undefined) return raw
+  const list = Array.isArray(raw.variants)
+    ? raw.variants.map((v) => normalizeVariant(v, raw.ts)).filter((v): v is MessageVariant => v !== null)
+    : []
+  const msg: ChatMessage = { ...raw }
+  if (list.length < 2) {
+    delete msg.variants
+    delete msg.variant
+    return msg
+  }
+  const index =
+    typeof raw.variant === 'number' && Number.isInteger(raw.variant) && raw.variant >= 0 && raw.variant < list.length
+      ? raw.variant
+      : 0
+  const active = list[index]
+  msg.variants = list
+  msg.variant = index
+  msg.content = active.content
+  msg.ts = active.ts
+  delete msg.emotion
+  if (active.emotion) msg.emotion = active.emotion
+  delete msg.thinking
+  if (active.thinking) msg.thinking = active.thinking
+  return msg
+}
+
 function chatFile(charId: string, chatId: string): string {
   return path.join(charDir(charId), 'chats', `${sanitizeFileName(chatId)}.jsonl`)
 }
@@ -480,7 +532,7 @@ export function readChat(charId: string, chatId: string): { meta: ChatMeta; mess
   const file = chatFile(charId, chatId)
   const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)
   const header = normalizeHeader(JSON.parse(lines[0]) as ChatHeader)
-  const messages = lines.slice(1).map((l) => JSON.parse(l) as ChatMessage)
+  const messages = lines.slice(1).map((l) => normalizeMessage(JSON.parse(l) as ChatMessage))
   return {
     meta: {
       ...header,
@@ -594,7 +646,7 @@ export function rewriteChatMessages(
   const file = chatFile(charId, chatId)
   const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)
   const header = lines[0]
-  const messages = lines.slice(1).map((l) => JSON.parse(l) as ChatMessage)
+  const messages = lines.slice(1).map((l) => normalizeMessage(JSON.parse(l) as ChatMessage))
   const next = mutate(messages)
   const tmp = file + '.tmp'
   const fd = fs.openSync(tmp, 'w')

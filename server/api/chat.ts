@@ -21,7 +21,7 @@ import { FILE_TOOL_NAMES, executeFileTool, fileToolDefs } from '../tools/fileToo
 import { CHAT_TOOL_NAMES, chatToolDefs, executeChatTool } from '../tools/chatTools'
 import { firstEmotionTag } from '../../shared/emotions'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
-import type { ChatEvent, ChatMessage, ContextInfo, Settings } from '../../shared/types'
+import type { ChatEvent, ChatMessage, ContextInfo, MessageVariant, Settings } from '../../shared/types'
 
 export const chatRouter = Router()
 
@@ -190,6 +190,10 @@ export function buildPayload(
   // string = message (ou consigne) purement textuel ; tableau = message courant
   // accompagné d'images (content multimodal OpenAI).
   pendingUserContent?: string | ContentPart[],
+  // Régénération : la réponse à refaire est encore DANS le fichier (elle y reste,
+  // elle va devenir une variante) — elle est simplement retirée de l'historique
+  // envoyé, sinon le modèle réécrirait par-dessus sa propre copie.
+  omitLastMessage = false,
 ): { systemText: string; characterPrompt: string; injected: string; payload: BackendPayload } {
   const character = getCharacter(characterId)
   if (!character) throw new Error(`Personnage introuvable : ${characterId}`)
@@ -202,7 +206,8 @@ export function buildPayload(
   if (personaName || personaDescription) injected += personaBlock(personaName, personaDescription)
   if (settings.memoryEnabled) injected += buildMemoryBlock(characterId, settings.modelMode === 'simple')
 
-  const { meta, messages: history } = readChat(characterId, chatId)
+  const { meta, messages: all } = readChat(characterId, chatId)
+  const history = omitLastMessage ? all.slice(0, -1) : all
   // Conversation compactée : le résumé (dans le system) remplace les messages qu'il couvre.
   const upto = meta.summary ? Math.min(meta.summaryUpto ?? 0, history.length) : 0
   if (meta.summary) injected += summaryBlock(meta.summary)
@@ -254,6 +259,68 @@ function toAssistantMessage(text: string, thinking?: string): ChatMessage {
   if (emotion) msg.emotion = emotion
   if (thinking) msg.thinking = thinking
   return msg
+}
+
+// ── Variantes de réponse ───────────────────────────────────────────────────
+// « Régénérer » n'écrase plus la dernière réponse : elle devient une variante du
+// MÊME message, la nouvelle s'ajoute à côté et devient celle qui est affichée.
+// Aucun message n'est créé ni retiré au passage — tout tient dans la ligne.
+// L'invariant (corps du message = variante affichée) se pose ici et se rejoue à
+// la lecture (lib/storage.ts).
+
+/**
+ * Plafond de variantes gardées sur un message. Au-delà, la PLUS ANCIENNE
+ * s'efface : une ligne de .jsonl ne doit pas enfler sans fin sous les clics.
+ * L'élagage du prochain message utilisateur fait le reste du ménage.
+ */
+const MAX_VARIANTS = 12
+
+/** Le corps d'un message, isolé — c'est exactement ce qu'une variante porte. */
+function bodyOf(m: ChatMessage): MessageVariant {
+  return {
+    content: m.content,
+    ts: m.ts,
+    ...(m.emotion ? { emotion: m.emotion } : {}),
+    ...(m.thinking ? { thinking: m.thinking } : {}),
+  }
+}
+
+/** Variantes d'un message — son propre corps quand il n'en porte aucune. */
+function variantsOf(m: ChatMessage): MessageVariant[] {
+  return m.variants && m.variants.length >= 2 ? m.variants : [bodyOf(m)]
+}
+
+/** Message reconstruit autour de la variante `index` (l'invariant du format). */
+function withVariants(m: ChatMessage, variants: MessageVariant[], index: number): ChatMessage {
+  const active = variants[index]
+  const out: ChatMessage = { ...m, content: active.content, ts: active.ts }
+  delete out.emotion
+  if (active.emotion) out.emotion = active.emotion
+  delete out.thinking
+  if (active.thinking) out.thinking = active.thinking
+  if (variants.length >= 2) {
+    out.variants = variants
+    out.variant = index
+  } else {
+    delete out.variants
+    delete out.variant
+  }
+  return out
+}
+
+/**
+ * ÉLAGAGE : la variante affichée reste, les autres disparaissent — le corps du
+ * message ne bouge pas d'un caractère (il la recopiait déjà). Appliqué dès que
+ * le fil AVANCE (nouveau message de l'utilisateur) ou qu'une réponse est éditée
+ * à la main : feuilleter sert à choisir avant de continuer, pas à emporter
+ * quatre versions du passé dans toute la conversation.
+ */
+function pruneVariants(m: ChatMessage): ChatMessage {
+  if (m.variants === undefined && m.variant === undefined) return m
+  const out = { ...m }
+  delete out.variants
+  delete out.variant
+  return out
 }
 
 /**
@@ -427,11 +494,8 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     return
   }
   let existing: ChatMessage[]
-  let existingPinned: number | undefined
   try {
-    const state = readChat(characterId, chatId)
-    existing = state.messages
-    existingPinned = state.meta.pinned
+    existing = readChat(characterId, chatId).messages
   } catch {
     res.status(404).json({ error: `Chat introuvable : ${chatId}` })
     return
@@ -439,6 +503,9 @@ async function handleChat(req: Request, res: Response): Promise<void> {
 
   // Base d'une continuation : le dernier message assistant, complété en place.
   let continueBase: ChatMessage | null = null
+  // Base d'une régénération : la réponse actuelle, qui NE SORT PAS du fichier —
+  // elle deviendra une variante du même message une fois la nouvelle écrite.
+  let regenBase: ChatMessage | null = null
   // Régénérer un premier message généré : la conversation redevient vide, le payload
   // reprend donc la consigne d'ouverture (sinon le modèle n'aurait aucun tour user).
   let regenOpens = false
@@ -447,16 +514,14 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       res.status(400).json({ error: 'Rien à régénérer (conversation vide)' })
       return
     }
-    // Dernier message = réponse de l'assistant → on la retire et on rejoue.
+    // Dernier message = réponse de l'assistant → nouvelle VARIANTE de ce message.
+    // Le fichier n'est pas touché ici : la réponse actuelle est seulement retirée
+    // de l'historique envoyé (omitLastMessage), et l'épingle — qui vise un
+    // message toujours présent, au même rang — n'a plus de raison d'être levée.
     // (Dernier message = user, ex. génération précédente échouée → on rejoue tel quel.)
     if (existing[existing.length - 1].role === 'assistant') {
-      rewriteChatMessages(characterId, chatId, (msgs) => msgs.slice(0, -1))
+      regenBase = existing[existing.length - 1]
       regenOpens = existing.length === 1
-      // L'épingle visait le message retiré : on la lève, sinon elle se
-      // recollerait en silence au nouveau texte généré à la même position.
-      if (existingPinned === existing.length - 1) {
-        updateChatHeader(characterId, chatId, { pinned: undefined })
-      }
     }
   } else if (mode === 'continue') {
     const last = existing[existing.length - 1]
@@ -484,11 +549,17 @@ async function handleChat(req: Request, res: Response): Promise<void> {
           : images.length > 0
             ? multimodalContent(content, images)
             : content
-  const { payload } = buildPayload(characterId, chatId, settings, pendingUser)
+  const { payload } = buildPayload(characterId, chatId, settings, pendingUser, regenBase !== null)
   const messages = payload.messages as Record<string, unknown>[]
 
   // Le message user est sauvegardé AVANT l'appel backend : il survit à toute erreur en aval.
   if (!mode) {
+    // Le fil AVANCE : les variantes non affichées de la réponse précédente sont
+    // élaguées (cf. pruneVariants). Aucun message n'entre ni ne sort — les
+    // repères qui comptent des messages (épingle, summaryUpto) ne bougent pas.
+    if (existing.some((m) => m.variants !== undefined)) {
+      rewriteChatMessages(characterId, chatId, (msgs) => msgs.map(pruneVariants))
+    }
     const userMsg: ChatMessage = { role: 'user', content, ts: new Date().toISOString() }
     if (images.length > 0) userMsg.images = images
     appendChatMessage(characterId, chatId, userMsg)
@@ -553,17 +624,25 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     if (mode === 'continue' && continueBase) {
       const base = continueBase
       const joiner = base.content.endsWith('\n') || assistantText.startsWith('\n') ? '' : ' '
-      const merged: ChatMessage = { ...base, content: base.content + joiner + assistantText }
+      let merged: ChatMessage = { ...base, content: base.content + joiner + assistantText }
       const mergedEmotion = firstEmotionTag(merged.content)
       if (mergedEmotion) merged.emotion = mergedEmotion
       if (assistantThinking) {
         merged.thinking = base.thinking ? base.thinking + '\n\n' + assistantThinking : assistantThinking
       }
-      let saved: ChatMessage = merged
+      // Le message porte des variantes : c'est la variante AFFICHÉE qui s'allonge
+      // (« Continuer » continue ce qu'on lit) — les autres restent feuilletables.
+      const active = merged.variant
+      if (merged.variants && typeof active === 'number') {
+        const grown = merged.variants.map((v, i) => (i === active ? bodyOf(merged) : v))
+        merged = withVariants(merged, grown, active)
+      }
+      const continued = merged
+      let saved: ChatMessage = continued
       rewriteChatMessages(characterId, chatId, (msgs) => {
         const lastMsg = msgs[msgs.length - 1]
         if (lastMsg && lastMsg.role === 'assistant' && lastMsg.ts === base.ts && lastMsg.content === base.content) {
-          msgs[msgs.length - 1] = merged
+          msgs[msgs.length - 1] = continued
           return msgs
         }
         saved = toAssistantMessage(assistantText, assistantThinking)
@@ -573,6 +652,27 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       return saved
     }
     const message = toAssistantMessage(assistantText, assistantThinking)
+    // Régénération : la nouvelle réponse rejoint les précédentes DANS le message,
+    // et devient celle qui est affichée. Comme pour la continuation, l'IDENTITÉ
+    // du message visé est vérifiée (ts + contenu) : un message spontané a pu
+    // s'ajouter pendant le stream — fil bougé, la réponse est alors simplement
+    // AJOUTÉE, rien n'est écrasé.
+    if (mode === 'regenerate' && regenBase) {
+      const base = regenBase
+      let saved: ChatMessage = message
+      rewriteChatMessages(characterId, chatId, (msgs) => {
+        const lastMsg = msgs[msgs.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.ts === base.ts && lastMsg.content === base.content) {
+          const list = [...variantsOf(lastMsg), bodyOf(message)].slice(-MAX_VARIANTS)
+          saved = withVariants(lastMsg, list, list.length - 1)
+          msgs[msgs.length - 1] = saved
+          return msgs
+        }
+        msgs.push(message)
+        return msgs
+      })
+      return saved
+    }
     appendChatMessage(characterId, chatId, message)
     return message
   }
@@ -955,6 +1055,9 @@ chatRouter.post('/api/chat/compact', async (req, res) => {
 
 // PUT /api/chat/message {characterId, chatId, index, content} — édition d'un message
 // en place (l'émotion est re-détectée pour les messages de l'assistant).
+//
+// Une réponse à variantes édite CELLE QUI EST AFFICHÉE et perd les autres :
+// écrire soi-même le texte est un choix définitif, on ne feuillette plus après.
 chatRouter.put('/api/chat/message', (req, res) => {
   const body = (req.body ?? {}) as {
     characterId?: unknown
@@ -983,7 +1086,7 @@ chatRouter.put('/api/chat/message', (req, res) => {
   }
   let updated: ChatMessage | null = null
   rewriteChatMessages(characterId, chatId, (msgs) => {
-    const msg: ChatMessage = { ...msgs[index], content }
+    const msg: ChatMessage = { ...pruneVariants(msgs[index]), content }
     if (msg.role === 'assistant') {
       delete msg.emotion
       const emotion = firstEmotionTag(content)
@@ -993,6 +1096,65 @@ chatRouter.put('/api/chat/message', (req, res) => {
     updated = msg
     return msgs
   })
+  res.json({ index, message: updated })
+})
+
+// PUT /api/chat/variant {characterId, chatId, index, variant} — change la variante
+// AFFICHÉE d'une réponse (« swipe »). Le corps du message recopie la variante
+// choisie : le payload du prochain envoi, l'export .md, la voix, la copie et
+// l'émotion du visage la suivent aussitôt, sans rien savoir des variantes.
+//
+// AUCUN message n'est ajouté ni retiré : l'index reste celui du message, et les
+// repères qui comptent des messages (épingle, summaryUpto) sont hors sujet ici.
+chatRouter.put('/api/chat/variant', (req, res) => {
+  const body = (req.body ?? {}) as {
+    characterId?: unknown
+    chatId?: unknown
+    index?: unknown
+    variant?: unknown
+  }
+  const characterId = typeof body.characterId === 'string' ? body.characterId : ''
+  const chatId = typeof body.chatId === 'string' ? body.chatId : ''
+  const index = typeof body.index === 'number' && Number.isInteger(body.index) ? body.index : -1
+  const variant = typeof body.variant === 'number' && Number.isInteger(body.variant) ? body.variant : -1
+  if (!characterId || !chatId || index < 0 || variant < 0) {
+    res.status(400).json({ error: 'characterId, chatId, index et variant (entiers ≥ 0) sont requis' })
+    return
+  }
+  let messages: ChatMessage[]
+  try {
+    messages = readChat(characterId, chatId).messages
+  } catch {
+    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    return
+  }
+  if (index >= messages.length) {
+    res.status(404).json({ error: `Message introuvable : ${index}` })
+    return
+  }
+  const target = messages[index]
+  if (!target.variants || target.variants.length < 2) {
+    res.status(400).json({ error: `Ce message n'a pas de variantes : ${index}` })
+    return
+  }
+  if (variant >= target.variants.length) {
+    res.status(404).json({ error: `Variante introuvable : ${variant}` })
+    return
+  }
+  let updated: ChatMessage | null = null
+  rewriteChatMessages(characterId, chatId, (msgs) => {
+    const msg = msgs[index]
+    // Le fil a pu bouger entre la lecture et la réécriture : sans variantes (ou
+    // moins nombreuses), on ne touche à rien.
+    if (!msg || !msg.variants || variant >= msg.variants.length) return msgs
+    updated = withVariants(msg, msg.variants, variant)
+    msgs[index] = updated
+    return msgs
+  })
+  if (updated === null) {
+    res.status(409).json({ error: 'La conversation a changé — variante introuvable' })
+    return
+  }
   res.json({ index, message: updated })
 })
 

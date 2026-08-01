@@ -92,6 +92,20 @@ export interface CharacterFull extends CharacterMeta {
   systemPrompt: string
 }
 
+/**
+ * Une VARIANTE de réponse : le corps d'un message assistant, tel qu'il a été
+ * généré. « Régénérer » en ajoute une au lieu d'écraser l'ancienne — on feuillette
+ * ensuite. Une variante porte tout ce qui dépend du texte : l'heure de SA
+ * génération, SON tag d'émotion (le visage suit la variante affichée) et SON
+ * raisonnement.
+ */
+export interface MessageVariant {
+  content: string
+  ts: string
+  emotion?: string
+  thinking?: string
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string // TOUJOURS le texte seul (les images vivent dans `images`)
@@ -100,6 +114,22 @@ export interface ChatMessage {
   emotion?: string // tag d'émotion détecté en tête de message ([happy] etc.)
   thinking?: string // raisonnement du modèle (<think> ou champ reasoning) — jamais renvoyé au backend
   spontaneous?: true // message écrit à l'initiative du personnage (moteur server/lib/spontaneous.ts)
+  // ── Variantes de réponse ─────────────────────────────────────────────────
+  // Clés ABSENTES = message ordinaire : tous les chats écrits avant les
+  // variantes restent valides tels quels, en lecture comme en écriture (rien
+  // n'est inventé à la relecture, cf. normalizeMessage dans lib/storage.ts).
+  //
+  // INVARIANT DU FORMAT — quand `variants` est présent (toujours ≥ 2 entrées),
+  // `content`, `ts`, `emotion` et `thinking` RECOPIENT `variants[variant]`.
+  // Tout le reste de l'app lit `content` sans rien savoir des variantes :
+  // payload du prochain envoi, export .md, voix, copie, recherche, émotion.
+  // Changer la variante affichée, c'est donc changer ce que TOUT le monde voit.
+  //
+  // Et surtout : une variante vit DANS la ligne du message, elle ne crée AUCUN
+  // index de message. L'épingle, `summaryUpto`, la suppression et la compaction
+  // continuent de compter les messages exactement comme avant.
+  variants?: MessageVariant[]
+  variant?: number // indice de la variante affichée dans `variants`
 }
 
 export interface ChatMeta {
