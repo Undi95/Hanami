@@ -88,14 +88,16 @@ Le nom du fichier fait office de configuration — il n'y a pas de fichier de ma
 | `idle.vrma` | socle joué en boucle (sans lui, aucune animation n'est jouée) |
 | `idle-talking.vrma` | socle joué en boucle pendant qu'une réponse s'écrit |
 | `happy.vrma`, `sad.vrma`, `angry.vrma`, `surprised.vrma`, `relaxed.vrma`, `neutral.vrma` | geste joué une fois quand le personnage exprime cette émotion, puis retour à l'idle. `surprised` est le seul rôle reconnu **sans fichier** : le déclenchement ne trouve rien et l'avatar continue de respirer |
-| `nod.vrma`, `shake.vrma`, `think.vrma`, `raise-hand.vrma` | briques de conversation, sans mot-clé dédié : réservées à un déclenchement par lecture du texte de la réponse, donc **ignorées par le lecteur d'aujourd'hui** |
+| `nod.vrma` | **acquiescement au clic sur le personnage** en scène vivante (cf. `REACTION_STEM`, `client/src/scene/vrmStage.ts`). Cinq variantes, tirées sans répétition immédiate. Seul rôle du face à face à n'être téléchargé **qu'avec** les clips `world-` : c'est la scène vivante qui s'en sert, pas la conversation |
+| `shake.vrma`, `think.vrma`, `raise-hand.vrma` | briques de conversation, sans mot-clé dédié : réservées à un déclenchement par lecture du texte de la réponse, donc **ignorées par le lecteur d'aujourd'hui** |
 | suffixe `-2`, `-3`… (`idle-2.vrma`, `happy-2.vrma`) | variantes du même rôle, tirées au hasard |
 
 `raise-hand` est le **seul rôle inventé** depuis que cette règle est écrite, et il
 l'est à contrecœur : lever la main n'est ni un `happy` ni un `nod`, il n'y avait
-aucun rôle voisin à enrichir. Comme `nod`, `shake` et `think`, il n'a pas de
-mot-clé et le lecteur d'aujourd'hui l'ignore — il attend une lecture du texte de la
-réponse. Le vocabulaire de **déclenchement** reste donc inchangé.
+aucun rôle voisin à enrichir. Comme `shake` et `think`, il n'a pas de mot-clé et le
+lecteur d'aujourd'hui l'ignore — il attend une lecture du texte de la réponse. Le
+vocabulaire de **déclenchement** reste donc inchangé (`nod`, lui, a depuis trouvé
+son déclencheur : le clic sur le personnage).
 
 **Et `raise-hand` LÈVE la main, il ne fait pas signe.** `raise-hand` et
 `raise-hand-2` lèvent la main et la **tiennent** — 8 s de maintien pour le premier.
@@ -504,7 +506,7 @@ perfect in its place.
 | Emotion | Clips | Source |
 | --- | --- | --- |
 | `neutral` | `neutral` | head tilt |
-| `happy` | `happy`, `happy-2`, `happy-3` | three claps |
+| `happy` | `happy`, `happy-2`, `happy-3`, `happy-6` | four claps — the fourth fished back out of `extra/` once its measurement was repaired (entry 11.1 → 0 cm, feet anchored, peak smoothed) |
 | `sad` | `sad` | head drop |
 | `angry` | `angry`, `angry-2` | annoyed head shake, measured head shake |
 | `relaxed` | `relaxed`, `relaxed-2`, `relaxed-3` | neck stretch, weight shift, 14 s waiting fidget |
@@ -534,14 +536,16 @@ The file name IS the configuration — there is no mapping file.
 | `idle.vrma` | looping base pose (without it, no animation is played at all) |
 | `idle-talking.vrma` | looping base pose played while a reply is being written |
 | `happy.vrma`, `sad.vrma`, `angry.vrma`, `surprised.vrma`, `relaxed.vrma`, `neutral.vrma` | one-shot gesture played when the character expresses that emotion, then back to idle. `surprised` is the one recognised role **with no file**: the trigger finds nothing and the avatar keeps breathing |
-| `nod.vrma`, `shake.vrma`, `think.vrma`, `raise-hand.vrma` | conversation primitives, with no dedicated keyword: reserved for triggering by reading the reply text, hence **ignored by today's player** |
+| `nod.vrma` | **acknowledgement when the character is clicked** in the living scene (see `REACTION_STEM`, `client/src/scene/vrmStage.ts`). Five variants, drawn without immediate repetition. The one face-to-face role downloaded **only with** the `world-` clips: it is the living scene that uses it, not the conversation |
+| `shake.vrma`, `think.vrma`, `raise-hand.vrma` | conversation primitives, with no dedicated keyword: reserved for triggering by reading the reply text, hence **ignored by today's player** |
 | `-2`, `-3`… suffix (`idle-2.vrma`, `happy-2.vrma`) | variants of the same role, picked at random |
 
 `raise-hand` is the **only role invented** since that rule was written, and
 reluctantly so: raising a hand is neither a `happy` nor a `nod`, there was no
-neighbouring role to enrich. Like `nod`, `shake` and `think` it has no keyword and
-today's player ignores it — it waits for a reading of the reply text. The
-**trigger** vocabulary is therefore unchanged.
+neighbouring role to enrich. Like `shake` and `think` it has no keyword and today's
+player ignores it — it waits for a reading of the reply text. The **trigger**
+vocabulary is therefore unchanged (`nod` has since found its own trigger: a click
+on the character).
 
 **And `raise-hand` RAISES a hand, it does not wave.** `raise-hand` and
 `raise-hand-2` raise a hand and **hold** it — 8 s of hold for the first. The forearm
