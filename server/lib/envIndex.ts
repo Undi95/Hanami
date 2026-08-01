@@ -25,7 +25,9 @@ import {
   placementFingerprint,
   readPlacement,
   scenePathFor,
+  spawnTrouble,
   writeScene,
+  type EnvPlacement,
 } from './envScene'
 import { ENVIRONMENTS_DIR } from './storage'
 
@@ -86,7 +88,13 @@ export function listEnvironmentModels(): string[] {
  * un `git checkout` change la date sans changer un octet, et refaire l'analyse
  * pour ça serait du gâchis.
  */
-function readFreshScene(file: string, bytes: number, mtimeMs: number, placement: string): SceneFile | null {
+function readFreshScene(
+  file: string,
+  bytes: number,
+  mtimeMs: number,
+  fingerprint: string,
+  sidecar: EnvPlacement,
+): SceneFile | null {
   const scenePath = scenePathFor(file)
   let scene: SceneFile
   try {
@@ -96,7 +104,14 @@ function readFreshScene(file: string, bytes: number, mtimeMs: number, placement:
   }
   if (scene?.format !== SCENE_FORMAT || scene.version !== SCENE_VERSION) return null
   if (!scene.source || !scene.grid || !Array.isArray(scene.seats)) return null
-  if (scene.placement?.fingerprint !== placement) return null
+  if (scene.placement?.fingerprint !== fingerprint) return null
+  // Une analyse d'AVANT le calage automatique, faite sur un décor qui en aurait
+  // besoin : c'est exactement le décor qui donnait un écran noir muet, et rien
+  // dans le .glb ni dans le sidecar n'a changé pour le signaler. On la refait
+  // UNE FOIS. Le champ `spawnAuto`, une fois écrit — fût-il `null`, « on a
+  // cherché, il n'y a nulle part où poser quelqu'un » — rend l'analyse
+  // définitive : jamais de remesure en boucle sur un décor sans issue.
+  if (scene.placement.spawnAuto === undefined && sidecar.spawn === undefined && spawnTrouble(scene)) return null
   if (scene.source.bytes !== bytes) return null
   if (scene.source.mtimeMs === mtimeMs) return scene
   const digest = createHash('sha256').update(fs.readFileSync(file)).digest('hex').slice(0, 16)
@@ -125,7 +140,8 @@ export function refreshEnvironmentIndex(force = false): void {
     } catch {
       continue // disparu entre le readdir et le stat
     }
-    const placement = placementFingerprint(readPlacement(file))
+    const sidecar = readPlacement(file)
+    const placement = placementFingerprint(sidecar)
     // La signature du fichier d'analyse compte AUSSI : l'effacer à la main doit
     // relancer l'analyse, et c'est la façon la plus naturelle de dire « refais-la ».
     const sceneSignature = signature(scenePathFor(file))
@@ -139,7 +155,7 @@ export function refreshEnvironmentIndex(force = false): void {
     ) {
       continue // rien n'a bougé : l'état connu fait foi (y compris un échec)
     }
-    const scene = readFreshScene(file, bytes, mtimeMs, placement)
+    const scene = readFreshScene(file, bytes, mtimeMs, placement, sidecar)
     const common = { name, file, bytes, mtimeMs, placement, scene: sceneSignature }
     const entry: Entry = scene
       ? { ...common, state: 'ready', seats: scene.seats.length, walkArea: scene.room.walkArea }
@@ -171,9 +187,17 @@ async function processQueue(): Promise<void> {
         // balayage suivant le croirait modifié par un tiers et remesurerait tout.
         entry.scene = signature(scenePathFor(entry.file))
         delete entry.reason
+        // Le calage automatique se DIT : c'est un décor qu'on a déplacé sous les
+        // pieds du personnage, et son auteur doit pouvoir le figer d'un sidecar
+        // s'il préfère un autre endroit.
+        const calage = report.spawnAuto
+          ? ` — point d’accueil calculé [${report.spawnAuto.join(', ')}] (l’origine du modèle n’en est pas un)`
+          : report.spawnTrouble
+            ? ' — aucun point d’accueil praticable trouvé : le décor reste un fond'
+            : ''
         console.log(
           `[décor] ${name} : analysé en ${(report.ms / 1000).toFixed(1)} s — ` +
-            `${scene.room.walkArea} m² praticables, ${scene.seats.length} assises`,
+            `${scene.room.walkArea} m² praticables, ${scene.seats.length} assises${calage}`,
         )
       } catch (e) {
         entry.state = e instanceof GlbUnsupportedError ? 'unsupported' : 'failed'

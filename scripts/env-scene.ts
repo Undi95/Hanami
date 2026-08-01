@@ -19,6 +19,7 @@ import {
   placementFingerprint,
   readPlacement,
   scenePathFor,
+  spawnTrouble,
   writeScene,
   type RejectedSeat,
 } from '../server/lib/envScene'
@@ -47,8 +48,12 @@ function staleReason(file: string): string | null {
   if (scene?.format !== SCENE_FORMAT) return 'format inconnu'
   if (scene.version !== SCENE_VERSION) return `format v${scene.version}, attendu v${SCENE_VERSION}`
   const stat = fs.statSync(file)
+  const sidecar = readPlacement(file)
   if (scene.source.bytes !== stat.size) return 'le .glb a changé de taille'
-  if (scene.placement?.fingerprint !== placementFingerprint(readPlacement(file))) return 'le placement a changé'
+  if (scene.placement?.fingerprint !== placementFingerprint(sidecar)) return 'le placement a changé'
+  if (scene.placement.spawnAuto === undefined && sidecar.spawn === undefined && spawnTrouble(scene)) {
+    return 'analyse d’avant le calage automatique, sur un décor qui en a besoin'
+  }
   if (scene.source.mtimeMs !== Math.round(stat.mtimeMs)) return 'date du .glb différente (contenu à revérifier)'
   return null
 }
@@ -165,6 +170,22 @@ async function main(): Promise<void> {
       )
       if (!dry) console.log(`  écrit : ${path.basename(target)} (${(size / 1024).toFixed(1)} Ko)`)
       else console.log('  --dry : rien écrit')
+      // Le calage automatique se DIT : c'est la seule chose que l'analyse ait
+      // décidée à la place de l'auteur du décor, et un sidecar la reprend.
+      if (report.spawnTrouble) {
+        const t = report.spawnTrouble
+        const pourquoi = [
+          t.ground !== null ? `sol de la pièce à ${t.ground.toFixed(3)} m des pieds` : '',
+          t.blind ? 'objectif dans la géométrie' : '',
+          t.outside ? 'origine hors de la pièce' : '',
+        ].filter(Boolean).join(', ')
+        console.log(
+          report.spawnAuto
+            ? `  point d’accueil CALCULÉ : [${report.spawnAuto.join(', ')}] — ${pourquoi}\n` +
+                '    (pour le figer : recopiez-le en `spawn` dans le sidecar .json à côté du .glb)'
+            : `  aucun point d’accueil praticable — ${pourquoi} : le décor reste un fond`,
+        )
+      }
       if (detail) showDetail(scene)
       if (explain) showRejected(report.rejectedSeats, report.seatIssues)
     } catch (e) {

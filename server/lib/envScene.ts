@@ -111,6 +111,34 @@ const ENV_TARGET_HEIGHT = 2.6
 const EYE_HEIGHT = 1.3
 const ROSE_DIRECTIONS = 16
 
+// ── Calage automatique du point d'accueil ──────────────────────────────────
+// « C'est la map qui s'adapte à nous » : un décor dont l'origine n'est pas au
+// sol praticable ne doit plus donner un écran noir muet. L'analyse SAIT où est
+// le sol et où l'on marche — elle propose donc elle-même un point d'accueil,
+// que le client applique exactement comme un `spawn` de sidecar.
+//
+// Elle ne le fait QUE si le sidecar n'en donne pas ET que l'origine ne fait pas
+// l'affaire : la parole de l'auteur (sidecar) passe avant, et l'origine d'un
+// décor propre EST le point voulu — la déplacer « pour faire mieux » serait
+// défaire un placement réglé à la main.
+
+/**
+ * Écart toléré entre le sol de la pièce et les pieds de l'avatar (m). Au-delà,
+ * il flotte ou il est enterré. La moitié d'une contremarche : les sept décors
+ * livrés tiennent tous à 5 mm près, aucun n'en approche.
+ */
+const SPAWN_GROUND_TOL = 0.1
+/** Dégagement max, toutes directions, en deçà duquel l'objectif est DANS la géométrie (m). */
+const SPAWN_BLIND = 0.3
+/** Pas d'échantillonnage des candidats (m) : peser deux points distants de 10 cm n'apprend rien. */
+const SPAWN_STRIDE = 0.3
+/** Nombre de candidats réellement pesés à la rose — c'est la partie chère du choix. */
+const SPAWN_MAX_CANDIDATES = 64
+/** Recul de caméra au-delà duquel du dégagement en plus ne sert plus à rien (m). */
+const SPAWN_CAM_ENOUGH = 3
+/** Distance au bord de la pièce au-delà de laquelle on est « au large » (m). */
+const SPAWN_ROOM_ENOUGH = 1.5
+
 // ── Placement (sidecar `.json`) ────────────────────────────────────────────
 
 /**
@@ -615,6 +643,245 @@ function markedBounds(field: Field, mark: Uint8Array): { i0: number; j0: number;
   return count > 0 ? { i0, j0, i1, j1, count } : null
 }
 
+// ── Dégagement de l'objectif ───────────────────────────────────────────────
+
+/**
+ * Distance libre à hauteur d'objectif depuis (cx, cz), dans 16 directions. De
+ * quoi choisir un axe et un recul de caméra sans relire la géométrie.
+ *
+ * Mesurée sur la grille de REPÉRAGE, la seule qui porte assez loin (la grille
+ * fine s'arrête aux abords de la pièce) — d'où une résolution de l'ordre du pas
+ * de cette grille. `eyeY` est l'altitude de l'objectif dans le repère mesuré :
+ * pour un point d'accueil candidat, c'est l'altitude de SON sol plus la hauteur
+ * d'œil, puisque c'est là que la caméra se tiendra une fois le décor recalé.
+ */
+function clearanceRose(coarse: Field, cx: number, cz: number, eyeY: number): number[] {
+  const out: number[] = []
+  const b0 = Math.max(0, Math.floor((eyeY - 0.2 - Y_MIN) / coarse.vbin))
+  const b1 = Math.min(coarse.bins - 1, Math.floor((eyeY + 0.3 - Y_MIN) / coarse.vbin))
+  for (let k = 0; k < ROSE_DIRECTIONS; k++) {
+    const rad = (k * 2 * Math.PI) / ROSE_DIRECTIONS
+    const dx = Math.sin(rad)
+    const dz = Math.cos(rad)
+    let d = 0
+    for (let t = 0.3; t <= WORLD_RADIUS; t += CELL) {
+      const ci = coarse.colOf(cx + dx * t)
+      const cj = coarse.rowOf(cz + dz * t)
+      if (ci < 0 || ci >= coarse.cols || cj < 0 || cj >= coarse.rows) break
+      const base = (cj * coarse.cols + ci) * coarse.bins
+      let blocked = false
+      for (let b = b0; b <= b1; b++) if (coarse.occ[base + b] >= OCC_MIN_AREA) blocked = true
+      if (blocked) break
+      d = t
+    }
+    out.push(round(d, 2))
+  }
+  return out
+}
+
+// ── Calage automatique ─────────────────────────────────────────────────────
+
+/** Ce qui cloche dans le point d'accueil d'un décor mesuré. Tout est déjà dans le `.scene.json`. */
+export interface SpawnTrouble {
+  /** Altitude du sol de la pièce (m) quand elle ne tombe pas sous les pieds de l'avatar ; `null` si elle y tombe. */
+  ground: number | null
+  /** L'objectif est dans la géométrie : rien à voir depuis le point d'accueil. */
+  blind: boolean
+  /** Le point d'accueil est HORS de la pièce : on marche ailleurs, pas ici. */
+  outside: boolean
+}
+
+/**
+ * Le point d'accueil d'une analyse est-il inhabitable ? Trois signes, tous lus
+ * dans le fichier produit, aucun devinable autrement :
+ *  — le sol de la pièce n'est pas sous les pieds de l'avatar (il est enterré) ;
+ *  — l'objectif ne voit rien dans aucune des 16 directions (écran noir) ;
+ *  — l'origine tombe hors de la boîte de ce qu'on atteint à pied.
+ *
+ * Un décor SANS aucun sol praticable n'est jamais concerné : c'est un fond
+ * peint, pas une pièce, et le personnage devant lui est à sa place depuis
+ * toujours. Cette fonction est LE juge commun du serveur (qui décide de
+ * recaler) et du client (qui décide d'expliquer) — deux règles séparées
+ * auraient fini par diverger.
+ */
+export function spawnTrouble(scene: Pick<SceneFile, 'room' | 'camera'>): SpawnTrouble | null {
+  const room = scene?.room
+  if (!room || !(room.walkArea > 0)) return null
+  const ground = typeof room.ground === 'number' && Math.abs(room.ground) > SPAWN_GROUND_TOL ? room.ground : null
+  const clearance = scene.camera?.clearance
+  const blind = Array.isArray(clearance) && clearance.length > 0 && Math.max(...clearance) < SPAWN_BLIND
+  const wb = room.walkBounds
+  const outside = Array.isArray(wb) && wb.length === 4 && !(wb[0] <= 0 && 0 <= wb[2] && wb[1] <= 0 && 0 <= wb[3])
+  return ground === null && !blind && !outside ? null : { ground, blind, outside }
+}
+
+/**
+ * Choisit un point d'accueil quand l'origine n'en est pas un. Trois idées, dans
+ * cet ordre — et c'est le classement qu'on faisait à la main en balayant des
+ * candidats (cf. l'outil `balayage` du chantier) :
+ *
+ *  1. LA PIÈCE, c'est la plus grande étendue d'un seul tenant où l'on marche.
+ *     Pas celle qui touche l'origine : sur un quai de métro, l'origine tombe
+ *     dans la voie, et la voie est une bande praticable parfaitement inutile.
+ *  2. AU LARGE : parmi ses cases, celles qui sont le plus loin de son bord
+ *     (transformée de distance). Un personnage posé contre un mur ne peut pas
+ *     faire trois pas, et la caméra le prend dans la cloison.
+ *  3. DEVANT SOI : la caméra recule sur +Z. Entre deux cases également au
+ *     large, celle qui laisse le plus de champ à l'objectif gagne — c'est la
+ *     mesure qui séparait un cadrage lisible d'un écran noir.
+ *
+ * Rend `[x, y, z]` dans le repère de CETTE mesure — donc exactement ce qu'un
+ * `spawn` de sidecar aurait dit — ou `null` si le décor n'a nulle part où poser
+ * qui que ce soit.
+ */
+function chooseSpawn(field: Field, coarse: Field, cells: (CellFloor | null)[]): [number, number, number] | null {
+  const n = field.cols * field.rows
+  const neighbours = [-1, 1, -field.cols, field.cols]
+  /** Numéro de la zone d'un seul tenant de chaque case, −1 = pas de sol praticable. */
+  const zone = new Int32Array(n).fill(-1)
+  let bestZone = -1
+  let bestSize = 0
+  let zoneCount = 0
+  const stack: number[] = []
+  for (let seed = 0; seed < n; seed++) {
+    if (zone[seed] >= 0 || !cells[seed]?.walkable) continue
+    const id = zoneCount++
+    zone[seed] = id
+    stack.length = 0
+    stack.push(seed)
+    let size = 0
+    while (stack.length > 0) {
+      const k = stack.pop() as number
+      size++
+      const here = cells[k] as CellFloor
+      const ci = k % field.cols
+      for (const d of neighbours) {
+        const m = k + d
+        if (m < 0 || m >= n || zone[m] >= 0) continue
+        if ((d === -1 && ci === 0) || (d === 1 && ci === field.cols - 1)) continue
+        const cell = cells[m]
+        if (!cell || !cell.walkable) continue
+        // Même franchissement que floodReachable : une zone est ce qu'on parcourt
+        // à pied, pas ce qui se touche à l'écran.
+        if (Math.abs(cell.y - here.y) > STEP_MAX) continue
+        zone[m] = id
+        stack.push(m)
+      }
+    }
+    if (size > bestSize) {
+      bestSize = size
+      bestZone = id
+    }
+  }
+  if (bestZone < 0) return null
+
+  // Distance au bord, en cases : propagation depuis la bordure de la zone. Le
+  // hors-grille compte comme bord — une pièce coupée par le cadre d'analyse ne
+  // doit pas passer pour un grand large.
+  const depth = new Int32Array(n)
+  const queue: number[] = []
+  for (let k = 0; k < n; k++) {
+    if (zone[k] !== bestZone) continue
+    const ci = k % field.cols
+    let edge = false
+    for (const d of neighbours) {
+      const m = k + d
+      if (m < 0 || m >= n || (d === -1 && ci === 0) || (d === 1 && ci === field.cols - 1) || zone[m] !== bestZone) {
+        edge = true
+        break
+      }
+    }
+    if (edge) {
+      depth[k] = 1
+      queue.push(k)
+    }
+  }
+  let maxDepth = 0
+  for (let head = 0; head < queue.length; head++) {
+    const k = queue[head]
+    if (depth[k] > maxDepth) maxDepth = depth[k]
+    const ci = k % field.cols
+    for (const d of neighbours) {
+      const m = k + d
+      if (m < 0 || m >= n || depth[m] !== 0 || zone[m] !== bestZone) continue
+      if ((d === -1 && ci === 0) || (d === 1 && ci === field.cols - 1)) continue
+      depth[m] = depth[k] + 1
+      queue.push(m)
+    }
+  }
+  if (maxDepth === 0) return null
+
+  // Présélection : ce qui est franchement au large, échantillonné au pas de
+  // SPAWN_STRIDE. La rose coûte 16 rayons par candidat, on ne la paie pas cent fois.
+  const minDepth = Math.max(1, Math.ceil(maxDepth * 0.5))
+  const stride = Math.max(1, Math.round(SPAWN_STRIDE / field.cell))
+  let shortlist: number[] = []
+  for (let cj = 0; cj < field.rows; cj++) {
+    for (let ci = 0; ci < field.cols; ci++) {
+      const k = cj * field.cols + ci
+      if (zone[k] !== bestZone || depth[k] < minDepth) continue
+      if (ci % stride !== 0 || cj % stride !== 0) continue
+      shortlist.push(k)
+    }
+  }
+  // Une pièce étroite peut n'avoir aucune case sur la trame : on retombe alors
+  // sur les cases les plus au large, quelles qu'elles soient.
+  if (shortlist.length === 0) {
+    for (let k = 0; k < n; k++) if (zone[k] === bestZone && depth[k] === maxDepth) shortlist.push(k)
+  }
+  if (shortlist.length > SPAWN_MAX_CANDIDATES) {
+    shortlist = [...shortlist].sort((a, b) => depth[b] - depth[a] || a - b).slice(0, SPAWN_MAX_CANDIDATES)
+  }
+
+  // Le cône de l'objectif, pour chaque candidat : +Z et ses deux voisins à
+  // 22,5°. C'est par là que la caméra recule, et un mur à 22,5° la ramène dans
+  // la géométrie tout autant qu'un mur pile devant.
+  const front = new Float64Array(shortlist.length)
+  let bestFront = 0
+  for (let c = 0; c < shortlist.length; c++) {
+    const k = shortlist[c]
+    const cell = cells[k] as CellFloor
+    const rose = clearanceRose(
+      coarse,
+      field.cellX(k % field.cols),
+      field.cellZ(Math.floor(k / field.cols)),
+      cell.y + EYE_HEIGHT,
+    )
+    front[c] = Math.min(rose[0], rose[1], rose[ROSE_DIRECTIONS - 1])
+    if (front[c] > bestFront) bestFront = front[c]
+  }
+  // Choix LEXICOGRAPHIQUE, et dans cet ordre : la caméra d'abord (un cadrage
+  // impossible ne se rattrape pas), la centralité ensuite, et l'immobilité pour
+  // départager. Au-delà de SPAWN_CAM_ENOUGH le recul ne sert plus à rien : tous
+  // les candidats assez dégagés sont alors à égalité, et c'est le large qui
+  // tranche. Une pièce trop exiguë pour ce recul retombe sur son meilleur point.
+  const wanted = Math.min(SPAWN_CAM_ENOUGH, bestFront) * 0.99
+  let best = -1
+  let bestDepth = -1
+  let bestKept = -1
+  let bestDist = Infinity
+  for (let c = 0; c < shortlist.length; c++) {
+    if (front[c] < wanted) continue
+    const k = shortlist[c]
+    const x = field.cellX(k % field.cols)
+    const z = field.cellZ(Math.floor(k / field.cols))
+    const room = Math.min(depth[k] * field.cell, SPAWN_ROOM_ENOUGH)
+    const dist = Math.hypot(x, z)
+    const better =
+      room > bestDepth + 1e-9 ||
+      (room > bestDepth - 1e-9 && (front[c] > bestKept + 1e-9 || (front[c] > bestKept - 1e-9 && dist < bestDist)))
+    if (better) {
+      bestDepth = room
+      bestKept = front[c]
+      bestDist = dist
+      best = k
+    }
+  }
+  if (best < 0) return null
+  const cell = cells[best] as CellFloor
+  return [round(field.cellX(best % field.cols), 3), round(cell.y, 3), round(field.cellZ(Math.floor(best / field.cols)), 3)]
+}
+
 // ── Niveaux ────────────────────────────────────────────────────────────────
 
 /** Regroupe des altitudes en niveaux à `LEVEL_TOL` près, plafonnés à la taille de l'alphabet. */
@@ -985,18 +1252,39 @@ export interface AnalyseResult {
     seatIssues: { reason: string; cells: number }[]
     autoRescaled: boolean
     scale: number
+    /** Point d'accueil calculé par le calage automatique, `null` si aucun n'était nécessaire. */
+    spawnAuto: [number, number, number] | null
+    /** Ce qui clochait au point d'accueil d'origine — la raison du calage. */
+    spawnTrouble: SpawnTrouble | null
   }
 }
 
+/** Ce qu'une passe de mesure produit : le contenu du fichier, et de quoi choisir un point d'accueil. */
+interface Measured {
+  placed: Placed
+  field: Field
+  coarse: Field
+  cells: (CellFloor | null)[]
+  room: SceneFile['room']
+  camera: SceneFile['camera']
+  grid: SceneFile['grid']
+  seats: SceneSeat[]
+  samples: number
+  rejectedSeats: RejectedSeat[]
+  seatIssues: Map<string, number> | null
+}
+
 /**
- * Analyse un décor et rend le contenu de son `.scene.json`.
- * Lève `GlbUnsupportedError` si le fichier n'offre pas de géométrie lisible.
+ * UNE mesure complète du décor, sous UN placement donné. Tout le corps de
+ * l'analyse vit ici pour qu'on puisse la rejouer telle quelle avec un point
+ * d'accueil calculé — sans relire ni reparser le .glb, qui pèse des mégaoctets.
  */
-export async function analyseEnvironment(modelFile: string, options: AnalyseOptions = {}): Promise<AnalyseResult> {
-  const started = Date.now()
-  const clock = new Clock(options.budgetMs ?? 8)
-  const placement = readPlacement(modelFile)
-  const model = loadGlb(modelFile)
+async function measure(
+  model: GlbModel,
+  placement: EnvPlacement,
+  clock: Clock,
+  options: AnalyseOptions,
+): Promise<Measured> {
   const placed = placeModel(model, placement)
   const meshes = toWorld(model, placed)
   if (meshes.length === 0) throw new GlbUnsupportedError('aucun triangle exploitable')
@@ -1139,30 +1427,77 @@ export async function analyseEnvironment(modelFile: string, options: AnalyseOpti
     ceiling = round(overhead[Math.floor(overhead.length / 2)], 3)
   }
 
-  // Rose de dégagement : distance libre à hauteur d'objectif, depuis le point
-  // d'accueil, dans 16 directions. De quoi choisir un axe et un recul de caméra
-  // sans relire la géométrie. Mesurée sur la grille de repérage, la seule qui
-  // porte assez loin (la grille fine s'arrête aux abords de la pièce) — d'où une
-  // résolution de l'ordre du pas de cette grille.
-  const clearance: number[] = []
-  const eyeB0 = Math.max(0, Math.floor((EYE_HEIGHT - 0.2 - Y_MIN) / COARSE_VBIN))
-  const eyeB1 = Math.min(coarse.bins - 1, Math.floor((EYE_HEIGHT + 0.3 - Y_MIN) / COARSE_VBIN))
-  for (let k = 0; k < ROSE_DIRECTIONS; k++) {
-    const rad = (k * 2 * Math.PI) / ROSE_DIRECTIONS
-    const dx = Math.sin(rad)
-    const dz = Math.cos(rad)
-    let d = 0
-    for (let t = 0.3; t <= WORLD_RADIUS; t += CELL) {
-      const ci = coarse.colOf(dx * t)
-      const cj = coarse.rowOf(dz * t)
-      if (ci < 0 || ci >= coarse.cols || cj < 0 || cj >= coarse.rows) break
-      const base = (cj * coarse.cols + ci) * coarse.bins
-      let blocked = false
-      for (let b = eyeB0; b <= eyeB1; b++) if (coarse.occ[base + b] >= OCC_MIN_AREA) blocked = true
-      if (blocked) break
-      d = t
+  return {
+    placed,
+    field,
+    coarse,
+    cells,
+    room: {
+      modelBounds: [
+        round(placed.min[0], 3),
+        round(placed.min[1], 3),
+        round(placed.min[2], 3),
+        round(placed.max[0], 3),
+        round(placed.max[1], 3),
+        round(placed.max[2], 3),
+      ],
+      walkBounds,
+      walkArea,
+      ground: round(groundY, 3),
+      ceiling,
+    },
+    // Rose de dégagement, mesurée depuis le point d'accueil (l'origine du repère
+    // mesuré) à hauteur d'objectif : de quoi choisir un axe et un recul de caméra
+    // sans relire la géométrie.
+    camera: { eye: EYE_HEIGHT, clearance: clearanceRose(coarse, 0, 0, EYE_HEIGHT) },
+    grid: {
+      cell: CELL,
+      origin: [round(field.x0 + i0 * CELL, 3), round(field.z0 + j0 * CELL, 3)],
+      cols: i1 - i0 + 1,
+      rows: j1 - j0 + 1,
+      levels,
+      legend: {
+        [CHAR_VOID]: 'pas de sol',
+        [CHAR_BLOCKED]: 'sol présent mais obstrué à hauteur de corps',
+        [CHAR_ISLAND]: 'sol libre mais hors d’atteinte à pied (dessus de meuble, îlot)',
+        '0-9a-zA-Z': 'sol libre et atteignable — le caractère est l’indice dans `levels`',
+      },
+      map,
+    },
+    seats,
+    samples,
+    rejectedSeats: rejected,
+    seatIssues: issues,
+  }
+}
+
+/**
+ * Analyse un décor et rend le contenu de son `.scene.json`.
+ * Lève `GlbUnsupportedError` si le fichier n'offre pas de géométrie lisible.
+ *
+ * Deux MESURES au plus : celle que le sidecar demande, puis — si le sidecar ne
+ * donne aucun `spawn` et que le point d'accueil obtenu est inhabitable — la
+ * même mesure rejouée autour du point d'accueil calculé. Le
+ * fichier livré décrit donc TOUJOURS le décor tel qu'il sera affiché, carte,
+ * assises et rose comprises : le client applique le `spawnAuto` et rien d'autre
+ * ne bouge. Un décor déjà calé (sidecar, ou origine posée au sol par son auteur)
+ * ne paie pas la seconde passe et ne voit pas le champ apparaître.
+ */
+export async function analyseEnvironment(modelFile: string, options: AnalyseOptions = {}): Promise<AnalyseResult> {
+  const started = Date.now()
+  const clock = new Clock(options.budgetMs ?? 8)
+  const placement = readPlacement(modelFile)
+  const model = loadGlb(modelFile)
+  let measured = await measure(model, placement, clock, options)
+
+  let spawnAuto: [number, number, number] | null = null
+  let trouble: SpawnTrouble | null = null
+  if (placement.spawn === undefined) {
+    trouble = spawnTrouble(measured)
+    if (trouble) {
+      spawnAuto = chooseSpawn(measured.field, measured.coarse, measured.cells)
+      if (spawnAuto) measured = await measure(model, { ...placement, spawn: spawnAuto }, clock, options)
     }
-    clearance.push(round(d, 2))
   }
 
   const stat = fs.statSync(modelFile)
@@ -1180,6 +1515,12 @@ export async function analyseEnvironment(modelFile: string, options: AnalyseOpti
       scale: placement.scale ?? null,
       rotationY: placement.rotationY ?? null,
       spawn: placement.spawn ?? null,
+      // Le champ n'apparaît QUE si le calage automatique a eu à se prononcer :
+      // un décor calé par son sidecar ou par son origine rend, à l'octet près,
+      // le même fichier qu'avant que ce mécanisme existe. `null` = « on a
+      // cherché, il n'y a nulle part où poser quelqu'un » — et c'est cette
+      // présence-là qui empêche de remesurer indéfiniment un décor sans issue.
+      ...(trouble ? { spawnAuto } : {}),
       fingerprint: placementFingerprint(placement),
     },
     frame: {
@@ -1194,51 +1535,27 @@ export async function analyseEnvironment(modelFile: string, options: AnalyseOpti
       step: STEP_MAX,
       seatRange: [SEAT_MIN, SEAT_MAX],
     },
-    room: {
-      modelBounds: [
-        round(placed.min[0], 3),
-        round(placed.min[1], 3),
-        round(placed.min[2], 3),
-        round(placed.max[0], 3),
-        round(placed.max[1], 3),
-        round(placed.max[2], 3),
-      ],
-      walkBounds,
-      walkArea,
-      ground: round(groundY, 3),
-      ceiling,
-    },
-    camera: { eye: EYE_HEIGHT, clearance },
-    grid: {
-      cell: CELL,
-      origin: [round(field.x0 + i0 * CELL, 3), round(field.z0 + j0 * CELL, 3)],
-      cols: i1 - i0 + 1,
-      rows: j1 - j0 + 1,
-      levels,
-      legend: {
-        [CHAR_VOID]: 'pas de sol',
-        [CHAR_BLOCKED]: 'sol présent mais obstrué à hauteur de corps',
-        [CHAR_ISLAND]: 'sol libre mais hors d’atteinte à pied (dessus de meuble, îlot)',
-        '0-9a-zA-Z': 'sol libre et atteignable — le caractère est l’indice dans `levels`',
-      },
-      map,
-    },
-    seats,
+    room: measured.room,
+    camera: measured.camera,
+    grid: measured.grid,
+    seats: measured.seats,
   }
   return {
     scene,
     report: {
       triangles: model.triangleCount,
-      samples,
-      coarseCells: coarse.cols * coarse.rows,
-      fineCells: field.cols * field.rows,
+      samples: measured.samples,
+      coarseCells: measured.coarse.cols * measured.coarse.rows,
+      fineCells: measured.field.cols * measured.field.rows,
       ms: Date.now() - started,
-      rejectedSeats: rejected,
-      seatIssues: [...(issues ?? new Map<string, number>()).entries()]
+      rejectedSeats: measured.rejectedSeats,
+      seatIssues: [...(measured.seatIssues ?? new Map<string, number>()).entries()]
         .map(([reason, cells2]) => ({ reason, cells: cells2 }))
         .sort((a, b) => b.cells - a.cells),
-      autoRescaled: placed.autoRescaled,
-      scale: placed.scale,
+      autoRescaled: measured.placed.autoRescaled,
+      scale: measured.placed.scale,
+      spawnAuto,
+      spawnTrouble: trouble,
     },
   }
 }

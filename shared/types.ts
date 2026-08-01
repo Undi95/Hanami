@@ -368,6 +368,18 @@ export interface SceneFile {
     scale: number | null
     rotationY: number | null
     spawn: [number, number, number] | null
+    /**
+     * Point d'accueil CALCULÉ par l'analyse, à appliquer exactement comme un
+     * `spawn` de sidecar — et déjà appliqué dans TOUTES les mesures de ce
+     * fichier (carte, assises, rose, sol). Le client suit l'ordre
+     * sidecar > `spawnAuto` > origine du modèle.
+     *
+     * La clé n'existe que si l'analyse a eu à se prononcer, c'est-à-dire si le
+     * sidecar ne donnait pas de `spawn` ET que l'origine du modèle était
+     * inhabitable (sol ailleurs, objectif bouché, pièce à côté). `null` = elle
+     * s'est prononcée et n'a trouvé nulle part où poser quelqu'un.
+     */
+    spawnAuto?: [number, number, number] | null
     fingerprint: string
   }
   frame: { units: 'm'; up: '+Y'; forward: '+Z'; origin: string }
