@@ -238,8 +238,13 @@ async function mesurerRig(nomRig, ctxRig, opts = {}) {
     socles.set(nomSocle, ref)
     return ref
   }
-  if (!clips.has('idle') && !clips.has('idle-talking')) {
-    throw new Error('ni idle.vrma ni idle-talking.vrma : aucun socle de référence')
+  // Un socle de référence, DE L'UNE DES DEUX FAMILLES de face à face : sans lui,
+  // aucun raccord ne peut être mesuré. Sur une sélection `--clips=rb-…`, ce sont
+  // les socles Rocketbox qui font foi (cf. soclesDeFamille dans mesures.mjs) —
+  // exiger ceux d'Overte reviendrait à juger une famille contre l'autre.
+  const SOCLES_REF = ['idle', 'idle-talking', 'rb-idle', 'rb-idle-talking']
+  if (!SOCLES_REF.some((s) => clips.has(s))) {
+    throw new Error(`aucun socle de référence : il en faut un parmi ${SOCLES_REF.map((s) => s + '.vrma').join(', ')}`)
   }
   const ctxJuge = {
     echPour: (slug) => clips.get(slug) ?? null,
