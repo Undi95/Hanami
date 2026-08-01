@@ -27,6 +27,22 @@ interface Props {
 // Même plafond que le serveur (CHAT_TITLE_MAX_CHARS) : un titre tient sur une ligne.
 const TITLE_MAX = 200
 
+// Nombre de conversations à partir duquel le filtre apparaît. En dessous, la
+// liste tient à l'écran d'un seul coup d'œil : un champ de plus serait du bruit.
+const FILTER_FROM = 5
+
+/**
+ * Repli casse/accents pour comparer des titres : « Été » trouve « ete ».
+ * (Le fil de messages a son propre repli, à longueur constante, parce qu'il
+ * doit RECOUPER le texte d'origine — ici on ne fait que tester l'inclusion.)
+ */
+function fold(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
 function fmtDate(iso: string, lang: Lang): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
@@ -85,6 +101,9 @@ export default function ChatsDialog({
   // Échap ferme l'édition ; si un blur suit tout de même (navigateur qui l'émet
   // au retrait du champ), ce drapeau empêche d'enregistrer la valeur abandonnée.
   const abandonRef = useRef(false)
+  // Filtre par titre — purement local (la liste est déjà entière en mémoire) :
+  // aucun appel, aucun délai, la frappe filtre à la lettre près.
+  const [query, setQuery] = useState('')
 
   const load = useCallback(() => {
     api
@@ -251,6 +270,14 @@ export default function ChatsDialog({
     }
   }
 
+  // Filtrage sur le titre AFFICHÉ (un titre automatique est rendu dans la langue
+  // de l'interface : c'est celui-là qu'on lit, donc celui-là qu'on cherche).
+  const needle = fold(query.trim())
+  const shown =
+    chats === null || needle === ''
+      ? chats
+      : chats.filter((c) => fold(chatDisplayTitle(c, lang, t)).includes(needle))
+
   return (
     <Dialog
       title={t('chats')}
@@ -270,13 +297,36 @@ export default function ChatsDialog({
       }
     >
       {error && <p className="msg-err">{error}</p>}
+      {/* Filtre : seulement quand la liste dépasse ce qu'un coup d'œil embrasse.
+          Il ne trie pas, ne recharge rien, ne touche à rien — il masque. */}
+      {chats !== null && chats.length >= FILTER_FROM && (
+        <input
+          className="list-filter"
+          type="search"
+          value={query}
+          placeholder={t('filterChats')}
+          aria-label={t('filterChats')}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            // Échap vide le champ avant de fermer le dialog (Dialog écoute sur
+            // window) : on annule le filtre, on ne quitte pas la liste.
+            if (e.key === 'Escape' && query !== '') {
+              e.preventDefault()
+              e.stopPropagation()
+              setQuery('')
+            }
+          }}
+        />
+      )}
       {chats === null ? (
         <p className="hint">{t('loading')}</p>
       ) : chats.length === 0 ? (
         <p className="hint">{t('noChats')}</p>
+      ) : shown !== null && shown.length === 0 ? (
+        <p className="hint">{t('noChatsMatch')}</p>
       ) : (
         <div className="item-list">
-          {chats.map((c) => (
+          {(shown ?? []).map((c) => (
             <div key={c.id} className={`item-row${c.id === activeChatId ? ' active' : ''}`}>
               {renaming === c.id ? (
                 <input

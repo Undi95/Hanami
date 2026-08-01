@@ -154,6 +154,8 @@ const FR = {
   // ── Conversations ────────────────────────────────────────────────────────
   newChat: 'Nouvelle conversation',
   noChats: 'Aucune conversation pour l’instant.',
+  filterChats: 'Filtrer par titre…',
+  noChatsMatch: 'Aucune conversation ne porte ce titre.',
   defaultChatTitle: 'Conversation du {date}',
   renameChat: 'Renommer la conversation',
   renameChatHint: 'Entrée pour enregistrer, Échap pour annuler.',
@@ -524,6 +526,8 @@ const EN: Record<Key, string> = {
   // ── Conversations ────────────────────────────────────────────────────────
   newChat: 'New conversation',
   noChats: 'No conversations yet.',
+  filterChats: 'Filter by title…',
+  noChatsMatch: 'No conversation matches that title.',
   defaultChatTitle: 'Conversation from {date}',
   renameChat: 'Rename conversation',
   renameChatHint: 'Enter to save, Esc to cancel.',
