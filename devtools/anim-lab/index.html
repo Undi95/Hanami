@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Banc d'essai — animations VRM (Hanami)</title>
 
+    <!-- GARDE-FOU. Cette page ne fonctionne QUE servie par serve.mjs sur
+         http://localhost:7799 : en file:// les imports ESM et les appels /api
+         sont morts, et l'origine 127.0.0.1 est bloquée par certains panes de
+         navigation. Plutôt que d'afficher une page à moitié morte, on se
+         redirige d'office vers le seul lien qui marche — si le serveur est
+         éteint, le navigateur affichera « connexion refusée », ce qui dit
+         exactement quoi faire (double-cliquer LANCER-LE-BANC.cmd). -->
+    <script>
+      if (location.protocol === "file:" || location.hostname === "127.0.0.1") {
+        location.replace("http://localhost:7799/");
+      }
+    </script>
+
     <!-- Les builds ESM de three-vrm* importent « three » en bare specifier :
          l'import map les résout vers les node_modules du projet, servis par
          serve.mjs. Une seule instance de three pour tout le monde. -->
