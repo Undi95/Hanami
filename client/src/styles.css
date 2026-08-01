@@ -1438,6 +1438,49 @@ select {
   .dialog-card .btn.small {
     min-height: 40px;
   }
+  /* Champs de saisie des dialogs. Relevé à 320 x 568, dialog par dialog et
+     onglet par onglet : le gabarit commun (.field, .row) tient déjà 44,5 px et
+     le renommage inline 44 — un SEUL champ habillé sur mesure passe dessous,
+     « Nom du nouveau fichier mémoire », 37,5 px de haut à tous les formats
+     (min-height 36 px, police 13 px). C'est donc lui, nommément, qu'on remonte.
+     Une règle large sur `.dialog-card input` coûterait plus qu'elle ne
+     rapporte : elle RABAISSERAIT le renommage inline de 44 à 40 (il se cale sur
+     la ligne de 44 px qu'il remplace, .chat-item et .memory-file), et elle
+     étirerait les deux <input> qui ne sont pas des champs — la case à cocher EST
+     le dessin de l'interrupteur (44 x 26, sa cible est le <label> entier, voir
+     plus bas) et la pastille de couleur du thème perso est une pastille
+     (34 x 26). */
+  .dialog-card .memory-files input {
+    min-height: 40px;
+  }
+  /* Régénérer / Continuer sous la dernière réponse : 36 px de haut, deux
+     boutons collés dont l'un relance une génération. En mode chat le fil
+     DÉFILE, les 4 px ne sont pris à personne. Le mode VN est laissé de côté
+     pour la même raison qu'en haut : là-bas la bande est le pied de la boîte de
+     dialogue, et 4 px de plus la remontent sur la scène. */
+  .chat-panel:not(.vn) .reply-actions .btn {
+    min-height: 40px;
+  }
+  /* « Pensées » : le <summary> du bloc de raisonnement mesurait 52,94 x 18 px =
+     953 px², la plus petite cible de l'app — et seule sur sa ligne, aucun
+     voisin ne rattrape un doigt qui rate. Ni la typo (12 px) ni le cadre
+     pointillé ne bougent : les 4 px de rembourrage vertical passent seulement du
+     conteneur au <summary>, qui gagne 11 px de chaque côté et DEVIENT la zone
+     cliquable — 40 px de haut, 2 118 px². La boîte fermée passe de 28 à 42 px,
+     le texte reste au même corps, au même style et au même endroit de la ligne
+     (rembourrage symétrique = ligne centrée). `.thoughts-body` reprend à son
+     compte les 4 px que le conteneur perd en bas, pour que le bloc OUVERT garde
+     son fond de boîte. */
+  .thoughts {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .thoughts summary {
+    padding: 11px 0;
+  }
+  .thoughts-body {
+    padding-bottom: 4px;
+  }
 }
 
 /* Vignettes DANS une bulle (et dans la boîte VN) — clic = image en grand. */
