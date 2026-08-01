@@ -254,9 +254,10 @@ qu'aucune licence n'oblige à citer**, parce qu'un crédit caché n'honore perso
 
 ### Animations
 
-- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **111 des 113 clips** de la
+- **[Overte](https://github.com/overte-org/overte)** — *Apache-2.0*. **111 des 151 clips** de la
   bibliothèque active (plus les 15 clips de réserve de `vrma/extra/`, tous Overte eux aussi), et de
-  loin la source principale : **tout le mode face à face** — cinq animations de repos, cinq repos
+  loin la source principale : **tout le mode face à face de la famille par défaut** — cinq
+  animations de repos, cinq repos
   « en train de parler », et vingt et un gestes (`neutral`, `happy` ×4, `sad`, `angry` ×2, `relaxed`
   ×3, `nod` ×5, `shake`, `think` ×2, `raise-hand` ×2) — plus l'intégralité de la locomotion, des
   gestes tenus et des postures assises de la scène 3D : vingt allures, cinq arrêts, pivots, départ,
@@ -279,6 +280,16 @@ qu'aucune licence n'oblige à citer**, parce qu'un crédit caché n'honore perso
   le relevé complet est dans [`NOTICE.md`](NOTICE.md). Auteurs d'origine du code repris :
   Anthony J. Thibault, Andrew Meadows, Angus Antley, Luis Cuenca, Howard Stearns, Seth Alves,
   Stephen Birarda, Mark Peng. Sans eux, ce moteur n'existerait pas.
+- **[Microsoft Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox)** — *MIT*, © Microsoft
+  Corporation (2020). **38 clips**, la **seconde famille de face à face** (préfixe `rb-`) : quatre
+  repos, trois repos « en train de parler », **trois socles d'écoute** — un rôle qu'Overte n'a pas
+  du tout, joué pendant que vous tapez — et vingt-huit gestes (`happy` ×3, `neutral` ×5, `relaxed`
+  ×4, `angry` ×2, `sad`, plus six briques de conversation en réserve). Une famille se choisit par
+  personnage et **ne se mélange jamais** à l'autre : le raccord croisé mesure 16,5 à 20,3 cm, deux
+  fois et demie le seuil d'acceptation. Le convertisseur et son plan sont livrés
+  ([`scripts/convert-rocketbox.mjs`](scripts/convert-rocketbox.mjs)), avec le commit source épinglé :
+  les 38 clips se refabriquent à l'octet près. La MIT exige que l'avis de copyright accompagne toute
+  redistribution — il est dans [`vrma/NOTICE.md`](vrma/NOTICE.md) §4.
 - **[Quaternius](https://quaternius.com)**, *Universal Animation Library* — *CC0 1.0*, domaine
   public, **aucune attribution requise** : on la donne quand même. Deux clips, la seule famille
   qu'Overte n'a pas : s'asseoir et se lever. Leurs deux extrémités ont été ancrées sur les poses

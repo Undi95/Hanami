@@ -17,6 +17,11 @@ préfixe du nom suffit à les distinguer** :
 | **face à face** | pas de préfixe | l'avatar debout devant l'utilisateur qui discute : repos, repos en train de parler, gestes d'émotion | 30 fichiers, 7,69 Mo |
 | **monde 3D** | préfixe `world-` | la scène interactive où le personnage marche, divague, s'assoit et réagit : allures, départs et arrêts, virages, changements de posture, gestes tenus, tout le vocabulaire assis | 81 fichiers, 11,91 Mo |
 
+Le domaine face à face existe en **deux familles étanches** : celle d'Overte
+(sans préfixe, ci-dessus) et celle de Rocketbox (préfixe `rb-`, 38 fichiers,
+8,26 Mo). Voir [Deux familles de face à face](#deux-familles-de-face-à-face).
+Le domaine monde 3D, lui, n'a qu'une famille et n'en aura pas d'autre.
+
 Le face à face est **sévère** : on n'y ajoute un geste que s'il est utile, agréable
 et crédible pour quelqu'un qui discute assis. On enrichit ce qui existe (une
 variante `-2`, `-3`) plutôt que d'inventer une catégorie : le vocabulaire de
@@ -77,6 +82,48 @@ jamais joués en face à face.
 `world-` n'ont aucune raison d'être téléchargés — c'est précisément pourquoi la
 frontière tient dans le nom du fichier et pas dans un fichier de configuration.
 
+## Deux familles de face à face
+
+Le face à face se joue en **deux bibliothèques complètes et interchangeables** :
+
+| Famille | Préfixe | Source | Poids | Ce qu'elle a en propre |
+| --- | --- | --- | --- | --- |
+| **Overte** (défaut) | *aucun* | Overte, Apache-2.0 | 30 fichiers, 7,69 Mo | cinq repos, cinq repos parlants, les gestes d'émotion |
+| **Rocketbox** | `rb-` | Microsoft Rocketbox, MIT | 38 fichiers, 8,26 Mo | quatre repos, trois repos parlants, **trois socles d'écoute**, vingt-huit gestes |
+
+Un personnage choisit la sienne (champ `animations` de son `character.json`,
+sélecteur dans le dialog Personnages). Absent = Overte, donc **rien ne change
+pour les personnages qui existaient avant**.
+
+### La règle des familles, et le chiffre qui la fonde
+
+> **Un personnage joue Overte OU Rocketbox, jamais un mélange.**
+
+Ce n'est pas une préférence de style, c'est une mesure. Les deux bibliothèques
+n'ont pas la même station debout : le raccord d'un clip Rocketbox contre le socle
+d'Overte vaut **16,5 à 20,3 cm** d'excursion du pire os majeur — deux fois et
+demie le seuil d'acceptation de 10 cm. À l'intérieur de la famille Rocketbox, la
+même mesure tombe entre **0,2 et 5,7 cm** (médiane 0,4). Mélanger, c'est
+fabriquer à chaque geste le défaut que toute la règle d'acceptation existe pour
+éviter.
+
+Le catalogue tient donc les deux familles **séparées à la construction** : un
+clip `rb-` n'entre jamais dans un rôle de la famille Overte, et réciproquement.
+Corollaire heureux : **la famille non choisie n'est jamais téléchargée**, pas un
+octet — même mécanisme que le chargement paresseux du domaine `world-`.
+
+### Et en scène vivante 3D ?
+
+**Le domaine `world-` reste 100 % Overte, pour tout le monde.** Marcher, se
+tourner, s'asseoir, les gestes assis : ces clips n'existent que chez Overte, et
+un socle debout Rocketbox raccordé à un arrêt de marche Overte rejouerait
+exactement les 16 à 20 cm ci-dessus, à chaque arrêt.
+
+La conséquence est nette et voulue : **le réglage `animations` ne vaut qu'en face
+à face**. Scène vivante allumée, le personnage joue la famille Overte entière,
+socle compris ; éteinte, il retrouve sa famille. C'est le seul agencement qui
+tienne la règle d'étanchéité sans mutiler la scène vivante.
+
 ## Convention de nommage
 
 Le nom du fichier fait office de configuration — il n'y a pas de fichier de mapping.
@@ -112,6 +159,47 @@ Le lecteur regroupe les variantes en retirant le suffixe `-<chiffres>` du nom :
 effet** — le catalogue est construit à partir des fichiers réellement présents, pas
 d'un comptage. `idle-5` et `idle-6` manquent donc sans rien casser : ils sont
 passés au domaine `world-` sous les noms `world-idle-alt1` et `world-idle-alt2`.
+
+### Face à face, famille Rocketbox (`rb-`)
+
+**Même vocabulaire de rôles, préfixe en plus.** Le lecteur retire `rb-` puis
+applique exactement la grammaire ci-dessus : `rb-happy-2.vrma` est une variante
+du geste `happy` de la famille Rocketbox, `rb-idle.vrma` en est le socle. Un seul
+rôle est nouveau, et il n'existe que là :
+
+| Nom | Rôle |
+| --- | --- |
+| `rb-listen.vrma`, `-2`, `-3` | **socle d'écoute**, joué en boucle pendant que l'utilisateur TAPE son message. Overte n'a rien d'équivalent : sans clip `listen`, le mécanisme est inerte et le personnage continue de respirer |
+
+Les 38 clips, par rôle — les deux colonnes de mesures sont celles de la règle
+d'acceptation, prises **contre le socle `rb-idle`** (jamais contre celui
+d'Overte : ce serait mesurer la distance entre deux studios, pas un défaut) :
+
+| Rôle | Clips | Raccord au socle | Couture |
+| --- | --- | --- | --- |
+| socle | `rb-idle`, `-2`, `-3`, `-4` | 0,2 – 2,7 cm | 0 – 0,82 cm |
+| socle parlant | `rb-idle-talking`, `-2`, `-3` | 2,2 – 5,4 cm | 0,93 – 2,17 cm |
+| socle d'écoute | `rb-listen`, `-2`, `-3` | 2,7 – 5,7 cm | 0,83 – 2,22 cm |
+| `happy` | `rb-happy`, `-2`, `-3` | 0,4 cm | — |
+| `neutral` | `rb-neutral`, `-2`, `-3`, `-4`, `-5` | 0,4 cm | — |
+| `relaxed` | `rb-relaxed`, `-2`, `-3`, `-4` | 0,4 – 5,2 cm | — |
+| `angry` | `rb-angry`, `-2` | 2,3 – 3,3 cm | — |
+| `sad` | `rb-sad` | 4,5 cm | — |
+| `surprised` | **aucun** — comme chez Overte | — | — |
+
+Et **six briques de conversation** sans mot-clé de déclenchement, reconnues mais
+ignorées par le lecteur d'aujourd'hui, exactement comme `shake`, `think` et
+`raise-hand` côté Overte : `rb-nod` (`-2`, `-3`), `rb-shake` (`-2`, `-3`),
+`rb-wave` (`-2`), `rb-shrug` (`-2`), `rb-laugh`, `rb-think` (`-2`). Elles
+attendent une lecture du texte de la réponse.
+
+**`rb-nod` n'est PAS l'acquiescement au clic.** Ce rôle-là (`REACTION_STEM`)
+appartient à la scène vivante, qui reste Overte : `rb-nod` est donc un `nod`
+Rocketbox en réserve, pas le clip que le clic déclenche. C'est voulu — une
+réaction Rocketbox par-dessus un socle debout Overte, ce serait le mélange que la
+règle interdit.
+
+Tout autre nom en `rb-` est simplement ignoré, comme partout ailleurs.
 
 ### Monde 3D
 
@@ -427,17 +515,24 @@ seulement dans le JSON.
 
 ## Crédits
 
-Deux provenances, toutes deux libres de redistribution. Les crédits complets du
+Trois provenances, toutes trois libres de redistribution. Les crédits complets du
 projet sont réunis dans le [README](../README.fr.md#crédits) ; le détail fichier par
 fichier, les avis de licence et les mentions à conserver sont dans
 [`NOTICE.md`](NOTICE.md), à lire avant toute redistribution :
 
-- **Overte** — **Apache 2.0** : **107 clips sur 109**, soit tout le domaine face à
-  face (31 clips : dix socles, vingt et un gestes) et tout le domaine monde 3D sauf
-  les deux transitions assises (80 clips). `transitions.json` vient de la même
-  source et de la même licence. Les **15 clips de `extra/`** viennent eux aussi
-  d'Overte, sous la même licence — ils portent donc les mêmes obligations, qu'ils
-  soient joués ou non.
+- **Overte** — **Apache 2.0** : **111 clips**, soit tout le domaine face à face de
+  la famille par défaut (31 clips : dix socles, vingt et un gestes) et tout le
+  domaine monde 3D sauf les deux transitions assises (80 clips).
+  `transitions.json` vient de la même source et de la même licence. Les **15 clips
+  de `extra/`** viennent eux aussi d'Overte, sous la même licence — ils portent
+  donc les mêmes obligations, qu'ils soient joués ou non.
+- **Microsoft Rocketbox** — **MIT**, © Microsoft Corporation (2020) : les **38
+  clips `rb-`**, la seconde famille de face à face — quatre repos, trois repos
+  parlants, trois socles d'écoute, vingt-huit gestes. Commit épinglé
+  `0943055`, convertisseur et plan livrés dans
+  [`scripts/`](../scripts/convert-rocketbox.mjs). La MIT exige que l'avis de
+  copyright et le texte de permission accompagnent toute redistribution : ils
+  sont dans [`NOTICE.md`](NOTICE.md) §4.
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, domaine public :
   les deux transitions assises, la seule famille qu'Overte n'a pas.
 
@@ -465,6 +560,11 @@ prefix alone tells them apart**:
 | --- | --- | --- | --- |
 | **face to face** | no prefix | the avatar standing in front of the user, talking: idles, talking idles, emotion gestures | 30 files, 7.69 MB |
 | **3D world** | `world-` prefix | the interactive scene where the character walks, wanders, sits down and reacts: gaits, starts and stops, turns, posture changes, held gestures, the whole seated vocabulary | 81 files, 11.91 MB |
+
+The face-to-face domain comes in **two watertight families**: Overte's (no
+prefix, above) and Rocketbox's (`rb-` prefix, 38 files, 8.26 MB). See
+[Two face-to-face families](#two-face-to-face-families). The 3D world has one
+family only, and will not get another.
 
 Face to face is **strict**: a gesture only earns its place if it is useful,
 pleasant and believable for someone having a conversation. Enrich what exists (a
@@ -525,6 +625,47 @@ played face to face.
 domain have no reason to be downloaded — which is exactly why the boundary lives
 in the file name rather than in a config file.
 
+## Two face-to-face families
+
+Face to face is played from **two complete, interchangeable libraries**:
+
+| Family | Prefix | Source | Weight | What it has of its own |
+| --- | --- | --- | --- | --- |
+| **Overte** (default) | *none* | Overte, Apache-2.0 | 30 files, 7.69 MB | five idles, five talking idles, the emotion gestures |
+| **Rocketbox** | `rb-` | Microsoft Rocketbox, MIT | 38 files, 8.26 MB | four idles, three talking idles, **three listening bases**, twenty-eight gestures |
+
+A character picks one (the `animations` field of its `character.json`, a selector
+in the Characters dialog). Absent = Overte, so **nothing changes for characters
+that already existed**.
+
+### The family rule, and the number it rests on
+
+> **A character plays Overte OR Rocketbox, never a mix.**
+
+This is not a matter of taste, it is a measurement. The two libraries do not
+share a standing pose: a Rocketbox clip measured against Overte's base is
+**16.5 to 20.3 cm** of world excursion of the worst major bone — two and a half
+times the 10 cm acceptance threshold. Inside the Rocketbox family the same
+measurement falls between **0.2 and 5.7 cm** (median 0.4). Mixing manufactures,
+at every gesture, exactly the defect the acceptance rule exists to prevent.
+
+The catalogue therefore keeps the two families **apart at build time**: an `rb-`
+clip never enters a role of the Overte family, and vice versa. Happy corollary:
+**the family that is not chosen is never downloaded**, not one byte — the same
+mechanism as the `world-` domain's lazy loading.
+
+### And in the living 3D scene?
+
+**The `world-` domain stays 100 % Overte, for everyone.** Walking, turning,
+sitting down, the seated gestures: those clips only exist in Overte, and a
+Rocketbox standing base joined to an Overte walk stop would replay exactly the
+16–20 cm above, at every stop.
+
+The consequence is deliberate: **the `animations` setting only applies face to
+face**. With the living scene on, the character plays the whole Overte family,
+base included; off, it gets its own family back. It is the only arrangement that
+keeps the watertight rule without crippling the living scene.
+
 ## Naming convention
 
 The file name IS the configuration — there is no mapping file.
@@ -559,6 +700,46 @@ The player groups variants by stripping the `-<digits>` suffix from the name:
 catalogue is built from the files actually present, not from a count. `idle-5` and
 `idle-6` are therefore missing without breaking anything: they moved to the
 `world-` domain as `world-idle-alt1` and `world-idle-alt2`.
+
+### Face to face, Rocketbox family (`rb-`)
+
+**Same role vocabulary, one prefix more.** The player strips `rb-` and then
+applies exactly the grammar above: `rb-happy-2.vrma` is a variant of the
+Rocketbox family's `happy` gesture, `rb-idle.vrma` is its base. One role is new,
+and it exists only there:
+
+| Name | Role |
+| --- | --- |
+| `rb-listen.vrma`, `-2`, `-3` | **listening base**, looped while the user is TYPING their message. Overte has no equivalent: with no `listen` clip the mechanism is inert and the avatar keeps breathing |
+
+The 38 clips by role — both measurement columns are the acceptance rule's, taken
+**against the `rb-idle` base** (never against Overte's: that would measure the
+distance between two studios, not a defect):
+
+| Role | Clips | Seam to base | Loop seam |
+| --- | --- | --- | --- |
+| base | `rb-idle`, `-2`, `-3`, `-4` | 0.2 – 2.7 cm | 0 – 0.82 cm |
+| talking base | `rb-idle-talking`, `-2`, `-3` | 2.2 – 5.4 cm | 0.93 – 2.17 cm |
+| listening base | `rb-listen`, `-2`, `-3` | 2.7 – 5.7 cm | 0.83 – 2.22 cm |
+| `happy` | `rb-happy`, `-2`, `-3` | 0.4 cm | — |
+| `neutral` | `rb-neutral`, `-2`, `-3`, `-4`, `-5` | 0.4 cm | — |
+| `relaxed` | `rb-relaxed`, `-2`, `-3`, `-4` | 0.4 – 5.2 cm | — |
+| `angry` | `rb-angry`, `-2` | 2.3 – 3.3 cm | — |
+| `sad` | `rb-sad` | 4.5 cm | — |
+| `surprised` | **none** — as in Overte | — | — |
+
+Plus **six conversation primitives** with no trigger keyword, recognised but
+ignored by today's player, exactly like Overte's `shake`, `think` and
+`raise-hand`: `rb-nod` (`-2`, `-3`), `rb-shake` (`-2`, `-3`), `rb-wave` (`-2`),
+`rb-shrug` (`-2`), `rb-laugh`, `rb-think` (`-2`). They wait for a reading of the
+reply text.
+
+**`rb-nod` is NOT the click acknowledgement.** That role (`REACTION_STEM`)
+belongs to the living scene, which stays Overte: `rb-nod` is a Rocketbox `nod`
+held in reserve, not the clip a click triggers. Deliberately so — a Rocketbox
+reaction over an Overte standing base would be the very mix the rule forbids.
+
+Any other `rb-` name is silently ignored, as everywhere else.
 
 ### 3D world
 
@@ -835,17 +1016,23 @@ JSON.
 
 ## Credits
 
-Two origins, both free to redistribute. The project's full credits are gathered
+Three origins, all free to redistribute. The project's full credits are gathered
 in the [README](../README.md#credits); the file-by-file breakdown, the licence
 notices and the mentions to keep are in [`NOTICE.md`](NOTICE.md), which must be
 read before any redistribution:
 
-- **Overte** — **Apache 2.0**: **107 clips out of 109** — the whole face-to-face
-  domain (31 clips: ten base poses, twenty-one gestures) and the whole 3D-world
-  domain except the two seated transitions (80 clips). `transitions.json` comes
-  from the same source under the same licence. The **15 clips in `extra/`** also
-  come from Overte under the same licence — they carry the same obligations,
-  whether or not they are ever played.
+- **Overte** — **Apache 2.0**: **111 clips** — the whole face-to-face domain of
+  the default family (31 clips: ten base poses, twenty-one gestures) and the
+  whole 3D-world domain except the two seated transitions (80 clips).
+  `transitions.json` comes from the same source under the same licence. The **15
+  clips in `extra/`** also come from Overte under the same licence — they carry
+  the same obligations, whether or not they are ever played.
+- **Microsoft Rocketbox** — **MIT**, © Microsoft Corporation (2020): the **38
+  `rb-` clips**, the second face-to-face family — four idles, three talking
+  idles, three listening bases, twenty-eight gestures. Pinned commit `0943055`;
+  converter and plan ship in [`scripts/`](../scripts/convert-rocketbox.mjs). MIT
+  requires the copyright notice and permission text to accompany any
+  redistribution: they are in [`NOTICE.md`](NOTICE.md) §4.
 - **Quaternius**, *Universal Animation Library* — **CC0 1.0**, public domain: the
   two seated transitions, the one family Overte does not have.
 
