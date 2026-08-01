@@ -77,6 +77,9 @@ charactersRouter.post('/api/characters', (req, res) => {
       greetings: greetingsOf(body.greetings),
       greetingMode: greetingModeOf(body.greetingMode),
       theme: typeof body.theme === 'string' ? body.theme : undefined,
+      // Voix : `true` explicite seulement (storage n'écrit la clé qu'allumée).
+      ttsEnabled: body.ttsEnabled === true,
+      ttsVoice: typeof body.ttsVoice === 'string' ? body.ttsVoice : undefined,
       // Prompt système dès la création : sans lui, un personnage en accueil
       // « généré » ouvre la conversation AVANT qu'on ait pu lui écrire son
       // caractère — le modèle parle alors sous le prompt par défaut, et le
@@ -116,6 +119,9 @@ charactersRouter.put('/api/characters/:id', (req, res) => {
       ...body,
       ...(body.greetings !== undefined ? { greetings: greetingsOf(body.greetings) } : {}),
       ...(body.greetingMode !== undefined ? { greetingMode: greetingModeOf(body.greetingMode) } : {}),
+      // Voix : booléen STRICT (un « true » textuel ne doit pas allumer une voix),
+      // et champ absent = inchangé.
+      ...(body.ttsEnabled !== undefined ? { ttsEnabled: body.ttsEnabled === true } : {}),
     }
     res.json(updateCharacter(req.params.id, patch))
   } catch (e) {

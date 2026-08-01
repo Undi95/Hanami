@@ -71,6 +71,17 @@ const FR = {
   noCharacters: 'Aucun personnage pour l’instant. Créez-en un, ou importez une carte SillyTavern.',
   createCharacter: 'Créer un personnage',
   exportCharacter: 'Exporter en carte (PNG ou .json)',
+  // Voix propre au personnage (dialog Personnages) — le serveur de synthèse,
+  // lui, reste un réglage d'application.
+  characterTts: 'Voix',
+  characterTtsSub:
+    'Ce personnage lit ses réponses à voix haute. Éteint par défaut : chaque personnage décide, la synthèse ne parle que pour ceux qui l’ont allumée.',
+  characterTtsOffGlobally:
+    'La synthèse vocale est éteinte dans les Réglages : allumez-la là-bas pour entendre ce personnage.',
+  characterVoice: 'Sa voix',
+  characterVoicePlaceholder: 'identifiant exact (ex. clone:Sakurav1)',
+  characterVoiceHint:
+    'Laissez vide pour la voix par défaut des Réglages. « Tester » interroge le serveur de synthèse configuré et propose ses voix.',
   importTitle: 'Importer',
   settingsUnavailable: 'Réglages indisponibles (serveur injoignable).',
   responseInterrupted: 'Réponse interrompue par le serveur.',
@@ -305,7 +316,8 @@ const FR = {
   compactDone: 'Conversation compactée ({n} messages résumés).',
   sectionTts: 'Synthèse vocale (TTS)',
   ttsEnabled: 'Lire les réponses à voix haute',
-  ttsEnabledSub: 'Chaque réponse terminée est envoyée au serveur TTS et l’audio est joué.',
+  ttsEnabledSub:
+    'Interrupteur général de la voix, et serveur de synthèse pour tout le monde. Chaque personnage a ensuite le sien (Personnages → Modifier), éteint par défaut.',
   ttsUrl: 'URL du serveur TTS (compatible OpenAI)',
   ttsModel: 'Modèle TTS',
   ttsVoice: 'Voix',
@@ -456,6 +468,15 @@ const EN: Record<Key, string> = {
   noCharacters: 'No characters yet. Create one, or import a SillyTavern card.',
   createCharacter: 'Create a character',
   exportCharacter: 'Export as a card (PNG or .json)',
+  characterTts: 'Voice',
+  characterTtsSub:
+    'This character reads their replies out loud. Off by default: each character decides, and speech only happens for those switched on.',
+  characterTtsOffGlobally:
+    'Text-to-speech is off in Settings: turn it on there to hear this character.',
+  characterVoice: 'Their voice',
+  characterVoicePlaceholder: 'exact id (e.g. clone:Sakurav1)',
+  characterVoiceHint:
+    'Leave empty for the default voice from Settings. “Test” asks the configured speech server for its voices.',
   importTitle: 'Import',
   settingsUnavailable: 'Settings unavailable (server unreachable).',
   responseInterrupted: 'The server cut the response short.',
@@ -665,7 +686,8 @@ const EN: Record<Key, string> = {
   compactDone: 'Conversation compacted ({n} messages summarized).',
   sectionTts: 'Text-to-speech (TTS)',
   ttsEnabled: 'Read replies out loud',
-  ttsEnabledSub: 'Each finished reply is sent to the TTS server and the audio is played.',
+  ttsEnabledSub:
+    'Master switch for speech, and the synthesis server for everyone. Each character then has its own switch (Characters → Edit), off by default.',
   ttsUrl: 'TTS server URL (OpenAI-compatible)',
   ttsModel: 'TTS model',
   ttsVoice: 'Voice',

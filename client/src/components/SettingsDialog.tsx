@@ -19,6 +19,8 @@ import {
   type CustomTheme,
 } from '../themes'
 import Dialog from './Dialog'
+import Toggle from './Toggle'
+import VoicePicker from './VoicePicker'
 
 interface Props {
   settings: Settings
@@ -148,44 +150,6 @@ function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassw
   }
 }
 
-function Toggle({
-  label,
-  sub,
-  checked,
-  onChange,
-  danger,
-  disabled,
-  reason,
-}: {
-  label: string
-  sub?: string
-  checked: boolean
-  onChange: (v: boolean) => void
-  danger?: boolean
-  // Grisé AVEC SA RAISON, jamais caché : un réglage qui disparaît laisse croire
-  // qu'il n'existe pas. La raison remplace le sous-titre — c'est elle qui compte
-  // à ce moment-là. La préférence, elle, n'est pas touchée.
-  disabled?: boolean
-  reason?: string
-}) {
-  return (
-    <label className={`toggle${danger ? ' danger' : ''}${disabled ? ' disabled' : ''}`}>
-      <span className="toggle-text">
-        <span className="toggle-label">{label}</span>
-        {(disabled && reason ? reason : sub) && (
-          <span className="toggle-sub">{disabled && reason ? reason : sub}</span>
-        )}
-      </span>
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-    </label>
-  )
-}
-
 /** Sélecteur segmenté : une valeur parmi quelques-unes, appliquée au clic. */
 function Seg<T extends string>({
   value,
@@ -299,8 +263,6 @@ export default function SettingsDialog({
   const [saveError, setSaveError] = useState<string | null>(null)
   // Sonde TTS : une ligne de résultat + les voix annoncées par le serveur. Le
   // résultat ne vaut que pour l'URL testée, donc il s'efface dès qu'elle change.
-  const [ttsProbe, setTtsProbe] = useState<{ ok: boolean; text: string; voices: api.TtsVoice[] } | null>(null)
-  const [ttsProbing, setTtsProbing] = useState(false)
   // Sauvegarde : le zip arrive par fetch (l'en-tête d'authentification est
   // obligatoire), il n'y a donc rien à afficher pendant l'attente sauf l'état du bouton.
   const [downloading, setDownloading] = useState(false)
@@ -351,35 +313,6 @@ export default function SettingsDialog({
       setBackendProbe({ ok: false, text: api.errorMessage(e), models: [] })
     } finally {
       setTesting(false)
-    }
-  }
-
-  /**
-   * Teste l'URL COURANTE du champ (même non enregistrée) et récupère les voix :
-   * l'identifiant exact d'une voix (du genre « clone:Sakurav1 ») est introuvable
-   * à la main, une pastille cliquable le recopie dans le champ.
-   */
-  async function testTts() {
-    setTtsProbing(true)
-    setTtsProbe(null)
-    try {
-      const r = await api.probeTts(form.ttsUrl.trim())
-      const voices = r.voices ?? []
-      const parts: string[] = []
-      if (r.info) parts.push(r.info)
-      if (r.reachable && voices.length === 0) parts.push(t('ttsProbeNoVoices'))
-      setTtsProbe({
-        ok: r.reachable,
-        text: parts.join(' — ') || t(r.reachable ? 'ttsProbeOk' : 'ttsProbeFail'),
-        voices,
-      })
-      // Le nom de modèle annoncé par le serveur remplit le champ : plus rien à
-      // recopier à la main (le champ reste éditable, certains serveurs l'ignorent).
-      if (r.model) set('ttsModel', r.model)
-    } catch (e) {
-      setTtsProbe({ ok: false, text: api.errorMessage(e), voices: [] })
-    } finally {
-      setTtsProbing(false)
     }
   }
 
@@ -788,49 +721,27 @@ export default function SettingsDialog({
           />
           <div className="field">
             <label htmlFor="set-tts-url">{t('ttsUrl')}</label>
-            <div className="row">
+            {/* Bouton de sonde, ligne de résultat et pastilles de voix : le même
+                composant que le dialog Personnages (VoicePicker) — ici il sonde
+                l'URL du champ, même pas encore enregistrée. */}
+            <VoicePicker
+              url={form.ttsUrl}
+              value={form.ttsVoice}
+              onPick={(v) => set('ttsVoice', v)}
+              // Le nom de modèle annoncé par le serveur remplit le champ : plus
+              // rien à recopier à la main (il reste éditable, certains l'ignorent).
+              onModel={(m) => set('ttsModel', m)}
+              disabled={!form.ttsUrl.trim()}
+            >
               <input
                 id="set-tts-url"
                 type="url"
                 value={form.ttsUrl}
                 placeholder="http://127.0.0.1:8880/v1"
                 style={{ flex: 1, minWidth: 0 }}
-                onChange={(e) => {
-                  setTtsProbe(null)
-                  set('ttsUrl', e.target.value)
-                }}
+                onChange={(e) => set('ttsUrl', e.target.value)}
               />
-              <button
-                className="btn small"
-                type="button"
-                onClick={() => testTts().catch((e) => console.error('[settings]', e))}
-                disabled={ttsProbing || !form.ttsUrl.trim()}
-              >
-                {ttsProbing ? t('probing') : t('probe')}
-              </button>
-            </div>
-            {ttsProbe && (
-              <span className={`probe-line${ttsProbe.ok ? '' : ' err'}`}>
-                <span className="probe-mark">{ttsProbe.ok ? '✓' : '✗'}</span>
-                <span>{ttsProbe.text}</span>
-              </span>
-            )}
-            {ttsProbe && ttsProbe.voices.length > 0 && (
-              <div className="voice-chips" role="group" aria-label={t('ttsProbeVoices')}>
-                {ttsProbe.voices.map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    className="voice-chip"
-                    aria-pressed={form.ttsVoice.trim() === v.id}
-                    title={v.id}
-                    onClick={() => set('ttsVoice', v.id)}
-                  >
-                    {v.name}
-                  </button>
-                ))}
-              </div>
-            )}
+            </VoicePicker>
           </div>
           <div className="grid-2">
             <div className="field">

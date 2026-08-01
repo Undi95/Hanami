@@ -5,6 +5,8 @@ import * as api from '../api'
 import { translate, useI18n } from '../i18n'
 import { THEMES, THEME_LABELS } from '../themes'
 import Dialog from './Dialog'
+import Toggle from './Toggle'
+import VoicePicker from './VoicePicker'
 import SelectMenu, { type SelectOption } from './SelectMenu'
 
 interface Props {
@@ -15,6 +17,13 @@ interface Props {
   onUpdated: (c: CharacterFull) => void
   onDeleted: (id: string) => void
   onClose: () => void
+  /**
+   * La synthèse vocale est-elle disponible côté application (interrupteur des
+   * Réglages allumé ET serveur renseigné) ? Le personnage garde son propre
+   * interrupteur dans tous les cas — mais quand l'app est muette, le dire ici
+   * évite de chercher pourquoi rien ne se lit.
+   */
+  ttsAvailable: boolean
   /**
    * Photo de la scène 3D en data URL PNG (contrat VrmStage.snapshot), branchée
    * par l'App. null/absent = aucun avatar 3D à l'écran : le bouton « Capturer le
@@ -36,6 +45,8 @@ interface FormState {
   greetings: string[]
   greetingMode: GreetingMode
   systemPrompt: string
+  ttsEnabled: boolean
+  ttsVoice: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -48,6 +59,9 @@ const EMPTY_FORM: FormState = {
   greetings: [],
   greetingMode: 'written',
   systemPrompt: '',
+  // Voix : éteinte par défaut, comme pour tout personnage qui n'a rien demandé.
+  ttsEnabled: false,
+  ttsVoice: '',
 }
 
 const GREETING_MODES: readonly GreetingMode[] = ['written', 'generated', 'ask']
@@ -157,6 +171,7 @@ export default function CharactersDialog({
   onUpdated,
   onDeleted,
   onClose,
+  ttsAvailable,
   snapshotAvatar,
 }: Props) {
   const { t } = useI18n()
@@ -244,6 +259,8 @@ export default function CharactersDialog({
         greetings: c.greetings ?? [],
         greetingMode: c.greetingMode ?? 'written',
         systemPrompt: c.systemPrompt,
+        ttsEnabled: c.ttsEnabled === true,
+        ttsVoice: c.ttsVoice ?? '',
       }
       setForm(f)
       setInitialForm(f)
@@ -357,6 +374,8 @@ export default function CharactersDialog({
           greeting: form.greeting,
           greetings,
           greetingMode: form.greetingMode,
+          ttsEnabled: form.ttsEnabled,
+          ttsVoice: form.ttsVoice.trim(),
           // Vide = le serveur écrit son prompt par défaut. Ce n'est PAS un repli
           // silencieux : le champ est proposé, ne rien y mettre est un choix.
           ...(form.systemPrompt.trim() ? { systemPrompt: form.systemPrompt } : {}),
@@ -373,6 +392,8 @@ export default function CharactersDialog({
           greeting: form.greeting,
           greetings,
           greetingMode: form.greetingMode,
+          ttsEnabled: form.ttsEnabled,
+          ttsVoice: form.ttsVoice.trim(),
           systemPrompt: form.systemPrompt,
         })
         onUpdated(c)
@@ -627,6 +648,35 @@ export default function CharactersDialog({
               <option value="custom">{t('themeCustom')}</option>
             </select>
           </div>
+          {/* VOIX DU PERSONNAGE — chaque personnage a la sienne, c'est le propre
+              d'une voix. Éteinte par défaut, ici comme pour tous ceux qui
+              existaient avant. Le serveur de synthèse, lui, reste dans les
+              Réglages : c'est le moteur, pas la voix. */}
+          <Toggle
+            label={t('characterTts')}
+            sub={ttsAvailable ? t('characterTtsSub') : t('characterTtsOffGlobally')}
+            checked={form.ttsEnabled}
+            onChange={(v) => set('ttsEnabled', v)}
+          />
+          {form.ttsEnabled && (
+            <div className="field">
+              <label htmlFor="char-voice">{t('characterVoice')}</label>
+              {/* Même sonde et mêmes pastilles que les Réglages (VoicePicker) —
+                  ici sur le serveur ENREGISTRÉ : on n'en règle pas un second. */}
+              <VoicePicker url="" value={form.ttsVoice} onPick={(v) => set('ttsVoice', v)}>
+                <input
+                  id="char-voice"
+                  type="text"
+                  value={form.ttsVoice}
+                  placeholder={t('characterVoicePlaceholder')}
+                  style={{ flex: 1, minWidth: 0 }}
+                  onChange={(e) => set('ttsVoice', e.target.value)}
+                />
+              </VoicePicker>
+              <span className="hint">{t('characterVoiceHint')}</span>
+            </div>
+          )}
+
           <div className="field">
             <label>{t('greetingMode')}</label>
             {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}

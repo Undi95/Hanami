@@ -72,6 +72,16 @@ export interface CharacterMeta {
   // Sans modèle VRM, le décor n'est pas chargé : un portrait 2D flottant devant
   // une pièce en 3D n'aurait aucun sens.
   environment?: string // ex: /environments/chambre.glb
+  // Voix du personnage : chaque personnage a la sienne, c'est le propre d'une
+  // voix. OPT-IN STRICT — clé absente = éteint, pour les personnages existants
+  // comme pour les nouveaux : personne ne doit se mettre à parler tout seul
+  // parce que l'app a appris à le faire.
+  // Le serveur de synthèse, lui, reste UN réglage d'application (Réglages) :
+  // c'est le moteur, pas la voix.
+  ttsEnabled?: boolean
+  // Identifiant EXACT de la voix chez le serveur TTS (ex. « clone:Sakurav1 »).
+  // Absent/vide = la voix par défaut des Réglages.
+  ttsVoice?: string
   greeting: string // premier message affiché dans un nouveau chat
   greetings?: string[] // variantes supplémentaires (tirage au hasard avec greeting)
   greetingMode?: GreetingMode // absent = 'written'

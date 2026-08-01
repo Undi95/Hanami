@@ -373,11 +373,13 @@ function AppInner() {
    * bulle dont l'icône doit devenir un carré « stop », et il se nettoie tout
    * seul quand la lecture s'achève (ou échoue). Sans clé, la voix parle mais
    * aucune bulle ne s'annonce parlante.
+   * `voice` = la voix du personnage qui parle ; vide, le serveur prend celle
+   * des Réglages (le serveur de synthèse, lui, est toujours celui des Réglages).
    */
-  async function playTts(text: string, key?: string) {
+  async function playTts(text: string, key?: string, voice = '') {
     const clean = stripEmotionTags(text).trim()
     if (!clean) return
-    const blob = await api.tts(clean)
+    const blob = await api.tts(clean, voice)
     stopTts()
     // Le timer des lèvres « texte » ne doit pas refermer la bouche en pleine
     // lecture audio : l'audio pilote seul à partir d'ici.
@@ -1075,9 +1077,16 @@ function AppInner() {
             // voix EST la notification. Le TTS se tait sur un texte sans mot
             // (tags d'émotion seuls) — dans ce cas le ding reprend son rôle.
             const toSpeak = ev.message.content.slice(ttsFromIndex)
-            const ttsWillSpeak = settings?.ttsEnabled === true && stripEmotionTags(toSpeak).trim().length > 0
+            // La voix appartient au PERSONNAGE : l'interrupteur des Réglages
+            // ouvre le service, le sien décide s'il parle. `char` et non l'état
+            // `character` — l'ouverture automatique passe par une fermeture qui
+            // date d'avant le chargement.
+            const ttsWillSpeak =
+              settings?.ttsEnabled === true &&
+              char.ttsEnabled === true &&
+              stripEmotionTags(toSpeak).trim().length > 0
             if (ttsWillSpeak) {
-              playTts(toSpeak, ev.message.ts).catch((e) => {
+              playTts(toSpeak, ev.message.ts, char.ttsVoice ?? '').catch((e) => {
                 setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }])
               })
             } else if (settings?.notifySound) {
@@ -1242,6 +1251,11 @@ function AppInner() {
   const canRegen = !!lastFeedMsg && !lastFeedMsg.pending
   const canContinue = canRegen && lastFeedMsg.msg.role === 'assistant'
 
+  // Ce personnage-ci parle-t-il ? La synthèse est un service d'application (on
+  // l'allume et on la configure une fois, dans les Réglages) ; la VOIX, elle,
+  // appartient au personnage — s'il ne l'a pas allumée, ses répliques restent
+  // muettes et aucun haut-parleur ne s'affiche sur ses bulles.
+  const ttsSpeaks = settings?.ttsEnabled === true && character?.ttsEnabled === true
   // Jauge de contexte : calculée une fois, partagée par la TopBar et le mode VN.
   const ctxPercent = context && context.limit > 0 ? context.percent : null
   const ctxTooltip = context ? t('contextBadgeTitle', { tokens: context.tokens, limit: context.limit }) : ''
@@ -1480,9 +1494,9 @@ function AppInner() {
             ttsPlaying={ttsPlaying}
             onStopTts={stopTts}
             onReplay={
-              settings?.ttsEnabled
+              ttsSpeaks
                 ? (msg) => {
-                    playTts(msg.content, msg.ts).catch((e) =>
+                    playTts(msg.content, msg.ts, character.ttsVoice ?? '').catch((e) =>
                       setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }]),
                     )
                   }
@@ -1520,7 +1534,7 @@ function AppInner() {
                 )}
                 {/* En VN les bulles sont hors d'atteinte : le rejeu vit ici. En
                     desktop, l'icône haut-parleur de la bulle s'en charge déjà. */}
-                {vnMode && canContinue && settings?.ttsEnabled && lastFeedMsg && (
+                {vnMode && canContinue && ttsSpeaks && lastFeedMsg && (
                   // Pendant la lecture, le même bouton la coupe : en VN il n'y a
                   // pas de bulle à survoler, c'est la seule prise sur la voix.
                   <button
@@ -1530,7 +1544,7 @@ function AppInner() {
                         stopTts()
                         return
                       }
-                      playTts(lastFeedMsg.msg.content, lastFeedMsg.msg.ts).catch((e) =>
+                      playTts(lastFeedMsg.msg.content, lastFeedMsg.msg.ts, character?.ttsVoice ?? '').catch((e) =>
                         setFeed((f) => [
                           ...f,
                           { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) },
@@ -1682,6 +1696,9 @@ function AppInner() {
           // Photo par capture : proposée seulement quand un avatar 3D est bien à
           // l'écran (scène prête, sans erreur, personnage doté d'un VRM). Le
           // dialog restreint en plus au personnage actif — le seul qui soit affiché.
+          // La voix du personnage se règle dans son formulaire ; le service, lui,
+          // s'allume dans les Réglages — le dialog le dit quand il est éteint.
+          ttsAvailable={settings?.ttsEnabled === true && (settings?.ttsUrl ?? '').trim() !== ''}
           snapshotAvatar={
             stageReady && !vrmError && !!character?.vrm
               ? () => stageRef.current?.snapshot() ?? null

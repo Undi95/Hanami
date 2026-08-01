@@ -144,6 +144,8 @@ export interface CreateCharacterInput {
   greetingMode?: GreetingMode
   theme?: string
   systemPrompt?: string
+  ttsEnabled?: boolean
+  ttsVoice?: string
 }
 
 /** Thème par personnage : clé écrite seulement quand elle porte une valeur. */
@@ -159,6 +161,19 @@ function environmentField(environment: unknown): Partial<CharacterMeta> {
 /** Portrait 2D : même règle que le thème — pas de clé vide dans character.json. */
 function portraitField(portrait: unknown): Partial<CharacterMeta> {
   return typeof portrait === 'string' && portrait.trim() ? { portrait: portrait.trim() } : {}
+}
+
+/**
+ * Voix du personnage : mêmes règles d'écriture que le thème — la clé n'existe
+ * que si elle porte une valeur. `ttsEnabled` n'est écrit que VRAI : un
+ * personnage muet n'a rien à dire dans son fichier, et tous ceux d'avant ce
+ * réglage restent muets sans être touchés.
+ */
+function ttsFields(ttsEnabled: unknown, ttsVoice: unknown): Partial<CharacterMeta> {
+  return {
+    ...(ttsEnabled === true ? { ttsEnabled: true } : {}),
+    ...(typeof ttsVoice === 'string' && ttsVoice.trim() ? { ttsVoice: ttsVoice.trim() } : {}),
+  }
 }
 
 /** Photo (vignette) : même règle — et c'est ainsi qu'un '' explicite la RETIRE. */
@@ -195,6 +210,7 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
     ...greetingFields(input.greetings, input.greetingMode),
     ...themeField(input.theme),
     ...environmentField(input.environment),
+    ...ttsFields(input.ttsEnabled, input.ttsVoice),
     createdAt: new Date().toISOString(),
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
@@ -227,6 +243,10 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     // Photo : même conservation d'office (elle se pose et se retire par ses
     // propres routes, jamais par le formulaire). Un '' explicite la retire.
     ...photoField(patch.photo ?? current.photo),
+    // Voix : à reconduire comme le reste — meta est reconstruit clé par clé, un
+    // oubli rendrait le personnage muet à la première édition. `false` explicite
+    // l'éteint (false ?? current vaut false), `undefined` conserve.
+    ...ttsFields(patch.ttsEnabled ?? current.ttsEnabled, patch.ttsVoice ?? current.ttsVoice),
     createdAt: current.createdAt,
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))

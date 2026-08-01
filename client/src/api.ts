@@ -207,6 +207,9 @@ export function createCharacter(input: {
   greetings?: string[]
   greetingMode?: GreetingMode
   theme?: string
+  /** Voix du personnage : absent = muet (opt-in strict), voix vide = celle des Réglages. */
+  ttsEnabled?: boolean
+  ttsVoice?: string
   /** Absent = prompt par défaut écrit par le serveur (à partir du nom). */
   systemPrompt?: string
 }): Promise<CharacterFull> {
@@ -483,14 +486,18 @@ export async function uploadBackground(file: File): Promise<string> {
 
 // ── Synthèse vocale ────────────────────────────────────────────────────────
 
-/** Renvoie l'audio de la réponse (le serveur proxifie le serveur TTS configuré). */
-export async function tts(text: string): Promise<Blob> {
+/**
+ * Renvoie l'audio de la réponse (le serveur proxifie le serveur TTS configuré).
+ * `voice` = la voix du personnage qui parle ; vide/absente, le serveur prend
+ * celle des Réglages.
+ */
+export async function tts(text: string, voice = ''): Promise<Blob> {
   let res: Response
   try {
     res = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(voice ? { text, voice } : { text }),
     })
   } catch {
     throw new ApiError(t('serverUnreachable'), 0)

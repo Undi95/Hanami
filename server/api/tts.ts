@@ -13,17 +13,21 @@ ttsRouter.post('/api/tts', async (req, res) => {
     res.status(400).json({ error: 'Synthèse vocale désactivée (voir Réglages)' })
     return
   }
-  const body = (req.body ?? {}) as { text?: unknown }
+  const body = (req.body ?? {}) as { text?: unknown; voice?: unknown }
   const text = typeof body.text === 'string' ? body.text.trim() : ''
   if (!text) {
     res.status(400).json({ error: 'text est requis' })
     return
   }
+  // Voix DEMANDÉE pour cette réplique-là : celle du personnage qui parle. Le
+  // serveur et le modèle, eux, restent ceux des Réglages — c'est le moteur, pas
+  // la voix. Champ absent ou vide : la voix par défaut des Réglages.
+  const voice = typeof body.voice === 'string' ? body.voice.trim() : ''
 
   const url = settings.ttsUrl.replace(/\/+$/, '') + '/audio/speech'
   const payload: Record<string, unknown> = { input: text }
   if (settings.ttsModel) payload.model = settings.ttsModel
-  if (settings.ttsVoice) payload.voice = settings.ttsVoice
+  if (voice || settings.ttsVoice) payload.voice = voice || settings.ttsVoice
 
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 60_000)
