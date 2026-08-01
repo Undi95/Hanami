@@ -611,25 +611,38 @@ pose of the `idle` and `idle-talking` bases. Failure threshold: 10 cm.
 | --- | --- | --- |
 | `idle-talking-2.vrma` | talking idle — the arms end up far from the base pose | 39.5 cm |
 | `raise-hand.passe-complete.vrma` | raised hand, **whole pass** (intro + hold + outro): this is the clip the `world-` domain ships split into `world-raise-hand-in` / `-hold` / `-out` | 18.8 cm |
-| `point.vrma` | pointing, whole pass — same story, shipped split as `world-point-…` | 15.7 cm |
-| `happy-6.vrma` | a fourth clap | 14.9 cm |
+| `point.vrma` | pointing, whole pass — same story, shipped split as `world-point-…`. Re-examined 2026-08-01: anchoring the leading edge brings it down to 6.7 cm, but **no `point` role exists in the face-to-face vocabulary** — promoted, it would stay mute; the split `world-` version is the one that plays, and it is excellent | 15.7 cm |
 | `idle-talking-3.vrma` | talking idle, just over the threshold | 11.2 cm |
-| `happy-5.vrma` | clap — **it is `happy-2`**: the two clips never differ by more than **3.4°** (worst bone, over the whole duration). Promoting it would give the random draw the same emote twice. The wrist jolt it carries (1000 °/s at t = 0.3 s) was therefore smoothed **in `happy-2`**, where it actually plays | 8.7 cm |
-| `neutral-2.vrma` | slow head nod — **redundant with the five `nod`s**: the face-to-face vocabulary must stay short, and `neutral` already has its clip. It holds up visually, but adds nothing | 8.1 cm |
+| `happy-5.vrma` | clap — **it is `happy-2`**: the two clips never differ by more than **3.4°** (worst bone, over the whole duration). Promoting it would give the random draw the same emote twice. The wrist jolt it carries (1000 °/s at t = 0.3 s) was therefore smoothed **in `happy-2`**, where it actually plays. Re-examined 2026-08-01: even reworked (anchoring + smoothing), it stays `happy-2`'s choreography within 14° — the duplicate argument holds, it stays here | 8.7 cm |
+| `neutral-2.vrma` | slow head nod — **redundant with the five `nod`s**: the face-to-face vocabulary must stay short, and `neutral` already has its clip. It holds up visually, but adds nothing. Re-examined 2026-08-01: clean seam (5.7–6.9 cm), redundancy decides, not the measurement | 8.1 cm |
 | `cand-idle-fenetre.vrma` | `idle` re-converted on the window the graph **declares** (1→300) instead of the trim that was kept — near-identical to the shipped file | 5.0 cm |
 | `cand-idle-2-fenetre.vrma` | same for `idle-2` (1→902) | 5.0 cm |
 | `cand-idle-3-fenetre.vrma` | same for `idle-3`, but the declared window runs **26.63 s** where the shipped file keeps only a 13.33 s sub-loop: this one really is different | 5.2 cm |
 | `cand-idle-talking-fenetre.vrma` | same for `idle-talking` (1→215) | 5.5 cm |
 | `world-jump-start.vrma`, `world-jump-air.vrma`, `world-jump-land.vrma`, `world-jump-run-start.vrma`, `world-jump-run-land.vrma` | the five beats of a jump. In Overte the airborne phase is not an animation but **fixed poses blended by the physics engine's vertical speed**, and the jump height lives in the simulation, not in the file: without that code they do not stand up (see [`NOTICE.md`](NOTICE.md) §3) | — |
 
-**Two of these clips moved up to the root** after the library's first judgement by
-eye: `idle-talking-4` (8.8 cm) and `relaxed-3` (7.6 cm). They fell outside the range
-of the clips that were kept (4.1 to 8.0 cm) without crossing the 10 cm threshold,
-and that was the only reproach the measurement had for them; on screen, the first
-gesticulates exactly like the `idle-talking-5/-6/-7` already in place, the second is
-a credible background loop. The two that remain above the range, `happy-5` and
-`neutral-2`, stay here — not for their seam, but because they **duplicate** a clip
-that already ships (see the table).
+**Three of these clips moved up to the root.** `idle-talking-4` (8.8 cm) and
+`relaxed-3` (7.6 cm) after the library's first judgement by eye: they fell outside
+the range of the clips that were kept (4.1 to 8.0 cm) without crossing the 10 cm
+threshold, and that was the only reproach the measurement had for them; on screen,
+the first gesticulates exactly like the `idle-talking-5/-6/-7` already in place,
+the second is a credible background loop. Then `happy-6` (2026-08-01), set aside
+solely for its measurement (11.1 cm entry, skating feet, 1000 °/s spike): with the
+measurement repaired — leading edge anchored on `idle`'s mean pose, legs damped
+towards their initial pose, spike smoothed to 604 °/s — it is a genuinely different
+clap from its three brothers (117 to 135° apart at the worst bone), it enriches the
+draw. The two that remain above the range, `happy-5` and `neutral-2`, stay here —
+not for their seam, but because they **duplicate** a clip that already ships (see
+the table).
+
+**And one clip from the 3D-world domain**, `world-afk-texting` (2026-08-01): the
+table above gave it no seam because a `world-` clip is not judged against the
+standing bases. Judged against what actually concerns it — its **loop seam** — it
+is beyond reproach: 0 cm of pose, a 12 °/s jump for an internal 95th percentile of
+21 °/s. It moved up to the root **together with its entry in
+[`world.json`](world.json)** (`famille: repos`, `boucle: true`): a `world-` clip
+without an entry would be judged against the standing base, at 26.8–29.1 cm, and
+would manufacture a false failure.
 
 **Six converted clips are deliberately not here**: the raw versions of
 `world-sit-point`, `world-sit-raise-hand-2` and the four `world-walk-stop-…`, from
@@ -647,7 +660,7 @@ variant, it is an earlier state.
 3. **Reload the page.** The catalogue is rebuilt from the files actually present;
    the server does not need restarting.
 
-`happy-5`, `happy-6`, `idle-talking-2` to `-4`, `neutral-2` and `relaxed-3` already
+`happy-5`, `idle-talking-2`, `-3` and `neutral-2` already
 carry a conforming name and a free number: they move as they are, and **gaps in the
 numbering have no effect**. The others need a name:
 
