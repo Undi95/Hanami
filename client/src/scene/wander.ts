@@ -324,6 +324,15 @@ const SEAT_LEGS = 2
  * hanches : c'est une propriété du MOBILIER, pas du modèle.
  */
 const MANEUVER_M = 0.7
+/**
+ * Pas de recherche du sol quand le point de pré-assise est tiré vers la case
+ * d'approche (m). Court exprès : on cherche le PREMIER endroit qui porte, donc
+ * on déplace le point le moins possible. Le pas de vérification de chemin
+ * (PATH_STEP, 15 cm) est trois fois trop gros pour ça — il ferait reculer la
+ * pré-assise jusqu'à 15 cm de plus que nécessaire, autant de glissement en trop
+ * pendant world-sit-enter.
+ */
+const SEAT_PULL_STEP = 0.05
 
 // ── Déambulation ────────────────────────────────────────────────────────────
 // L'utilisateur discute avec quelqu'un, pas avec un personnage agité : ces
@@ -938,11 +947,42 @@ export function createWander(host: WanderHost): Wander {
         }
       }
     }
-    const standX = sitX + fx * back
-    const standZ = sitZ + fz * back
-    // Le sol sous les pieds une fois assis : sous le point de pré-assise (les
-    // pieds y restent), à défaut sous la case d'approche — jamais inventé.
-    const groundY = host.floorAt(standX, standZ) ?? host.floorAt(seat.approach[0], seat.approach[1])
+    let standX = sitX + fx * back
+    let standZ = sitZ + fz * back
+    // TIRER LE POINT DE PRÉ-ASSISE VERS LA CASE D'APPROCHE JUSQU'À TROUVER DU
+    // SOL. Le glissement le long du bord, juste au-dessus, ne décale le point
+    // que dans la nappe du meuble (3,4 cm sur une chaise de 40 cm) : il ne sort
+    // pas de son empreinte, et 40 des 66 assises des trois décors gardaient un
+    // point de pré-assise SANS SOL SOUS LUI (36/55 en classe, 1/6 au loft,
+    // 3/5 en chambre). L'ancien repli `?? floorAt(approche)` les laissait
+    // passer en empruntant l'altitude d'AILLEURS : tout l'aval — l'itinéraire,
+    // le seuil de proximité d'endLeg, les segments de repli — visait alors du
+    // vide, et le personnage marchait pour rien avant de rester planté debout.
+    // Ici on déplace un point au lieu de mentir sur son altitude : la case
+    // d'approche a du sol par construction, et le pas est court pour s'arrêter
+    // au premier appui. Le recul est BORNÉ À LA ZONE DE MANŒUVRE — au-delà, le
+    // glissement dépeint pendant world-sit-enter deviendrait du patinage
+    // (mesuré : jusqu'à 1,885 m sans borne, contre 0,640 m avant correction).
+    if (host.floorAt(standX, standZ) === null) {
+      const dx = seat.approach[0] - standX
+      const dz = seat.approach[1] - standZ
+      const d = Math.hypot(dx, dz)
+      if (d > 1e-6) {
+        const dMax = Math.min(d, MANEUVER_M)
+        const n = Math.max(1, Math.ceil(dMax / SEAT_PULL_STEP))
+        for (let i = 1; i <= n; i++) {
+          const t = ((i / n) * dMax) / d
+          if (host.floorAt(standX + dx * t, standZ + dz * t) !== null) {
+            standX += dx * t
+            standZ += dz * t
+            break
+          }
+        }
+      }
+    }
+    // Le sol sous les pieds une fois assis, sous le point de pré-assise lui-même
+    // (les pieds y restent) — jamais emprunté ailleurs, jamais inventé.
+    const groundY = host.floorAt(standX, standZ)
     if (groundY === null) return null
     return {
       sitX,
