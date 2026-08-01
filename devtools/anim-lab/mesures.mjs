@@ -26,11 +26,26 @@ export const R2D = 180 / Math.PI
 export const FPS = 30 // grille des clés source des .vrma
 export const EPS = 1e-4 // échantillonnage de la dernière image (cf. ci-dessus)
 
-// ── Constantes du lecteur, reprises TELLES QUELLES de vrmStage.ts ───────────
-export const GESTURE_FADE = 0.3 // fondu socle → geste
-export const GESTURE_RETURN = 0.4 // fondu geste → socle
-export const BASE_FADE = 0.5 // fondu socle → socle
+// ── Constantes du lecteur ───────────────────────────────────────────────────
+// MIROIR de `client/src/scene/fades.ts`, la table de correspondance avec la
+// machine à états d'Overte. Une copie, parce que ce fichier est aussi importé
+// par la PAGE (index.html, import map, sans transformation TypeScript) — mais
+// une copie VÉRIFIÉE : `verif-fondus.mjs` compare ces trois lignes à fades.ts et
+// sort en code 1 à la moindre dérive. Ne pas les modifier ici sans y toucher là.
+export const GESTURE_FADE = 0.6 // fondu socle → geste (Overte reactionPositive)
+export const GESTURE_RETURN = 0.833 // fondu geste → socle (Overte idleTalkOverlay)
+export const BASE_FADE = 0.833 // fondu socle → socle (Overte idleTalkOverlay)
+/** Les trois fondus ci-dessus sont ADOUCIS — cf. `courbeFondu`. */
+export const FONDUS_ADOUCIS = true
 export const DT_SIM = 1 / 60 // pas de requestAnimationFrame simulé
+
+/**
+ * La courbe de poids d'Overte (`easeInOutQuad`, AnimUtil.cpp) : dérivée nulle
+ * aux deux bouts, donc aucune marche de vitesse au début ni à la fin du fondu.
+ * Elle ne touche QUE le poids, jamais la vitesse de lecture des clips.
+ */
+export const easeInOutQuad = (a) => (a < 0.5 ? 2 * a * a : -2 * a * a + 4 * a - 1)
+export const courbeFondu = (p, adouci = FONDUS_ADOUCIS) => (adouci ? easeInOutQuad(p) : p)
 
 // ── Groupes d'os ────────────────────────────────────────────────────────────
 export const OS_HAUT = [
@@ -453,7 +468,10 @@ export function simulerFondu(THREE, rig, clipGeste, clipSocle, opts = {}) {
     if (fade) {
       fade.elapsed += DT_SIM
       const p = Math.min(1, fade.elapsed / fade.duree)
-      poser(fadeWeights(fade.from, fade.to, p))
+      // La COURBE, comme vrmStage : elle ne déplace que `p`, et fadeWeights rend
+      // une somme de 1 pour n'importe quel `p` — l'invariant ne bouge pas (il
+      // est d'ailleurs contrôlé juste en dessous, `sommeMin`).
+      poser(fadeWeights(fade.from, fade.to, courbeFondu(p)))
       if (p >= 1) fade = null
     }
     let s = 0; for (const w of poids.values()) s += w

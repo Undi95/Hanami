@@ -1,0 +1,719 @@
+{
+ "rig": "reference-2.vrm",
+ "rapport": [
+  {
+   "nom": "idle → idle-talking",
+   "fondu": "BASE_SWAP",
+   "paires": 25,
+   "jeux": {
+    "avant": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 217,
+     "sautMoy": 151,
+     "sautOu": "idle-7→idle-talking-7 (rightHand)",
+     "pointe": 411,
+     "n": 25
+    },
+    "durees": {
+     "duree": 0.833,
+     "ease": false,
+     "saut": 125,
+     "sautMoy": 99,
+     "sautOu": "idle-2→idle-talking-6 (leftHand)",
+     "pointe": 402,
+     "n": 25
+    },
+    "actuel": {
+     "duree": 0.833,
+     "ease": true,
+     "saut": 114,
+     "sautMoy": 66,
+     "sautOu": "idle→idle-talking-4 (leftMiddleDistal)",
+     "pointe": 411,
+     "n": 25
+    }
+   }
+  },
+  {
+   "nom": "idle-talking → idle",
+   "fondu": "BASE_SWAP",
+   "paires": 25,
+   "jeux": {
+    "avant": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 210,
+     "sautMoy": 167,
+     "sautOu": "idle-talking-4→idle (rightIndexDistal)",
+     "pointe": 376,
+     "n": 25
+    },
+    "durees": {
+     "duree": 0.833,
+     "ease": false,
+     "saut": 151,
+     "sautMoy": 111,
+     "sautOu": "idle-talking-4→idle (rightIndexDistal)",
+     "pointe": 388,
+     "n": 25
+    },
+    "actuel": {
+     "duree": 0.833,
+     "ease": true,
+     "saut": 103,
+     "sautMoy": 50,
+     "sautOu": "idle-talking-4→idle-7 (leftMiddleDistal)",
+     "pointe": 419,
+     "n": 25
+    }
+   }
+  },
+  {
+   "nom": "rb-idle → rb-listen",
+   "fondu": "BASE_SWAP",
+   "paires": 12,
+   "jeux": {
+    "avant": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 100,
+     "sautMoy": 60,
+     "sautOu": "rb-idle-3→rb-listen-3 (rightHand)",
+     "pointe": 283,
+     "n": 12
+    },
+    "durees": {
+     "duree": 0.833,
+     "ease": false,
+     "saut": 113,
+     "sautMoy": 54,
+     "sautOu": "rb-idle-3→rb-listen-3 (rightHand)",
+     "pointe": 283,
+     "n": 12
+    },
+    "actuel": {
+     "duree": 0.833,
+     "ease": true,
+     "saut": 88,
+     "sautMoy": 36,
+     "sautOu": "rb-idle→rb-listen-3 (rightHand)",
+     "pointe": 283,
+     "n": 12
+    }
+   }
+  },
+  {
+   "nom": "idle → geste",
+   "fondu": "GESTURE_IN",
+   "paires": 20,
+   "jeux": {
+    "avant": {
+     "duree": 0.3,
+     "ease": false,
+     "saut": 744,
+     "sautMoy": 215,
+     "sautOu": "idle→happy-6 (leftLowerArm)",
+     "pointe": 765,
+     "n": 20
+    },
+    "durees": {
+     "duree": 0.6,
+     "ease": false,
+     "saut": 540,
+     "sautMoy": 164,
+     "sautOu": "idle→happy-6 (leftHand)",
+     "pointe": 765,
+     "n": 20
+    },
+    "actuel": {
+     "duree": 0.6,
+     "ease": true,
+     "saut": 595,
+     "sautMoy": 146,
+     "sautOu": "idle→happy-6 (leftLowerArm)",
+     "pointe": 765,
+     "n": 20
+    }
+   }
+  },
+  {
+   "nom": "geste → idle",
+   "fondu": "GESTURE_OUT",
+   "paires": 20,
+   "jeux": {
+    "avant": {
+     "duree": 0.4,
+     "ease": false,
+     "saut": 95,
+     "sautMoy": 53,
+     "sautOu": "relaxed→idle (leftHand)",
+     "pointe": 95,
+     "n": 20
+    },
+    "durees": {
+     "duree": 0.833,
+     "ease": false,
+     "saut": 45,
+     "sautMoy": 25,
+     "sautOu": "relaxed→idle (leftHand)",
+     "pointe": 48,
+     "n": 20
+    },
+    "actuel": {
+     "duree": 0.833,
+     "ease": true,
+     "saut": 12,
+     "sautMoy": 10,
+     "sautOu": "relaxed-3→idle (leftHand)",
+     "pointe": 88,
+     "n": 20
+    }
+   }
+  },
+  {
+   "nom": "idle → pivot",
+   "fondu": "TURN_IN",
+   "paires": 2,
+   "jeux": {
+    "avant": {
+     "duree": 0.3,
+     "ease": false,
+     "saut": 110,
+     "sautMoy": 107,
+     "sautOu": "idle→world-turn-left (leftFoot)",
+     "pointe": 172,
+     "n": 2
+    },
+    "durees": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 95,
+     "sautMoy": 85,
+     "sautOu": "idle→world-turn-left (rightLowerLeg)",
+     "pointe": 160,
+     "n": 2
+    },
+    "actuel": {
+     "duree": 0.5,
+     "ease": true,
+     "saut": 95,
+     "sautMoy": 85,
+     "sautOu": "idle→world-turn-left (rightLowerLeg)",
+     "pointe": 160,
+     "n": 2
+    }
+   }
+  },
+  {
+   "nom": "pivot → idle",
+   "fondu": "TURN_OUT",
+   "paires": 2,
+   "jeux": {
+    "avant": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 59,
+     "sautMoy": 55,
+     "sautOu": "world-turn-right→idle (leftFoot)",
+     "pointe": 155,
+     "n": 2
+    },
+    "durees": {
+     "duree": 0.667,
+     "ease": false,
+     "saut": 44,
+     "sautMoy": 43,
+     "sautOu": "world-turn-left→idle (rightFoot)",
+     "pointe": 152,
+     "n": 2
+    },
+    "actuel": {
+     "duree": 0.667,
+     "ease": true,
+     "saut": 46,
+     "sautMoy": 36,
+     "sautOu": "world-turn-right→idle (leftLowerLeg)",
+     "pointe": 160,
+     "n": 2
+    }
+   }
+  },
+  {
+   "nom": "idle → walk-start",
+   "fondu": "WALK_START_IN",
+   "paires": 1,
+   "jeux": {
+    "avant": {
+     "duree": 0.4,
+     "ease": false,
+     "saut": 347,
+     "sautMoy": 347,
+     "sautOu": "idle→world-walk-start (rightFoot)",
+     "pointe": 350,
+     "n": 1
+    },
+    "durees": {
+     "duree": 0.267,
+     "ease": false,
+     "saut": 351,
+     "sautMoy": 351,
+     "sautOu": "idle→world-walk-start (rightFoot)",
+     "pointe": 353,
+     "n": 1
+    },
+    "actuel": {
+     "duree": 0.267,
+     "ease": false,
+     "saut": 351,
+     "sautMoy": 351,
+     "sautOu": "idle→world-walk-start (rightFoot)",
+     "pointe": 353,
+     "n": 1
+    }
+   }
+  },
+  {
+   "nom": "pivot → walk-start",
+   "fondu": "TURN_OUT",
+   "paires": 2,
+   "jeux": {
+    "avant": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 265,
+     "sautMoy": 260,
+     "sautOu": "world-turn-right→world-walk-start (rightFoot)",
+     "pointe": 292,
+     "n": 2
+    },
+    "durees": {
+     "duree": 0.667,
+     "ease": false,
+     "saut": 190,
+     "sautMoy": 188,
+     "sautOu": "world-turn-left→world-walk-start (rightFoot)",
+     "pointe": 219,
+     "n": 2
+    },
+    "actuel": {
+     "duree": 0.667,
+     "ease": true,
+     "saut": 218,
+     "sautMoy": 214,
+     "sautOu": "world-turn-right→world-walk-start (rightFoot)",
+     "pointe": 252,
+     "n": 2
+    }
+   }
+  },
+  {
+   "nom": "idle → walk-slow",
+   "fondu": "WALK_CYCLE_IN",
+   "paires": 1,
+   "jeux": {
+    "avant": {
+     "duree": 0.4,
+     "ease": false,
+     "saut": 140,
+     "sautMoy": 140,
+     "sautOu": "idle→world-walk-slow (rightThumbDistal)",
+     "pointe": 176,
+     "n": 1
+    },
+    "durees": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 112,
+     "sautMoy": 112,
+     "sautOu": "idle→world-walk-slow (rightThumbDistal)",
+     "pointe": 152,
+     "n": 1
+    },
+    "actuel": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 112,
+     "sautMoy": 112,
+     "sautOu": "idle→world-walk-slow (rightThumbDistal)",
+     "pointe": 152,
+     "n": 1
+    }
+   }
+  },
+  {
+   "nom": "walk → arrêt",
+   "fondu": "STOP_IN",
+   "paires": 5,
+   "jeux": {
+    "avant": {
+     "duree": 0.35,
+     "ease": false,
+     "saut": 127,
+     "sautMoy": 126,
+     "sautOu": "world-walk→world-walk-stop-3 (leftUpperArm)",
+     "pointe": 279,
+     "n": 5
+    },
+    "durees": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 116,
+     "sautMoy": 114,
+     "sautOu": "world-walk→world-walk-stop-small (leftFoot)",
+     "pointe": 269,
+     "n": 5
+    },
+    "actuel": {
+     "duree": 0.5,
+     "ease": true,
+     "saut": 108,
+     "sautMoy": 100,
+     "sautOu": "world-walk→world-walk-stop-2 (leftLowerLeg)",
+     "pointe": 250,
+     "n": 5
+    }
+   }
+  },
+  {
+   "nom": "walk-slow → arrêt",
+   "fondu": "STOP_IN",
+   "paires": 5,
+   "jeux": {
+    "avant": {
+     "duree": 0.35,
+     "ease": false,
+     "saut": 182,
+     "sautMoy": 170,
+     "sautOu": "world-walk-slow→world-walk-stop (rightThumbDistal)",
+     "pointe": 203,
+     "n": 5
+    },
+    "durees": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 126,
+     "sautMoy": 117,
+     "sautOu": "world-walk-slow→world-walk-stop (rightThumbDistal)",
+     "pointe": 169,
+     "n": 5
+    },
+    "actuel": {
+     "duree": 0.5,
+     "ease": true,
+     "saut": 65,
+     "sautMoy": 60,
+     "sautOu": "world-walk-slow→world-walk-stop (rightThumbDistal)",
+     "pointe": 249,
+     "n": 5
+    }
+   }
+  },
+  {
+   "nom": "walk → arrêt court",
+   "fondu": "STOP_SMALL_IN",
+   "paires": 1,
+   "jeux": {
+    "avant": {
+     "duree": 0.35,
+     "ease": false,
+     "saut": 126,
+     "sautMoy": 126,
+     "sautOu": "world-walk→world-walk-stop-small (leftFoot)",
+     "pointe": 279,
+     "n": 1
+    },
+    "durees": {
+     "duree": 0.333,
+     "ease": false,
+     "saut": 129,
+     "sautMoy": 129,
+     "sautOu": "world-walk→world-walk-stop-small (leftUpperArm)",
+     "pointe": 281,
+     "n": 1
+    },
+    "actuel": {
+     "duree": 0.333,
+     "ease": true,
+     "saut": 96,
+     "sautMoy": 96,
+     "sautOu": "world-walk→world-walk-stop-small (leftFoot)",
+     "pointe": 252,
+     "n": 1
+    }
+   }
+  },
+  {
+   "nom": "arrêt → idle",
+   "fondu": "STOP_OUT",
+   "paires": 25,
+   "jeux": {
+    "avant": {
+     "duree": 0.2,
+     "ease": false,
+     "saut": 190,
+     "sautMoy": 110,
+     "sautOu": "world-walk-stop-small→idle-4 (leftHand)",
+     "pointe": 190,
+     "n": 25
+    },
+    "durees": {
+     "duree": 0.667,
+     "ease": false,
+     "saut": 57,
+     "sautMoy": 34,
+     "sautOu": "world-walk-stop-small→idle-4 (leftHand)",
+     "pointe": 57,
+     "n": 25
+    },
+    "actuel": {
+     "duree": 0.667,
+     "ease": true,
+     "saut": 14,
+     "sautMoy": 9,
+     "sautOu": "world-walk-stop→idle-2 (head)",
+     "pointe": 111,
+     "n": 25
+    }
+   }
+  },
+  {
+   "nom": "idle → sit-enter",
+   "fondu": "SIT_IN",
+   "paires": 1,
+   "jeux": {
+    "avant": {
+     "duree": 0.3,
+     "ease": false,
+     "saut": 289,
+     "sautMoy": 289,
+     "sautOu": "idle→world-sit-enter (rightThumbDistal)",
+     "pointe": 402,
+     "n": 1
+    },
+    "durees": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 180,
+     "sautMoy": 180,
+     "sautOu": "idle→world-sit-enter (rightThumbDistal)",
+     "pointe": 402,
+     "n": 1
+    },
+    "actuel": {
+     "duree": 0.5,
+     "ease": true,
+     "saut": 180,
+     "sautMoy": 180,
+     "sautOu": "idle→world-sit-enter (rightThumbDistal)",
+     "pointe": 402,
+     "n": 1
+    }
+   }
+  },
+  {
+   "nom": "sit-enter → sit-idle",
+   "fondu": "SIT_LAND",
+   "paires": 5,
+   "jeux": {
+    "avant": {
+     "duree": 1,
+     "ease": false,
+     "saut": 92,
+     "sautMoy": 41,
+     "sautOu": "world-sit-enter→world-sit-idle-3 (leftHand)",
+     "pointe": 92,
+     "n": 5
+    },
+    "durees": {
+     "duree": 1,
+     "ease": false,
+     "saut": 92,
+     "sautMoy": 41,
+     "sautOu": "world-sit-enter→world-sit-idle-3 (leftHand)",
+     "pointe": 92,
+     "n": 5
+    },
+    "actuel": {
+     "duree": 1,
+     "ease": true,
+     "saut": 14,
+     "sautMoy": 9,
+     "sautOu": "world-sit-enter→world-sit-idle-4 (head)",
+     "pointe": 181,
+     "n": 5
+    }
+   }
+  },
+  {
+   "nom": "sit-idle → sit-talking",
+   "fondu": "SIT_TALK",
+   "paires": 15,
+   "jeux": {
+    "avant": {
+     "duree": 0.8,
+     "ease": false,
+     "saut": 281,
+     "sautMoy": 186,
+     "sautOu": "world-sit-idle→world-sit-talking (rightRingIntermediate)",
+     "pointe": 721,
+     "n": 15
+    },
+    "durees": {
+     "duree": 0.833,
+     "ease": false,
+     "saut": 281,
+     "sautMoy": 182,
+     "sautOu": "world-sit-idle→world-sit-talking (rightRingIntermediate)",
+     "pointe": 721,
+     "n": 15
+    },
+    "actuel": {
+     "duree": 0.833,
+     "ease": true,
+     "saut": 281,
+     "sautMoy": 116,
+     "sautOu": "world-sit-idle→world-sit-talking (rightRingIntermediate)",
+     "pointe": 721,
+     "n": 15
+    }
+   }
+  },
+  {
+   "nom": "sit-idle → geste assis",
+   "fondu": "SIT_GESTURE_IN",
+   "paires": 8,
+   "jeux": {
+    "avant": {
+     "duree": 0.4,
+     "ease": false,
+     "saut": 538,
+     "sautMoy": 248,
+     "sautOu": "world-sit-idle→world-sit-clap (rightHand)",
+     "pointe": 797,
+     "n": 8
+    },
+    "durees": {
+     "duree": 0.4,
+     "ease": false,
+     "saut": 538,
+     "sautMoy": 248,
+     "sautOu": "world-sit-idle→world-sit-clap (rightHand)",
+     "pointe": 797,
+     "n": 8
+    },
+    "actuel": {
+     "duree": 0.4,
+     "ease": true,
+     "saut": 538,
+     "sautMoy": 216,
+     "sautOu": "world-sit-idle→world-sit-clap (rightHand)",
+     "pointe": 831,
+     "n": 8
+    }
+   }
+  },
+  {
+   "nom": "geste assis → sit-idle",
+   "fondu": "SIT_GESTURE_OUT",
+   "paires": 5,
+   "jeux": {
+    "avant": {
+     "duree": 0.4,
+     "ease": false,
+     "saut": 230,
+     "sautMoy": 102,
+     "sautOu": "world-sit-clap→world-sit-idle (leftHand)",
+     "pointe": 231,
+     "n": 5
+    },
+    "durees": {
+     "duree": 0.833,
+     "ease": false,
+     "saut": 110,
+     "sautMoy": 49,
+     "sautOu": "world-sit-clap→world-sit-idle (leftHand)",
+     "pointe": 112,
+     "n": 5
+    },
+    "actuel": {
+     "duree": 0.833,
+     "ease": true,
+     "saut": 9,
+     "sautMoy": 9,
+     "sautOu": "world-sit-clap→world-sit-idle (leftHand)",
+     "pointe": 216,
+     "n": 5
+    }
+   }
+  },
+  {
+   "nom": "sit-idle → sit-exit",
+   "fondu": "SIT_IN",
+   "paires": 5,
+   "jeux": {
+    "avant": {
+     "duree": 0.3,
+     "ease": false,
+     "saut": 381,
+     "sautMoy": 294,
+     "sautOu": "world-sit-idle-3→world-sit-exit (leftHand)",
+     "pointe": 585,
+     "n": 5
+    },
+    "durees": {
+     "duree": 0.5,
+     "ease": false,
+     "saut": 272,
+     "sautMoy": 272,
+     "sautOu": "world-sit-idle→world-sit-exit (rightLowerLeg)",
+     "pointe": 508,
+     "n": 5
+    },
+    "actuel": {
+     "duree": 0.5,
+     "ease": true,
+     "saut": 272,
+     "sautMoy": 272,
+     "sautOu": "world-sit-idle→world-sit-exit (rightLowerLeg)",
+     "pointe": 580,
+     "n": 5
+    }
+   }
+  },
+  {
+   "nom": "sit-exit → idle",
+   "fondu": "STOP_OUT",
+   "paires": 5,
+   "jeux": {
+    "avant": {
+     "duree": 0.2,
+     "ease": false,
+     "saut": 495,
+     "sautMoy": 453,
+     "sautOu": "world-sit-exit→idle-4 (rightThumbDistal)",
+     "pointe": 495,
+     "n": 5
+    },
+    "durees": {
+     "duree": 0.667,
+     "ease": false,
+     "saut": 148,
+     "sautMoy": 136,
+     "sautOu": "world-sit-exit→idle-4 (rightThumbDistal)",
+     "pointe": 149,
+     "n": 5
+    },
+    "actuel": {
+     "duree": 0.667,
+     "ease": true,
+     "saut": 15,
+     "sautMoy": 14,
+     "sautOu": "world-sit-exit→idle-4 (rightThumbDistal)",
+     "pointe": 290,
+     "n": 5
+    }
+   }
+  }
+ ]
+}

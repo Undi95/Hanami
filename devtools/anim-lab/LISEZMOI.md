@@ -72,6 +72,9 @@ la taille du fichier a changé (**un autre agent a remplacé le clip**) ou non
 | `sonde.mjs` | contrôle headless |
 | `verif-syntaxe.mjs` | `node verif-syntaxe.mjs` : fait analyser le module inline d'`index.html` par node, sans navigateur. À lancer après toute retouche de la page |
 | `verif-catalogue.mjs` | `node verif-catalogue.mjs` : le **câblage**, pas les clips. Chaque clef de `WORLD_NEEDED` (vrmStage) a-t-elle des fichiers, chaque clef des tables assises (`SIT_EMOTES`, `SIT_REACTIONS` de wander) est-elle déclarée ? Une clef morte ne produit aucune erreur, juste un personnage qui ne fait rien — c'est ce qui a rendu `world-walk-stop-small` dormant. Il rejoue aussi le catalogue **une fois par famille de face à face** et prouve leur étanchéité : aucun fichier commun, aucun `rb-` dans la scène vivante, et le poids que la famille non choisie ne télécharge jamais. Sort en code 1 au moindre problème |
+| `banc-fondus.mjs` | `node banc-fondus.mjs` : **l'à-coup des transitions**, mesuré. Rejoue l'enchaînement de `vrmStage` (`advanceFade` puis `mixer.update`, loi de poids `fadeWeights`) hors navigateur, sur toutes les paires de variantes de chaque jonction, et rend le **saut** de vitesse angulaire (la marche entre deux images — c'est ÇA, l'à-coup) et la **pointe**. Trois jeux côte à côte : `avant` (nos anciens 0,3/0,4/0,5 linéaires), `durees` (les durées d'Overte, encore linéaires), `actuel` (**lu dans `client/src/scene/fades.ts`** : le banc ne peut pas mesurer autre chose que l'application). `--plancher` donne l'à-coup PROPRE de chaque clip, celui qu'aucun fondu ne descend. Voir la section « Les fondus » |
+| `verif-fondus.mjs` | `node verif-fondus.mjs` : la table des fondus **ne peut pas dériver**. Chaque durée de `fades.ts` est comparée à l'état d'Overte dont elle se réclame dans `vrma/transitions.json` (durée ET courbe) ; les fondus **sans** équivalent Overte doivent être déclarés, avec leur raison ; le miroir de `mesures.mjs` (que la page importe, sans TypeScript) est comparé à la table. Sort en code 1 à la moindre divergence |
+| `banc-deambulation.mjs` | `node banc-deambulation.mjs [--minutes=60]` : la **scène vivante déroulée sous node**. `wander.ts` est pur — on le fait tourner tel quel contre un décor synthétique et un tirage grainé. Vérifie les **invariants** (0 image sous le sol debout, bassin exactement sur la nappe assis), les **contrats de phase** de `vrma/world.json` (aucune entrée de cycle hors contrat) et sort l'**empreinte** (trajets, pivots, assises, mètres, temps cumulé en fondu). Rejouable sur un ancien arbre : `HANAMI_ROOT=<worktree>` |
 | `/diagnostic/` (URL) | fiches biomécaniques + planches PNG par clip, `RAPPORT.md`, `index.json` — écrits par `../diagnostic/diagnostic.mjs` dans `devtools/diagnostic-out/` (gitignoré), servis ici, affichés par l'onglet **Diagnostic** (voir la section dédiée) |
 
 ### La prise console
@@ -569,3 +572,106 @@ les transitions à l'œil, pas à mesurer.
   la grille des clés source.
 - Un **onglet caché** met le rendu en pause (rAF) : une *passe en direct* s'y
   interrompt. L'*analyse des raccords*, elle, n'en dépend pas et va au bout.
+
+## Les fondus — la table d'Overte, et ce qu'elle a changé
+
+Nos fondus étaient **uniformes** (0,3 / 0,4 / 0,5 s, linéaires) alors que
+`vrma/transitions.json` donne une durée **par transition** — l'`interpDuration`
+de chacun des 165 états de la machine à états d'Overte, en images à 30 i/s — et
+sa courbe. La table de correspondance vit dans `client/src/scene/fades.ts` ;
+`verif-fondus.mjs` la compare ligne à ligne au graphe, `banc-fondus.mjs` la
+mesure.
+
+Deux familles ressortent du graphe, et elles ne se ressemblent pas :
+l'**expression** (repos, parole, gestes, pivots, arrêts, assise) est **longue et
+adoucie** (`easeInOutQuad`) ; la **locomotion** (entrer dans un cycle de marche)
+est **courte et linéaire** — Overte n'a mis aucun `easingType` sur `WALKFWD` ni
+sur `idleToWalkFwd`, et la mesure lui donne raison.
+
+`easeInOutQuad` part et arrive à vitesse nulle : c'est ce qui supprime la marche
+de vitesse angulaire au début et à la fin du fondu. En échange sa pente culmine
+à 2/T au lieu de 1/T — d'où les durées plus longues d'Overte : à durée
+multipliée par ~1,7, la pointe est la même et la marche a disparu.
+
+### Référence — `node banc-fondus.mjs`, rig `reference-2.vrm`
+
+`saut` = la plus grosse marche de vitesse angulaire entre deux images (°/s, pire
+os, toutes paires de variantes) ; entre parenthèses la moyenne sur les paires ;
+puis la pointe.
+
+| jonction | fondu | avant | durées d'Overte, linéaires | actuel (durées + courbe) |
+| --- | --- | --- | --- | --- |
+| idle → idle-talking | `BASE_SWAP` 0,833~ | 217 (151) / 411 | 125 (99) / 402 | **114 (66) / 411** |
+| idle-talking → idle | `BASE_SWAP` 0,833~ | 210 (167) / 376 | 151 (111) / 388 | **103 (50) / 419** |
+| rb-idle → rb-listen | `BASE_SWAP` 0,833~ | 100 (60) / 283 | 113 (54) / 283 | **88 (36) / 283** |
+| idle → geste | `GESTURE_IN` 0,6~ | 744 (215) / 765 | 540 (164) / 765 | **595 (146) / 765** |
+| geste → idle | `GESTURE_OUT` 0,833~ | 95 (53) / 95 | 45 (25) / 48 | **12 (10) / 88** |
+| idle → pivot | `TURN_IN` 0,5~ | 110 (107) / 172 | 95 (85) / 160 | **95 (85) / 160** |
+| pivot → idle | `TURN_OUT` 0,667~ | 59 (55) / 155 | 44 (43) / 152 | **46 (36) / 160** |
+| idle → walk-start | `WALK_START_IN` 0,267 | 347 (347) / 350 | 351 (351) / 353 | **351 (351) / 353** |
+| pivot → walk-start | `TURN_OUT` 0,667~ | 265 (260) / 292 | 190 (188) / 219 | **218 (214) / 252** |
+| idle → walk-slow | `WALK_CYCLE_IN` 0,5 | 140 (140) / 176 | 112 (112) / 152 | **112 (112) / 152** |
+| walk → arrêt | `STOP_IN` 0,5~ | 127 (126) / 279 | 116 (114) / 269 | **108 (100) / 250** |
+| walk-slow → arrêt | `STOP_IN` 0,5~ | 182 (170) / 203 | 126 (117) / 169 | **65 (60) / 249** |
+| walk → arrêt court | `STOP_SMALL_IN` 0,333~ | 126 (126) / 279 | 129 (129) / 281 | **96 (96) / 252** |
+| arrêt → idle | `STOP_OUT` 0,667~ | 190 (110) / 190 | 57 (34) / 57 | **14 (9) / 111** |
+| idle → sit-enter | `SIT_IN` 0,5~ | 289 (289) / 402 | 180 (180) / 402 | **180 (180) / 402** |
+| sit-enter → sit-idle | `SIT_LAND` 1~ | 92 (41) / 92 | 92 (41) / 92 | **14 (9) / 181** |
+| sit-idle → sit-talking | `SIT_TALK` 0,833~ | 281 (186) / 721 | 281 (182) / 721 | **281 (116) / 721** |
+| sit-idle → geste assis | `SIT_GESTURE_IN` 0,4~ | 538 (248) / 797 | 538 (248) / 797 | **538 (216) / 831** |
+| geste assis → sit-idle | `SIT_GESTURE_OUT` 0,833~ | 230 (102) / 231 | 110 (49) / 112 | **9 (9) / 216** |
+| sit-idle → sit-exit | `SIT_IN` 0,5~ | 381 (294) / 585 | 272 (272) / 508 | **272 (272) / 580** |
+| sit-exit → idle | `STOP_OUT` 0,667~ | 495 (453) / 495 | 148 (136) / 149 | **15 (14) / 290** |
+
+`~` = fondu adouci. Un `saut` qui ne bouge pas est un **plancher** : l'à-coup du
+clip lui-même, que `--plancher` mesure séparément (`happy-6` 744 °/s,
+`world-sit-clap` 623, `world-walk-start` 351, `world-sit-talking` 281,
+`world-sit-exit` 272). Aucun fondu ne descend en dessous — c'est la moyenne sur
+les paires qui dit alors ce qu'on a gagné.
+
+Les deux seules **pointes** qui montent franchement sont
+`sit-enter → sit-idle` (92 → 181) et `walk-slow → arrêt` (203 → 249) : ce sont
+des corps qui se posent ou qui ralentissent, la courbe y remplace une vitesse
+constante encadrée de deux marches par une montée et une descente sans marche.
+
+### Un geste répond-il encore vite ?
+
+Le fondu d'entrée d'un geste a doublé (0,3 s linéaire → 0,6 s adouci). Ce qui
+n'a pas bougé : l'**expression du visage** part dès le tag (`setEmotion` écrit
+avant `playGesture`), et le clip du geste démarre à son image 0 quoi qu'il
+arrive — le fondu ne règle que sa montée en poids, exactement comme chez Overte
+(`interpTarget` = 18 : la cible est lue en direct pendant le fondu).
+
+Ce que ça coûte, mesuré sur les vingt gestes de face à face — instant où le
+CORPS s'est écarté de N degrés de ce que le socle seul aurait donné (pire os
+majeur, moyenne sur les gestes) :
+
+| écart | avant (0,3 linéaire) | actuel (0,6 adouci) |
+| --- | --- | --- |
+| 2° — le premier frémissement | 65 ms | 141 ms |
+| 5° — c'est visible | 110 ms | 201 ms |
+| 10° — c'est un geste | 231 ms | 249 ms |
+
+Le départ est plus doux d'environ 80 ms ; à l'instant où le mouvement devient un
+geste, l'écart est retombé à 18 ms. C'est le prix, et il est petit.
+
+### Référence — `node banc-deambulation.mjs --minutes=60`, graine 12345
+
+L'empreinte de comportement **ne bouge pas** : les fondus ne pilotent pas la
+machine à états, ce sont les durées de clips et les phases qui le font.
+
+| | avant | actuel |
+| --- | --- | --- |
+| images sous le sol (debout) | 0 | 0 |
+| bassin hors de la nappe (assis) | 0 | 0 |
+| entrées de cycle hors contrat de phase | 0 | 0 |
+| temps debout / assis | 82,2 % / 17,8 % | 82,2 % / 17,8 % |
+| distance parcourue | 56,1 m | 56,1 m |
+| socles posés · transitions | 116 · 51 | 116 · 51 |
+| temps cumulé en fondu | 79,0 s (2,2 %) | **125,9 s (3,5 %)** |
+| fondus adoucis | 0 / 167 | **161 / 167** |
+
+Et `node sonde.mjs --sequences` rend exactement les mêmes jointures qu'avant —
+`verdicts : passe 96 · limite 3 · excellent 52`, séquence « marche » et séquence
+« assise » toutes deux *excellent* : les contrats de phase n'ont pas été touchés,
+et c'était le but.

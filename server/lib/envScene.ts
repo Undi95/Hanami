@@ -133,11 +133,31 @@ const SPAWN_BLIND = 0.3
 /** Pas d'échantillonnage des candidats (m) : peser deux points distants de 10 cm n'apprend rien. */
 const SPAWN_STRIDE = 0.3
 /** Nombre de candidats réellement pesés à la rose — c'est la partie chère du choix. */
-const SPAWN_MAX_CANDIDATES = 64
-/** Recul de caméra au-delà duquel du dégagement en plus ne sert plus à rien (m). */
-const SPAWN_CAM_ENOUGH = 3
-/** Distance au bord de la pièce au-delà de laquelle on est « au large » (m). */
-const SPAWN_ROOM_ENOUGH = 1.5
+const SPAWN_MAX_CANDIDATES = 256
+/**
+ * Recul dont l'objectif a besoin sur +Z, et au-delà duquel du champ en plus ne
+ * sert plus à rien (m). Le cadrage par défaut se pose entre 2 et 3,5 m, et la
+ * rose borne déjà ce recul côté client. Les sept décors livrés vont de 2,2 m
+ * (le loft, une mansarde) à 14,2 m : 2,5 m est donc une exigence réelle, pas un
+ * confort — et une pièce qui n'en offre nulle part se rabat sur son meilleur point.
+ */
+const SPAWN_CAM_ENOUGH = 2.5
+/**
+ * Place minimale autour des pieds pour que le personnage tienne debout et
+ * puisse partir (m). Son gabarit fait 0,25 m de rayon : 0,4 m lui laisse un
+ * pas. Ce n'est PAS un critère de choix, c'est un plancher — voir plus bas.
+ */
+const SPAWN_ROOM_MIN = 0.4
+/**
+ * Distance au-delà de laquelle ce qu'il y a DERRIÈRE le personnage ne fait plus
+ * décor (m). La caméra est devant lui : ce qu'elle cadre, c'est le fond
+ * derrière ses épaules. Les sept points d'accueil réglés à la main des décors
+ * livrés ont TOUS un fond à 2,7 m ou moins derrière eux — de 0,7 m (le loft) à
+ * 2,7 m (le restaurant) — alors que leur dégagement DEVANT va de 1,6 m à
+ * 14,2 m. C'est la seule régularité de ces sept réglages, et elle dit tout : un
+ * personnage planté au milieu d'un grand vide est cadré sur du vide.
+ */
+const SPAWN_BACKDROP = 3
 
 // ── Placement (sidecar `.json`) ────────────────────────────────────────────
 
@@ -716,19 +736,26 @@ export function spawnTrouble(scene: Pick<SceneFile, 'room' | 'camera'>): SpawnTr
 }
 
 /**
- * Choisit un point d'accueil quand l'origine n'en est pas un. Trois idées, dans
- * cet ordre — et c'est le classement qu'on faisait à la main en balayant des
- * candidats (cf. l'outil `balayage` du chantier) :
+ * Choisit un point d'accueil quand l'origine n'en est pas un — c'est-à-dire ce
+ * qu'on faisait à la main en balayant des candidats et en classant ce qu'ils
+ * rendaient (cf. l'outil `balayage` du chantier).
  *
  *  1. LA PIÈCE, c'est la plus grande étendue d'un seul tenant où l'on marche.
  *     Pas celle qui touche l'origine : sur un quai de métro, l'origine tombe
  *     dans la voie, et la voie est une bande praticable parfaitement inutile.
- *  2. AU LARGE : parmi ses cases, celles qui sont le plus loin de son bord
- *     (transformée de distance). Un personnage posé contre un mur ne peut pas
- *     faire trois pas, et la caméra le prend dans la cloison.
- *  3. DEVANT SOI : la caméra recule sur +Z. Entre deux cases également au
- *     large, celle qui laisse le plus de champ à l'objectif gagne — c'est la
- *     mesure qui séparait un cadrage lisible d'un écran noir.
+ *  2. TENIR DEBOUT — un plancher, pas un critère : la case doit être à
+ *     `SPAWN_ROOM_MIN` du premier obstacle, sans quoi le personnage est encastré
+ *     et ne peut pas partir. Au-delà, être plus au large ne vaut rien de plus.
+ *  3. RECULER — la caméra se pose devant, sur +Z : il lui faut `SPAWN_CAM_ENOUGH`
+ *     de champ dans son cône. En deçà, elle entre dans la géométrie et l'écran
+ *     devient noir ; au-delà, du champ en plus ne sert plus à rien.
+ *  4. AVOIR QUELQUE CHOSE À CADRER — et c'est le critère qui départage : entre
+ *     deux points également praticables et également dégagés devant, on prend
+ *     celui qui a le décor le plus proche DERRIÈRE lui (`SPAWN_BACKDROP`). Le
+ *     « point le plus central » d'une grande salle est un point où la caméra ne
+ *     voit que du vide : mesuré sur le quai du métro, 8,7 m de rien derrière
+ *     l'avatar et 16 % de l'image peinte. Les sept décors livrés, réglés à la
+ *     main, ont tous leur fond à 2,2 m ou moins.
  *
  * Rend `[x, y, z]` dans le repère de CETTE mesure — donc exactement ce qu'un
  * `spawn` de sidecar aurait dit — ou `null` si le décor n'a nulle part où poser
@@ -811,10 +838,15 @@ function chooseSpawn(field: Field, coarse: Field, cells: (CellFloor | null)[]): 
   }
   if (maxDepth === 0) return null
 
-  // Présélection : ce qui est franchement au large, échantillonné au pas de
-  // SPAWN_STRIDE. La rose coûte 16 rayons par candidat, on ne la paie pas cent fois.
-  const minDepth = Math.max(1, Math.ceil(maxDepth * 0.5))
-  const stride = Math.max(1, Math.round(SPAWN_STRIDE / field.cell))
+  // Présélection : les cases où le personnage TIENT DEBOUT, échantillonnées sur
+  // une trame. La rose coûte 16 rayons par candidat — le pas de la trame
+  // s'élargit avec la pièce pour que la facture reste la même partout.
+  const minDepth = Math.max(1, Math.ceil(SPAWN_ROOM_MIN / field.cell))
+  const stride = Math.max(
+    Math.round(SPAWN_STRIDE / field.cell),
+    Math.round(Math.sqrt(bestSize / SPAWN_MAX_CANDIDATES)),
+    1,
+  )
   let shortlist: number[] = []
   for (let cj = 0; cj < field.rows; cj++) {
     for (let ci = 0; ci < field.cols; ci++) {
@@ -824,20 +856,33 @@ function chooseSpawn(field: Field, coarse: Field, cells: (CellFloor | null)[]): 
       shortlist.push(k)
     }
   }
-  // Une pièce étroite peut n'avoir aucune case sur la trame : on retombe alors
-  // sur les cases les plus au large, quelles qu'elles soient.
+  // Une pièce étroite peut n'avoir aucune case assez dégagée, ou aucune sur la
+  // trame : on retombe alors sur ses cases les plus au large, quelles qu'elles
+  // soient — mieux vaut un point serré que pas de point du tout.
   if (shortlist.length === 0) {
     for (let k = 0; k < n; k++) if (zone[k] === bestZone && depth[k] === maxDepth) shortlist.push(k)
   }
   if (shortlist.length > SPAWN_MAX_CANDIDATES) {
-    shortlist = [...shortlist].sort((a, b) => depth[b] - depth[a] || a - b).slice(0, SPAWN_MAX_CANDIDATES)
+    // Décimation régulière : on garde la couverture de la pièce, pas un coin.
+    const keep = shortlist
+    const pas = keep.length / SPAWN_MAX_CANDIDATES
+    shortlist = []
+    for (let c = 0; c < SPAWN_MAX_CANDIDATES; c++) shortlist.push(keep[Math.floor(c * pas)])
   }
 
-  // Le cône de l'objectif, pour chaque candidat : +Z et ses deux voisins à
-  // 22,5°. C'est par là que la caméra recule, et un mur à 22,5° la ramène dans
-  // la géométrie tout autant qu'un mur pile devant.
+  // Deux mesures par candidat, prises sur la même rose :
+  //  — DEVANT : le champ sur +Z, l'axe EXACT sur lequel la caméra recule. Une
+  //    seule direction, à dessein : ce qui borde ce couloir à 22,5° tombe au
+  //    bord de l'image, il ne met pas l'objectif dans la géométrie.
+  //  — DERRIÈRE : ce que la caméra a dans le champ par-dessus les épaules du
+  //    personnage. CINQ directions (−Z et ses voisins jusqu'à 45°), moyennées
+  //    après plafonnement à SPAWN_BACKDROP : un fond, c'est une étendue, pas un
+  //    poteau isolé qu'un minimum prendrait pour un mur ; et au-delà du plafond
+  //    tout est également absent, un vide à 4 m comme un vide à 9 m.
   const front = new Float64Array(shortlist.length)
+  const back = new Float64Array(shortlist.length)
   let bestFront = 0
+  const half = ROSE_DIRECTIONS >> 1
   for (let c = 0; c < shortlist.length; c++) {
     const k = shortlist[c]
     const cell = cells[k] as CellFloor
@@ -847,32 +892,39 @@ function chooseSpawn(field: Field, coarse: Field, cells: (CellFloor | null)[]): 
       field.cellZ(Math.floor(k / field.cols)),
       cell.y + EYE_HEIGHT,
     )
-    front[c] = Math.min(rose[0], rose[1], rose[ROSE_DIRECTIONS - 1])
+    front[c] = rose[0]
+    back[c] =
+      (Math.min(rose[half - 2], SPAWN_BACKDROP) +
+        Math.min(rose[half - 1], SPAWN_BACKDROP) +
+        Math.min(rose[half], SPAWN_BACKDROP) +
+        Math.min(rose[half + 1], SPAWN_BACKDROP) +
+        Math.min(rose[half + 2], SPAWN_BACKDROP)) /
+      5
     if (front[c] > bestFront) bestFront = front[c]
   }
-  // Choix LEXICOGRAPHIQUE, et dans cet ordre : la caméra d'abord (un cadrage
-  // impossible ne se rattrape pas), la centralité ensuite, et l'immobilité pour
-  // départager. Au-delà de SPAWN_CAM_ENOUGH le recul ne sert plus à rien : tous
-  // les candidats assez dégagés sont alors à égalité, et c'est le large qui
-  // tranche. Une pièce trop exiguë pour ce recul retombe sur son meilleur point.
+  // Choix LEXICOGRAPHIQUE : d'abord ce qui rend un cadrage POSSIBLE (assez de
+  // recul devant — au-delà de SPAWN_CAM_ENOUGH tous les candidats sont à
+  // égalité, une pièce trop exiguë retombe sur son meilleur point), puis ce qui
+  // le rend LISIBLE (du décor derrière), puis le large, puis l'immobilité.
   const wanted = Math.min(SPAWN_CAM_ENOUGH, bestFront) * 0.99
   let best = -1
+  let bestBack = Infinity
   let bestDepth = -1
-  let bestKept = -1
   let bestDist = Infinity
   for (let c = 0; c < shortlist.length; c++) {
     if (front[c] < wanted) continue
     const k = shortlist[c]
     const x = field.cellX(k % field.cols)
     const z = field.cellZ(Math.floor(k / field.cols))
-    const room = Math.min(depth[k] * field.cell, SPAWN_ROOM_ENOUGH)
+    const backdrop = back[c]
+    const room = depth[k] * field.cell
     const dist = Math.hypot(x, z)
     const better =
-      room > bestDepth + 1e-9 ||
-      (room > bestDepth - 1e-9 && (front[c] > bestKept + 1e-9 || (front[c] > bestKept - 1e-9 && dist < bestDist)))
+      backdrop < bestBack - 1e-9 ||
+      (backdrop < bestBack + 1e-9 && (room > bestDepth + 1e-9 || (room > bestDepth - 1e-9 && dist < bestDist)))
     if (better) {
+      bestBack = backdrop
       bestDepth = room
-      bestKept = front[c]
       bestDist = dist
       best = k
     }
