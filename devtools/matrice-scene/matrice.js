@@ -988,6 +988,26 @@
         persoCle: 'a',
       },
       {
+        id: '07b-retrait-du-decor-pendant-la-marche',
+        titre: 'T2bis — retrait du décor alors que le personnage a quitté sa place',
+        async faire() {
+          // L'avatar s'en va, et on lui retire la pièce sous les pieds : il doit
+          // revenir à l'origine du monde, face à la caméra, sans décor.
+          await cliquerScene(0.62, 0.86, { attendreMs: 700 })
+          await editerPersonnage(PERSOS.a.nom, { decor: '' })
+          await attendreCalme({ min: 2000 })
+          this.clic = await essayerClicsSol()
+          // Puis on lui rend sa pièce, pour la suite du scénario.
+          await editerPersonnage(PERSOS.a.nom, { decor: DECOR_A })
+          await attendreCalme({ min: 2000 })
+        },
+        // Sonde prise APRÈS le retour du décor : ce que l'étape vérifie, c'est
+        // qu'aucune erreur n'a été levée et que la pièce revient proprement. Le
+        // clic, lui, a été essayé pendant le creux — sans décor, rien à viser.
+        attendu: { rend: true, peint: true, decor: true, banniereDecor: false, banniereVrm: false, clic: 'inerte' },
+        persoCle: 'a',
+      },
+      {
         id: '08-changement-de-personnage-rocketbox',
         titre: 'T6 — changement de personnage en pleine scène (overte → rocketbox)',
         async faire() {
