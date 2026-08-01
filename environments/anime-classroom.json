@@ -2,5 +2,6 @@
   "scale": 0.31,
   "rotationY": 180,
   "spawn": [0.72, 0.363, -3.72],
-  "exposure": 1
+  "exposure": 1,
+  "frameDistance": 3.5
 }

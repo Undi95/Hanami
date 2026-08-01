@@ -116,6 +116,7 @@ interface EnvPlacement {
   rotationY?: number // degrés autour de la verticale
   spawn?: [number, number, number] // point du décor où poser le personnage (mètres, y depuis le sol)
   exposure?: number // multiplicateur de luminosité des MATÉRIAUX du décor (cf. applyEnvExposure)
+  frameDistance?: number // distance du cadrage par défaut (m) voulue par CE décor (cf. frameCamera)
 }
 
 /** Nombre fini dans des bornes larges — on ne refuse que l'absurde. */
@@ -140,6 +141,11 @@ function parsePlacement(raw: unknown): EnvPlacement {
   if (rotationY !== undefined) out.rotationY = rotationY
   const exposure = asNumberIn(o.exposure, ENV_MIN_EXPOSURE, ENV_MAX_EXPOSURE)
   if (exposure !== undefined) out.exposure = exposure
+  // Bornes larges : plus près que 0,5 m on est dans le visage, au-delà de 8 m
+  // c'est un panorama, pas un cadrage de personnage. Hors bornes : OMISE,
+  // repli sur la distance automatique — jamais une erreur.
+  const frameDistance = asNumberIn(o.frameDistance, 0.5, 8)
+  if (frameDistance !== undefined) out.frameDistance = frameDistance
   if (Array.isArray(o.spawn) && o.spawn.length === 3) {
     const t = o.spawn.map((n) => asNumberIn(n, -1000, 1000))
     if (t.every((n): n is number => n !== undefined)) out.spawn = [t[0], t[1], t[2]]
@@ -668,6 +674,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // Dimensions du décor en place (mètres) : elles pilotent le plan lointain de la
   // caméra et la distance de recul maximale. null = pas de décor.
   let envMetrics: { radius: number; height: number } | null = null
+  // Distance de cadrage par défaut voulue par le SIDECAR du décor en place.
+  // null = pas de décor ou décor muet : la distance automatique de frameCamera.
+  // C'est le remède mesuré au « tableau plein cadre » de la classe : à 2 m le
+  // fond du cadre est un mur plat à 2,06 m, et le spawn ne peut pas reculer
+  // (les allées de 0,60 m ne laissent pas passer le gabarit) — seule la CAMÉRA
+  // peut prendre du champ.
+  let envFrameDist: number | null = null
   let envGeneration = 0
 
   // ── Cadrage utilisateur (pan/zoom/rotation) : persistance + reset ─────────
@@ -1351,7 +1364,12 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const head = vrm.humanoid.getNormalizedBoneNode('head')
     const headPos = new Vector3(0, h * (1.35 / 1.6), 0) // repli si modèle sans os "head"
     if (head) head.getWorldPosition(headPos)
-    const distance = Math.min(2.5 * h, Math.max(0.375 * h, headPos.y * 1.4))
+    // La distance : celle que le sidecar du décor demande (frameDistance), sinon
+    // l'automatique dérivée de la tête. Les deux passent sous le MÊME clamp de
+    // plausibilité en h — un modèle minuscule garde un cadrage à sa taille, quel
+    // que soit le décor derrière lui.
+    const desired = envFrameDist ?? headPos.y * 1.4
+    const distance = Math.min(2.5 * h, Math.max(0.375 * h, desired))
     frameDist = distance // AVANT applyEnvLimits : c'est le plancher du clamp de recul
     controls.target.set(headPos.x, headPos.y - 0.12, headPos.z)
     // Le `z` de la caméra est DEVANT la tête, pas à une abscisse absolue : sans
@@ -1450,6 +1468,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     }
     envMetrics = null
     sceneMap = null
+    envFrameDist = null
     // Le personnage rentre chez lui : la pièce où il s'était déplacé n'existe
     // plus, et le laisser à ses coordonnées d'avant le poserait au hasard dans
     // la suivante — ou dans le vide s'il n'y en a pas.
@@ -1463,6 +1482,12 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     envGroup.scale.setScalar(1)
     applyLightRegime()
     applyEnvLimits()
+    // Le décor emportait peut-être sa distance de cadrage : si la caméra tenait
+    // encore le cadrage par défaut (et lui seul — même garde que
+    // reframeAfterMixer, une vue posée ou touchée par l'utilisateur est
+    // sacrée), elle reprend celui du vide. Sous dispose(), lastFrame est déjà
+    // null : aucun recadrage fantôme.
+    if (defaultFramed && lastFrame) frameCamera(lastFrame.vrm, lastFrame.h)
   }
 
   /**
@@ -1537,8 +1562,15 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // personnage chez lui : sinon la carte du nouveau décor serait effacée
       // aussitôt posée.
       sceneMap = map
+      envFrameDist = placement.frameDistance ?? null
       applyLightRegime()
       applyEnvLimits()
+      // Le décor et le modèle arrivent par deux effets indépendants : si le
+      // cadrage par défaut est en place (et rien d'autre — même garde que
+      // reframeAfterMixer), il est recalculé AVEC le décor, donc avec sa
+      // frameDistance. Sans elle, ce recadrage rend la même caméra qu'avant,
+      // au millimètre : le cas courant ne bouge pas.
+      if (defaultFramed && lastFrame) frameCamera(lastFrame.vrm, lastFrame.h)
     } catch (e) {
       console.error('[env]', e)
       // Décor illisible : retirer celui d'AVANT. Sans ça, le bandeau d'erreur
