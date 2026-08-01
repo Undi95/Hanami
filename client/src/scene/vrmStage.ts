@@ -1562,6 +1562,15 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   /** Geste d'émotion : joué UNE fois, variante tirée à chaque déclenchement. */
   function playGesture(emotion: Emotion): void {
     if (!mixer) return
+    // ASSIS, LE CORPS A SES PROPRES GESTES. Le socle assis est une allure du
+    // domaine `world-` (world-sit-idle), donc `gaitAction` est posé : la garde
+    // ci-dessous refusait TOUT geste, et la scène vivante passe 18 à 25 % de
+    // son temps assise (mesuré sur les trois décors, 15 min de simulation
+    // chacun) — l'émotion n'y était portée que par le visage. Le
+    // comportement, lui, sait s'il est assis ET au repos, et il a la porte pour
+    // ça (le canal des gestes d'assise) : on la lui laisse ouvrir.
+    // Rendu false — debout, en marche, en pleine transition — rien ne change.
+    if (wander?.emote(emotion)) return
     // Un geste monte à poids 1 sur TOUT le squelette (three n'a ni couche ni
     // masque d'os) : déclenché pendant un pivot, une marche, une posture assise
     // ou une TRANSITION (départ, assise…), il casserait les jambes net — et un
@@ -1594,11 +1603,14 @@ export function createVrmStage(container: HTMLElement): VrmStage {
 
   /**
    * Acquiescement au clic sur le personnage : un hochement de tête, joué une
-   * fois comme un geste d'émotion. Mêmes gardes que playGesture — jamais
-   * par-dessus une allure, une posture assise ou une transition.
+   * fois comme un geste d'émotion. Mêmes gardes que playGesture — assis, c'est
+   * le comportement qui répond (hochements assis) ; debout, jamais par-dessus
+   * une allure, une posture ou une transition.
    */
   function playReaction(): void {
-    if (!mixer || gaitAction || onceThen) return
+    if (!mixer) return
+    if (wander?.react()) return
+    if (gaitAction || onceThen) return
     const action = pickAction(catalog?.reactions, lastReaction)
     if (!action) return
     lastReaction = action
