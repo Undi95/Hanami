@@ -1163,9 +1163,10 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     const cible = viser(e.clientX, e.clientY)
     if (!cible) return
     if (cible.quoi === 'avatar') {
-      // Les yeux suivent déjà la caméra : il acquiesce (debout, au repos) et se
-      // met bien en face quelques secondes. Assis ou en mouvement, les gardes de
-      // playReaction et poke laissent l'attention aux seuls yeux.
+      // Les yeux suivent déjà la caméra : il acquiesce et se met bien en face
+      // quelques secondes. Assis, l'acquiescement passe par le canal des gestes
+      // assis (wander.react → sit-ack/sit-nod) ; en mouvement ou en transition,
+      // les gardes de playReaction et poke laissent l'attention aux seuls yeux.
       //
       // AUCUN marqueur ici, et c'est délibéré : l'anneau est une marque AU SOL,
       // le poser sur un buste inventerait un second vocabulaire. Le personnage
