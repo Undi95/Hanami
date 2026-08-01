@@ -969,6 +969,15 @@ select {
   color: var(--danger);
 }
 
+/* Réplique en cours de lecture : le haut-parleur est devenu un carré « stop ».
+   Visible SANS survol (le sélecteur double l'emporte sur le `.msg-edit` de la
+   règle souris) — la voix parle maintenant, la couper ne doit pas demander de
+   retrouver la bulle. */
+.msg-edit.playing {
+  opacity: 1;
+  color: var(--accent);
+}
+
 .msg-edit svg {
   width: 11px;
   height: 11px;
@@ -991,7 +1000,9 @@ select {
   .msg:hover .msg-edit.pinned,
   .msg:focus-within .msg-edit.pinned,
   .msg:hover .msg-edit.armed,
-  .msg:focus-within .msg-edit.armed {
+  .msg:focus-within .msg-edit.armed,
+  .msg:hover .msg-edit.playing,
+  .msg:focus-within .msg-edit.playing {
     opacity: 1;
   }
 }

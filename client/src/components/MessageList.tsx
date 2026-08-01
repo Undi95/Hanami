@@ -44,6 +44,14 @@ interface Props {
   onPin: (ordinal: number | null) => void
   /** Rejoue la réplique à voix haute — null quand la synthèse vocale est coupée. */
   onReplay: ((msg: ChatMessage) => void) | null
+  /**
+   * `ts` du message dont la voix est en cours de lecture (null = silence) : son
+   * haut-parleur devient un carré « stop ». Le `ts` plutôt que l'ordinal — c'est
+   * le message qui parle, et il garde son identité même si le fil bouge.
+   */
+  ttsPlaying: string | null
+  /** Coupe la lecture en cours (clic sur le carré). */
+  onStopTts: () => void
 }
 
 // ── Recherche dans le fil ──────────────────────────────────────────────────
@@ -186,6 +194,8 @@ export default function MessageList({
   onReply,
   onPin,
   onReplay,
+  ttsPlaying,
+  onStopTts,
 }: Props) {
   const { lang, t } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -344,6 +354,8 @@ export default function MessageList({
         // arrivé n'a rien à faire à l'écran (cf. stripEmotionTags).
         const text = isUser ? item.msg.content : stripEmotionTags(item.msg.content, item.pending)
         const isEditing = ordinal !== null && editing === ordinal
+        // Cette réplique est-elle celle qu'on entend en ce moment ?
+        const speaking = ttsPlaying !== null && ttsPlaying === item.msg.ts
         return (
           <div
             className={`msg ${isUser ? 'user' : 'assistant'}`}
@@ -459,17 +471,28 @@ export default function MessageList({
                         <path d="M12 12v8" />
                       </svg>
                     </button>
+                    {/* Haut-parleur — et carré « stop » PENDANT la lecture : une
+                        voix qu'on lance doit pouvoir se couper au même endroit.
+                        La classe `playing` le montre sans attendre le survol
+                        (cf. styles.css) : chercher la bulle pour faire taire une
+                        réplique serait absurde. */}
                     {onReplay && item.msg.role === 'assistant' && (
                       <button
-                        className="msg-edit"
-                        title={t('replayTts')}
-                        aria-label={t('replayTts')}
-                        onClick={() => onReplay(item.msg)}
+                        className={speaking ? 'msg-edit playing' : 'msg-edit'}
+                        title={speaking ? t('stopTts') : t('replayTts')}
+                        aria-label={speaking ? t('stopTts') : t('replayTts')}
+                        onClick={() => (speaking ? onStopTts() : onReplay(item.msg))}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M10.5 5.5L6.5 9H4v6h2.5l4 3.5z" />
-                          <path d="M14.5 9.5a3.5 3.5 0 010 5" />
-                          <path d="M17 7a7 7 0 010 10" />
+                          {speaking ? (
+                            <rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none" />
+                          ) : (
+                            <>
+                              <path d="M10.5 5.5L6.5 9H4v6h2.5l4 3.5z" />
+                              <path d="M14.5 9.5a3.5 3.5 0 010 5" />
+                              <path d="M17 7a7 7 0 010 10" />
+                            </>
+                          )}
                         </svg>
                       </button>
                     )}

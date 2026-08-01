@@ -304,6 +304,7 @@ const FR = {
   ttsProbeVoices: 'Voix proposées par le serveur — cliquez pour remplir le champ Voix',
   ttsError: 'Synthèse vocale : {message}',
   replayTts: 'Réécouter',
+  stopTts: 'Couper la voix',
   sectionSpontaneous: 'Messages spontanés',
   spontaneousEnabled: 'Le personnage peut écrire de lui-même',
   spontaneousEnabledSub:
@@ -650,6 +651,7 @@ const EN: Record<Key, string> = {
   ttsProbeVoices: 'Voices offered by the server — click one to fill the Voice field',
   ttsError: 'Text-to-speech: {message}',
   replayTts: 'Listen again',
+  stopTts: 'Stop the voice',
   sectionSpontaneous: 'Spontaneous messages',
   spontaneousEnabled: 'The character can write on their own',
   spontaneousEnabledSub:

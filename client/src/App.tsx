@@ -157,6 +157,10 @@ function AppInner() {
   // Mode d'accueil « demander » : question posée une seule fois par ouverture de
   // chat vide (le personnage et le chat visés sont figés dans l'état).
   const [greetingAsk, setGreetingAsk] = useState<{ char: CharacterFull; chat: ChatMeta } | null>(null)
+  // Message dont la voix est en cours de lecture, désigné par son `ts` : l'icône
+  // haut-parleur de CETTE bulle devient un carré « stop ». null = silence — et
+  // c'est stopTts (ou la fin naturelle de l'audio) qui l'y ramène.
+  const [ttsPlaying, setTtsPlaying] = useState<string | null>(null)
 
   const sceneRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<VrmStage | null>(null)
@@ -287,6 +291,7 @@ function AppInner() {
   }
 
   function stopTts() {
+    setTtsPlaying(null)
     const audio = audioRef.current
     if (!audio) return
     audioRef.current = null
@@ -339,7 +344,13 @@ function AppInner() {
     }
   }
 
-  async function playTts(text: string) {
+  /**
+   * Lit une réplique à voix haute. `key` = le `ts` du message lu : il désigne la
+   * bulle dont l'icône doit devenir un carré « stop », et il se nettoie tout
+   * seul quand la lecture s'achève (ou échoue). Sans clé, la voix parle mais
+   * aucune bulle ne s'annonce parlante.
+   */
+  async function playTts(text: string, key?: string) {
     const clean = stripEmotionTags(text).trim()
     if (!clean) return
     const blob = await api.tts(clean)
@@ -358,13 +369,22 @@ function AppInner() {
     const end = () => {
       if (audioRef.current === audio) {
         audioRef.current = null
+        setTtsPlaying(null)
         stageRef.current?.setSpeaking(false)
       }
       URL.revokeObjectURL(url)
     }
     audio.onended = end
     audio.onerror = end
-    await audio.play()
+    setTtsPlaying(key ?? null)
+    try {
+      await audio.play()
+    } catch (e) {
+      // Lecture refusée (autoplay bloqué, format illisible) : aucune bulle ne
+      // doit rester en « stop » — l'erreur, elle, remonte à l'appelant.
+      end()
+      throw e
+    }
   }
 
   // ── Scène 3D (import lazy, contrat scene/types.ts) ───────────────────────
@@ -1027,7 +1047,7 @@ function AppInner() {
             const toSpeak = ev.message.content.slice(ttsFromIndex)
             const ttsWillSpeak = settings?.ttsEnabled === true && stripEmotionTags(toSpeak).trim().length > 0
             if (ttsWillSpeak) {
-              playTts(toSpeak).catch((e) => {
+              playTts(toSpeak, ev.message.ts).catch((e) => {
                 setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }])
               })
             } else if (settings?.notifySound) {
@@ -1418,10 +1438,12 @@ function AppInner() {
                   else setFeed((f) => [...f, { kind: 'error', text: api.errorMessage(e) }])
                 })
             }}
+            ttsPlaying={ttsPlaying}
+            onStopTts={stopTts}
             onReplay={
               settings?.ttsEnabled
                 ? (msg) => {
-                    playTts(msg.content).catch((e) =>
+                    playTts(msg.content, msg.ts).catch((e) =>
                       setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }]),
                     )
                   }
@@ -1460,10 +1482,16 @@ function AppInner() {
                 {/* En VN les bulles sont hors d'atteinte : le rejeu vit ici. En
                     desktop, l'icône haut-parleur de la bulle s'en charge déjà. */}
                 {vnMode && canContinue && settings?.ttsEnabled && lastFeedMsg && (
+                  // Pendant la lecture, le même bouton la coupe : en VN il n'y a
+                  // pas de bulle à survoler, c'est la seule prise sur la voix.
                   <button
                     className="btn small"
                     onClick={() => {
-                      playTts(lastFeedMsg.msg.content).catch((e) =>
+                      if (ttsPlaying !== null && ttsPlaying === lastFeedMsg.msg.ts) {
+                        stopTts()
+                        return
+                      }
+                      playTts(lastFeedMsg.msg.content, lastFeedMsg.msg.ts).catch((e) =>
                         setFeed((f) => [
                           ...f,
                           { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) },
@@ -1471,7 +1499,7 @@ function AppInner() {
                       )
                     }}
                   >
-                    {t('replayTts')}
+                    {ttsPlaying !== null && ttsPlaying === lastFeedMsg.msg.ts ? t('stopTts') : t('replayTts')}
                   </button>
                 )}
               </>
