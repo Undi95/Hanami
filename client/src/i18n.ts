@@ -56,6 +56,11 @@ const FR = {
   sceneLiveNoMobile:
     'Réservé au grand écran : sur un écran étroit la scène n’est qu’un bandeau, l’avatar reste posé devant le décor.',
   sceneLiveNoVrma: 'Demande les animations gestuelles : sans les fichiers .vrma, il n’y a aucun pas à jouer.',
+  // Astuce montrée UNE SEULE FOIS, en surimpression basse de la scène, à la
+  // première scène vivante réellement en service (préférence hint3dSeen). Rien
+  // ne signalait ces trois gestes : ils s'apprenaient par accident, ou pas.
+  scene3dHint:
+    'Cliquez le sol pour l’y envoyer, un siège pour l’y asseoir, le personnage pour attirer son attention.',
 
   // ── Coquille de l’application ────────────────────────────────────────────
   collapseChat: 'Replier le chat pour voir l’avatar',
@@ -411,6 +416,8 @@ const EN: Record<Key, string> = {
   sceneLiveNoMobile:
     'Large screens only: on a narrow screen the scene is just a strip, and the avatar stays in front of the environment.',
   sceneLiveNoVrma: 'Needs gesture animations: without the .vrma files there is no step to play.',
+  scene3dHint:
+    'Click the floor to send it there, a seat to sit it down, the character to get its attention.',
 
   // ── App shell ────────────────────────────────────────────────────────────
   collapseChat: 'Collapse the chat to see the avatar',

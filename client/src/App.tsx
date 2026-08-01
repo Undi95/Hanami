@@ -66,6 +66,11 @@ const VRM_RETRY_DELAYS_MS: readonly number[] = [1000, 3000]
 // dessous, c'est une feuille basse et il ne reste qu'un bandeau. La scène vivante
 // (déplacement dans le décor) est réservée à ce cas-là — décision du propriétaire.
 const WIDE_SCREEN_QUERY = '(min-width: 900px)'
+// Astuce des interactions 3D : durée de vie totale à l'écran, fondus compris.
+// DOIT rester la durée de l'animation `scene-hint` de styles.css (8,5 s), au
+// tour de roue près — c'est le CSS qui fait le fondu, ce délai ne fait que
+// retirer du DOM une ligne déjà transparente.
+const HINT_3D_MS = 8600
 
 /** Extrait d'un message à citer : une seule ligne, tags d'émotion retirés, tronquée. */
 function excerpt(text: string, max: number): string {
@@ -124,6 +129,9 @@ function AppInner() {
   const [vrmaEnabled, setVrmaEnabled] = useState(() => getPref('vrmaEnabled') !== false)
   // Scène vivante : OPT-IN STRICT (`=== true`), contrairement aux deux au-dessus.
   const [interactive, setInteractive] = useState(() => getPref('interactive') === true)
+  // L'astuce des interactions 3D est-elle à l'écran ? Vraie au plus une fois par
+  // installation (cf. l'effet qui la pose, et la préférence hint3dSeen).
+  const [hint3d, setHint3d] = useState(false)
   // Grand écran ? C'est la MÊME borne que le CSS (styles.css, @media 900px), celle
   // qui décide si le chat est une colonne ou une feuille basse. Décision du
   // propriétaire : pas d'interaction 3D sur mobile — l'interrupteur reste visible
@@ -434,9 +442,35 @@ function AppInner() {
   // Scène vivante : la préférence ET la place à l'écran. Les animations
   // gestuelles en sont le socle (sans .vrma, aucun clip de marche) — les couper
   // coupe donc aussi la scène vivante, sans rien effacer.
+  const sceneLive = interactive && wideScreen && vrmaEnabled
   useEffect(() => {
-    stageRef.current?.setInteractive(interactive && wideScreen && vrmaEnabled)
-  }, [interactive, wideScreen, vrmaEnabled, stageReady])
+    stageRef.current?.setInteractive(sceneLive)
+  }, [sceneLive, stageReady])
+
+  // Astuce des interactions 3D — la seule chose qui dise qu'on peut cliquer la
+  // pièce. Montrée UNE FOIS par installation, jamais redemandée, jamais
+  // réglable : c'est un apprentissage, pas une option.
+  //
+  // Elle attend que la scène vivante soit RÉELLEMENT en service — préférence,
+  // grand écran, animations — ET qu'il y ait une pièce autour du personnage.
+  // Sans décor 3D, il n'y a ni sol ni siège à cliquer : l'astuce mentirait, et
+  // elle serait brûlée pour de bon.
+  //
+  // Ordre de lecture des préférences : `interactive` ne peut devenir vrai que
+  // par le même instantané (cache local ou serveur) qui porte `hint3dSeen` —
+  // c'est ce qui garantit qu'un serveur qui a déjà vu l'astuce ne la rejoue pas
+  // pendant le vol du GET /api/ui.
+  useEffect(() => {
+    if (!sceneLive || !stageReady || vrmError) return
+    if (!character?.vrm || !character.environment || !env3d) return
+    if (getPref('hint3dSeen') === true) return
+    // Écrite DÈS L'AFFICHAGE et non à la fin : « ne revient jamais » doit tenir
+    // même si l'onglet est fermé pendant les huit secondes.
+    setPref({ hint3dSeen: true })
+    setHint3d(true)
+    const timer = window.setTimeout(() => setHint3d(false), HINT_3D_MS)
+    return () => window.clearTimeout(timer)
+  }, [sceneLive, stageReady, vrmError, character?.vrm, character?.environment, env3d])
 
   // Changement de personnage (ou scène prête) → charger son modèle VRM, puis
   // réappliquer le cadrage caméra choisi pour lui DANS LE MODE courant.
@@ -1163,6 +1197,17 @@ function AppInner() {
           alt=""
           aria-hidden="true"
         />
+      )}
+
+      {/* ASTUCE DES INTERACTIONS 3D — une ligne, une fois, puis plus jamais.
+          Rendue FRÈRE de .scene comme le reste des surimpressions, inerte au
+          pointeur (le clic qu'elle explique doit passer au travers) et annoncée
+          en `status` : elle apparaît sans que rien n'ait été demandé, une
+          synthèse vocale doit pouvoir la lire sans qu'elle vole le focus. */}
+      {hint3d && (
+        <p className={`scene-hint${vnMode ? ' vn' : ''}`} role="status">
+          {t('scene3dHint')}
+        </p>
       )}
 
       {/* RÉINITIALISER L'AFFICHAGE — un seul bouton pour tout (doctrine : pas un

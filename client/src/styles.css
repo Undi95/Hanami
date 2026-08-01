@@ -318,6 +318,68 @@ select {
   }
 }
 
+/* ── Astuce des interactions 3D (une seule fois) ──────────────────────── */
+
+/* Une ligne posée au bas de la scène, à la première scène vivante en service,
+   puis plus jamais (préférence serveur hint3dSeen). Rien ne signalait qu'on
+   pouvait cliquer le sol, un siège ou le personnage : ces gestes s'apprenaient
+   par accident, ou pas du tout.
+
+   Une PHRASE, pas un panneau : ni cadre, ni icône, ni bouton « compris » — elle
+   arrive, se lit, s'en va. Inerte (pointer-events: none) : elle traverse la
+   scène, un clic pendant qu'elle est là fait ce qu'elle explique.
+
+   L'astuce ne peut apparaître que sur grand écran, la scène vivante y étant
+   réservée : aucune variante étroite n'est écrite ici. */
+.scene-hint {
+  position: fixed;
+  z-index: 6;
+  bottom: 18px;
+  left: 0;
+  /* Centrée dans la bande laissée par la colonne de chat, et jamais sous le
+     bouton de recadrage (30 px au coin, plus sa marge) : le retrait latéral
+     tient les deux à distance même sur la fenêtre la plus étroite qui puisse
+     l'afficher (900 px). */
+  right: var(--chat-col-w);
+  padding: 0 76px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: center;
+  text-wrap: balance;
+  pointer-events: none;
+  /* Le texte est clair et la scène peut l'être aussi (une chambre en plein
+     jour) : l'ombre porte la lisibilité sans imposer de pastille opaque. */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75), 0 0 10px rgba(0, 0, 0, 0.5);
+  animation: scene-hint 8.5s ease forwards;
+}
+
+/* Mode visual novel : la boîte de dialogue occupe le bas de l'écran et la
+   colonne de chat n'existe plus — l'astuce monte en haut, où seul le
+   quick-menu d'icônes vit, dans le coin droit. */
+.scene-hint.vn {
+  top: 18px;
+  bottom: auto;
+  right: 0;
+}
+
+/* Fondu d'entrée court, longue tenue, sortie douce. Aucun mouvement : une
+   phrase qui glisse attirerait l'œil, et c'est le personnage qu'on regarde. */
+@keyframes scene-hint {
+  0% {
+    opacity: 0;
+  }
+  7% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* ── Portrait 2D (personnage sans modèle VRM) ─────────────────────────── */
 
 /* Image de la card importée posée dans la scène, à la place du canvas 3D vide.

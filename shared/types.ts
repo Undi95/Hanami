@@ -168,6 +168,16 @@ export interface UiPrefs {
   // client la conditionne à la taille de l'écran) — la préférence, elle, suit
   // l'utilisateur du PC au téléphone comme toutes les autres.
   interactive?: boolean
+  // L'astuce des interactions 3D a-t-elle déjà été montrée ? Écrite UNE FOIS,
+  // à la première scène vivante réellement en service, et jamais relue autrement
+  // que pour se taire. Clé absente = elle reste à montrer.
+  //
+  // Ici et non dans le localStorage, pour la raison qui vaut pour tout ce
+  // fichier : l'utilisateur est seul sur son serveur, et une astuce lue au
+  // bureau n'a pas à se rejouer sur son téléphone. C'est aussi la seule
+  // préférence que l'app s'écrit à ELLE-MÊME — l'utilisateur ne la règle nulle
+  // part. Pour la revoir : supprimer la clé de data/ui.json.
+  hint3dSeen?: boolean
   // Tailles réglées à la poignée (pixels). Clé ABSENTE = taille par défaut de
   // styles.css : l'utilisateur qui n'y touche pas n'a rien dans ui.json, et un
   // double-clic sur la poignée efface la clé (retour au défaut).
