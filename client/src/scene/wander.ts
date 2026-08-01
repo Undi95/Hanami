@@ -372,6 +372,17 @@ const SIT_EMOTES: Record<Emotion, readonly string[]> = {
 const SIT_REACTIONS: readonly string[] = ['sit-ack', 'sit-nod']
 /** Rôle de l'anti-répétition pour le clic. Le `@` le met hors d'atteinte d'une émotion. */
 const SIT_ROLE_CLICK = '@clic'
+/**
+ * Gestes d'assise AMBIANTS — regarder autour (sit-look), se replacer
+ * (sit-shift). Tirés par pickSeatClip comme les émotions : le tirage 50/50
+ * indépendant qui précédait rejouait le même geste une fois sur deux (52 %
+ * mesurés sur 500 tirages au banc), et deux sit-look d'affilée lisent comme un
+ * tic. Au passage, une clef au fichier manquant ne fait plus sauter le tour :
+ * l'ancien tirage pouvait la choisir, puis `has` refusait, et rien ne jouait.
+ */
+const SIT_FIDGETS: readonly string[] = ['sit-look', 'sit-shift']
+/** Rôle de l'anti-répétition pour la bougeotte assise — même règle que le clic. */
+const SIT_ROLE_FIDGET = '@bougeotte'
 
 // ── Déambulation ────────────────────────────────────────────────────────────
 // L'utilisateur discute avec quelqu'un, pas avec un personnage agité : ces
@@ -1471,12 +1482,13 @@ export function createWander(host: WanderHost): Wander {
         }
         if (fidgetT <= 0) {
           fidgetT = rand(FIDGET_MIN_S, FIDGET_MAX_S)
-          const gesture = Math.random() < 0.5 ? 'sit-look' : 'sit-shift'
           // La fin du geste rend l'écran à sit-idle (son `then`) : le livre des
           // socles doit le savoir, sinon une parole en cours de geste croirait
-          // sit-talking encore en place.
-          if (host.has(gesture) && seatBase === 'sit-idle') {
-            host.once(gesture, BASE_SWAP_FADE, 'sit-idle', BASE_SWAP_FADE)
+          // sit-talking encore en place. Le socle est vérifié AVANT le tirage —
+          // un tirage sans geste joué fausserait la mémoire du rôle.
+          if (seatBase === 'sit-idle') {
+            const gesture = pickSeatClip(SIT_ROLE_FIDGET, SIT_FIDGETS)
+            if (gesture) host.once(gesture, BASE_SWAP_FADE, 'sit-idle', BASE_SWAP_FADE)
           }
         }
         break
