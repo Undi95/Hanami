@@ -57,7 +57,7 @@ import { buildEnvBvh, raycastFirst } from './bvh'
 import type { EnvBvh } from './bvh'
 import { createGaze } from './gaze'
 import { applyRelaxedHands } from './handPoses'
-import { BASE_SWAP, GESTURE_IN, GESTURE_OUT, NO_FADE } from './fades'
+import { BASE_SWAP, fadeCurve, GESTURE_IN, GESTURE_OUT, NO_FADE } from './fades'
 import type { Fade } from './fades'
 import { fetchSceneMap } from './sceneMap'
 import type { SceneMap, Seat } from './sceneMap'
@@ -1545,17 +1545,26 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   /**
    * Avance le fondu en cours d'une image (appelé JUSTE AVANT mixer.update).
    *
-   * La COURBE du fondu (cf. fades.ts) n'est pas encore appliquée ici : cette
-   * étape ne porte que les DURÉES d'Overte, pour que la mesure les isole. Le
-   * `fadeCurve` arrive à l'étape suivante — et il ne touchera pas l'invariant :
-   * `fadeWeights` rend une somme de 1 pour N'IMPORTE QUEL `p` de [0, 1], donc
-   * courber `p` ne peut pas la faire bouger.
+   * LA COURBE NE TOUCHE QUE `p`, et c'est tout l'intérêt : `fadeWeights` rend
+   * une somme de poids qui vaut `p + (1 − p)·Σfrom`, donc exactement 1 pour
+   * N'IMPORTE QUEL `p` de [0, 1] dès que Σfrom vaut 1. Courber `p` ne peut donc
+   * pas faire bouger l'invariant de la section — il n'y a rien à re-vérifier, la
+   * démonstration de fadeWeights couvre déjà le cas.
+   *
+   * L'ordre de la boucle de rendu ne change pas non plus : base → fondu →
+   * mixer → re-capture. Les poids de CETTE image sont posés avant que le mixer
+   * n'accumule, exactement comme avant.
+   *
+   * `easeInOutQuad` part et arrive à vitesse nulle : c'est ce qui supprime la
+   * marche de vitesse angulaire au début et à la fin du fondu — l'à-coup. Les
+   * jonctions de LOCOMOTION restent linéaires (leur `ease` est false), parce
+   * qu'Overte les a laissées linéaires et que la mesure lui donne raison.
    */
   function advanceFade(delta: number): void {
     if (!fade) return
     fade.elapsed += delta
     const p = Math.min(1, fade.elapsed / fade.spec.s)
-    poseWeights(fadeWeights(fade.from, fade.to, p))
+    poseWeights(fadeWeights(fade.from, fade.to, fadeCurve(fade.spec, p)))
     if (p >= 1) fade = null
   }
 
