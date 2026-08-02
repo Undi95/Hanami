@@ -3649,7 +3649,14 @@ a.credit-link {
      la DDLC — quatre ombres serrées qui détourent chaque lettre + une portée
      douce : le texte se pose sur la scène. */
   font-family: 'Mulish', 'Segoe UI', Verdana, sans-serif;
-  font-size: 17px;
+  /* Taille FLUIDE : 17 px conviennent à une boîte de 900 px, pas à un téléphone
+     où la boîte fait 347 px — cinq mots centrés par ligne, l'effet « affiche ».
+     Pente calibrée sur deux points : 14.5 px à 375 px d'écran, 17 px à 768 px
+     ((17 − 14.5) / (768 − 375) = 0.64vw, ordonnée 12.1 px), bornée aux deux
+     bouts. Le corps suit l'écran, pas la boîte : sur mobile la boîte EST
+     l'écran (100 % − 28 px), et sur desktop le plafond de 17 px vaut pour
+     toutes les largeurs de boîte. */
+  font-size: clamp(14.5px, 12.1px + 0.64vw, 17px);
   font-weight: 500;
   letter-spacing: 0.012em;
   text-shadow:
