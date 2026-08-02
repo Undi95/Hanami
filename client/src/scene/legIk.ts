@@ -499,13 +499,23 @@ function solveLeg(
  * décroît linéairement jusqu'à 0 à l'extension maximale — le mélange se fait
  * vers la pose du clip, dans `apply`.
  *
- * La BANDE vaut 10 % de la longueur de jambe (6,3 cm sur Sakura), et ce n'est
- * pas un réglage libre : elle doit laisser l'autorité PLEINE sur les assises que
- * le fichier promet d'adapter. Mesuré sur les rigs et les décors livrés, la
- * portée d'une vraie chaise vaut 0,72 à 0,89 (chaises d'anime-classroom à
- * 0,426 m pour Sakura : 0,85 ; chaise 0,45 m et lit 0,51 m pour ayaka : 0,77 et
- * 0,85) — toutes sous 0,897, donc toutes à autorité 1, correction inchangée au
- * bit près. La bande ne mord que là où le solveur n'avait plus rien à dire.
+ * LA BANDE vaut 10 % de la longueur de jambe, et ce n'est pas un réglage libre.
+ * Balayée à 0 (coupure franche), 0,05, 0,10 et 0,20 sur quatre morphologies
+ * (hanches 0,755 à 1,070 m) × sept hauteurs d'assise, en relevant les DEUX
+ * grandeurs qui tirent en sens contraire — le pied qui flotte (ce que la bande
+ * coûte) et l'écart entre les deux jambes (ce qu'elle rapporte) :
+ *
+ *  · sous une portée de 0,897, l'autorité vaut 1 : la sortie est identique à la
+ *    coupure franche, AU BIT PRÈS. Ça couvre les chaises des décors livrés
+ *    (portée 0,69 à 0,95 selon le modèle) — la bande ne leur retire rien ;
+ *  · au-delà d'une portée de 1, la correction ne RAPPORTE rien : même à pleine
+ *    autorité, le pied reste 26 à 33 cm au-dessus du sol (mesuré, Sakura et Holo
+ *    sur les pupitres) — il n'y arrive pas, il ne fait que détruire l'assise.
+ *    C'est exactement ce que la bande retire ;
+ *  · entre les deux, elle échange au pire 1,8 cm de pied qui flotte contre 1 à
+ *    5 cm d'écart entre les jambes ;
+ *  · à 0,20 elle mordrait pour de bon : 8,1 cm de pied en l'air pour Sakura sur
+ *    une assise à 0,55 m, 1,1 cm sur les chaises de japanese-classroom. Trop.
  */
 const REACH_BAND = 0.1
 
