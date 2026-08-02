@@ -50,7 +50,7 @@ import { createWander } from './wander'
 import type { Wander, WanderHost } from './wander'
 import { createLegIk } from './legIk'
 import type { FootMode, LegIk } from './legIk'
-import { createJointLimits } from './jointLimits'
+import { createJointLimits, normalizedFacesPlusZ } from './jointLimits'
 import type { JointLimits } from './jointLimits'
 import { CriticallyDampedSpringPoseHelper } from './overteMath'
 import { buildEnvBvh, raycastFirst } from './bvh'
@@ -64,7 +64,10 @@ import type { SceneMap, Seat } from './sceneMap'
 import { mergeEnvironment } from './envMerge'
 import { createClickMarks } from './clickMark'
 
-// Pose de repos (anti T-pose : les VRM chargent bras en croix) — rotation Z par os.
+// Pose de repos (anti T-pose : les VRM chargent bras en croix) — rotation Z par
+// os, ÉCRITE DANS LE REPÈRE DES OS NORMALISÉS QUI REGARDE LE −Z. C'est celui de
+// 89 des 95 modèles du dossier (tous les 0.x) — les angles ont été réglés là.
+// L'autre repère existe et il y renverse le signe : cf. applyRestPose.
 const REST_POSE_Z: ReadonlyArray<readonly [VRMHumanBoneName, number]> = [
   ['leftUpperArm', 1.25],
   ['rightUpperArm', -1.25],
@@ -1463,9 +1466,21 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // Pose anti T-pose, puis mémorisation de la base (Euler) par os : l'idle
   // ajoutera ses offsets PAR-DESSUS ces valeurs à chaque frame.
   function applyRestPose(vrm: VRM): void {
+    // Le repère des os normalisés d'un modèle regarde le +Z ou le −Z — MESURÉ
+    // (cf. normalizedFacesPlusZ), c'est le même piège que la table
+    // d'articulations (MirroredConstraint) et que la pose des doigts. REST_POSE_Z
+    // est écrite pour le −Z : appliquée telle quelle dans l'autre repère, elle
+    // LÈVE les bras au lieu de les baisser (mesuré : la main gagne 42 à 46 cm
+    // sur les 6 modèles concernés du dossier, tous en 1.x, contre 25 à 52 cm
+    // perdus sur les 89 autres). Le remède est le demi-tour autour de Y des deux
+    // autres, et sur une rotation PURE autour de Z il se réduit exactement à un
+    // changement de signe — le demi-tour envoie +Z sur −Z, donc
+    // HT·Rz(θ)·HT⁻¹ = Rz(−θ). L'Euler reste pur (0, 0, ±θ), ce dont dépend
+    // l'idle, qui ajoute ses offsets sur `base.x` et `base.z`.
+    const sens = normalizedFacesPlusZ(vrm) ? -1 : 1
     for (const [name, z] of REST_POSE_Z) {
       const node = vrm.humanoid.getNormalizedBoneNode(name)
-      if (node) node.rotation.z = z
+      if (node) node.rotation.z = sens * z
     }
     // Les DOIGTS de la même façon, et pour la même raison : un VRM charge la
     // main tendue, doigts en éventail — un mannequin de vitrine. La pose de
