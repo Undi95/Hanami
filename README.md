@@ -298,7 +298,10 @@ no licence obliges us to name**, because a credit that is hidden honours nobody.
   times the acceptance threshold. The converter and its plan ship with the clips
   ([`scripts/convert-rocketbox.mjs`](scripts/convert-rocketbox.mjs)) along with the pinned source
   commit: the 38 clips can be rebuilt byte for byte. MIT requires the copyright notice to accompany
-  any redistribution — it is in [`vrma/NOTICE.md`](vrma/NOTICE.md) §4.
+  any redistribution — it is in [`vrma/NOTICE.md`](vrma/NOTICE.md) §4. A good-faith request to
+  confirm that the animations fall under the repository's MIT licence was filed upstream
+  ([issue #24](https://github.com/microsoft/Microsoft-Rocketbox/issues/24)) and is still open; it
+  is kept here as a record, not as a condition of the licence.
 - **[Quaternius](https://quaternius.com)**, *Universal Animation Library* — *CC0 1.0*, public
   domain, **no attribution required**: we give it anyway. Two clips, the one family Overte does not
   have: sitting down and standing up. Both ends of each were anchored onto the neighbouring poses so

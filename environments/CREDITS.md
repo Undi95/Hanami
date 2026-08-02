@@ -227,8 +227,8 @@ contains one decorative animation ("Take 001").
 | Fichier / File | Faces | Sommets / Verts | Taille / Size | Échelle / Scale | Pièce mesurée / Measured room | Praticable / Walkable | Assises / Seats |
 |---|---|---|---|---|---|---|---|
 | `anime-classroom.glb` | 217 314 | 111 826 | 8,5 Mo | ×0,31 | 6,30 × 7,60 m, plafond 3,13 m | 31,15 m² | 55 |
-| `cozy-loft-room.glb` | 74 904 | 40 230 | 5,5 Mo | ×0,031 | 2,60 × 3,00 m, plafond 2,98 m | 3,34 m² | 6 |
-| `rustic-bedroom.glb` | 21 828 | 12 213 | 3,9 Mo | ×1,1 | 2,70 × 3,00 m, murs 2,42 m | 1,67 m² | 5 |
+| `cozy-loft-room.glb` | 74 904 | 40 230 | 5,3 Mo | ×0,031 | 2,60 × 3,00 m, plafond 2,98 m | 3,34 m² | 6 |
+| `rustic-bedroom.glb` | 21 828 | 12 213 | 3,7 Mo | ×1,1 | 2,70 × 3,00 m, murs 2,42 m | 1,67 m² | 5 |
 | `lowpoly-restaurant.glb` | 64 750 | 35 698 | 4,5 Mo | ×1 | 7,80 × 14,80 m, plafond 3,33 m | 46,21 m² | 29 |
 | `small-cafe.glb` | 62 260 | 31 420 | 5,4 Mo | ×0,87 | 5,70 × 16,30 m, plafond 2,67 m | 51,35 m² | 21 |
 | `japanese-classroom.glb` | 326 040 | 169 861 | 19,0 Mo | ×1 | 12,50 × 8,40 m, plafond 3,17 m | 75,13 m² | 62 |

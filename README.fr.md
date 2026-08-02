@@ -312,7 +312,10 @@ qu'aucune licence n'oblige à citer**, parce qu'un crédit caché n'honore perso
   fois et demie le seuil d'acceptation. Le convertisseur et son plan sont livrés
   ([`scripts/convert-rocketbox.mjs`](scripts/convert-rocketbox.mjs)), avec le commit source épinglé :
   les 38 clips se refabriquent à l'octet près. La MIT exige que l'avis de copyright accompagne toute
-  redistribution — il est dans [`vrma/NOTICE.md`](vrma/NOTICE.md) §4.
+  redistribution — il est dans [`vrma/NOTICE.md`](vrma/NOTICE.md) §4. Une demande de confirmation
+  que les animations relèvent bien de la MIT du dépôt a été posée en amont
+  ([issue #24](https://github.com/microsoft/Microsoft-Rocketbox/issues/24)) et reste ouverte : elle
+  est conservée comme trace de bonne foi, pas comme une condition de la licence.
 - **[Quaternius](https://quaternius.com)**, *Universal Animation Library* — *CC0 1.0*, domaine
   public, **aucune attribution requise** : on la donne quand même. Deux clips, la seule famille
   qu'Overte n'a pas : s'asseoir et se lever. Leurs deux extrémités ont été ancrées sur les poses
