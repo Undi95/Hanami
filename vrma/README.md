@@ -335,7 +335,8 @@ en activant un.
 
 ## La semelle sous le sol : ce que ces fichiers ne corrigent pas, et pourquoi
 
-Un banc de diagnostic mesure, sur `reference.vrm` (hanches 0,755 m), que
+Un banc de diagnostic mesure, sur l'étalon du projet (un chibi VRM 0.x de
+0,755 m de hanches), que
 **55 clips enfoncent la semelle sous le plancher** : toute la famille assise de 8,5
 à 10,4 cm, les pas chassés et les courses de 5 à 10, la marche de 2,5 à 5,2. Le
 réflexe est de remonter la piste verticale du bassin dans les `.vrma`. **Ce serait
@@ -888,7 +889,8 @@ enabling one.
 
 ## The sole under the floor: what these files do NOT fix, and why
 
-A diagnostic bench measures, on `reference.vrm` (hips 0.755 m), that **55 clips
+A diagnostic bench measures, on the project's reference model (a chibi VRM 0.x
+with 0.755 m hips), that **55 clips
 sink the sole below the floor**: the whole seated family by 8.5 to 10.4 cm, the
 strafes and runs by 5 to 10, the walks by 2.5 to 5.2. The reflex is to raise the
 hips translation track inside the `.vrma`. **That would be wrong, three times over.**

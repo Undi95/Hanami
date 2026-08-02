@@ -27,11 +27,13 @@ Les résultats se regardent dans l'onglet **Diagnostic** du banc d'essai
 (`devtools/LANCER-LE-BANC.cmd`, ou `node devtools/anim-lab/serve.mjs`), ou
 directement dans `devtools/diagnostic-out/RAPPORT.md`, lisible sans navigateur.
 
-Modèle épinglé par défaut : **`reference.vrm`** (hanches 0,755 m).
+Modèle épinglé par défaut : **`vrm/reference.vrm`** — l'étalon du projet, un
+chibi VRM 0.x de 0,755 m de hanches. Posez le vôtre sous ce nom (copie ou lien) ;
+sans lui l'outil s'arrête en le disant. Voir `devtools/LISEZMOI.md`.
 Toute mesure ne se compare qu'à modèle égal — il est écrit dans chaque fiche.
 `--modele=<nom>` : nom **exact** d'abord ; une sous-chaîne ambiguë est refusée
-avec la liste des candidats (« sakura » attrapait un autre modèle dont le nom la contient
-selon l'ordre du disque).
+avec la liste des candidats (une sous-chaîne courte attrapait un autre modèle
+dont le nom la contient, selon l'ordre du disque).
 
 ## Les pièges déjà payés (ne pas les réintroduire)
 

@@ -20,7 +20,7 @@ node $RENDU phase    world-walk world-walk-fast
 node $RENDU liste                                # clips et modèles dispo
 ```
 
-Options : `--modele=<nom exact|chemin>` (défaut EtalonChibi ; ambiguïté refusée) · `--vue=face|profil|dessus|toutes`
+Options : `--modele=<nom exact|chemin>` (défaut `vrm/reference.vrm`, l'étalon ; ambiguïté refusée) · `--vue=face|profil|dessus|toutes`
 · `--poses=N` (12) · `--colonnes=N` (4) · `--case=LxH` (300x400) · `--cadre=corps`
 (désactive le gros plan auto) · `--maillage=0` (squelette seul, ~5× plus rapide)
 · `--pelure=0` · `--fps=N` (60) · `--sortie=<dossier|fichier>` · `--prefixe=<txt>`.

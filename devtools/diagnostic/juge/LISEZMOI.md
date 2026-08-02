@@ -40,13 +40,14 @@ rig ?* Il rejoue le clip sur tous les `.vrm` du dossier et marque chaque critèr
 ou « verdict VARIABLE selon le modèle ». Un défaut qui tient sur tous les modèles est un défaut du
 clip.
 
-⚠ **Le modèle par défaut est une cible mouvante.** Sans `--vrm=`, l'outil prend le PREMIER `.vrm`
-du dossier par ordre alphabétique — et le dossier vit : il est passé de 12 à 88 modèles EN COURS de
-mission, et l'arrivée d'un modèle dont le nom passait devant a changé
-le défaut sous nos pieds, décalant tous les cm-adulte d'une exécution à l'autre (27,8 → 30,4 cm
-d'écartement pour le même `idle`). Rien de faux — chaque fiche imprime son modèle, le JSON le
-consigne dans `meta.rig` — mais **deux exécutions ne se comparent qu'à modèle égal** : pour toute
-mesure de référence, passer `--vrm=rig-temoin-hist` (le modèle des résultats committés ici).
+⚠ **Le modèle par défaut a été une cible mouvante — il ne l'est plus.** L'outil prenait le PREMIER
+`.vrm` du dossier par ordre alphabétique, et le dossier vit : il est passé de 12 à 88 modèles EN
+COURS de mission, et l'arrivée d'un modèle dont le nom passait devant a changé le défaut sous nos
+pieds, décalant tous les cm-adulte d'une exécution à l'autre (27,8 → 30,4 cm d'écartement pour le
+même `idle`). Rien de faux — chaque fiche imprime son modèle, le JSON le consigne dans `meta.rig` —
+mais **deux exécutions ne se comparent qu'à modèle égal**. Le défaut est donc désormais un NOM fixe,
+`vrm/reference.vrm`, que l'ordre du disque ne peut plus déplacer : c'est l'étalon, celui des
+résultats committés ici (cf. `devtools/LISEZMOI.md`).
 
 ## La sortie
 
@@ -130,7 +131,7 @@ Ces pièges sont documentés dans le code, à l'endroit exact où ils mordent. I
 tous produisaient des chiffres **crédibles et faux**.
 
 - **L'épaule, c'est `upperArm`, pas `shoulder`.** Dans un VRM, `shoulder` est la racine de la
-  clavicule, collée au rachis : sur `reference.vrm` les deux `shoulder` ne sont distantes que de
+  clavicule, collée au rachis : sur l'étalon (chibi 0,755 m) les deux `shoulder` ne sont distantes que de
   **4 cm**. Toute la torsion du tronc se serait appuyée sur du bruit.
 - **Le sol n'est pas l'os le plus bas.** La cheville est à 9,4 cm du sol et l'os des orteils à 3,5 cm.
   Mesurer la hauteur du pied sur les os faisait « flotter » de 9 cm un pied posé talon au sol, et
@@ -199,9 +200,9 @@ tous produisaient des chiffres **crédibles et faux**.
   hanches basses arrivés depuis). Il dépend de la largeur de bassin du rig, que la hauteur de hanche
   ne normalise pas. À lire comme « à la limite haute », pas comme un défaut ferme.
 - **Trois modèles sont HORS-GABARIT anthropométrique** et les fourchettes du juge ne leur sont pas
-  opposables : `5661047213623940145.vrm` (chibi, hanches 0,328 m — écartement jusqu'à 37 cm-adulte),
-  une mascotte non humanoïde (rig mascotte 0,547 m, SANS os `neck`, jambes 0,68 × hanches —
-  traverse son tronc en course, charnière de genou jusqu'à 50°), `7312138852387622699.vrm` (0,628 m).
+  opposables : modele-01 (chibi, hanches 0,328 m — écartement jusqu'à 37 cm-adulte),
+  modele-02 (mascotte non humanoïde, 0,547 m, SANS os `neck`, jambes 0,68 × hanches —
+  traverse son tronc en course, charnière de genou jusqu'à 50°), modele-03 (0,628 m).
   Leurs « défauts » sur ces critères sont des proportions de modèle, pas des défauts de clips — à
   étiqueter, jamais à corriger (liste détaillée : `devtools/anim-lab/LISEZMOI.md`, passe des 94).
 - **Le visage, le regard, les expressions** : hors périmètre, les pistes correspondantes sont ignorées.

@@ -16,7 +16,7 @@ clip retargeté place les mains à côté, systématiquement, du même angle.
 
 Le cas fondateur : un export à pose cuite — 17 échecs et 17 limites à la matrice du
 banc, seul hors-série sur 94 modèles, `idle` à 9,4 cm de son propre socle. Son
-squelette est identique à celui de `modele-sain.vrm` (169 nœuds de mêmes
+squelette est identique à celui d'un jumeau sain du même exportateur (169 nœuds de mêmes
 noms, longueurs égales au dixième de millimètre) ; seule la pose de repos des
 bras différait : ~80° à chaque épaule, ~22° et ~10° aux poignets.
 
