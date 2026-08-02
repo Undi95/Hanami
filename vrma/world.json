@@ -154,7 +154,7 @@
       "entreeMoteurS": {
         "tS": 0.167,
         "ecartPireCm": 7.2,
-        "commentaire": "Phase posée par wander.startPivot (le moteur LISAIT ce contrat nulle part : entré à sa phase rassise, un pivot tombait à 19,2 cm de l’idle au pire, moy 13,9). Minimax re-mesuré sur le rig de la sonde (reference-2.vrm, hanches 0,9045 m) sur toutes les phases d’idle — cohérent avec depuisIdle ci-dessus (rig Overte)."
+        "commentaire": "Phase posée par wander.startPivot (le moteur LISAIT ce contrat nulle part : entré à sa phase rassise, un pivot tombait à 19,2 cm de l’idle au pire, moy 13,9). Minimax re-mesuré sur le rig moyen de la sonde (hanches 0,9045 m, VRM 0.x) sur toutes les phases d’idle — cohérent avec depuisIdle ci-dessus (rig Overte)."
       }
     },
     "world-turn-right": {
@@ -507,7 +507,7 @@
           2.5,
           2.1
         ],
-        "rigDesCm": "reference-2.vrm, hanches au repos 0,9045 m — le rig par défaut de la sonde. Les écarts en cm de ce bloc y sont mesurés tels quels ; ils suivent la taille du modèle.",
+        "rigDesCm": "le rig moyen de la sonde (VRM 0.x), hanches au repos 0,9045 m — le rig par défaut de la sonde. Les écarts en cm de ce bloc y sont mesurés tels quels ; ils suivent la taille du modèle.",
         "commentaire": "le raccord nul n'est pas un hasard : la première image de world-sit-turn-left-end a été ancrée sur cette phase-là. Le balayage seul plafonnait à 13,2 cm — le cycle tient l'avant-bras gauche à ~36° de l'amorce du settle à TOUTE phase (35,5 à 35,8° sur les 199)."
       }
     },
@@ -528,7 +528,7 @@
           1.3,
           1.5
         ],
-        "rigDesCm": "reference-2.vrm, hanches au repos 0,9045 m — le rig par défaut de la sonde. Les écarts en cm de ce bloc y sont mesurés tels quels ; ils suivent la taille du modèle.",
+        "rigDesCm": "le rig moyen de la sonde (VRM 0.x), hanches au repos 0,9045 m — le rig par défaut de la sonde. Les écarts en cm de ce bloc y sont mesurés tels quels ; ils suivent la taille du modèle.",
         "commentaire": "idem : ancrage sur cette phase. Le balayage seul plafonnait à 32,6 cm, dont 16,4 de résidu incompressible — le settle n'avait aucune piste de buste (voir ses retouches)."
       }
     }
@@ -1002,7 +1002,7 @@
         "verdict": "excellent"
       },
       "retouches": [
-        "phase de départ décalée de 21 images (0,700 s) sur une période de 196 : un cycle n'a pas de « début », et celui-ci passait à 17 cm du maintien assis à l'image 0 pour 8,8 cm à l'image 21 (rig de la sonde, hanches 0,9045 m ; 13,8 et 7,1 sur EtalonChibi). La couture reste exacte par construction — le nouveau raccord est un intervalle INTÉRIEUR du clip d'origine (0 cm, 0,01°), et le saut de vitesse y tombe de 68 à 32 °/s",
+        "phase de départ décalée de 21 images (0,700 s) sur une période de 196 : un cycle n'a pas de « début », et celui-ci passait à 17 cm du maintien assis à l'image 0 pour 8,8 cm à l'image 21 (rig moyen de la sonde, hanches 0,9045 m ; 13,8 et 7,1 sur l’étalon chibi 0,755 m). La couture reste exacte par construction — le nouveau raccord est un intervalle INTÉRIEUR du clip d'origine (0 cm, 0,01°), et le saut de vitesse y tombe de 68 à 32 °/s",
         "les deux extrémités ancrées sur la pose moyenne de world-sit-idle (correction max 18,5° sur rightLowerArm, fenêtre 0,40 s)",
         "os terminaux (head, mains, orteils) exclus de l'ancrage : dans une BOUCLE, ancrer le poignet gauche à 129° du socle aurait rejoué une secousse de 639 °/s à chaque tour, pour zéro centimètre gagné (la rotation propre d'un os terminal ne déplace aucun os mesuré). Pic de vitesse inchangé : 269 °/s"
       ],
@@ -1616,7 +1616,7 @@
       "enchaine": {
         "depuis": "idle",
         "vers": "world-raise-hand-hold",
-        "commentaire": "intro, ANCRÉE sur ses deux voisines : la première image est la pose moyenne d'idle, la dernière celle de world-raise-hand-hold à t=0. Aucun contrat de phase ici — un geste se déclenche quand l'intention arrive, pas quand le socle veut bien : c'est justement pourquoi le bord amont vise la pose MOYENNE d'idle. Écart après ancrage : 2,0 cm au pire des 300 phases d'idle (0,2 au mieux), 0 cm vers le maintien — rig de la sonde, hanches 0,9045 m ; 1,6 cm sur EtalonChibi, contre 13,6 avant."
+        "commentaire": "intro, ANCRÉE sur ses deux voisines : la première image est la pose moyenne d'idle, la dernière celle de world-raise-hand-hold à t=0. Aucun contrat de phase ici — un geste se déclenche quand l'intention arrive, pas quand le socle veut bien : c'est justement pourquoi le bord amont vise la pose MOYENNE d'idle. Écart après ancrage : 2,0 cm au pire des 300 phases d'idle (0,2 au mieux), 0 cm vers le maintien — rig moyen de la sonde, hanches 0,9045 m ; 1,6 cm sur l’étalon chibi 0,755 m, contre 13,6 avant."
       },
       "hanchesFraction": {
         "min": 0.9955,
@@ -2091,7 +2091,7 @@
         "hanchesFraction": 0.541,
         "raccordAWorldSitIdleCm": 4,
         "verdict": "passe",
-        "commentaire": "Re-mesuré après la greffe de jambes de 14a79eb (le clip a changé : 206448 → 167972 octets). Rig de la sonde (reference-2.vrm, hanches 0,9045 m) faute des archives du rig Overte : pire image contre la pose de référence du socle, 4,0 cm (rightHand) — dans la famille (les variantes 2-4 font 1,7-4,9 sur ce rig). L’ancien chiffre (11,6, echoue, rightToes, rig Overte) datait d’avant la retouche ; les jonctions moteur qui échouaient par lui (atterrissage 10,8, lever 10,8, retours de geste 10,7-10,8) mesurent désormais 3,9-6,3 cm."
+        "commentaire": "Re-mesuré après la greffe de jambes de 14a79eb (le clip a changé : 206448 → 167972 octets). Rig moyen de la sonde (hanches 0,9045 m, VRM 0.x) faute des archives du rig Overte : pire image contre la pose de référence du socle, 4,0 cm (rightHand) — dans la famille (les variantes 2-4 font 1,7-4,9 sur ce rig). L’ancien chiffre (11,6, echoue, rightToes, rig Overte) datait d’avant la retouche ; les jonctions moteur qui échouaient par lui (atterrissage 10,8, lever 10,8, retours de geste 10,7-10,8) mesurent désormais 3,9-6,3 cm."
       },
       "coutureBoucleDeg": 0,
       "raccordVitesse": {
@@ -2157,7 +2157,7 @@
         "verdict": "excellent"
       },
       "retouches": [
-        "deux os greffés (leftShoulder, rightShoulder) : le FBX source n'a aucune piste dessus, les épaules restaient donc OUVERTES comme debout sous un corps assis. Le défaut ne venait pas des chevilles croisées mais de là — l'écart au maintien assis valait 15,9 cm CONSTANTS sur les 138 images (14,4 sur le rig de la sonde, 11,6 sur EtalonChibi), porté par rightShoulder (21,6°). Qu'il ne bouge PAS d'une image à l'autre est la signature d'une pose fausse, pas d'un geste qui dérive. Elles reçoivent la pose moyenne de world-sit-idle, constante (la posture assise d'Overte l'est), comme les sept assis privés de bassin",
+        "deux os greffés (leftShoulder, rightShoulder) : le FBX source n'a aucune piste dessus, les épaules restaient donc OUVERTES comme debout sous un corps assis. Le défaut ne venait pas des chevilles croisées mais de là — l'écart au maintien assis valait 15,9 cm CONSTANTS sur les 138 images (14,4 sur le rig moyen de la sonde, 11,6 sur l’étalon chibi 0,755 m), porté par rightShoulder (21,6°). Qu'il ne bouge PAS d'une image à l'autre est la signature d'une pose fausse, pas d'un geste qui dérive. Elles reçoivent la pose moyenne de world-sit-idle, constante (la posture assise d'Overte l'est), comme les sept assis privés de bassin",
         "les deux extrémités ancrées sur la pose moyenne de world-sit-idle (correction max 5,8° sur leftUpperArm, fenêtre 0,30 s)",
         "os terminaux (head, mains, orteils) exclus de l'ancrage : leur rotation propre ne déplace aucun os mesuré. Pic de vitesse inchangé : 49 °/s"
       ],

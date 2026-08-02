@@ -1,6 +1,6 @@
 import * as S from './scene.mjs'
 
-const m = S.chargerModele(S.resoudreModele('EtalonChibi'), { maillage: false })
+const m = S.chargerModele(S.resoudreModele(null), { maillage: false })
 for (const slug of ['world-walk', 'world-sit-enter', 'idle']) {
   const c = await S.chargerClip(m, slug)
   const n = 25

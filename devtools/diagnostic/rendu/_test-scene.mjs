@@ -1,7 +1,7 @@
 import * as S from './scene.mjs'
 
 const t0 = Date.now()
-const m = S.chargerModele(S.resoudreModele('EtalonChibi'), { maillage: true })
+const m = S.chargerModele(S.resoudreModele(null), { maillage: true })
 console.log(`modèle ${m.nom} VRM ${m.version} — chargé en ${Date.now() - t0} ms`)
 console.log(`hanches au repos ${m.hanchesRepos.toFixed(4)} m, échelle world.json ${m.echelle.toFixed(4)}`)
 console.log(`primitives ${m.peaux.primitives.length}, sommets utiles ${m.peaux.primitives.reduce((a, p) => a + p.nv, 0)}, triangles ${m.peaux.primitives.reduce((a, p) => a + p.tri.length / 3, 0)}`)

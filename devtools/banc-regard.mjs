@@ -476,9 +476,12 @@ function bascules(trace) {
 
 // ── Exécution ───────────────────────────────────────────────────────────────
 
+// Les étalons du banc : le regard se mesure sur les deux versions du format.
+// Posez les vôtres sous ces noms dans vrm/ (copie ou lien) — l'étalon du projet
+// est un chibi VRM 0.x de 0,755 m de hanches, le témoin un rig adulte VRM 1.x.
 const RIGS = [
-  { fichier: 'reference.vrm', etiquette: 'EtalonChibi (VRM 0.x)' },
-  { fichier: 'TemoinUnPointX.vrm', etiquette: 'TemoinUnPointX (VRM 1.0)' },
+  { fichier: 'reference.vrm', etiquette: 'étalon chibi 0,755 m (VRM 0.x)' },
+  { fichier: 'reference-1x.vrm', etiquette: 'témoin adulte (VRM 1.x)' },
 ]
 
 const seul = args.get('scene')

@@ -5,8 +5,10 @@
 // Le cas qui a motivé l'outil : un export qui a cuit une pose
 // « bras baissés » dans les TRANSLATIONS des os du bras (rotations toutes
 // identité, liaison du maillage cohérente avec cette pose — nœuds = inverse des
-// IBM à 0,0 cm près). Le squelette est identique à celui de modele-sain.vrm
-// (mêmes 169 nœuds, mêmes noms, mêmes longueurs de segments), mais son repos
+// IBM à 0,0 cm près). Le squelette est identique à celui d'un autre modèle du
+// même exportateur (mêmes 169 nœuds, mêmes noms, mêmes longueurs de segments,
+// à un dixième de millimètre près) qui, lui, est sain — c'est ce jumeau qui a
+// servi de référence à la réparation. Mais son repos
 // n'est PAS la T-pose que le format VRM exige : tout clip retargeté par
 // three-vrm y place les mains ~10 cm à côté, systématiquement (17 échecs à la
 // matrice du banc, seul hors-série sur 94 modèles).

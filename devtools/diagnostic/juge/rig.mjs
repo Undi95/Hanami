@@ -143,8 +143,8 @@ export function chargerRig(fichier) {
   //
   // Un .vrm pose son personnage DEBOUT SUR y = 0 : c'est la convention du format,
   // et c'est ce que l'app suppose. Les os, eux, sont à l'INTÉRIEUR du pied — sur
-  // reference.vrm la cheville est à 9,4 cm et l'os des orteils à 3,5 cm du
-  // sol. Prendre l'os le plus bas comme « le pied » ferait dire qu'un pied posé
+  // l'étalon (chibi 0,755 m de hanches) la cheville est à 9,4 cm et l'os des
+  // orteils à 3,5 cm du sol. Prendre l'os le plus bas comme « le pied » ferait dire qu'un pied posé
   // talon au sol flotte de 9 cm, et l'attaque talon deviendrait indétectable.
   //
   // On ancre donc, UNE FOIS, dans le repère de chaque os, le point du sol qui se
@@ -179,7 +179,7 @@ export function chargerRig(fichier) {
   rig.echelle = rig.hanchesM / HANCHES_ADULTE_M
   // LARGEUR D'ÉPAULES = écart entre les deux `upperArm`, jamais entre les
   // `shoulder`. Dans un VRM, `shoulder` est la racine de la clavicule, collée au
-  // rachis : sur reference.vrm les deux ne sont séparées que de 4 cm. Un axe
+  // rachis : sur l'étalon (chibi 0,755 m) les deux ne sont séparées que de 4 cm. Un axe
   // latéral construit là-dessus est du bruit, et toute la torsion du tronc en
   // dépend. `upperArm` EST l'articulation gléno-humérale : c'est la vraie épaule.
   rig.epauleM = (() => {
@@ -224,30 +224,54 @@ export function chargerRig(fichier) {
 }
 
 /**
- * Le premier .vrm du dossier, ou celui demandé.
+ * L'ÉTALON du banc. L'étalon du projet est un chibi VRM 0.x de 0,755 m de
+ * hanches ; posez le vôtre sous ce nom (copie ou lien) dans `vrm/`, ou passez
+ * --vrm=. Un nom FIXE, jamais « le premier du dossier » : le raccourci
+ * « premier qui contient » faisait choisir le modèle jugé par l'ORDRE DU
+ * DISQUE, et toutes les mesures avec.
+ */
+export const ETALON = 'reference.vrm'
+
+/** Le second profil : le rig moyen, 0,904 m de hanches (VRM 0.x). */
+export const ETALON_2 = 'reference-2.vrm'
+
+/** Ce qu'il faut dire à qui n'a pas encore posé son étalon. */
+export const AIDE_ETALON =
+  `posez un .vrm sous vrm/${ETALON} (copie ou lien) — l'étalon du projet ` +
+  'est un chibi VRM 0.x de 0,755 m de hanches ; ou passez --vrm=<nom exact|chemin>'
+
+/**
+ * Une erreur ATTENDUE : la faute est dans la commande ou dans l'installation,
+ * pas dans le code. Les outils l'affichent seule, sans pile d'appels.
+ */
+export function erreurAttendue(message) {
+  return Object.assign(new Error(message), { attendue: true })
+}
+
+/**
+ * L'étalon du dossier, ou le modèle demandé.
  *
  * Résolution : chemin existant, puis NOM EXACT (avec ou sans .vrm, insensible à
  * la casse), puis sous-chaîne — mais si PLUSIEURS fichiers répondent, on refuse
- * en les listant au lieu de prendre le premier. Le raccourci « premier qui
- * contient » faisait résoudre « sakura » vers un autre modèle dont le nom la contient, au
- * lieu de « reference.vrm » : c'était l'ordre du disque qui choisissait le
- * modèle jugé, et toutes les mesures avec.
+ * en les listant au lieu de prendre le premier.
  */
 export function choisirVrm(demande) {
   const liste = fs.readdirSync(VRM_DIR).filter((f) => f.toLowerCase().endsWith('.vrm')).sort()
-  if (demande) {
-    const p = path.isAbsolute(demande) ? demande : path.join(VRM_DIR, demande)
-    if (fs.existsSync(p)) return p
-    const bas = demande.toLowerCase()
-    const exact = liste.find((f) => f.toLowerCase() === bas || f.toLowerCase() === bas + '.vrm')
-    if (exact) return path.join(VRM_DIR, exact)
-    const cand = liste.filter((f) => f.toLowerCase().includes(bas))
-    if (cand.length === 1) return path.join(VRM_DIR, cand[0])
-    if (cand.length > 1) throw new Error(`« ${demande} » est ambigu — ${cand.length} candidats, nomme-le exactement : ${cand.join(' · ')}`)
-    throw new Error(`.vrm introuvable : ${demande} (disponibles : ${liste.join(', ')})`)
+  const dem = demande || ETALON
+  // Un chemin est essayé TEL QUEL (relatif au cwd : « vrm/x.vrm » depuis la
+  // racine du dépôt) avant d'être cherché dans vrm/ — sans quoi le chemin le
+  // plus naturel, celui qu'on lit dans la doc, était le seul à ne pas marcher.
+  for (const p of [dem, path.resolve(dem), path.join(VRM_DIR, dem)]) {
+    if (fs.existsSync(p) && fs.statSync(p).isFile()) return p
   }
-  if (!liste.length) throw new Error(`aucun .vrm dans ${VRM_DIR}`)
-  return path.join(VRM_DIR, liste[0])
+  const bas = dem.toLowerCase()
+  const exact = liste.find((f) => f.toLowerCase() === bas || f.toLowerCase() === bas + '.vrm')
+  if (exact) return path.join(VRM_DIR, exact)
+  const cand = liste.filter((f) => f.toLowerCase().includes(bas))
+  if (cand.length === 1) return path.join(VRM_DIR, cand[0])
+  if (cand.length > 1) throw new Error(`« ${dem} » est ambigu — ${cand.length} candidats, nomme-le exactement : ${cand.join(' · ')}`)
+  if (bas.startsWith('reference')) throw erreurAttendue(`étalon introuvable : ${AIDE_ETALON}`)
+  throw erreurAttendue(`.vrm introuvable : ${dem} — ${liste.length} modèles dans ${VRM_DIR}`)
 }
 
 export function listerVrm() {

@@ -68,7 +68,7 @@ export interface CharacterMeta {
   id: string
   name: string
   theme?: string // thème de couleurs propre au personnage (absent = thème de l'app)
-  vrm: string // ex: /vrm/reference.vrm ('' = pas de modèle 3D)
+  vrm: string // ex: /vrm/mon-avatar.vrm ('' = pas de modèle 3D)
   // Portrait 2D servi par /portraits — avatar de repli affiché dans la scène
   // TANT QUE `vrm` est vide. Posé par l'import d'une card SillyTavern (le PNG de
   // la card EST l'image). Champ absent = aucune représentation visuelle.

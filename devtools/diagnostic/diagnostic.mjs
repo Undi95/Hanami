@@ -29,7 +29,9 @@
 //   node diagnostic.mjs --rapport                régénère index.json + RAPPORT.md
 //                                                depuis les fiche.json existants
 // Options :
-//   --modele=<nom>      .vrm utilisé PARTOUT (défaut : EtalonChibi, épinglé).
+//   --modele=<nom>      .vrm utilisé PARTOUT (défaut : vrm/reference.vrm, épinglé
+//                       — l'étalon du projet est un chibi VRM 0.x de 0,755 m de
+//                       hanches ; posez le vôtre sous ce nom, copie ou lien).
 //                       Nom exact d'abord ; une sous-chaîne ambiguë est refusée
 //                       avec la liste des candidats. Toute mesure ne se compare
 //                       qu'à modèle égal — il est écrit dans chaque fiche.
@@ -424,13 +426,25 @@ async function principal() {
   }
   if (!ids.length) {
     console.log('usage : node diagnostic.mjs <clip…> | --lot [--extra=a,b|tous] | --rapport [--modele=m] [--sans-images] [--poses=N]')
+    // Dire tout de suite si l'étalon manque : sans lui, la première vraie
+    // commande échouerait, et on préfère l'annoncer ici, sans rien casser.
+    try {
+      const f = REN.scene.resoudreModele(opt.get('modele'))
+      console.log(`modèle par défaut : ${path.basename(f)}`)
+    } catch (e) {
+      console.log(`\n${e.message}`)
+      process.exitCode = 1
+    }
     return
   }
 
   // UN modèle pour tout : la fiche et les images parlent du même squelette.
-  // EtalonChibi est ÉPINGLÉ (nom exact — « sakura » attrapait
-  // un autre modèle dont le nom la contient, selon l'ordre du disque).
-  const modeleFichier = REN.scene.resoudreModele(opt.get('modele') ?? 'EtalonChibi')
+  // L'étalon est ÉPINGLÉ par son NOM (vrm/reference.vrm) et jamais choisi par
+  // l'ordre du disque : « le premier .vrm du dossier » changeait le modèle
+  // mesuré à chaque modèle ajouté, et tous les chiffres avec.
+  // L'étalon du projet est un chibi VRM 0.x de 0,755 m de hanches ; posez le
+  // vôtre sous ce nom (copie ou lien), ou passez --modele=.
+  const modeleFichier = REN.scene.resoudreModele(opt.get('modele'))
   const rig = JR.chargerRig(modeleFichier)
   console.log(`modèle : ${rig.nom} — hanches ${rig.hanchesM.toFixed(3)} m, échelle ${rig.echelle.toFixed(3)}`)
   console.log(`sortie : ${SORTIE}`)
@@ -459,5 +473,10 @@ async function principal() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-  principal().catch((e) => { console.error(e); process.exitCode = 1 })
+  principal().catch((e) => {
+    // Une erreur ATTENDUE (étalon absent, clip inconnu) est une consigne à
+    // lire : on l'affiche seule. Le reste garde sa pile — c'est un bug.
+    console.error(e.attendue ? e.message : e)
+    process.exitCode = 1
+  })
 }

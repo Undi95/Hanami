@@ -105,7 +105,7 @@ const HIPS_FORWARD = new Vector3(0, 0, 1)
 //
 // MESURÉ sur les 94 modèles de vrm/ : 89 sont en 0.x, et sur ces 89 la charnière
 // `angleAxis(midAngle, +X)` du régime assis pliait le genou VERS L'AVANT — de
-// l'hyperextension, pas une flexion. Relevé sur EtalonChibi (0.x, hanches
+// l'hyperextension, pas une flexion. Relevé sur l'étalon (0.x, hanches
 // 0,755 m) assise à 0,426 m (les chaises d'anime-classroom), sur world-sit-idle :
 // 108,7° hors de la table de jointLimits au genou et 54,9° à la cheville, genou
 // 14 à 20 cm DERRIÈRE la corde hanche→cheville, semelle 4,9 cm sous le sol, et
@@ -209,7 +209,7 @@ export interface LegIk {
    * personne n'a jamais mesuré le profil.
    *
    * Le chiffre qui justifie ça : `world-walk-slow` dépeint 0,4928 · h par cycle
-   * sur le rig de mesure de vrma/world.json, mais 0,5265 · h sur Sakura — 7 %
+   * sur le rig de mesure de vrma/world.json, mais 0,5265 · h sur l'étalon — 7 %
    * d'écart, soit 2,6 cm de glissement par cycle avec une vitesse imposée. Les
    * proportions de jambes ne se transportent pas d'un modèle à l'autre, seule la
    * hauteur de hanches le fait.
@@ -484,7 +484,7 @@ function solveLeg(
  * or c'est justement lui qui sait à quoi ressemble un corps assis haut : cuisses
  * posées sur l'assise, genoux au bord, mollets qui pendent.
  *
- * Ce que ça donnait, sur EtalonChibi (hanches 0,755 m) sur un pupitre
+ * Ce que ça donnait, sur l'étalon (hanches 0,755 m) sur un pupitre
  * d'anime-classroom à 0,694 m (portée 1,24), world-sit-idle :
  *   · avance du genou hors de la corde hanche→cheville : 0,189 m → 0,005 m
  *     (les cuisses passent à la VERTICALE — la silhouette n'est plus assise) ;
@@ -509,12 +509,13 @@ function solveLeg(
  *    coupure franche, AU BIT PRÈS. Ça couvre les chaises des décors livrés
  *    (portée 0,69 à 0,95 selon le modèle) — la bande ne leur retire rien ;
  *  · au-delà d'une portée de 1, la correction ne RAPPORTE rien : même à pleine
- *    autorité, le pied reste 26 à 33 cm au-dessus du sol (mesuré, Sakura et Holo
- *    sur les pupitres) — il n'y arrive pas, il ne fait que détruire l'assise.
+ *    autorité, le pied reste 26 à 33 cm au-dessus du sol (mesuré sur l'étalon
+ *    et sur un rig adulte, aux pupitres) — il n'y arrive pas, il ne fait
+ *    que détruire l'assise.
  *    C'est exactement ce que la bande retire ;
  *  · entre les deux, elle échange au pire 1,8 cm de pied qui flotte contre 1 à
  *    5 cm d'écart entre les jambes ;
- *  · à 0,20 elle mordrait pour de bon : 8,1 cm de pied en l'air pour Sakura sur
+ *  · à 0,20 elle mordrait pour de bon : 8,1 cm de pied en l'air pour l'étalon sur
  *    une assise à 0,55 m, 1,1 cm sur les chaises de japanese-classroom. Trop.
  */
 const REACH_BAND = 0.1

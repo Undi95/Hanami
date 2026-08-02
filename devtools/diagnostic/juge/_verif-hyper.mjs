@@ -5,7 +5,8 @@
 import * as R from './rig.mjs'
 import * as A from './anatomie.mjs'
 
-const rig = R.chargerRig(R.choisirVrm('rig-temoin-hist'))
+// L'étalon du banc (vrm/reference.vrm) — le modèle des résultats committés.
+const rig = R.chargerRig(R.choisirVrm(null))
 
 {
   const info = await R.chargerClip(rig, 'world-run')

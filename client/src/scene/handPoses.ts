@@ -80,8 +80,9 @@ const M_RIGHT = new Quaternion(0.5, 0.5, 0.5, -0.5)
  * nomment les leurs `thumbProximal/Intermediate/Distal`, mais three-vrm les
  * renomme à l'import (VRMHumanoidLoaderPlugin, thumbBoneNameMap) — les 89
  * modèles 0.x du dossier exposent donc les mêmes 30 os que les 5 en 1.x, et
- * une seule table suffit pour les deux formats (vérifié sur EtalonChibi en
- * 0.x et ayaka en 1.x : 30/30 os retrouvés de part et d'autre).
+ * une seule table suffit pour les deux formats (vérifié sur l'étalon chibi
+ * 0,755 m en 0.x et sur le témoin adulte en 1.x : 30/30 os retrouvés de part
+ * et d'autre).
  */
 const FINGER_BONES: ReadonlyArray<readonly [string, string, ReadonlyArray<string>]> = [
   ['thumb', 'Thumb', ['Metacarpal', 'Proximal', 'Distal']],

@@ -10,7 +10,7 @@
 //
 // Toutes les grandeurs de mouvement sont des FRACTIONS de la hauteur de hanches
 // au repos du modèle (`host.hips()`), jamais des mètres absolus : le dossier
-// vrm/ va de 0,755 m (Sakura) à 1,201 m (ModeleTemoin) de hanches, soit un
+// vrm/ va de 0,755 m à 1,201 m de hanches d'un modèle à l'autre, soit un
 // rapport de 1,59 — une constante en mètres ferait patiner l'une et courir
 // l'autre. C'est exactement la convention de vrma/world.json.
 import type { Seat } from './sceneMap' // type seul — sceneMap est pur lui aussi
@@ -49,7 +49,7 @@ const TURN_RIGHT_RATE = -52.1 // °/s, world-turn-right (−52,1 / 1,0)
  * la vitesse que le clip dépeint, le pied posé reste immobile dans le monde.
  * Au-delà, il est TRAÎNÉ de `bras de levier × Δcap × durée d'appui`.
  *
- * Mesuré sur le rig de la sonde (reference-2.vrm, hanches 0,9045 m),
+ * Mesuré sur le rig moyen de la sonde (hanches 0,9045 m, VRM 0.x),
  * en rejouant les clips image par image : le pied porteur d'un pivot tourne à
  * 9,1 cm (turn-left) / 10,8 cm (turn-right) de l'axe du corps, et une phase
  * d'appui dure au plus un demi-cycle, soit ~0,5 s. Le traîné AJOUTÉ vaut donc :
@@ -296,7 +296,7 @@ const WALK_OVER_STROLL_M = 2.6
 // ralentir SANS s'arrêter. Elle est consignée ici, à l'endroit où la décision se
 // prendra, pour que personne n'ait à la refaire.
 //
-// CE QUI A ÉTÉ MESURÉ (sonde du banc, rig reference-2.vrm, hanches
+// CE QUI A ÉTÉ MESURÉ (sonde du banc, rig moyen, hanches
 // 0,9045 m ; écart de pose du pire os majeur, en cm) :
 //
 //                            bascule brute   MEILLEURE paire   verrou de phase

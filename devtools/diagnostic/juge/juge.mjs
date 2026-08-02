@@ -7,9 +7,9 @@
 //   node juge.mjs --lot                      les 32 clips, tableau récapitulatif
 //   node juge.mjs --lot --tout               idem, avec toutes les phrases
 //   node juge.mjs --comparer a b             le même critère sur deux clips
-//   node juge.mjs world-walk --modele=Chloe  sur un autre modèle (--vrm accepté ;
+//   node juge.mjs world-walk --modele=<nom>  sur un autre modèle (--vrm accepté ;
 //                                            nom exact d'abord, ambiguïté refusée ;
-//                                            défaut : EtalonChibi, épinglé)
+//                                            défaut : vrm/reference.vrm, épinglé)
 //   node juge.mjs world-walk --tousvrm       sur les 12 modèles (défaut du clip
 //                                            ou du rig ? c'est la question)
 //   node juge.mjs --lot --json=x.json        sortie machine
@@ -48,11 +48,28 @@ const SYM = C.VERDICTS
 const pad = (s, n) => String(s).padEnd(n)
 const padL = (s, n) => String(s).padStart(n)
 
-/** Le modèle demandé (--modele, alias historique --vrm) — EtalonChibi épinglé
- *  par défaut : toute mesure ne se compare qu'à modèle égal. */
+/** Le modèle demandé (--modele, alias historique --vrm) — l'ÉTALON du banc par
+ *  défaut : toute mesure ne se compare qu'à modèle égal. L'étalon du projet est
+ *  un chibi VRM 0.x de 0,755 m de hanches ; posez le vôtre sous
+ *  `vrm/reference.vrm` (copie ou lien), ou passez --vrm=. */
 function modeleDemande() {
   const v = args.get('modele') ?? args.get('vrm')
-  return v && v !== '1' ? v : 'EtalonChibi'
+  return v && v !== '1' ? v : R.ETALON
+}
+
+/**
+ * Le rig demandé, monté — ou une sortie PROPRE. Sans étalon posé, l'outil n'a
+ * rien à juger : il dit quoi faire et s'arrête, il ne déroule pas une pile
+ * d'appels qui ne regarde que le mainteneur.
+ */
+function rigDemande() {
+  try {
+    return R.chargerRig(R.choisirVrm(modeleDemande()))
+  } catch (e) {
+    if (!e.attendue) throw e
+    console.error(e.message)
+    process.exit(1)
+  }
 }
 
 const W = R.world()
@@ -238,19 +255,19 @@ if (args.has('tousvrm')) {
     console.log(`   ${stable ? '·' : '≠'} ${pad(vals[0].libelle, 52)} ${padL(mn.toFixed(2), 9)} … ${padL(mx.toFixed(2), 9)}  ${verdicts.length > 1 ? 'verdict VARIABLE selon le modèle : ' + verdicts.join('/') : 'verdict stable : ' + verdicts[0]}`)
   }
 } else if (args.has('comparer')) {
-  const rig = R.chargerRig(R.choisirVrm(modeleDemande()))
+  const rig = rigDemande()
   const [x, y] = libres
   if (!x || !y) throw new Error('--comparer demande deux noms de clips')
   comparer(C.juger(await analyser(rig, x)), C.juger(await analyser(rig, y)))
 } else if (args.has('lot')) {
-  const rig = R.chargerRig(R.choisirVrm(modeleDemande()))
+  const rig = rigDemande()
   console.log(`juge biomécanique — ${slugs.length} clips sur ${rig.nom} (hanches ${rig.hanchesM.toFixed(3)} m, échelle ${rig.echelle.toFixed(3)})`)
   if (!rig.solSuppose) console.log(`   ⚠ ce modèle ne pose pas ses pieds sur y = 0 : le sol a été pris au point le plus bas du rig au repos.`)
   const fiches = await lot(rig, slugs, { tout: args.has('tout') })
   sortie.fiches = fiches.map(dep)
   sortie.meta = { rig: rig.nom, hanchesM: rig.hanchesM, echelle: rig.echelle, genere: new Date().toISOString() }
 } else {
-  const rig = R.chargerRig(R.choisirVrm(modeleDemande()))
+  const rig = rigDemande()
   if (!rig.solSuppose) console.log(`⚠ ${rig.nom} ne pose pas ses pieds sur y = 0 : sol pris au point le plus bas du rig au repos.`)
   for (const slug of slugs) {
     const f = C.juger(await analyser(rig, slug))

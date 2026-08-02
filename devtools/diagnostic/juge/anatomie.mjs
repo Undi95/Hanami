@@ -18,7 +18,8 @@
 //      l'autre (un VRM 0.x le porte à l'envers). `haut × (gauche→droite)` est
 //      indépendant de la version VRM et des conventions d'axes.
 //      Et l'épaule, c'est `upperArm`, pas `shoulder` : dans un VRM `shoulder` est
-//      la racine de la clavicule, collée au rachis — sur reference.vrm les
+//      la racine de la clavicule, collée au rachis — sur l'étalon (chibi
+//      0,755 m de hanches) les
 //      deux ne sont distantes que de 4 cm, un axe latéral bâti là-dessus est du
 //      bruit, et toute la torsion du tronc en dépendrait.
 //

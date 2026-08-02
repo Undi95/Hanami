@@ -504,25 +504,52 @@ export function listerModeles() {
 }
 
 /**
+ * L'ÉTALON du banc. L'étalon du projet est un chibi VRM 0.x de 0,755 m de
+ * hanches ; posez le vôtre sous ce nom (copie ou lien) dans `vrm/`, ou passez
+ * --modele=. Un nom FIXE, jamais « le premier du dossier » : l'ordre du disque
+ * changeait le modèle mesuré sous nos pieds, et toutes les mesures avec.
+ */
+export const ETALON = 'reference.vrm'
+
+/** Ce qu'il faut dire à qui n'a pas encore posé son étalon. */
+export const AIDE_ETALON =
+  `posez un .vrm sous vrm/${ETALON} (copie ou lien) — l'étalon du projet ` +
+  'est un chibi VRM 0.x de 0,755 m de hanches ; ou passez --modele=<nom exact|chemin>'
+
+/**
+ * Une erreur ATTENDUE : la faute est dans la commande ou dans l'installation,
+ * pas dans le code. Les outils l'affichent seule, sans pile d'appels — c'est
+ * une consigne à lire, pas un plantage à déboguer.
+ */
+export function erreurAttendue(message) {
+  return Object.assign(new Error(message), { attendue: true })
+}
+
+/**
  * Résout un nom de modèle en chemin complet : chemin existant, puis NOM EXACT
  * (avec ou sans .vrm, insensible à la casse), puis sous-chaîne — mais si
  * PLUSIEURS fichiers répondent, on refuse en les listant au lieu de prendre le
- * premier (« sakura » attrapait un autre modèle dont le nom la contient, selon l'ordre du
- * disque). Sans nom : reference.vrm, le modèle épinglé du diagnostic.
+ * premier (une sous-chaîne courte attrapait un autre modèle dont le nom la
+ * contient, selon l'ordre du disque). Sans nom : l'étalon, ci-dessus.
  */
 export function resoudreModele(nom) {
   const liste = listerModeles()
   if (!nom) {
-    const d = liste.find((f) => f.toLowerCase() === 'sakurakinomoto.vrm') ?? liste[0]
-    if (!d) throw new Error(`aucun .vrm dans ${DOSSIER_VRM}`)
+    const d = liste.find((f) => f.toLowerCase() === ETALON)
+    if (!d) throw erreurAttendue(`étalon introuvable : ${AIDE_ETALON}`)
     return path.join(DOSSIER_VRM, d)
   }
-  if (fs.existsSync(nom)) return nom
+  // Un chemin est essayé TEL QUEL (relatif au cwd : « vrm/x.vrm » depuis la
+  // racine du dépôt) avant d'être cherché dans vrm/.
+  for (const p of [nom, path.resolve(nom), path.join(DOSSIER_VRM, nom)]) {
+    if (fs.existsSync(p) && fs.statSync(p).isFile()) return p
+  }
   const bas = nom.toLowerCase()
   const exact = liste.find((f) => f.toLowerCase() === bas || f.toLowerCase() === bas + '.vrm')
   if (exact) return path.join(DOSSIER_VRM, exact)
   const cand = liste.filter((f) => f.toLowerCase().includes(bas))
   if (cand.length === 1) return path.join(DOSSIER_VRM, cand[0])
   if (cand.length > 1) throw new Error(`« ${nom} » est ambigu — ${cand.length} candidats, nomme-le exactement : ${cand.join(' · ')}`)
-  throw new Error(`modèle introuvable : ${nom} (dispo : ${liste.join(', ')})`)
+  if (bas.startsWith('reference')) throw erreurAttendue(`étalon introuvable : ${AIDE_ETALON}`)
+  throw erreurAttendue(`modèle introuvable : ${nom} — ${liste.length} modèles dans ${DOSSIER_VRM}`)
 }

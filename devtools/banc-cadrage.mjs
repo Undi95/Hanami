@@ -22,7 +22,7 @@
 //
 // Lancement (tsx, pour importer le vrai bvh.ts et le vrai sceneMap.ts) :
 //   npx tsx devtools/banc-cadrage.mjs                     # 7 décors × 2 rigs
-//   npx tsx devtools/banc-cadrage.mjs --rig=reference-1x.vrm     # un rig imposé
+//   npx tsx devtools/banc-cadrage.mjs --rig=<nom>.vrm     # un rig imposé
 //   npx tsx devtools/banc-cadrage.mjs lowpoly-restaurant  # un décor
 //
 // Les textures sont retirées des GLB avant parse (pas de décodeur d'image sous
@@ -55,6 +55,9 @@ const TOUS_DECORS = fs
   .sort()
 // Les deux rigs de la mission : le PETIT (celui qui casse) et le grand (la
 // non-régression). Ce sont aussi deux versions de VRM, 0.x et 1.0.
+// Ce sont les étalons du banc — l'étalon du projet est un chibi VRM 0.x de
+// 0,755 m de hanches, le témoin est un rig adulte VRM 1.x ; posez les vôtres
+// sous ces noms dans vrm/ (copie ou lien), ou passez --rig=<nom>.vrm.
 const TOUS_RIGS = ['reference.vrm', 'reference-1x.vrm']
 
 // ── Constantes RECOPIÉES de vrmStage.ts (frameCamera) ───────────────────────
@@ -160,10 +163,18 @@ function sansTextures(fichier) {
  * deux seules entrées du cadrage.
  */
 async function chargerRig(nom) {
+  const chemin = path.join(ROOT, 'vrm', nom)
+  if (!fs.existsSync(chemin)) {
+    throw new Error(
+      `rig introuvable : vrm/${nom} — posez un .vrm sous ce nom (copie ou lien) ; ` +
+      "l'étalon du projet est un chibi VRM 0.x de 0,755 m de hanches et son témoin " +
+      'un rig adulte VRM 1.x. Ou passez --rig=<nom>.vrm.',
+    )
+  }
   const loader = new GLTFLoader()
   loader.register((parser) => new VRMLoaderPlugin(parser))
   const gltf = await new Promise((res, rej) =>
-    loader.parse(sansTextures(path.join(ROOT, 'vrm', nom)), '', res, rej),
+    loader.parse(sansTextures(chemin), '', res, rej),
   )
   const vrm = gltf.userData.vrm
   if (!vrm) throw new Error(`${nom} : aucune extension VRM`)

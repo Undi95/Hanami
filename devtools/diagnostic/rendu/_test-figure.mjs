@@ -2,7 +2,7 @@ import * as S from './scene.mjs'
 import * as F from './figure.mjs'
 import { Toile, COULEURS } from './png.mjs'
 
-const m = S.chargerModele(S.resoudreModele('EtalonChibi'), { maillage: true })
+const m = S.chargerModele(S.resoudreModele(null), { maillage: true })
 const c = await S.chargerClip(m, process.argv[3] || 'world-walk')
 const t = Number(process.argv[4] ?? 0.25)
 

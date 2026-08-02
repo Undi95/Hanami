@@ -115,7 +115,7 @@ rendu.mjs — banc de rendu d'animations VRM, sans navigateur, sans dépendance.
   node rendu.mjs liste               clips et modèles disponibles
 
 Options
-  --modele=<nom>       nom exact ou chemin d'un .vrm        (défaut : EtalonChibi)
+  --modele=<nom>       nom exact ou chemin d'un .vrm        (défaut : vrm/reference.vrm)
   --vue=<v>            face | profil | dessus | toutes      (défaut : profil)
   --poses=N            nombre de cases de la planche        (défaut : 12)
   --colonnes=N         cases par rangée                     (défaut : 4)
@@ -129,7 +129,7 @@ Options
 
 Exemples
   node rendu.mjs planche world-walk --vue=toutes
-  node rendu.mjs tout world-sit-enter --modele=miku --poses=16
+  node rendu.mjs tout world-sit-enter --modele=reference-2 --poses=16
   node rendu.mjs phase world-walk world-walk-slow world-walk-fast
 `
 
@@ -198,5 +198,10 @@ async function principal() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-  principal().catch((e) => { console.error(e); process.exitCode = 1 })
+  principal().catch((e) => {
+    // Une erreur ATTENDUE (étalon absent, clip inconnu) est une consigne à
+    // lire : on l'affiche seule. Le reste garde sa pile — c'est un bug.
+    console.error(e.attendue ? e.message : e)
+    process.exitCode = 1
+  })
 }
