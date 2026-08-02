@@ -441,3 +441,9 @@ crédit ; ces deux fichiers le documentent.
 AGPL-3.0. Les modèles VRM et les images ne sont pas inclus — respecte la licence de chaque
 modèle que tu utilises. Les animations `.vrma` de `vrma/` et les décors de `environments/` portent
 leurs propres licences : voir les [crédits](#crédits) ci-dessus.
+
+## Soutenir
+
+Hanami est gratuit et le restera — pas de paywall, pas de version premium, jamais. Si l'outil
+t'apporte quelque chose et que tu as envie de laisser un pourboire, il y a un
+[Ko-fi](https://ko-fi.com/undiai). Ça aide son auteur plus que tu ne le crois. 🌸
