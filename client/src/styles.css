@@ -635,14 +635,27 @@ select {
     left: 7px;
     opacity: 0.3;
   }
+}
+
+/* Poignée de la boîte VN au doigt OU sur petit écran : affichée FRANCHEMENT.
+   La demi-teinte de 10 px à 0.35 était invisible en pratique — l'utilisateur
+   ne l'a jamais trouvée. Zone de toucher élargie, équerre plus grande, trait
+   doublé, opacité aux trois quarts : visible en permanence, sans crier. */
+@media (pointer: coarse), (max-width: 768px) {
   .vn-grip {
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
   }
   .vn-grip::before {
-    width: 10px;
-    height: 10px;
-    opacity: 0.35;
+    width: 13px;
+    height: 13px;
+    border-top-width: 2px;
+    border-left-width: 2px;
+    opacity: 0.75;
+  }
+  .vn-grip:hover::before,
+  .vn-grip[data-dragging]::before {
+    opacity: 1;
   }
 }
 
