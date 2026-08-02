@@ -14,17 +14,20 @@ redistribution.*
 
 ## 1. Overte — Apache License 2.0
 
-**Cent onze fichiers sur cent treize** dérivent des animations d'avatar du projet
-**Overte** (`overte-org/overte`, `interface/resources/avatar/animations/`,
-127 fichiers FBX) : **tout le domaine face à face** — les dix animations de
-repos et de parole, qui sont le socle permanent de la scène, et les vingt et un
-gestes — ainsi que tout le domaine monde 3D sauf les deux transitions assises.
-C'est la source de la bibliothèque, à deux fichiers près.
+**Cent onze fichiers sur cent cinquante et un** dérivent des animations d'avatar du
+projet **Overte** (`overte-org/overte`, `interface/resources/avatar/animations/`,
+127 fichiers FBX) : **tout le domaine face à face de la famille par défaut** — les
+dix animations de repos et de parole, qui sont le socle permanent de la scène, et
+les vingt et un gestes — ainsi que tout le domaine monde 3D sauf les deux
+transitions assises. C'est la source du monde 3D à deux fichiers près, et celle de
+la gestuelle par défaut ; les quarante autres fichiers de la bibliothèque active
+sont les trente-huit clips `rb-` de Microsoft Rocketbox (§4) et ces deux
+transitions assises de Quaternius (§3).
 
 Ce décompte est celui de la **bibliothèque active**, à la racine de `vrma/`. S'y
 ajoutent les **quinze clips du sous-dossier `extra/`**, convertis mais non retenus
 et jamais chargés par l'application : ils viennent eux aussi d'Overte, sous la même
-licence, et sont détaillés en fin de section. Overte fournit donc **126 des 128**
+licence, et sont détaillés en fin de section. Overte fournit donc **126 des 166**
 fichiers `.vrma` redistribués.
 
 Le fichier [`transitions.json`](transitions.json) livré à côté des clips dérive de
@@ -40,16 +43,18 @@ dans Maya — les métadonnées internes des FBX déclarent
 Mixamo recyclé : la recherche de chaînes ne donne aucune occurrence de « mixamo »
 ou « adobe », et aucun os ne porte le préfixe `mixamorig:`.
 
-*One hundred and eleven files out of one hundred and thirteen derive from the avatar
+*One hundred and eleven files out of one hundred and fifty-one derive from the avatar
 animations of the **Overte** project (127 FBX files): the whole face-to-face
-domain — all ten idle and talking animations, which are the permanent base of the
-scene, and the twenty-one gestures — plus the whole 3D-world domain except the two
-seated transitions. `transitions.json` derives from the same repository's animation
-graph under the same licence. These animations were hand-made in-house at High
-Fidelity by an animator, in Maya. That count covers the active library at the root
-of `vrma/`; the fifteen clips of the `extra/` subfolder — converted, not kept, never
-loaded — also come from Overte under the same licence, so Overte supplies **126 of
-the 128** redistributed `.vrma` files.*
+domain of the default family — all ten idle and talking animations, which are the
+permanent base of the scene, and the twenty-one gestures — plus the whole 3D-world
+domain except the two seated transitions. The other forty files of the active
+library are Microsoft Rocketbox's thirty-eight `rb-` clips (§4) and those two
+Quaternius seated transitions (§3). `transitions.json` derives from the same
+repository's animation graph under the same licence. These animations were
+hand-made in-house at High Fidelity by an animator, in Maya. That count covers the
+active library at the root of `vrma/`; the fifteen clips of the `extra/` subfolder —
+converted, not kept, never loaded — also come from Overte under the same licence, so
+Overte supplies **126 of the 166** redistributed `.vrma` files.*
 
 ```
 Copyright (c) 2013-2019, High Fidelity, Inc.
@@ -542,7 +547,7 @@ every case, so no seam to the idle moved.*
 
 ### Sous-dossier `extra/` — quinze clips convertis, non retenus
 
-Le sous-dossier [`extra/`](extra) porte **15 clips** (4,11 Mo) issus de la même
+Le sous-dossier [`extra/`](extra) porte **15 clips** (3,92 Mo) issus de la même
 passe et de la **même source** : tous dérivent d'Overte, sous la même licence
 Apache-2.0, avec les mêmes modifications que celles décrites ci-dessus. Ils ne sont
 jamais chargés par l'application — `/api/vrm-animations` ne liste que la racine de
@@ -550,7 +555,7 @@ jamais chargés par l'application — `/api/vrm-animations` ne liste que la raci
 paragraphe les couvre exactement comme les autres. Le pourquoi de leur mise à
 l'écart, clip par clip, est dans [`README.md`](README.md#extra--les-clips-convertis-et-non-retenus).
 
-*The `extra/` subfolder holds 15 clips (4.11 MB) from the same pass and the **same
+*The `extra/` subfolder holds 15 clips (3.92 MB) from the same pass and the **same
 source**: all derive from Overte under the same Apache-2.0 licence, with the same
 modifications described above. The application never loads them, but they are
 redistributed with it and this section's notice covers them like the rest.*

@@ -14,8 +14,8 @@ préfixe du nom suffit à les distinguer** :
 
 | Domaine | Nom | Contenu | Poids |
 | --- | --- | --- | --- |
-| **face à face** | pas de préfixe | l'avatar debout devant l'utilisateur qui discute : repos, repos en train de parler, gestes d'émotion | 30 fichiers, 7,69 Mo |
-| **monde 3D** | préfixe `world-` | la scène interactive où le personnage marche, divague, s'assoit et réagit : allures, départs et arrêts, virages, changements de posture, gestes tenus, tout le vocabulaire assis | 81 fichiers, 11,91 Mo |
+| **face à face** | pas de préfixe | l'avatar debout devant l'utilisateur qui discute : repos, repos en train de parler, gestes d'émotion | 31 fichiers, 7,89 Mo |
+| **monde 3D** | préfixe `world-` | la scène interactive où le personnage marche, divague, s'assoit et réagit : allures, départs et arrêts, virages, changements de posture, gestes tenus, tout le vocabulaire assis | 82 fichiers, 12,28 Mo |
 
 Le domaine face à face existe en **deux familles étanches** : celle d'Overte
 (sans préfixe, ci-dessus) et celle de Rocketbox (préfixe `rb-`, 38 fichiers,
@@ -38,12 +38,14 @@ pendant qu'une réponse s'écrit. Sous ce seuil, les fondus de 0,3 s (entrée) e
 0,4 s (sortie) sont invisibles ; au-dessus, le corps est tiré et les pieds glissent
 sans pas.
 
-Les 30 clips actuels tiennent tous entre **4,1 et 8,8 cm** sur la pire de leurs
+Les 31 clips actuels tiennent tous sous le seuil. Les trente premiers s'échelonnent
+de **4,1 à 8,8 cm** sur la pire de leurs
 quatre mesures (entrée et sortie, contre chacun des deux socles), médiane 5,5 ;
 contre le socle `idle` seul, de **0,8 à 6,8 cm**, médiane 3,2. Les deux plus hauts
 (8,8 et 7,6 cm) sont `idle-talking-4` et `relaxed-3`, promus depuis `extra/` après
 jugement à l'image : leur raccord est en haut de la fourchette, pas au-dessus du
-seuil, et le fondu l'absorbe. Un clip qui ne tient
+seuil, et le fondu l'absorbe. Le trente et unième, `happy-6`, est monté d'`extra/`
+une fois sa mesure d'entrée réparée (11,1 → 0 cm). Un clip qui ne tient
 pas ce seuil est retiré, pas rafistolé — une émotion sans geste n'est pas un drame (le
 déclenchement ne trouve rien, l'avatar continue de respirer), un geste qui accroche
 l'œil en est un. C'est ce qui a coûté leur place aux quinze gestes issus du mocap
@@ -78,7 +80,7 @@ en tire respectivement quatre et sept, toutes les 10 à 30 s pour le repos et 7 
 Le monde 3D est **généreux** : la scène a besoin de matière, et ces clips ne sont
 jamais joués en face à face.
 
-**Le chargement paresseux est voulu.** En mode face à face, les 11,91 Mo du domaine
+**Le chargement paresseux est voulu.** En mode face à face, les 12,28 Mo du domaine
 `world-` n'ont aucune raison d'être téléchargés — c'est précisément pourquoi la
 frontière tient dans le nom du fichier et pas dans un fichier de configuration.
 
@@ -88,7 +90,7 @@ Le face à face se joue en **deux bibliothèques complètes et interchangeables*
 
 | Famille | Préfixe | Source | Poids | Ce qu'elle a en propre |
 | --- | --- | --- | --- | --- |
-| **Overte** (défaut) | *aucun* | Overte, Apache-2.0 | 30 fichiers, 7,69 Mo | cinq repos, cinq repos parlants, les gestes d'émotion |
+| **Overte** (défaut) | *aucun* | Overte, Apache-2.0 | 31 fichiers, 7,89 Mo | cinq repos, cinq repos parlants, les gestes d'émotion |
 | **Rocketbox** | `rb-` | Microsoft Rocketbox, MIT | 38 fichiers, 8,26 Mo | quatre repos, trois repos parlants, **trois socles d'écoute**, vingt-huit gestes |
 
 Un personnage choisit la sienne (champ `animations` de son `character.json`,
@@ -245,7 +247,7 @@ bibliothèque n'avait **aucune** émote assise.
 
 ## `extra/` — les clips convertis et non retenus
 
-Le sous-dossier [`extra/`](extra) contient **15 clips** (4,11 Mo) issus de la même
+Le sous-dossier [`extra/`](extra) contient **15 clips** (3,92 Mo) issus de la même
 passe de conversion que les autres : mêmes outils, mêmes corrections, même
 validation à l'aller-retour, mêmes crédits (voir [`NOTICE.md`](NOTICE.md) §1). Ils
 n'ont simplement pas leur place dans la bibliothèque active. Ils sont livrés quand
@@ -431,8 +433,9 @@ vitesse s'étale).
 | `world-walk`, `-fast`, `-back`, `-back-fast` | la piste `hips.position` était **purement verticale** — or les jambes de la source compensent un bassin qui oscille : sans lui, c'est le pied d'appui qui écope (2,2 à 12,0 cm de traînée latérale pendant l'appui). Sinus 1×/cycle sur période exacte, amplitude et phase par **grille par clip** (bornée à la bande « bon » du juge, 3–5 cm crête-à-crête), sens mesuré sur les jambes | traînée d'appui **3,7→1,7 · 6,6→3,1 · 7,8→4,1 · 12,0→7,6 cm** ; juge bassin-latéral **0,0 « limite » → 4–5 cm « bon »** ; coutures et sauts au degré près inchangés ; jonction walk-start→walk 0,3 cm (zéro du sinus sur le contrat t=0,200 s) |
 
 Après la passe : **0 échec et 0 « limite » sur le rig de référence** (53 excellents,
-59 passe sur les 112 clips livrés — le décompte 62 datait d'avant le retour
-d'`happy-5`, `neutral-2` et `point` dans `extra/`), 0 échec et les 4 « limite »
+59 passe sur les 112 clips livrés **à cette date** — `world-afk-texting` est monté à
+la racine après, portant le domaine `world-` à 82 ; le décompte 62 datait d'avant le
+retour d'`happy-5`, `neutral-2` et `point` dans `extra/`), 0 échec et les 4 « limite »
 pré-existants sur le rig 0,9045 — aucune régression, prouvée par la sonde
 intégrale des deux rigs avant/après chaque correction, et re-prouvée par une
 sonde indépendante après clôture (2026-08-01 : mêmes décomptes au clip près). Les « pieds qui glissent » des cinq gestes face (`relaxed-2/-3`,
@@ -568,8 +571,8 @@ prefix alone tells them apart**:
 
 | Domain | Name | Contents | Weight |
 | --- | --- | --- | --- |
-| **face to face** | no prefix | the avatar standing in front of the user, talking: idles, talking idles, emotion gestures | 30 files, 7.69 MB |
-| **3D world** | `world-` prefix | the interactive scene where the character walks, wanders, sits down and reacts: gaits, starts and stops, turns, posture changes, held gestures, the whole seated vocabulary | 81 files, 11.91 MB |
+| **face to face** | no prefix | the avatar standing in front of the user, talking: idles, talking idles, emotion gestures | 31 files, 7.89 MB |
+| **3D world** | `world-` prefix | the interactive scene where the character walks, wanders, sits down and reacts: gaits, starts and stops, turns, posture changes, held gestures, the whole seated vocabulary | 82 files, 12.28 MB |
 
 The face-to-face domain comes in **two watertight families**: Overte's (no
 prefix, above) and Rocketbox's (`rb-` prefix, 38 files, 8.26 MB). See
@@ -591,12 +594,14 @@ against `idle-talking.vrma`, since that is what gestures return to while a reply
 being written. Below that threshold the 0.3 s (in) and 0.4 s (out) fades are
 invisible; above it, the body is dragged and the feet slide without a step.
 
-The current 30 clips all stay between **4.1 and 8.8 cm** on the worst of their four
+The current 31 clips all stay under the threshold. The first thirty range between
+**4.1 and 8.8 cm** on the worst of their four
 measurements (in and out, against each of the two idles), median 5.5; against the
 `idle` base alone, **0.8 to 6.8 cm**, median 3.2. The two highest (8.8 and 7.6 cm)
 are `idle-talking-4` and `relaxed-3`, promoted from `extra/` after a judgement by
 eye: their seam is at the top of the range, not over the threshold, and the fade
-absorbs it. A clip that misses the threshold
+absorbs it. The thirty-first, `happy-6`, moved up from `extra/` once its entry
+measurement was repaired (11.1 → 0 cm). A clip that misses the threshold
 is removed, not patched — an emotion with no gesture is no drama (the
 trigger finds nothing and the avatar keeps breathing), a gesture that catches the
 eye is. That is what cost the fifteen CMU-mocap gestures their place, and the
@@ -631,7 +636,7 @@ Overte draws from four and seven respectively, every 10–30 s for the idle and
 The 3D world is **generous**: the scene needs material, and these clips are never
 played face to face.
 
-**Lazy loading is intended.** In face-to-face mode, the 11.91 MB of the `world-`
+**Lazy loading is intended.** In face-to-face mode, the 12.28 MB of the `world-`
 domain have no reason to be downloaded — which is exactly why the boundary lives
 in the file name rather than in a config file.
 
@@ -641,7 +646,7 @@ Face to face is played from **two complete, interchangeable libraries**:
 
 | Family | Prefix | Source | Weight | What it has of its own |
 | --- | --- | --- | --- | --- |
-| **Overte** (default) | *none* | Overte, Apache-2.0 | 30 files, 7.69 MB | five idles, five talking idles, the emotion gestures |
+| **Overte** (default) | *none* | Overte, Apache-2.0 | 31 files, 7.89 MB | five idles, five talking idles, the emotion gestures |
 | **Rocketbox** | `rb-` | Microsoft Rocketbox, MIT | 38 files, 8.26 MB | four idles, three talking idles, **three listening bases**, twenty-eight gestures |
 
 A character picks one (the `animations` field of its `character.json`, a selector
@@ -794,7 +799,7 @@ by Overte, and it was until now the pack's largest untapped seam: the library ha
 
 ## `extra/` — the converted clips that were not kept
 
-The [`extra/`](extra) subfolder holds **15 clips** (4.11 MB) from the same
+The [`extra/`](extra) subfolder holds **15 clips** (3.92 MB) from the same
 conversion pass as the others: same tools, same fixes, same round-trip validation,
 same credits (see [`NOTICE.md`](NOTICE.md) §1). They simply have no place in the
 active library. They ship anyway, because a clip that was converted and then set
@@ -956,6 +961,40 @@ generalise:
    (`world-raise-hand-in` therefore targets the mean pose of `idle`, not one of its
    phases).
 
+
+**The “clip lode” pass of 2026-08-01** clears the seven “borderline” verdicts the
+bench still gave on the reference rig, and the six outright failures they turned
+back into on a taller rig (hips at 0.9045 m) — multi-model margin was the real
+issue. Same tools, same conventions as the previous pass, plus two new ones:
+**local** smoothing of a velocity spike (windowed, edges intact) and **circular**
+smoothing of a loop seam (the seam pose stays exact, only the velocity spreads).
+
+| Clip | Fix | Before → after (reference rig · 0.9045 rig) |
+| --- | --- | --- |
+| `world-point-in` | leading edge anchored onto the mean pose of `idle` (the `world-raise-hand-in` recipe) | junction **8.1 → 1.6 cm** · **10.1 → 2.0**; downstream 0.7 unchanged |
+| `world-sit-talking`, `-3` | loop phase rotated to the frame closest to the seated hold (+58 / +13 frames, swept on both rigs) + edges anchored; `-3`: graft of an `upperChest` **missing from the file** | in **8.3/8.6 → 0 cm** everywhere · seams 0 cm, jumps 63→30 / 31→32 °/s |
+| `world-sit-idle-5` | legs almost static (≤ 0.9°) but offset from the rest of the family: constant graft of the six leg bones from the hold's mean pose | in **9.3 → 3.1 cm** · **10.4 → 3.9**; knees at 101° = the family; loop seam untouched; anchoring the arms REFUSED (a 10× spike replayed every cycle, for a gap the fade already absorbs) |
+| `world-sit-cheer` | `leftShoulder` track **missing** (a standing shoulder frozen under a seated body): grafted from the hold, then both edges anchored (short 0.25 s window — the 687 °/s peak of the “yay!” does not move) | in = out **8.9 → 0 cm** · **10.7 → 0** |
+| `world-sit-clap-3` | leading edge alone anchored (the exit was already at 2.1) | entry **7.9 → 0 cm**; 747 peak unchanged |
+| `world-raise-hand-hold` | loop seam: pose exact, but a 98 °/s velocity jump (1.34 × p95) across the whole raised-arm chain — circular smoothing ±0.2 s, four bones | jump **98 → 25 °/s** · max deviation 1.1° · both junctions of the hold stay excellent |
+| `raise-hand-2`, `world-sit-raise-hand`, `world-raise-hand-in` | forearm spikes over 800 °/s (1000 °/s clipping plateaus, a dead stop then a 936 snap): local smoothing at the offending instants, on the way up AND down | peaks **1000/1000/936 → 779/739/687 °/s**, velocity verdict “good”; seams unchanged to a tenth of a centimetre |
+| `world-sit-disbelief`, `world-sit-clap` | hand spikes (cosmetic): 993/1000/815 and 956/875 °/s — local smoothing, including a `rightHand` at 815 the sweep had missed | every peak **≤ 797 °/s**; the clap keeps its snap (797 left alone) |
+| `world-walk`, `-fast`, `-back`, `-back-fast` | the `hips.position` track was **purely vertical** — yet the source's legs compensate for a pelvis that sways: without it, the stance foot pays (2.2 to 12.0 cm of lateral drag during stance). One sine per cycle on the exact period, amplitude and phase fitted by a **per-clip grid** (bounded to the judge's “good” band, 3–5 cm peak to peak), sign measured on the legs themselves | stance drag **3.7→1.7 · 6.6→3.1 · 7.8→4.1 · 12.0→7.6 cm**; lateral-pelvis judge **0.0 “borderline” → 4–5 cm “good”**; seams and jumps unchanged to the degree; walk-start→walk junction 0.3 cm (the sine crosses zero on the t = 0.200 s contract) |
+
+After the pass: **0 failures and 0 “borderline” on the reference rig** (53
+excellent, 59 pass across the 112 clips shipped **at that date** —
+`world-afk-texting` moved up to the root afterwards, taking the `world-` domain to
+82; the count of 62 predated the return of `happy-5`, `neutral-2` and `point` to
+`extra/`), 0 failures and the 4 pre-existing “borderline” verdicts on the 0.9045
+rig — no regression, proven by a full probe of both rigs before and after each fix,
+and proven again by an independent probe after closing (2026-08-01: the same tallies
+down to the clip). The “sliding feet” of the five face-to-face gestures
+(`relaxed-2/-3`, `think-2`, `happy`, `happy-3`) were examined and **left alone**:
+the judge's criterion measures the foot **relative to the pelvis** and therefore
+adds body sway to actual skating; in WORLD space the feet only move 1.3 to 5.6 cm
+(four of the five under 3 cm), and damping the legs would kill the weight shift that
+makes those poses live (`relaxed-2` is a contrapposto: its “slide” is it settling
+in).
 
 **`world-walk-slow` was examined and left alone.** Its feet only clear the ground by
 2.6 cm and it is the gait of the autonomous wander, but both proposed exits fail on
