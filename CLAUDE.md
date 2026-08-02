@@ -20,6 +20,11 @@
   `*.vrma`…) qui les masquerait — voir les commentaires de `.gitignore`.
 - `client/` n'utilise pas `@types/three` : les shims sont écrits à la main dans
   `client/src/scene/three-shims.d.ts`. Ne pas installer de dépendance npm.
+- Node 25 sur Windows : `fs.rmSync` échoue EN SILENCE (aucune erreur, le fichier
+  reste) sur tout chemin contenant un caractère non-ASCII (« passé.md », « 日本 »).
+  Pour supprimer un chemin à nom libre : `fs.unlinkSync` (fichiers) ou
+  readdir+unlink+rmdir (dossiers). `rmSync` reste acceptable sur les chemins
+  garantis ASCII (ids slugifiés, dossiers datés).
 - React sans StrictMode, volontairement. Ne pas le réintroduire.
 
 ## Commits

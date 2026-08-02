@@ -212,7 +212,10 @@ export function executeFileTool(settings: Settings, tool: string, args: Record<s
       const target = resolveSafe(root, p)
       if (!fs.existsSync(target)) throw new Error(`fichier introuvable : ${p}`)
       if (!fs.statSync(target).isFile()) throw new Error(`pas un fichier : ${p}`)
-      fs.rmSync(target)
+      // unlinkSync et non rmSync : sous Node 25/Windows, rmSync échoue EN SILENCE
+      // sur un chemin non-ASCII — l'outil répondrait « supprimé » en laissant le
+      // fichier en place (même piège que deleteMemoryFile, cf. lib/storage.ts).
+      fs.unlinkSync(target)
       return `Fichier supprimé : ${p}`
     }
     default:

@@ -725,7 +725,15 @@ export function writeMemoryFile(charId: string, name: string, content: string): 
 export function deleteMemoryFile(charId: string, name: string): void {
   // Comparaison insensible à la casse : le FS Windows l'est aussi ("memory.MD" = même fichier).
   if (sanitizeFileName(name).toLowerCase() === 'memory.md') throw new Error("MEMORY.md est l'index — non supprimable")
-  fs.rmSync(path.join(memoryDir(charId), sanitizeFileName(name)), { force: true })
+  // unlinkSync et non rmSync : sous Node 25/Windows, rmSync ne supprime PAS un
+  // chemin contenant un caractère non-ASCII (« passé.md ») et ne lève rien —
+  // le fichier restait dans la liste après un « ok ». Le try avale ENOENT pour
+  // garder la sémantique de l'ancien { force: true }.
+  try {
+    fs.unlinkSync(path.join(memoryDir(charId), sanitizeFileName(name)))
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+  }
 }
 
 /**
