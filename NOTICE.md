@@ -48,6 +48,29 @@ Apache-2.0 §4(b) modification statement in its header.*
 | `client/src/scene/gaze.ts` | `libraries/avatars-renderer/src/avatars-renderer/Head.cpp`, `libraries/animation/src/Rig.cpp` (updateEyeJoint), `interface/src/avatar/MyAvatar.cpp`, `scripts/developer/automaticLookAt.js` | High Fidelity, Inc. (2013-2015) ; Mark Peng (8/16/13) ; Luis Cuenca (11/11/19) ; Vircadia contributors (2020) ; Overte e.V. (2022-2023) |
 | `client/src/scene/handPoses.ts` + `handPosesOverte.json` | `scripts/system/controllers/handTouch.js` (jeux `dataOpen` / `dataClose`, 60 quaternions) | Luis Cuenca (12/29/17) |
 
+## Valeurs dérivées du graphe / values derived from the animation graph
+
+Deux fichiers ne transcrivent **aucun** code d'Overte mais en tirent des
+**chiffres**, et méritent d'être nommés ici même si rien ne l'exige :
+`client/src/scene/fades.ts`, dont les durées de fondu et les courbes sont
+relevées état par état dans le graphe d'animation d'Overte
+(`interface/resources/avatar/avatar-animation.json`, Apache-2.0), et
+`client/src/scene/wander.ts`, dont la mise à l'échelle du temps de lecture
+reprend le comportement d'`AnimBlendLinearMove` ainsi que les seuils de
+déplacement, d'élan et d'hystérésis du moteur d'Overte. Le graphe lui-même est
+redistribué sous sa licence d'origine en [`vrma/transitions.json`](vrma/transitions.json)
+— l'avis Apache-2.0 ci-dessus le couvre, lui et les valeurs qui en sortent.
+
+*Two files transcribe **no** Overte code but take **numbers** from it, and are
+named here even though nothing requires it: `client/src/scene/fades.ts`, whose
+fade durations and curves are read state by state from Overte's animation graph
+(`interface/resources/avatar/avatar-animation.json`, Apache-2.0), and
+`client/src/scene/wander.ts`, whose playback time scaling follows the behaviour
+of `AnimBlendLinearMove` along with Overte's move-in, momentum and hysteresis
+thresholds. The graph itself is redistributed under its original licence as
+`vrma/transitions.json` — the Apache-2.0 notice above covers it and the values
+drawn from it.*
+
 ## Nature des modifications / nature of the modifications
 
 Transcription du C++ (glm, Qt) et du JavaScript d'origine vers TypeScript ;

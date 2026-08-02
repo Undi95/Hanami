@@ -42,7 +42,7 @@ clip.
 
 ⚠ **Le modèle par défaut est une cible mouvante.** Sans `--vrm=`, l'outil prend le PREMIER `.vrm`
 du dossier par ordre alphabétique — et le dossier vit : il est passé de 12 à 88 modèles EN COURS de
-mission (le propriétaire y verse sa collection), et l'arrivée de `reference-2.vrm` a changé
+mission, et l'arrivée d'un modèle dont le nom passait devant a changé
 le défaut sous nos pieds, décalant tous les cm-adulte d'une exécution à l'autre (27,8 → 30,4 cm
 d'écartement pour le même `idle`). Rien de faux — chaque fiche imprime son modèle, le JSON le
 consigne dans `meta.rig` — mais **deux exécutions ne se comparent qu'à modèle égal** : pour toute
