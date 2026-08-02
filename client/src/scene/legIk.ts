@@ -155,9 +155,10 @@ export type FootMode =
    */
   | 'planted'
   /**
-   * Assis : le pied VISE le sol, dans les deux sens. Siège bas → le genou se
-   * replie ; siège haut → la jambe se tend d'elle-même vers un sol hors de
-   * portée, et c'est exactement une jambe qui pend.
+   * Assis : le pied VISE le sol, dans les deux sens — tant que le sol est à
+   * portée de jambe. Siège bas → le genou se replie ; siège haut → la cible
+   * sort de la portée et l'IK rend la main au clip, qui est le seul à savoir à
+   * quoi ressemble un corps assis plus haut que ses jambes (cf. `autoriteReach`).
    */
   | 'reach'
 
@@ -401,7 +402,21 @@ export function createLegIk(vrm: VRM, root: Object3D): LegIk | null {
       }
       lastMode = mode
       let fixed = 0
-      for (const leg of legs) if (solveLeg(leg, mode, groundAt, dt)) fixed++
+      for (let i = 0; i < legs.length; i++) {
+        const autorite = solveLeg(legs[i], mode, groundAt, dt)
+        if (autorite > 0) fixed++
+        // AUTORITÉ PARTIELLE (cf. `autoriteReach`) : le solveur a travaillé,
+        // mais le sol n'est plus tout à fait à sa portée — on revient d'autant
+        // vers la pose du CLIP, qui est la jambe telle que l'animateur l'a
+        // posée. Les trois os de CETTE jambe seulement : l'autre peut très bien
+        // atteindre le sol (un pied sur un barreau, l'autre dans le vide).
+        if (autorite < 1) {
+          for (let k = 0; k < 3; k++) {
+            const b = 3 * i + k
+            safeLerpQuat(base[b], bones[b].quaternion, autorite, bones[b].quaternion)
+          }
+        }
+      }
       // Fondu anti-pop : de l'instantané vers la solution de CE régime,
       // ease-in expo (AnimTwoBoneIK.cpp:203-224). Le fondu s'applique aux
       // rotations LOCALES des six os de jambe — le corps, lui, continue de
@@ -424,7 +439,9 @@ export function createLegIk(vrm: VRM, root: Object3D): LegIk | null {
 }
 
 /**
- * Une jambe. Rend `true` si elle a été corrigée.
+ * Une jambe. Rend l'AUTORITÉ de la correction : 0 = pas touchée (la pose du
+ * clip reste), 1 = solution du solveur, et entre les deux le mélange des deux
+ * (cf. `autoriteReach`).
  *
  * Le pied n'est déplacé QUE verticalement : son x et son z restent ceux du clip,
  * qui possède la foulée — le déplacer latéralement ferait patiner le personnage.
@@ -438,20 +455,66 @@ function solveLeg(
   mode: FootMode,
   groundAt: (x: number, z: number) => number | null,
   dt: number,
-): boolean {
+): number {
   const { ankle } = leg
 
   ankle.updateWorldMatrix(true, false)
   ankle.getWorldPosition(vA)
   ankle.localToWorld(vSole.copy(leg.sole))
   const ground = groundAt(vSole.x, vSole.z)
-  if (ground === null) return false
+  if (ground === null) return 0
 
   const dy = ground - vSole.y
   // Debout : on remonte un pied enfoncé, jamais on n'abaisse un pied en l'air.
-  if (mode === 'planted' && dy <= 0) return false
-  if (Math.abs(dy) < IK_EPS) return false
-  return mode === 'planted' ? solvePlanted(leg, dy) : solveReach(leg, dy, dt)
+  if (mode === 'planted' && dy <= 0) return 0
+  if (Math.abs(dy) < IK_EPS) return 0
+  if (mode === 'planted') return solvePlanted(leg, dy) ? 1 : 0
+  const autorite = autoriteReach(leg, dy)
+  if (autorite <= 0) return 0
+  return solveReach(leg, dy, dt) ? autorite : 0
+}
+
+/**
+ * CE QUE LE SOLVEUR ASSIS A LE DROIT DE DIRE, ET OÙ IL DOIT SE TAIRE.
+ *
+ * L'en-tête promettait qu'un sol hors de portée donnerait « exactement une jambe
+ * qui pend ». MESURÉ, c'est faux : hors de portée, `midAngle` tombe à 0, la
+ * jambe part TENDUE vers la cible, et la hanche l'oriente sur la ligne
+ * hanche→cible. Le solveur jette alors TOUT ce que le clip disait de la jambe —
+ * or c'est justement lui qui sait à quoi ressemble un corps assis haut : cuisses
+ * posées sur l'assise, genoux au bord, mollets qui pendent.
+ *
+ * Ce que ça donnait, sur EtalonChibi (hanches 0,755 m) sur un pupitre
+ * d'anime-classroom à 0,694 m (portée 1,24), world-sit-idle :
+ *   · avance du genou hors de la corde hanche→cheville : 0,189 m → 0,005 m
+ *     (les cuisses passent à la VERTICALE — la silhouette n'est plus assise) ;
+ *   · les deux jambes tendues gardent le croisement de chevilles du clip (4 cm)
+ *     mais perdent l'écart des genoux : les mollets se traversent.
+ * À l'inverse, la pose du clip laissée telle quelle est JUSTE : genoux écartés,
+ * chevilles croisées, pieds en l'air — c'est une personne assise sur une table.
+ *
+ * D'où la règle, la même que celle de `planted` (« on ne fait que remonter un
+ * pied qui traverse ») transposée : L'IK NE PARLE QUE DE CE QU'ELLE PEUT
+ * ATTEINDRE. L'autorité vaut 1 tant que la cible est franchement à portée, et
+ * décroît linéairement jusqu'à 0 à l'extension maximale — le mélange se fait
+ * vers la pose du clip, dans `apply`.
+ *
+ * La BANDE vaut 10 % de la longueur de jambe (6,3 cm sur Sakura), et ce n'est
+ * pas un réglage libre : elle doit laisser l'autorité PLEINE sur les assises que
+ * le fichier promet d'adapter. Mesuré sur les rigs et les décors livrés, la
+ * portée d'une vraie chaise vaut 0,72 à 0,89 (chaises d'anime-classroom à
+ * 0,426 m pour Sakura : 0,85 ; chaise 0,45 m et lit 0,51 m pour ayaka : 0,77 et
+ * 0,85) — toutes sous 0,897, donc toutes à autorité 1, correction inchangée au
+ * bit près. La bande ne mord que là où le solveur n'avait plus rien à dire.
+ */
+const REACH_BAND = 0.1
+
+function autoriteReach(leg: Leg, dy: number): number {
+  leg.hip.getWorldPosition(vH)
+  vT.copy(vA)
+  vT.y += dy
+  const portee = (leg.thigh + leg.shin) * MAX_EXTENSION
+  return clamp((portee - vT.distanceTo(vH)) / (REACH_BAND * (leg.thigh + leg.shin)), 0, 1)
 }
 
 /** Régime debout — le code maison mesuré à 0,0 mm de glissement, conservé tel quel. */
@@ -596,8 +659,9 @@ function solveReach(leg: Leg, dy: number, dt: number): boolean {
       (2 * d)
     midAngle = Math.PI - (Math.acos(clamp(y / thigh, -1, 1)) + Math.acos(clamp(y / shin, -1, 1)))
   }
-  // Cible hors de portée : midAngle reste 0, la jambe reste TENDUE et pointe
-  // vers la cible sans l'atteindre — c'est une jambe qui pend, pas un NaN.
+  // Cible hors de portée : midAngle reste 0 et la jambe part TENDUE. Ce cas ne
+  // se présente plus qu'en bordure de bande — au-delà, `autoriteReach` a déjà
+  // rendu la jambe au clip — mais la garde reste : c'est elle qui évite le NaN.
   // Le genou devient une CHARNIÈRE PURE (relMidRot = angleAxis(midAngle, axe)) :
   // il satisfait la table de jointLimits par construction.
   knee.quaternion.setFromAxisAngle(leg.repere.kneeHinge, midAngle)
