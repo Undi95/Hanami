@@ -46,6 +46,11 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
   **reply to one** (the quote is written at the top of what you send — nothing hidden),
   **pin** one message per conversation (a ribbon, purely visual, never in the payload), and
   **Remember this** to file a message into the character's memory (`moments.md`).
+- 🔀 **Reply variants**: regenerating overwrites nothing, it stacks. Two arrows ‹ › and an *n/m*
+  counter under the reply scroll through the versions; whichever one is on screen when you send
+  your next message is the one that stays.
+- 🎙️ **Dictation**: a microphone button in the input, present only when the browser can do it and
+  the page is served over HTTPS or from `localhost`.
 - 🔎 **Search the conversation**: Ctrl+F, or the magnifier in the bar for touch — match count,
   previous/next, Esc to close.
 - 🕰️ **Sense of time** (optional): the date, the hour and the time elapsed since your last
@@ -58,9 +63,11 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
 - 🗣️ **Text-to-speech** (optional): each finished reply is read out loud through an
   OpenAI-compatible TTS server. *Test* reports what the server announces and lists its voices as
   clickable chips; *Listen again* replays a line. While the audio plays, it drives the lips.
+  **Each character has its own voice** (and its own switch): the server is an app setting, the
+  voice belongs to the character.
 - 💌 **Spontaneous messages** (opt-in): while you are away, the character writes on their own —
-  after about 4 h, then 10 h, 24 h, 48 h, and finally one understanding note before going quiet
-  until you come back. Never outside the hour range you set.
+  after about 4 h, then 10 h, then 24 h, and finally, around 48 h, one understanding note before
+  going quiet until you come back. Four messages in all, never outside the hour range you set.
 
 ### The avatar and the screen
 
@@ -77,13 +84,20 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
   even downloaded here; any other name is ignored. Breathing and head sway keep playing **on top** of
   the animation, and the face stays the model's business. The clips shipped with the app are all
   freely redistributable — see the [credits](#credits). Switch in *Settings > Appearance > Scene*.
+- 🎭 **Two body languages to pick from, per character**: two complete libraries that **never mix**
+  (their standing stances are too far apart to join up), chosen in the character's *Body language*
+  field — **Overte** by default, or **Rocketbox**, which brings a wider vocabulary and a
+  **listening idle**: the character shifts posture while you are typing your message. Walking and
+  sitting stay Overte's in both cases, the living scene existing only there.
 - 🏠 **3D environment**: a `.glb` room from `environments/`, placed around the avatar instead of the
   2D background — chosen per character, with an optional `.json` sidecar for scale, rotation, spawn
-  point and exposure. Switch in *Settings > Appearance > Scene*.
+  point and exposure. An environment whose floor is not at the model origin no longer puts the
+  character **under its own floor**: with no spawn point written down, the analysis looks for a
+  walkable one and finds it. Switch in *Settings > Appearance > Scene*.
 - 🚶 **Living scene**: the character inhabits the room — turning to face you, walking around on its
   own, sitting on whatever it finds, and replying seated if you write at that moment. A click on the
-  floor sends it there, a click on a seat makes it sit, a click on the character makes it nod; its
-  eyes follow the camera. Any environment dropped into `environments/` is **measured automatically on
+  floor sends it there, a click on a seat makes it sit, a click on the character makes it nod — a
+  hint says so once, on the first living scene; its eyes follow the camera. Any environment dropped into `environments/` is **measured automatically on
   import** (walkable floor, obstacles, seats — see
   [`environments/README.md`](environments/README.md)): no manual preparation, and inverse kinematics
   puts the feet on the real floor and the pelvis on the real seat, whatever its height. Large
@@ -128,6 +142,11 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
   of conversation.
 - 📥 **SillyTavern import**: character cards (PNG V2/V3, `alternate_greetings` becoming greeting
   variants) and chat logs (`.jsonl`).
+- 💾 **Backup and restore** (*Settings > Features > Data*): a `.zip` of the whole of `data/` and the
+  portraits — conversations, memory, prompts, settings, screen preferences. Restoring first shows
+  what it would change, and **archives the current state** into `backups/` before writing anything:
+  nothing is ever lost without a net. 3D models, backgrounds, environments and animations are not
+  in it — they are not data.
 - 📱 **Mobile / PWA**: responsive interface, installable on your home screen.
 - 🔒 Optional password (recommended if you expose Hanami through a Cloudflare Tunnel).
 
@@ -165,11 +184,12 @@ open <http://localhost:7799>. Details in [`devtools/LISEZMOI.md`](devtools/LISEZ
 
 Three tabs, one single form — switching tabs neither loses nor saves anything:
 
-- **Appearance** — interface language, theme (and the custom theme's two colours).
+- **Appearance** — interface language, theme (and the custom theme's two colours), scene (3D
+  environment, gesture animations, living scene).
 - **Model** — backend URL, API key, model, images (vision), temperature, max tokens, history
   length, model context size, model mode, automatic compaction.
 - **Features** — sense of time, thoughts, text-to-speech, spontaneous messages, memory, file
-  tools, sandbox folder, access password.
+  tools, sandbox folder, access password, data backup and restore.
 
 Language and theme apply immediately; everything else takes effect when you save.
 
@@ -193,7 +213,8 @@ Language and theme apply immediately; everything else takes effect when you save
 
 - **`data/` is never committed** (see `.gitignore`). Your chats, memory files, edited prompts,
   interface preferences and `config.json` — including the API key and password you may have set —
-  stay on your disk only.
+  stay on your disk only. Neither is `backups/`, where the pre-restore archives land: same
+  contents.
 - **VRM models, backgrounds and portraits are never committed either**: `vrm/`, `backgrounds/` and
   `portraits/` are git-ignored except for their `README.md`. Most VRoid Hub / Booth models forbid
   redistribution, so each user brings their own.
@@ -220,6 +241,7 @@ data/                  # YOUR data (never committed)
     system-prompt.md   # THE prompt — edit it freely
     memory/            # MEMORY.md (index) + one fact per file
     chats/             # one .jsonl per conversation
+backups/               # pre-restore archives (never committed, never purged)
 presets/               # characters shipped with the app (copied into data/ on first launch)
 vrm/                   # your .vrm models
 backgrounds/           # your background images

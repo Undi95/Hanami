@@ -48,6 +48,11 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
   quel message, **répondre à un message** (la citation est écrite en tête de ton envoi — rien de
   caché), **épingler** un message par conversation (un bandeau, purement visuel, jamais dans le
   payload) et **Retiens ça** pour ranger un message dans la mémoire du personnage (`moments.md`).
+- 🔀 **Variantes de réponse** : régénérer n'écrase rien, ça empile. Deux flèches ‹ › et un
+  compteur *n/m* sous la réponse font défiler les versions ; celle qui est affichée au moment où
+  tu envoies le message suivant est celle qui reste.
+- 🎙️ **Dictée** : un bouton micro dans le champ de saisie, présent uniquement si le navigateur
+  sait le faire et si la page est servie en HTTPS ou depuis `localhost`.
 - 🔎 **Recherche dans la conversation** : Ctrl+F, ou la loupe de la barre au doigt — nombre de
   correspondances, précédente/suivante, Échap pour fermer.
 - 🕰️ **Notion du temps** (option) : la date, l'heure et le temps écoulé depuis ton dernier message,
@@ -61,10 +66,12 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
 - 🗣️ **Synthèse vocale** (option) : chaque réponse terminée est lue à voix haute par un serveur TTS
   compatible OpenAI. *Tester* rapporte ce que le serveur annonce et liste ses voix en pastilles
   cliquables ; *Réécouter* rejoue une réplique. Pendant la lecture, c'est l'audio qui pilote les
-  lèvres.
+  lèvres. **Chaque personnage a sa voix** (et son interrupteur) : le serveur est un réglage de
+  l'app, la voix appartient au personnage.
 - 💌 **Messages spontanés** (opt-in) : pendant ton absence, le personnage écrit de lui-même — après
-  environ 4 h, puis 10 h, 24 h, 48 h, et enfin un dernier mot compréhensif avant de se taire
-  jusqu'à ton retour. Jamais en dehors de la plage horaire que tu fixes.
+  environ 4 h, puis 10 h, puis 24 h, et enfin, vers 48 h, un dernier mot compréhensif avant de se
+  taire jusqu'à ton retour. Quatre messages en tout, jamais en dehors de la plage horaire que tu
+  fixes.
 
 ### L'avatar et l'écran
 
@@ -82,13 +89,21 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
   et le sway de la tête continuent **par-dessus** l'animation, et le visage reste l'affaire du
   modèle. Les clips livrés avec l'app sont tous librement redistribuables — voir les
   [crédits](#crédits). Interrupteur dans *Réglages > Apparence > Scène*.
+- 🎭 **Deux gestuelles au choix, par personnage** : deux bibliothèques complètes et **jamais
+  mélangées** (leurs stations debout sont trop éloignées pour se raccorder), choisies au champ
+  *Gestuelle* du personnage — **Overte** par défaut, ou **Rocketbox**, qui apporte un vocabulaire
+  plus large et un **socle d'écoute** : le personnage change de posture pendant que tu tapes ton
+  message. Marcher et s'asseoir restent d'Overte dans les deux cas, la scène vivante n'existant
+  que là.
 - 🏠 **Décor 3D** : une pièce `.glb` de `environments/`, posée autour de l'avatar à la place du fond
   2D — choisie par personnage, avec un sidecar `.json` optionnel pour l'échelle, la rotation, le
-  point d'accueil et l'exposition. Interrupteur dans *Réglages > Apparence > Scène*.
+  point d'accueil et l'exposition. Un décor dont le sol n'est pas à l'origine du modèle ne pose
+  plus le personnage **sous son plancher** : faute de point d'accueil écrit, l'analyse en cherche
+  un praticable et le trouve. Interrupteur dans *Réglages > Apparence > Scène*.
 - 🚶 **Scène vivante** : le personnage occupe la pièce — il se tourne vers vous, s'y déplace de
   lui-même, s'assoit sur ce qu'il y trouve, et répond assis si vous lui écrivez à ce moment-là. Un
-  clic sur le sol l'y envoie, un clic sur un siège l'y assoit, un clic sur lui le fait acquiescer ;
-  ses yeux suivent la caméra. Tout décor déposé dans `environments/` est **mesuré automatiquement à
+  clic sur le sol l'y envoie, un clic sur un siège l'y assoit, un clic sur lui le fait acquiescer —
+  une astuce le dit une fois, à la première scène vivante ; ses yeux suivent la caméra. Tout décor déposé dans `environments/` est **mesuré automatiquement à
   l'import** (sol praticable, obstacles, assises — voir
   [`environments/README.md`](environments/README.md)) : aucune préparation manuelle, et une
   cinématique inverse pose les pieds sur le sol réel et le bassin sur l'assise réelle, quelle que
@@ -136,6 +151,11 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
   messages, jours de conversation.
 - 📥 **Import SillyTavern** : cartes de personnage (PNG V2/V3, les `alternate_greetings` devenant
   des variantes de salutation) et historiques de chat (`.jsonl`).
+- 💾 **Sauvegarde et restauration** (*Réglages > Fonctions > Données*) : un `.zip` de tout `data/`
+  et des portraits — conversations, mémoire, prompts, réglages, préférences d'écran. La
+  restauration montre d'abord ce qu'elle changerait, et **archive l'état courant** dans `backups/`
+  avant d'écrire quoi que ce soit : rien n'est jamais perdu sans filet. Les modèles 3D, les fonds,
+  les décors et les animations n'y sont pas — ils ne sont pas des données.
 - 📱 **Mobile/PWA** : interface responsive, installable sur l'écran d'accueil.
 - 🔒 Mot de passe optionnel (recommandé si tu exposes Hanami via un tunnel Cloudflare).
 
@@ -175,11 +195,12 @@ devtools/anim-lab/serve.mjs` ailleurs — puis <http://localhost:7799>. Le déta
 
 Trois onglets, un seul formulaire — changer d'onglet ne perd rien et n'enregistre rien :
 
-- **Apparence** — langue de l'interface, thème (et les deux couleurs du thème perso).
+- **Apparence** — langue de l'interface, thème (et les deux couleurs du thème perso), scène (décor
+  3D, animations gestuelles, scène vivante).
 - **Modèle** — URL du backend, clé API, modèle, images (vision), température, tokens max, longueur
   d'historique, taille de contexte du modèle, mode du modèle, compaction automatique.
 - **Fonctions** — notion du temps, pensées, synthèse vocale, messages spontanés, mémoire, outils
-  fichiers, dossier sandbox, mot de passe d'accès.
+  fichiers, dossier sandbox, mot de passe d'accès, sauvegarde et restauration des données.
 
 La langue et le thème s'appliquent immédiatement ; tout le reste prend effet à l'enregistrement.
 
@@ -204,7 +225,8 @@ La langue et le thème s'appliquent immédiatement ; tout le reste prend effet �
 
 - **`data/` n'est jamais committé** (voir `.gitignore`). Tes conversations, tes fichiers mémoire,
   tes prompts édités, tes préférences d'interface et `config.json` — clé d'API et mot de passe
-  éventuels compris — restent uniquement sur ton disque.
+  éventuels compris — restent uniquement sur ton disque. `backups/`, où atterrissent les archives
+  d'avant-restauration, non plus : c'est le même contenu.
 - **Les modèles VRM, les fonds et les portraits non plus** : `vrm/`, `backgrounds/` et
   `portraits/` sont ignorés par git, sauf leur `README.md`. La plupart des modèles VRoid Hub /
   Booth interdisent la redistribution : chacun apporte les siens.
@@ -232,6 +254,7 @@ data/                  # TES données (jamais committées)
     system-prompt.md   # LE prompt — édite-le librement
     memory/            # MEMORY.md (index) + un fait par fichier
     chats/             # un .jsonl par conversation
+backups/               # archives d'avant-restauration (jamais committées, jamais purgées)
 presets/               # personnages livrés avec l'app (copiés dans data/ au 1er lancement)
 vrm/                   # tes modèles .vrm
 backgrounds/           # tes fonds d'écran
