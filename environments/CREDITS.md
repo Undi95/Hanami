@@ -235,7 +235,8 @@ contains one decorative animation ("Take 001").
 | `apartment-floorplan.glb` | 133 767 | 76 585 | 8,8 Mo | ×1 | 8,10 × 5,50 m, murs 1,20 m | 17,94 m² | 28 |
 
 **FR —** Les modèles sont orientés Y-up (conversion effectuée par l'export Sketchfab).
-Les trois premiers ne sont pas livrés à l'échelle métrique ; les facteurs ci-dessus sont
+Quatre d'entre eux ne sont pas livrés à l'échelle métrique (les trois premiers et le
+café) ; les facteurs ci-dessus sont
 **mesurés** (hauteur de plafond, de fenêtre, de commode, pas des pupitres, nappe d'assise
 vers 0,45-0,50 m et plateau de table vers 0,75 m — recoupés entre eux) et vivent dans
 le sidecar `<nom>.json` de chaque décor, qui fait foi avec la rotation, le point d'accueil
@@ -245,8 +246,8 @@ embarque son environnement, un plan de coupe) déclencherait le rattrapage autom
 écraserait l'échelle vraie. La matrice racine posée par l'export Sketchfab peut déjà contenir
 un facteur : mesurer le rendu final, jamais les seules coordonnées des sommets.
 
-**EN —** All models are Y-up (converted by the Sketchfab exporter). The first three do not
-ship at metric scale; the factors above are **measured** (ceiling, window, dresser and
+**EN —** All models are Y-up (converted by the Sketchfab exporter). Four of them do not
+ship at metric scale (the first three and the café); the factors above are **measured** (ceiling, window, dresser and
 desk-spacing heights, seat surfaces around 0.45-0.50 m and table tops around 0.75 m,
 cross-checked against each other) and live in each environment's `<name>.json`
 sidecar, which is authoritative — along with rotation, spawn point and exposure. An

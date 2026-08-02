@@ -41,10 +41,31 @@ Dépose ici des fichiers `.glb` (ou `.gltf`) — ils apparaissent dans Hanami
   estrade de 1,2 m.
 - `exposure` — multiplicateur des **couleurs des matériaux du décor** (0,1 à 4)
   pour un décor déjà sombre ou déjà très clair. Il n'agit pas sur les lumières :
-  deux des trois décors livrés sont `KHR_materials_unlit` et les ignorent
+  trois des sept décors livrés sont `KHR_materials_unlit` et les ignorent
   totalement. L'avatar, lui, n'est jamais touché. Attention, comme partout ici,
   une valeur **hors bornes est ignorée**, donc repli sur 1 (décor intact) : écrire
   `4.5` rend un décor plus sombre qu'attendu, pas plus clair.
+
+Trois clés de plus servent aux cas particuliers ; les décors livrés en donnent
+chacun un exemple :
+
+- `frameDistance` — distance du cadrage par défaut de la caméra (0,5 à 8 m) voulue
+  par **ce** décor : une grande salle se regarde de plus loin qu'une chambre. Sans
+  elle, l'app choisit.
+- `materials` — réparations d'un asset abîmé, **par nom de matériau glTF**. Forme
+  courte `"Sol": [r, g, b]` : l'albédo est **remplacé** (composantes **linéaires**
+  0-1, la convention de `baseColorFactor`, pas du sRGB) ; forme longue
+  `{ "color": [...], "transmission": 0 }`. Deux cas réels sont livrés — les sols de
+  `rustic-bedroom`, arrivés quasi noirs de l'export et qu'aucune exposition ne
+  rattrape, et trois bocaux décoratifs de `cozy-loft-room` dont la transmission
+  coûtait une passe de rendu entière à chaque image. Un nom de matériau inconnu est
+  sans effet.
+- `backdrop` — jusqu'à **huit** panneaux de fond posés derrière les ouvertures du
+  décor (fenêtre sans vitrage, mur ouvert, plan de coupe) : sans eux, le fond de
+  page de l'app se voit au travers.
+  `{ "color": [r, g, b], "center": [x, y, z], "size": [largeur, hauteur], "yawY": 0 }`,
+  décrit dans le **repère brut du `.glb`** — le panneau appartient au décor, donc
+  changer `scale` ou `rotationY` l'emmène avec lui.
 
 Toutes les clés sont facultatives ; une clé inconnue ou une valeur invalide est
 ignorée en silence.
@@ -265,8 +286,12 @@ la donnée personnelle, et cela évite à chacun de refaire la même mesure.
 - Le canvas est **transparent** : un décor troué (pas de plafond, pas de mur
   derrière la caméra) laisse voir le dégradé de l'app. C'est **voulu** — le repli
   naturel, pas un bug.
-- Les `.glb` **ne sont pas committés** individuellement : chaque décor a sa propre
-  licence. Ceux livrés avec l'app sont crédités dans `CREDITS.md` (CC0 ou CC-BY).
+- Les **sept décors livrés avec l'app sont committés volontairement** : tous sont
+  sous **CC BY 4.0**, et crédités un par un dans [`CREDITS.md`](CREDITS.md) —
+  l'attribution est la seule condition de cette licence, et elle doit accompagner
+  toute redistribution. Ceux que **vous** déposez ici ne le sont pas (voir
+  `.gitignore`) : chaque décor a sa propre licence, à vous de la vérifier avant de
+  le partager.
 - Une capture (bouton photo) prend l'avatar **et** le décor derrière lui.
 - Le poids compte : un décor de 100 Mo se charge lentement sur téléphone.
 
@@ -315,10 +340,30 @@ Next to `room.glb`, a `room.json` tunes placement without touching the model:
   character on a 1.2 m platform.
 - `exposure` — multiplier applied to the **colors of the environment materials**
   (0.1 to 4), for an environment that is already dark or already very bright. It
-  does not touch the lights: two of the three shipped environments are
+  does not touch the lights: three of the seven shipped environments are
   `KHR_materials_unlit` and ignore them entirely. The avatar is never affected.
   Beware, as everywhere here, an **out-of-range value is ignored** and falls back
   to 1 (environment untouched): writing `4.5` gives a darker room, not a lighter one.
+
+Three further keys cover the special cases; the shipped environments give one
+example of each:
+
+- `frameDistance` — the default camera framing distance (0.5 to 8 m) **this**
+  environment asks for: a big hall is watched from further away than a bedroom.
+  Without it, the app decides.
+- `materials` — repairs to a damaged asset, **by glTF material name**. Short form
+  `"Floor": [r, g, b]`: the base colour is **replaced** (**linear** components 0-1,
+  the `baseColorFactor` convention, not sRGB); long form
+  `{ "color": [...], "transmission": 0 }`. Two real cases ship — the floors of
+  `rustic-bedroom`, which came out of the export almost black and no exposure can
+  rescue, and three decorative jars in `cozy-loft-room` whose transmission cost a
+  whole extra render pass every frame. An unknown material name does nothing.
+- `backdrop` — up to **eight** backdrop panels placed behind the environment's
+  openings (an unglazed window, an open wall, a cutaway plan): without them the
+  app's page background shows through.
+  `{ "color": [r, g, b], "center": [x, y, z], "size": [width, height], "yawY": 0 }`,
+  expressed in the **raw frame of the `.glb`** — the panel belongs to the
+  environment, so changing `scale` or `rotationY` carries it along.
 
 Every key is optional; an unknown key or an invalid value is silently ignored.
 
@@ -536,8 +581,10 @@ computation, not personal data, and it saves everyone the same measurement.
 - The canvas is **transparent**: an open environment (no ceiling, no wall behind
   the camera) lets the app gradient show through. That is **intended** — the
   natural fallback, not a bug.
-- The `.glb` files are **not committed** individually: each environment has its
-  own license. The ones shipped with the app are credited in `CREDITS.md` (CC0 or
-  CC-BY).
+- The **seven environments shipped with the app are committed on purpose**: all of
+  them are **CC BY 4.0**, and credited one by one in [`CREDITS.md`](CREDITS.md) —
+  attribution is that licence's only condition, and it must accompany any
+  redistribution. The ones **you** drop in here are not (see `.gitignore`): each
+  environment has its own licence, and checking it before sharing is on you.
 - A snapshot (photo button) captures the avatar **and** the room behind it.
 - Size matters: a 100 MB environment loads slowly on a phone.
