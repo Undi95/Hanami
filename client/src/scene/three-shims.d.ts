@@ -396,6 +396,9 @@ declare module 'three/examples/jsm/controls/OrbitControls.js' {
 
   export class OrbitControls {
     constructor(object: Camera, domElement?: HTMLElement)
+    // OrbitControls étend EventDispatcher : seul l'envoi est déclaré ici (le
+    // zoom clavier simule le cycle start/end d'une interaction utilisateur).
+    dispatchEvent(event: { type: string }): void
     target: Vector3
     enabled: boolean
     enableDamping: boolean

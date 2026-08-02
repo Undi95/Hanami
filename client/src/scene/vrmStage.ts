@@ -1407,6 +1407,31 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   renderer.domElement.addEventListener('pointerdown', onPointerDown)
   renderer.domElement.addEventListener('click', onSceneClick)
 
+  // ── Zoom au clavier : Maj + « + » avance vers le personnage, Maj + « − »
+  // recule — le secours quand la molette manque (ou est cassée). Pas propor-
+  // tionnel (×0,9 / ×1,1), borné par les mêmes min/maxDistance que la molette.
+  // Le cycle start/mouvement/end d'OrbitControls est simulé pour que la vue se
+  // persiste par le circuit existant (la garde du clic immobile laisse passer :
+  // le mouvement dépasse son epsilon).
+  function onKeyZoom(e: KeyboardEvent): void {
+    if (!e.shiftKey) return
+    const t = e.target as HTMLElement | null
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+    const versAvant = e.key === '+' || e.key === '='
+    const versArriere = e.key === '-' || e.key === '_'
+    if (!versAvant && !versArriere) return
+    e.preventDefault()
+    const offset = camera.position.clone().sub(controls.target)
+    const d = offset.length()
+    const vise = Math.min(controls.maxDistance, Math.max(controls.minDistance, d * (versAvant ? 0.9 : 1.1)))
+    if (Math.abs(vise - d) < 1e-6) return
+    controls.dispatchEvent({ type: 'start' })
+    camera.position.copy(controls.target).addScaledVector(offset.normalize(), vise)
+    controls.update()
+    controls.dispatchEvent({ type: 'end' })
+  }
+  window.addEventListener('keydown', onKeyZoom)
+
   // ── Taille : canvas 100 % du container (ResizeObserver + resize fenêtre) ──
   function resize(): void {
     const w = Math.max(1, container.clientWidth)
@@ -2798,6 +2823,7 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       renderer.domElement.removeEventListener('dblclick', onDblClick)
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('click', onSceneClick)
+      window.removeEventListener('keydown', onKeyZoom)
       clickMarks.dispose()
       controls.dispose()
       unloadCurrent()
