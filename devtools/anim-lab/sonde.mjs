@@ -111,7 +111,9 @@ function lireGLB(buf) {
   return { json: JSON.parse(new TextDecoder().decode(buf.subarray(20, 20 + jl))) }
 }
 
-// Pose de repos anti T-pose, reprise TELLE QUELLE de vrmStage.ts / index.html.
+// Pose de repos anti T-pose, reprise de vrmStage.ts / index.html — écrite dans
+// le repère normalisé qui regarde le −Z (les VRM 0.x) ; dans l'autre repère le
+// signe se renverse, et il se MESURE (cf. M.normalizedFacesPlusZ, dans rigVrm).
 const REST_POSE_Z = [
   ['leftUpperArm', 1.25], ['rightUpperArm', -1.25],
   ['leftLowerArm', 0.12], ['rightLowerArm', -0.12],
@@ -161,10 +163,12 @@ function rigVrm(fichier) {
   const a = adapter(vrm)
   // La page pose la même pose de repos anti T-pose AVANT de créer les actions :
   // c'est donc elle que PropertyMixer restaurera pour un os que le socle
-  // n'anime pas. La sonde doit poser la même, sinon les os non animés divergent.
+  // n'anime pas. La sonde doit poser la même, sinon les os non animés divergent
+  // — signe compris : sur un VRM 1.x, la pose sans le miroir lève les bras.
+  const sens = M.normalizedFacesPlusZ(vrm) ? -1 : 1
   for (const [nom, z] of REST_POSE_Z) {
     const n = a.noeudNorm(nom)
-    if (n) { n.rotation.z = z; a.reposQ.set(nom, n.quaternion.clone()) }
+    if (n) { n.rotation.z = sens * z; a.reposQ.set(nom, n.quaternion.clone()) }
   }
   a.majHumanoide()
   return { vrm, nom: `${path.basename(fichier)} (VRM ${metaVersion}.x, ${Object.keys(humanBones).length} os)`, adapt: a }

@@ -575,6 +575,9 @@
       const KEY_LIGHT_ENV = 1.1, FILL_LIGHT_ENV = 0.35
       const ENV_MIN_HEIGHT = 1.5, ENV_MAX_HEIGHT = 12, ENV_TARGET_HEIGHT = 2.6
       const DEG2RAD = Math.PI / 180
+      // Pose de repos anti T-pose, écrite dans le repère normalisé qui regarde
+      // le −Z (les VRM 0.x) ; le signe se renverse dans l'autre repère — il se
+      // MESURE à l'application, cf. M.normalizedFacesPlusZ (chargerModele).
       const REST_POSE_Z = [
         ['leftUpperArm', 1.25], ['rightUpperArm', -1.25],
         ['leftLowerArm', 0.12], ['rightLowerArm', -0.12],
@@ -983,10 +986,13 @@
           VRMUtils.removeUnnecessaryVertices(gltf.scene)
           VRMUtils.combineSkeletons(gltf.scene)
           VRMUtils.rotateVRM0(v) // VRM 0.x : retournés pour faire face au +Z
-          // Pose de repos anti T-pose, comme l'app.
+          // Pose de repos anti T-pose, comme l'app : le signe suit le sens
+          // MESURÉ du repère normalisé (sur un VRM 1.x, la pose telle quelle
+          // LÈVE les bras — cf. applyRestPose, vrmStage.ts).
+          const sens = M.normalizedFacesPlusZ(v) ? -1 : 1
           for (const [nom, z] of REST_POSE_Z) {
             const n = v.humanoid.getNormalizedBoneNode(nom)
-            if (n) n.rotation.z = z
+            if (n) n.rotation.z = sens * z
           }
           // Proxy de regard : sans lui, createVRMAnimationClip avertit en console.
           if (v.lookAt) {
