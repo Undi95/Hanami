@@ -11,7 +11,10 @@ interface Props {
   hasCharacter: boolean
   hasChat: boolean
   vnMode: boolean // mode visual novel actif (bascule d'affichage, pas un dialog)
+  vnHidden: boolean // boîte de dialogue VN masquée (la scène seule à l'écran)
   onToggleVn: () => void
+  /** Masque/remet la boîte de dialogue VN — le « cacher le chat » de ce mode. */
+  onToggleHide: () => void
   /** Bascule la recherche du fil (Ctrl+F rendu visible, et atteignable au doigt). */
   onToggleSearch: () => void
   onOpen: (d: DialogKind) => void
@@ -58,7 +61,9 @@ export default function TopBar({
   hasCharacter,
   hasChat,
   vnMode,
+  vnHidden,
   onToggleVn,
+  onToggleHide,
   onToggleSearch,
   onOpen,
 }: Props) {
@@ -143,6 +148,25 @@ export default function TopBar({
               extra={<path d="M6.8 13h10.4M6.8 16h6.6" />}
             />
           </button>
+          {/* Masquer le dialogue (mode VN seulement) : le geste classique des
+              visual novels — la scène seule à l'écran, le quick-menu reste pour
+              revenir. C'est le « cacher le chat » de ce mode, à côté de sa
+              bascule comme la poignée l'est de sa colonne. */}
+          {vnMode && (
+            <button
+              className="icon-btn"
+              title={vnHidden ? t('vnShowBox') : t('vnHideBox')}
+              aria-label={vnHidden ? t('vnShowBox') : t('vnHideBox')}
+              aria-pressed={vnHidden}
+              onClick={onToggleHide}
+            >
+              {/* La même boîte de dialogue que l'icône VN, barrée : « sans elle ». */}
+              <Icon
+                d="M5 5h14a2.5 2.5 0 012.5 2.5v9A2.5 2.5 0 0119 19H5a2.5 2.5 0 01-2.5-2.5v-9A2.5 2.5 0 015 5z"
+                extra={<path d="M5.5 18.5l13-13" />}
+              />
+            </button>
+          )}
           {/* Loupe : Ctrl+F reste, mais il lui fallait un accès visible — surtout
               au doigt, où le raccourci n'existe pas. Absente en mode VN : la boîte
               n'affiche qu'une réplique, il n'y a rien à y chercher. */}

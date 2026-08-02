@@ -310,6 +310,7 @@ export interface UiPrefs {
   chatPanelWidth?: number // largeur de la colonne de chat (desktop, ≥ 900 px)
   vnBoxWidth?: number // largeur de la boîte de dialogue du mode visual novel
   vnBoxHeight?: number // hauteur de la zone de texte de cette boîte
+  sheetHeight?: number // hauteur de la feuille basse de chat (< 900 px)
   activeCharacter?: string // dernier personnage ouvert
   activeChat?: Record<string, string> // dernière conversation ouverte, par personnage
   // Cadrage caméra choisi, par personnage ET par mode d'affichage : clé composée

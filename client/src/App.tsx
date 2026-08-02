@@ -39,7 +39,7 @@ import {
 import { chatPanelWidth, healLayoutPrefs, saveChatPanelWidth, saveVnBoxWidth, saveVnTextHeight } from './layout'
 import { I18nProvider, chatDisplayTitle, getLang, localeOf, useI18n } from './i18n'
 import TopBar, { AUTO_COMPACT_AT, CtxBadge, type DialogKind } from './components/TopBar'
-import { ChatPanelGrip } from './components/ResizeGrips'
+import { ChatPanelGrip, SheetHandle } from './components/ResizeGrips'
 import MessageList, { VnBox, messageVariants, type FeedItem } from './components/MessageList'
 import Composer from './components/Composer'
 import LoginGate from './components/LoginGate'
@@ -467,8 +467,10 @@ function AppInner() {
   // le recadrage attend le prochain reset ou la prochaine bascule de mode
   // (comme pour un redimensionnement de fenêtre, qui ne recadre pas non plus).
   useEffect(() => {
-    stageRef.current?.setPanelWidth(chatWidth)
-  }, [chatWidth, stageReady])
+    // Colonne repliée : la scène dispose de tout l'écran, le cadrage 'left'
+    // n'a plus de colonne à esquiver (0, comme sous 900 px où il n'y en a pas).
+    stageRef.current?.setPanelWidth(collapsed && !vnMode ? 0 : chatWidth)
+  }, [chatWidth, collapsed, vnMode, stageReady])
 
   // Animations gestuelles : la scène démarre allumée (c'est le défaut), donc cet
   // effet ne fait quelque chose qu'à l'extinction — et à chaque bascule ensuite.
@@ -1343,7 +1345,7 @@ function AppInner() {
           bouge ni les lèvres ni les émotions. */}
       {portrait !== '' && (
         <img
-          className={`scene-portrait${vnMode ? ' vn' : ''}`}
+          className={`scene-portrait${vnMode ? ' vn' : ''}${collapsed && !vnMode ? ' collapsed' : ''}`}
           src={portrait}
           alt=""
           aria-hidden="true"
@@ -1475,20 +1477,27 @@ function AppInner() {
         </div>
       )}
 
-      {/* En mode VN, le panneau s'efface (CSS) : « collapsed » n'a plus de sens. */}
-      <div className={`chat-panel${vnMode ? ' vn' : collapsed ? ' collapsed' : ''}`}>
+      {/* « collapsed » a un sens PAR MODE, réglé en CSS : feuille basse glissée
+          hors écran (mobile), colonne repliée contre le bord droit (desktop),
+          boîte de dialogue masquée au profit de la scène (visual novel). */}
+      <div className={`chat-panel${vnMode ? ' vn' : ''}${collapsed ? ' collapsed' : ''}`}>
         {/* Poignée de largeur du bord gauche : le CSS la réserve à la colonne de
             droite (desktop, hors mode VN) — ailleurs le panneau n'a pas de
             largeur à régler. */}
         <ChatPanelGrip />
 
+        {/* Languette de repli de la colonne desktop : le pendant du sheet-handle
+            mobile. Rendue en permanence, le CSS la réserve au ≥ 900 px hors VN. */}
         <button
-          className="sheet-handle"
+          className="col-toggle"
           onClick={() => setCollapsed((c) => !c)}
           aria-label={collapsed ? t('expandChat') : t('collapseChat')}
+          title={collapsed ? t('expandChat') : t('collapseChat')}
         >
-          <span className="handle-bar" />
+          <span aria-hidden="true">{collapsed ? '‹' : '›'}</span>
         </button>
+
+        <SheetHandle collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
 
         <TopBar
           characterName={character?.name ?? 'Hanami'}
@@ -1498,10 +1507,12 @@ function AppInner() {
           hasCharacter={!!character}
           hasChat={!!character && !!chatMeta}
           vnMode={vnMode}
+          vnHidden={vnMode && collapsed}
           onToggleVn={() => {
             changeVnMode(!vnMode)
-            setCollapsed(false) // on ne revient jamais du mode VN sur un panneau replié
+            setCollapsed(false) // on n'entre ni ne sort du mode VN sur un panneau replié
           }}
+          onToggleHide={() => setCollapsed((c) => !c)}
           onToggleSearch={() => setSearchSignal((n) => n + 1)}
           onOpen={(kind) => {
             // Par la barre du haut, l'Inspecteur s'ouvre toujours sur son premier

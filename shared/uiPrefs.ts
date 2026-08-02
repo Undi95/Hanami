@@ -83,6 +83,7 @@ export const UI_PREF_VALIDATORS: { [K in keyof Required<UiPrefs>]: (value: unkno
   chatPanelWidth: asPixels(280, 4000),
   vnBoxWidth: asPixels(400, 8000),
   vnBoxHeight: asPixels(60, 4000),
+  sheetHeight: asPixels(120, 4000),
   activeCharacter: (v) => asString(v, 128),
   activeChat: (v) => asRecord(v, (raw) => asString(raw, 128)),
   views: (v) => asRecord(v, asView),

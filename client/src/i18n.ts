@@ -107,6 +107,9 @@ const FR = {
   resetLayout: 'Réinitialiser l’affichage (avatar et panneaux)',
   resizeChatPanel: 'Largeur du chat — glissez, double-clic pour réinitialiser',
   resizeVnBox: 'Taille de la boîte de dialogue — glissez, double-clic pour réinitialiser',
+  sheetHandleHint: 'Toucher : replier · Glisser : hauteur · Double-toucher : réinitialiser',
+  vnHideBox: 'Masquer le dialogue (la scène seule)',
+  vnShowBox: 'Réafficher le dialogue',
 
   // ── Erreurs côté client (celles du serveur sont affichées telles quelles) ─
   authRequired: 'Authentification requise',
@@ -594,6 +597,9 @@ const EN: Record<Key, string> = {
   resetLayout: 'Reset the layout (avatar and panels)',
   resizeChatPanel: 'Chat width — drag, double-click to reset',
   resizeVnBox: 'Dialogue box size — drag, double-click to reset',
+  sheetHandleHint: 'Tap: collapse · Drag: height · Double-tap: reset',
+  vnHideBox: 'Hide the dialogue (scene only)',
+  vnShowBox: 'Show the dialogue again',
 
   // ── Client-side errors (server errors are shown verbatim) ────────────────
   authRequired: 'Authentication required',

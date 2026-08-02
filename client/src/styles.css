@@ -413,8 +413,10 @@ select {
     right: var(--chat-col-w);
     max-width: calc(100% - var(--chat-col-w) - 32px);
   }
-  /* Mode VN : plus de colonne, la scène est plein écran — retour au centre. */
-  .scene-portrait.vn {
+  /* Mode VN : plus de colonne, la scène est plein écran — retour au centre.
+     Colonne REPLIÉE : même géométrie, la scène a récupéré tout l'écran. */
+  .scene-portrait.vn,
+  .scene-portrait.collapsed {
     right: 0;
     max-width: 92%;
   }
@@ -427,7 +429,9 @@ select {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 52dvh;
+  /* Hauteur réglée à la barre-poignée (--sheet-h), bornée : la scène garde
+     toujours ses 15 % — le même plafond que sheetMax() côté layout.ts. */
+  height: min(var(--sheet-h, 52dvh), 85dvh);
   display: flex;
   flex-direction: column;
   background: var(--panel);
@@ -439,10 +443,15 @@ select {
   z-index: 10;
 }
 
-.chat-panel.collapsed {
+/* Repli de la feuille basse — :not(.vn) : le mode VN a SON repli (la boîte de
+   dialogue masquée, plus bas), et le desktop le sien (translateX du media). */
+.chat-panel.collapsed:not(.vn) {
   transform: translateY(calc(100% - 44px - env(safe-area-inset-bottom)));
 }
 
+/* Barre-poignée de la feuille : toucher replie, GLISSER règle la hauteur,
+   double-toucher réinitialise — les trois gestes des autres modes, au même
+   endroit. Le geste vertical nous appartient en entier (touch-action). */
 .sheet-handle {
   flex: none;
   height: 44px;
@@ -452,8 +461,10 @@ select {
   justify-content: center;
   background: none;
   border: none;
-  cursor: pointer;
+  cursor: ns-resize;
   padding: 0;
+  touch-action: none;
+  user-select: none;
 }
 
 .handle-bar {
@@ -464,8 +475,43 @@ select {
   transition: background 0.15s ease;
 }
 
-.sheet-handle:hover .handle-bar {
+.sheet-handle:hover .handle-bar,
+.sheet-handle[data-dragging] .handle-bar {
   background: var(--accent);
+}
+
+/* Languette de repli de la colonne desktop : posée SUR la scène, accolée au
+   bord gauche du panneau (left négatif), mi-hauteur. Sobre : en demi-teinte au
+   repos, franche au survol. Une fois la colonne repliée (translateX), cette
+   languette est ce qui en reste à l'écran — et le geste pour la rouvrir. */
+.col-toggle {
+  display: none; /* réservée au desktop hors VN (cf. les media plus bas) */
+  position: absolute;
+  left: -22px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 72px;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: 10px 0 0 10px;
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.col-toggle:hover {
+  opacity: 1;
+  color: var(--accent);
 }
 
 @media (min-width: 900px) {
@@ -478,10 +524,21 @@ select {
     border-radius: 0;
     border-top: none;
     border-left: 1px solid var(--border);
-    transform: none !important;
+  }
+  /* Colonne repliée : glissée contre le bord droit. Elle reste montée (aucun
+     état perdu), seule la languette — qui déborde du panneau — reste visible. */
+  .chat-panel.collapsed:not(.vn) {
+    transform: translateX(100%);
+  }
+  /* Replié, le bord gauche n'est plus une poignée de largeur. */
+  .chat-panel.collapsed .panel-grip {
+    display: none;
   }
   .sheet-handle {
     display: none;
+  }
+  .chat-panel:not(.vn) .col-toggle {
+    display: flex;
   }
 }
 
@@ -3423,6 +3480,17 @@ a.credit-link {
   display: none;
 }
 
+/* Dialogue masqué (le « cacher le chat » du mode VN, depuis le quick-menu) :
+   la scène seule à l'écran. Le quick-menu reste — c'est lui qui remet tout —
+   et les bannières d'état (backend injoignable, compaction) restent aussi :
+   masquer le dialogue ne doit jamais masquer une alerte. */
+.chat-panel.vn.collapsed .vn-box,
+.chat-panel.vn.collapsed .composer,
+.chat-panel.vn.collapsed .reply-actions,
+.chat-panel.vn.collapsed .reply-quote {
+  display: none;
+}
+
 .chat-panel.vn .topbar {
   border-bottom: none;
   padding: 0 12px 6px;
@@ -3450,7 +3518,8 @@ a.credit-link {
 
 /* En colonne la largeur de l'écran ne compte plus : les boutons reprennent leur
    gabarit plein (la règle « téléphone » de la rangée les rétrécissait pour rien,
-   et un doigt mérite 44 px). Sept icônes : 7 × 44 + 6 = 314 px, ça tient. */
+   et un doigt mérite 44 px). Huit icônes (masquer-le-dialogue comprise) :
+   8 × 44 + 6 = 358 px, ça tient encore au-dessus du seuil court de 700 px. */
 .chat-panel.vn .topbar nav .icon-btn {
   flex: none;
   width: 44px;
@@ -3476,9 +3545,11 @@ a.credit-link {
   .chat-panel.vn .topbar nav {
     left: 12px;
     flex-direction: row;
-    /* 7 × 44 + 4 (retraits) + 2 (bordures) = 314 px : au-delà ce ne serait que
-       du vide. Marge gauche automatique = la rangée reste calée à droite. */
-    max-width: 314px;
+    /* 8 × 44 + 4 (retraits) + 2 (bordures) = 358 px : au-delà ce ne serait que
+       du vide. Marge gauche automatique = la rangée reste calée à droite.
+       À 360 px d'écran, les huit boutons se partagent 336 px : 42 px chacun,
+       toujours au-dessus du seuil tactile de 40. */
+    max-width: 358px;
     margin-left: auto;
   }
   .chat-panel.vn .topbar nav .icon-btn {

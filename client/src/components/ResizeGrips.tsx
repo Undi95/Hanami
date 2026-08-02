@@ -13,12 +13,19 @@ import {
   VN_BOX_W,
   VN_TEXT_MIN_H,
   previewChatPanelWidth,
+  previewSheetHeight,
   previewVnBoxWidth,
   previewVnTextHeight,
   saveChatPanelWidth,
+  saveSheetHeight,
   saveVnBoxWidth,
   saveVnTextHeight,
 } from '../layout'
+
+// En dessous, le geste est un TOUCHER, pas un glissement : un doigt qui tape
+// bouge d'un ou deux pixels, et la poignée de la feuille basse doit distinguer
+// « replier » (tap) de « redimensionner » (drag).
+const DRAG_THRESHOLD = 6
 
 interface DragHandlers {
   /** Prise du pointeur : mémorise l'état de départ (la poignée est passée). */
@@ -29,6 +36,8 @@ interface DragHandlers {
   drop: () => void
   /** Double-clic : la préférence est oubliée. */
   reset: () => void
+  /** Relâchement SANS déplacement (sous le seuil) : un simple toucher. */
+  tap?: () => void
 }
 
 /** Câblage pointeur commun aux poignées (capture, annulation, double-clic). */
@@ -36,16 +45,17 @@ function useDrag(handlers: DragHandlers) {
   const origin = useRef<{ x: number; y: number } | null>(null)
   const moved = useRef(false)
 
-  function end(grip: HTMLElement): void {
+  function end(grip: HTMLElement, canceled: boolean): void {
     origin.current = null
     delete grip.dataset.dragging
     // Un simple clic n'écrit rien : la préférence ne naît que d'un déplacement.
     if (moved.current) handlers.drop()
+    else if (!canceled) handlers.tap?.()
     moved.current = false
   }
 
   return {
-    onPointerDown(e: ReactPointerEvent<HTMLDivElement>): void {
+    onPointerDown(e: ReactPointerEvent<HTMLElement>): void {
       if (e.button !== 0 || origin.current) return
       const grip = e.currentTarget
       origin.current = { x: e.clientX, y: e.clientY }
@@ -53,29 +63,37 @@ function useDrag(handlers: DragHandlers) {
       handlers.grab(grip)
       // Capture : le pointeur peut sortir de la poignée (7 px de large…) sans
       // perdre le geste, et le relâchement nous revient où qu'il ait lieu.
-      grip.setPointerCapture(e.pointerId)
+      // try : un pointerId déjà relâché (ou synthétique) fait jeter la capture —
+      // le geste dégrade alors en suivi simple, il ne doit pas casser la poignée.
+      try {
+        grip.setPointerCapture(e.pointerId)
+      } catch {
+        /* capture refusée : les move/up arrivent tant que le pointeur reste dessus */
+      }
       grip.dataset.dragging = 'on'
       e.preventDefault() // le drag ne sélectionne pas le texte autour
     },
 
-    onPointerMove(e: ReactPointerEvent<HTMLDivElement>): void {
+    onPointerMove(e: ReactPointerEvent<HTMLElement>): void {
       const from = origin.current
       if (!from) return
       const dx = e.clientX - from.x
       const dy = e.clientY - from.y
-      if (dx === 0 && dy === 0) return
+      // Zone morte : rien ne bouge tant que le geste peut encore être un tap.
+      if (!moved.current && Math.hypot(dx, dy) < DRAG_THRESHOLD) return
       moved.current = true
       handlers.move(dx, dy)
     },
 
-    onPointerUp(e: ReactPointerEvent<HTMLDivElement>): void {
-      if (origin.current) end(e.currentTarget)
+    onPointerUp(e: ReactPointerEvent<HTMLElement>): void {
+      if (origin.current) end(e.currentTarget, false)
     },
 
     // Geste repris par le navigateur (défilement tactile) : ce qui est déjà
     // appliqué est PERSISTÉ — sinon la variable CSS et la préférence divergeraient.
-    onPointerCancel(e: ReactPointerEvent<HTMLDivElement>): void {
-      if (origin.current) end(e.currentTarget)
+    // Mais un tap annulé ne déclenche RIEN : le navigateur a pris la main.
+    onPointerCancel(e: ReactPointerEvent<HTMLElement>): void {
+      if (origin.current) end(e.currentTarget, true)
     },
 
     onDoubleClick(): void {
@@ -125,6 +143,50 @@ export function ChatPanelGrip() {
       title={label}
       {...drag}
     />
+  )
+}
+
+/**
+ * Barre de la feuille basse (< 900 px) : LA poignée à trois gestes du panneau de
+ * chat mobile — toucher replie/déplie, glisser règle la hauteur, double-toucher
+ * revient à la hauteur par défaut. C'est la grammaire des « bottom sheets »
+ * (Plans, feuilles de partage) : aucun bouton de plus à l'écran.
+ */
+export function SheetHandle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+  const { t } = useI18n()
+  const start = useRef<number | null>(null)
+  const last = useRef<number | null>(null)
+  const drag = useDrag({
+    grab: (grip) => {
+      // Replié : la feuille est hors écran, un glissement n'aurait rien à
+      // montrer — seul le toucher (déplier) a un sens.
+      start.current = collapsed ? null : (grip.parentElement?.getBoundingClientRect().height ?? null)
+      last.current = null
+    },
+    // Ancrée en BAS : tirer la barre vers le HAUT (dy < 0) agrandit la feuille.
+    move: (_dx, dy) => {
+      if (start.current !== null) last.current = previewSheetHeight(start.current - dy)
+    },
+    drop: () => {
+      if (last.current !== null) saveSheetHeight(last.current)
+    },
+    reset: () => saveSheetHeight(null),
+    tap: onToggle,
+  })
+  return (
+    <button
+      className="sheet-handle"
+      aria-label={collapsed ? t('expandChat') : t('collapseChat')}
+      title={t('sheetHandleHint')}
+      // Clavier : Entrée/Espace déclenchent un click sans pointeur (detail 0) —
+      // le tap du pointeur, lui, est déjà servi par onPointerUp.
+      onClick={(e) => {
+        if (e.detail === 0) onToggle()
+      }}
+      {...drag}
+    >
+      <span className="handle-bar" />
+    </button>
   )
 }
 
