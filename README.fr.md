@@ -4,6 +4,11 @@
 
 **Compagnon de chat LLM ultra-léger avec avatar 3D (VRM) — local-first, transparent, mobile.**
 
+> **🚧 Travail en cours.** Hanami fonctionne — chaque fonctionnalité ci-dessous est réelle,
+> mesurée et testée — mais son auteur est un perfectionniste et ce dépôt bouge vite. Attendez-vous
+> à des angles rugueux, des commits fréquents, et un outil qui s'améliore de semaine en semaine.
+> Les issues et retours sont bienvenus.
+
 Hanami est une alternative minimaliste à SillyTavern, pensée pour une seule chose : discuter
 avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
 

@@ -4,6 +4,10 @@
 
 **An ultra-light LLM chat companion with a 3D (VRM) avatar — local-first, transparent, mobile-ready.**
 
+> **🚧 Work in progress.** Hanami works — every feature below is real, measured and tested — but its
+> author is a perfectionist and this repository moves fast. Expect rough edges, frequent commits,
+> and things getting better week after week. Issues and feedback are welcome.
+
 Hanami is a minimal alternative to SillyTavern, built around one thing: talking to a
 character, and doing it well. No macro language, no forty nested menus, no hidden magic.
 
