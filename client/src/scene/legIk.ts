@@ -55,6 +55,7 @@
 import { Quaternion, Vector3 } from 'three'
 import type { Object3D } from 'three'
 import type { VRM, VRMHumanBoneName } from '@pixiv/three-vrm'
+import { normalizedFacesPlusZ } from './jointLimits'
 import { easeInExpo, safeLerpQuat, safeMixQuat } from './overteMath'
 
 /** Sous cet écart, on ne touche à rien : la correction serait sous le pixel. */
@@ -88,6 +89,61 @@ const MIN_AXIS_LENGTH = 1e-4
 const KNEE_HINGE = new Vector3(1, 0, 0)
 /** `Rig.cpp:2290` — direction du cou-de-pied dans le repère LOCAL du pied. */
 const LOCAL_FOOT_FORWARD = new Vector3(0, Math.cos(FOOT_THETA), Math.sin(FOOT_THETA))
+/** L'avant du bassin dans son repère local — `hipsForward` de Rig::calculateKneePoleVector. */
+const HIPS_FORWARD = new Vector3(0, 0, 1)
+
+// ── LE SENS DU REPÈRE NORMALISÉ, MESURÉ ────────────────────────────────────
+//
+// Le même piège que jointLimits a déjà payé, et il mordait ici aussi.
+//
+// Quatre des grandeurs ci-dessus ne sont pas des directions du MONDE : ce sont
+// des directions d'OS (l'axe de charnière du genou, le devant du genou —
+// refVector du pole vector —, le cou-de-pied, l'avant du bassin). Toutes sont
+// écrites dans la convention « +Z devant, +X à gauche ». Or `VRMHumanoidRig`
+// bâtit les os normalisés dans l'espace PROPRE du modèle, et un VRM 0.x y
+// regarde le −Z : `VRMUtils.rotateVRM0` tourne la SCÈNE, jamais un repère local.
+//
+// MESURÉ sur les 94 modèles de vrm/ : 89 sont en 0.x, et sur ces 89 la charnière
+// `angleAxis(midAngle, +X)` du régime assis pliait le genou VERS L'AVANT — de
+// l'hyperextension, pas une flexion. Relevé sur EtalonChibi (0.x, hanches
+// 0,755 m) assise à 0,426 m (les chaises d'anime-classroom), sur world-sit-idle :
+// 108,7° hors de la table de jointLimits au genou et 54,9° à la cheville, genou
+// 14 à 20 cm DERRIÈRE la corde hanche→cheville, semelle 4,9 cm sous le sol, et
+// les deux jambes ramenées à 0,000 m l'une de l'autre — l'interpénétration
+// franche. Sur les 5 modèles en 1.0, les mêmes mesures rendaient 0,0° : c'est le
+// repère qui était en cause, pas la table ni les clips.
+//
+// Le remède est celui de jointLimits — un CHANGEMENT DE BASE, pas une retouche
+// des valeurs : le demi-tour autour de Y qui sépare les deux conventions échange
+// (+X, +Z) et (−X, −Z). Il est appliqué UNE FOIS, à la préparation du modèle, et
+// le solveur ne lit ensuite que le repère mesuré.
+
+/** Les quatre directions d'os du solveur, dans le repère RÉEL du modèle. */
+interface Repere {
+  /** Axe de charnière du genou, repère LOCAL du tibia. */
+  kneeHinge: Vector3
+  /** Le devant du genou et de la cuisse, dans leur repère LOCAL. */
+  kneeForward: Vector3
+  /** Direction du cou-de-pied, repère LOCAL du pied. */
+  footForward: Vector3
+  /** L'avant du bassin, dans son repère LOCAL. */
+  hipsForward: Vector3
+}
+
+/** Un demi-tour autour de Y : (x, y, z) → (−x, y, −z). */
+function retourne(v: Vector3, faceZ: boolean): Vector3 {
+  return faceZ ? v.clone() : new Vector3(-v.x, v.y, -v.z)
+}
+
+function repereDe(vrm: VRM): Repere {
+  const faceZ = normalizedFacesPlusZ(vrm)
+  return {
+    kneeHinge: retourne(KNEE_HINGE, faceZ),
+    kneeForward: retourne(KNEE_FORWARD, faceZ),
+    footForward: retourne(LOCAL_FOOT_FORWARD, faceZ),
+    hipsForward: retourne(HIPS_FORWARD, faceZ),
+  }
+}
 
 /** Comment traiter le sol sous un pied. */
 export type FootMode =
@@ -122,6 +178,8 @@ interface Leg {
   prevPole: Vector3 | null
   /** Le bassin — la moitié « 25 % » du pole vector du genou. */
   hips: Object3D | null
+  /** Le repère d'os MESURÉ sur ce modèle (cf. la section ci-dessus). */
+  repere: Repere
 }
 
 /** Déplacement au sol dépeint par l'animation, dans le repère du personnage. */
@@ -213,6 +271,8 @@ export function createLegIk(vrm: VRM, root: Object3D): LegIk | null {
     vrm.humanoid.getNormalizedBoneNode(name as VRMHumanBoneName)
   const legs: Leg[] = []
   const bones: Object3D[] = []
+  // Le sens du repère normalisé est MESURÉ ici, une fois, sur le modèle chargé.
+  const repere = repereDe(vrm)
 
   for (const side of ['left', 'right'] as const) {
     const hip = node(`${side}UpperLeg`)
@@ -232,7 +292,7 @@ export function createLegIk(vrm: VRM, root: Object3D): LegIk | null {
     vTmp.y = 0
     vrm.scene.localToWorld(vTmp)
     const sole = ankle.worldToLocal(vTmp.clone())
-    legs.push({ hip, knee, ankle, thigh, shin, sole, prevPole: null, hips: node('hips') })
+    legs.push({ hip, knee, ankle, thigh, shin, sole, prevPole: null, hips: node('hips'), repere })
     bones.push(hip, knee, ankle)
   }
 
@@ -432,7 +492,7 @@ function solvePlanted(leg: Leg, dy: number): boolean {
     // Cuisse alignée sur la cible : le plan de flexion n'existe pas. Le genou
     // plie alors vers l'AVANT du corps, comme un genou.
     hip.getWorldQuaternion(qWorld)
-    vTmp.copy(KNEE_FORWARD).applyQuaternion(qWorld)
+    vTmp.copy(leg.repere.kneeForward).applyQuaternion(qWorld)
     vBend.copy(vTmp).addScaledVector(vDir, -vTmp.dot(vDir))
     if (vBend.lengthSq() < 1e-10) return false
   }
@@ -505,11 +565,11 @@ function solveReach(leg: Leg, dy: number, dt: number): boolean {
   // footForward = targetRot · localFootForward ; hipsForward = hipsRot · UNIT_Z.
   // La direction « du pied » est celle du COU-DE-PIED (51,39° de l'axe du
   // tibia), pas celle de la semelle — le réglage empirique d'origine.
-  vTmp.copy(LOCAL_FOOT_FORWARD).applyQuaternion(qFoot)
+  vTmp.copy(leg.repere.footForward).applyQuaternion(qFoot)
   if (leg.hips) leg.hips.getWorldQuaternion(qTmp)
   else if (hip.parent) hip.parent.getWorldQuaternion(qTmp)
   else qTmp.identity()
-  vTmp2.set(0, 0, 1).applyQuaternion(qTmp)
+  vTmp2.copy(leg.repere.hipsForward).applyQuaternion(qTmp)
   // lerp(hipsForward, footForward, 0.75) puis normalisation
   vPole.copy(vTmp2).addScaledVector(vTmp.sub(vTmp2), KNEE_POLE_BLEND).normalize()
   // Lissage ANGULAIRE (Rig::updateFeet) : la rotation entre l'ancien vecteur
@@ -540,7 +600,7 @@ function solveReach(leg: Leg, dy: number, dt: number): boolean {
   // vers la cible sans l'atteindre — c'est une jambe qui pend, pas un NaN.
   // Le genou devient une CHARNIÈRE PURE (relMidRot = angleAxis(midAngle, axe)) :
   // il satisfait la table de jointLimits par construction.
-  knee.quaternion.setFromAxisAngle(KNEE_HINGE, midAngle)
+  knee.quaternion.setFromAxisAngle(leg.repere.kneeHinge, midAngle)
 
   // ── Hanche : le bras de levier sur la ligne de cible (lignes 165-186) ────
   ankle.updateWorldMatrix(true, false)
@@ -565,7 +625,7 @@ function solveReach(leg: Leg, dy: number, dt: number): boolean {
   // (AnimPoleVectorConstraint.cpp:40-166, avec ses cinq gardes.)
   knee.updateWorldMatrix(true, false)
   knee.getWorldQuaternion(qTmp)
-  vShin.copy(KNEE_FORWARD).applyQuaternion(qTmp) // refVector : le devant du genou
+  vShin.copy(leg.repere.kneeForward).applyQuaternion(qTmp) // refVector : le devant du genou
   ankle.updateWorldMatrix(true, false)
   ankle.getWorldPosition(vTmp)
   vTmp2.subVectors(vH, vTmp) // NOTE : hanche − pied, comme l'original
