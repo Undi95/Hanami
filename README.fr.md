@@ -9,23 +9,38 @@
 > à des angles rugueux, des commits fréquents, et un outil qui s'améliore de semaine en semaine.
 > Les issues et retours sont bienvenus.
 
-![Six captures d'écran de Hanami. Rangée du haut : un avatar 3D debout entre les pupitres d'une
-grande salle de classe japonaise ; le même avatar assis sur une chaise à côté d'une table de café,
-sous une inscription murale « Happiness is a cup of coffee » ; l'avatar dans une petite chambre rose
-avec un bureau et un écran. Rangée du bas : la vue classique, avatar à gauche et conversation à
-droite ; le mode visual novel, avatar plein écran avec une boîte de dialogue en bas ; la fenêtre
-Réglages ouverte sur l'onglet Apparence, avec les six pastilles de thème et les interrupteurs de
-scène.](docs/images/collage.png)
+![Six captures d'écran de Hanami, en deux rangées. Rangée du haut, la scène 3D seule, panneau de
+chat retiré du cadre : un garçon en tunique blanche, un grand bras mécanique dans le dos, debout
+pieds nus entre les pupitres d'une salle de classe japonaise ; le même personnage assis sur un
+tabouret au comptoir d'un café, les mains sur les genoux, une ardoise de menu derrière lui ; le
+personnage dans une petite chambre aux murs roses, avec un lit mezzanine et un bureau à deux écrans.
+Rangée du bas, l'interface : le face à face — le personnage à gauche, une conversation de trois
+messages à droite ; le mode visual novel — le personnage plein écran au-dessus d'une boîte de
+dialogue où on lit « Watching the rain, mostly. Sit down — I'll keep you company until you're
+tired. » ; la vue 2D — un portrait plat devant un lac au crépuscule, la même conversation à
+côté.](docs/images/collage.jpg)
 
-<sub>De gauche à droite, rangée du haut : **debout dans la classe japonaise** — 75 m², la pièce
-mesurée à l'import ; **assis à une table de café**, de lui-même, dans la scène vivante ; **une
-chambre douillette**. Rangée du bas : **le face à face**, avatar et conversation côte à côte ; **le
-mode visual novel**, sa boîte de dialogue et sa colonne d'icônes ; **Réglages ▸ Apparence**, les six
-thèmes et les interrupteurs de scène. Les captures une à une dans
-[`docs/images/`](docs/images). Avatar d'exemple de toutes les captures : **Seed-san** par
-**VirtualCast, Inc.** — [VRM Public License 1.0](https://vrm.dev/licenses/1.0/), issu des
+<sub>Rangée du haut, la **scène 3D** seule : **debout dans la classe japonaise** — 75 m², la pièce
+mesurée à l'import ; **assis au café**, de lui-même, dans la scène vivante ; **une petite chambre**.
+Rangée du bas, l'**interface** : **le face à face**, avatar et conversation côte à côte ; **le mode
+visual novel**, sa boîte de dialogue et sa colonne d'icônes ; **la vue 2D**, pour un personnage sans
+aucun modèle 3D — un portrait devant une image de fond (ce paysage a été dessiné pour la capture ;
+`backgrounds/` est livré vide, c'est à vous de le remplir). Les captures une à une, en grand, dans
+[`docs/images/`](docs/images) — dont [Réglages ▸ Crédits](docs/images/07-credits.jpg). Personnage
+d'exemple de toutes les captures : **Seed-san** par **VirtualCast, Inc.** —
+[VRM Public License 1.0](https://vrm.dev/licenses/1.0/), issu des
 [modèles d'exemple du VRM Consortium](https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san) ;
-il est livré avec Hanami, voir les [crédits](#crédits).</sub>
+il est livré avec Hanami, voir les [crédits](#crédits). Le bras mécanique dans son dos fait partie du
+modèle : il recopie son bras gauche, par les contraintes de rotation que le fichier porte.</sub>
+
+Et la vue dans laquelle on vit vraiment — le personnage d'un côté, la conversation de l'autre :
+
+![Le face à face en grand. À gauche, l'avatar 3D jusqu'à la ceinture, éclairé de face sur un dégradé
+violet profond. À droite, la colonne de chat : le nom du personnage, le titre de la conversation,
+puis trois messages — « Oh — hello. I wasn't expecting anyone this late. », « Couldn't sleep. What
+are you up to? », « Watching the rain, mostly. Sit down — I'll keep you company until you're
+tired. » — et, en bas, les boutons Regenerate et Continue et la zone de
+saisie.](docs/images/04-face-to-face.jpg)
 
 Hanami est une alternative minimaliste à SillyTavern, pensée pour une seule chose : discuter
 avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.

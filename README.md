@@ -8,21 +8,37 @@
 > author is a perfectionist and this repository moves fast. Expect rough edges, frequent commits,
 > and things getting better week after week. Issues and feedback are welcome.
 
-![Six screenshots of Hanami. Top row: a 3D avatar standing between the desks of a large Japanese
-classroom; the same avatar sitting on a chair beside a café table, under a "Happiness is a cup of
-coffee" wall sign; the avatar in a small pink loft room with a desk and a monitor. Bottom row: the
-classic view, avatar on the left and the conversation on the right; visual-novel mode, the avatar
-full-screen with a dialogue box across the bottom; the Settings window open on the Appearance tab,
-showing the six theme swatches and the scene toggles.](docs/images/collage.png)
+![Six screenshots of Hanami, in two rows. Top row, the 3D scene on its own, chat panel cropped out:
+a boy in a white tunic with a large mechanical arm on his back, standing barefoot between the desks
+of a Japanese classroom; the same character sitting on a stool at a café counter, hands on his lap,
+a menu board behind him; the character in a small loft room with pink walls, a bunk bed and a desk
+with two monitors. Bottom row, the interface: the face-to-face view — the character on the left, a
+three-message conversation on the right; visual-novel mode — the character full-screen above a
+dialogue box reading "Watching the rain, mostly. Sit down — I'll keep you company until you're
+tired."; the 2D view — a flat portrait over a twilight-lake background, with the same conversation
+beside it.](docs/images/collage.jpg)
 
-<sub>Left to right, top row: **standing in the Japanese classroom** — 75 m², the room measured on
-import; **sitting at a café table**, on its own, in the living scene; **a cosy loft room**. Bottom
-row: **the face-to-face view**, avatar and conversation side by side; **visual-novel mode**, with its
-dialogue box and its column of menu icons; **Settings ▸ Appearance**, the six themes and the scene
-switches. Individual screenshots in [`docs/images/`](docs/images). Example avatar in every shot:
-**Seed-san** by **VirtualCast, Inc.** — [VRM Public License 1.0](https://vrm.dev/licenses/1.0/),
-from the [VRM Consortium samples](https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san);
-it ships with Hanami, see the [credits](#credits).</sub>
+<sub>Top row, the **3D scene** alone: **standing in the Japanese classroom** — 75 m², the room
+measured on import; **sat down at the café** by himself, in the living scene; **a small loft room**.
+Bottom row, the **interface**: **the face-to-face view**, avatar and conversation side by side;
+**visual-novel mode**, with its dialogue box and its column of menu icons; **the 2D view**, for a
+character with no 3D model at all — a portrait over a background image (that landscape was drawn for
+the screenshot; `backgrounds/` ships empty and is yours to fill). One shot at a time, full size, in
+[`docs/images/`](docs/images) — including [Settings ▸ Credits](docs/images/07-credits.jpg).
+Example character in every shot: **Seed-san** by **VirtualCast, Inc.** —
+[VRM Public License 1.0](https://vrm.dev/licenses/1.0/), from the
+[VRM Consortium samples](https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san);
+he ships with Hanami, see the [credits](#credits). The mechanical arm on his back is part of the
+model: it copies his left arm, by way of the rotation constraints the file carries.</sub>
+
+And the view you will actually live in — the character on one side, the conversation on the other:
+
+![The face-to-face view at full size. On the left, the 3D avatar down to the belt, lit from the
+front, against a deep violet gradient. On the right, the chat column: the character's name, the
+conversation title, then three messages — "Oh — hello. I wasn't expecting anyone this late.",
+"Couldn't sleep. What are you up to?", "Watching the rain, mostly. Sit down — I'll keep you company
+until you're tired." — and, at the bottom, the Regenerate and Continue buttons and the message
+box.](docs/images/04-face-to-face.jpg)
 
 Hanami is a minimal alternative to SillyTavern, built around one thing: talking to a
 character, and doing it well. No macro language, no forty nested menus, no hidden magic.
