@@ -16,6 +16,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import {
   ANIMATION_CREDITS,
   APP_LICENSE,
+  AVATAR_CREDITS,
   CODE_CREDITS,
   FONT_CREDITS,
   labelOf,
@@ -159,6 +160,14 @@ export default function CreditsPanel() {
       <h3 className="section-title">{t('creditsAnimations')}</h3>
       <ul className="credits">
         {ANIMATION_CREDITS.map((entry) => (
+          <StaticCredit key={entry.title} entry={entry} lang={lang} />
+        ))}
+      </ul>
+
+      <h3 className="section-title">{t('creditsAvatar')}</h3>
+      <p className="hint">{t('creditsAvatarNote')}</p>
+      <ul className="credits">
+        {AVATAR_CREDITS.map((entry) => (
           <StaticCredit key={entry.title} entry={entry} lang={lang} />
         ))}
       </ul>

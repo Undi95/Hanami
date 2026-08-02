@@ -394,6 +394,9 @@ const FR = {
   creditsEnvironmentsEmpty: 'Aucun décor installé.',
   creditsNoAttribution: 'Attribution absente du fichier — à retrouver avant toute redistribution.',
   creditsAnimations: 'Animations',
+  creditsAvatar: 'Avatar d’exemple',
+  creditsAvatarNote:
+    'Le seul modèle 3D livré avec l’app, celui que porte Hana au premier lancement. Sa licence exige d’être citée, et elle autorise explicitement la redistribution — ce que la quasi-totalité des modèles VRM gratuits refusent. Vos propres modèles, déposés dans vrm/, ne regardent que vous.',
   creditsFont: 'Police',
   creditsCode: 'Code',
   creditsCodeNote: 'Rien de ce qui suit n’exige d’être cité. Tout y est quand même.',
@@ -847,6 +850,9 @@ const EN: Record<Key, string> = {
   creditsEnvironmentsEmpty: 'No environment installed.',
   creditsNoAttribution: 'Attribution missing from the file — track it down before redistributing.',
   creditsAnimations: 'Animations',
+  creditsAvatar: 'Example avatar',
+  creditsAvatarNote:
+    'The only 3D model shipped with the app, the one Hana wears on first launch. Its licence requires being named, and it explicitly allows redistribution — which almost no free VRM model does. Your own models, dropped into vrm/, are nobody’s business but yours.',
   creditsFont: 'Typeface',
   creditsCode: 'Code',
   creditsCodeNote: 'None of the following requires being named. All of it is named anyway.',

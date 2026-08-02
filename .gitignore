@@ -22,6 +22,15 @@ presets/*
 # Modèles VRM et fonds : fichiers perso / licences tierces — non committés.
 vrm/*
 !vrm/README.md
+# SEULE exception : l'avatar d'exemple de Hana, le seul modèle 3D livré avec
+# l'app. Seed-san, du VRM Consortium (VirtualCast, Inc.), sous VRM Public
+# License 1.0 dont les conditions embarquées disent noir sur blanc
+# allowRedistribution: true — d'où le droit de le committer, que la quasi-
+# totalité des modèles VRM gratuits n'accordent PAS. La preuve de licence
+# recopiée vit à côté, dans Seed-san.LICENCE.txt : les deux se committent
+# ensemble ou pas du tout. N'ajoutez aucun autre modèle à cette liste.
+!vrm/Seed-san.vrm
+!vrm/Seed-san.LICENCE.txt
 backgrounds/*
 !backgrounds/README.md
 # Portraits 2D : images des cards importées (posées par l'app, pas à la main).

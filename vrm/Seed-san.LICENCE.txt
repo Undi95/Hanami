@@ -1,0 +1,76 @@
+Seed-san — avatar d'exemple livré avec Hanami
+=============================================
+(Seed-san — the example avatar shipped with Hanami)
+
+Fichier / File : vrm/Seed-san.vrm  (10 917 800 octets / bytes)
+
+Auteur / Author  : VirtualCast, Inc.
+Licence / Licence: VRM Public License 1.0 — https://vrm.dev/licenses/1.0/
+Source           : https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san
+Téléchargé le / downloaded on : 2026-08-02, depuis / from
+  https://raw.githubusercontent.com/vrm-c/vrm-specification/master/samples/Seed-san/vrm/Seed-san.vrm
+  (fichier repris tel quel, aucun octet modifié / taken verbatim, not a byte changed)
+
+POURQUOI CELUI-LÀ / WHY THIS ONE
+--------------------------------
+FR — Hanami ne livre qu'un seul modèle 3D, et il fallait qu'il soit REDISTRIBUABLE :
+la plupart des modèles VRM gratuits (VRoid Hub, Booth) autorisent l'usage mais
+INTERDISENT la redistribution — ils ne pouvaient donc pas entrer dans le dépôt.
+Seed-san est le modèle d'exemple officiel du VRM Consortium, publié dans le dépôt
+de la spécification VRM elle-même, et ses conditions ne sont pas une promesse
+verbale : elles sont ÉCRITES DANS LE FICHIER, lisibles par n'importe qui
+(extension `VRMC_vrm`, objet `meta`). Elles sont recopiées mot pour mot ci-dessous.
+
+EN — Hanami ships exactly one 3D model, and it had to be REDISTRIBUTABLE: most free
+VRM models (VRoid Hub, Booth) allow use but FORBID redistribution, so none of them
+could enter the repository. Seed-san is the VRM Consortium's official sample model,
+published inside the VRM specification repository itself, and its terms are not a
+verbal promise: they are WRITTEN INSIDE THE FILE, readable by anyone (the `VRMC_vrm`
+extension, `meta` object). They are copied verbatim below.
+
+CONDITIONS EMBARQUÉES DANS LE FICHIER / LICENCE SETTINGS EMBEDDED IN THE FILE
+----------------------------------------------------------------------------
+Relevé sur le fichier livré, chunk JSON du GLB, extensions.VRMC_vrm.meta :
+(read off the shipped file, GLB JSON chunk, extensions.VRMC_vrm.meta)
+
+    "name": "Seed-san",
+    "version": "1",
+    "authors": ["VirtualCast, Inc."],
+    "copyrightInformation": "VirtualCast, Inc.",
+    "licenseUrl": "https://vrm.dev/licenses/1.0/",
+    "avatarPermission": "everyone",
+    "allowRedistribution": true,
+    "modification": "allowModificationRedistribution",
+    "commercialUsage": "corporation",
+    "creditNotation": "required",
+    "allowAntisocialOrHateUsage": true,
+    "allowExcessivelyViolentUsage": true,
+    "allowExcessivelySexualUsage": true,
+    "allowPoliticalOrReligiousUsage": true
+
+Les deux lignes qui décident / the two lines that decide:
+  allowRedistribution: true            → la redistribution est autorisée.
+  modification: allowModificationRedistribution → modifier et redistribuer aussi.
+La ligne qui oblige / the line that obliges:
+  creditNotation: "required"           → l'attribution est EXIGÉE.
+
+Cette attribution est donnée dans Hanami à quatre endroits : ce fichier,
+README.md et README.fr.md (section Crédits), et l'écran Réglages ▸ Crédits de
+l'application (shared/credits.ts) — un crédit qu'on ne peut pas lire n'honore
+personne.
+(That attribution is given in four places: this file, README.md and README.fr.md
+(Credits section), and the app's own Settings ▸ Credits screen — a credit nobody
+can read honours nobody.)
+
+Ce que dit la VRM Public License 1.0 sur l'usage en images / what VRM PL 1.0 says
+about image use : elle autorise explicitement le « Model Use », c'est-à-dire la
+diffusion publique d'une suite d'images obtenues en manipulant l'avatar 3D — ce
+sont exactement les captures d'écran de docs/images/.
+
+RIEN D'AUTRE DE vrm/ N'EST DANS LE DÉPÔT / NOTHING ELSE IN vrm/ IS COMMITTED
+---------------------------------------------------------------------------
+vrm/ est ignoré par git (voir .gitignore) sauf deux exceptions nommées :
+ce fichier et Seed-san.vrm. Les autres modèles que vous déposez ici sont les
+vôtres et restent chez vous.
+(vrm/ is git-ignored except for two named exceptions: this file and Seed-san.vrm.
+Whatever else you drop here is yours and stays on your disk.)

@@ -8,6 +8,22 @@
 > author is a perfectionist and this repository moves fast. Expect rough edges, frequent commits,
 > and things getting better week after week. Issues and feedback are welcome.
 
+![Six screenshots of Hanami. Top row: a 3D avatar standing between the desks of a large Japanese
+classroom; the same avatar sitting on a chair beside a café table, under a "Happiness is a cup of
+coffee" wall sign; the avatar in a small pink loft room with a desk and a monitor. Bottom row: the
+classic view, avatar on the left and the conversation on the right; visual-novel mode, the avatar
+full-screen with a dialogue box across the bottom; the Settings window open on the Appearance tab,
+showing the six theme swatches and the scene toggles.](docs/images/collage.png)
+
+<sub>Left to right, top row: **standing in the Japanese classroom** — 75 m², the room measured on
+import; **sitting at a café table**, on its own, in the living scene; **a cosy loft room**. Bottom
+row: **the face-to-face view**, avatar and conversation side by side; **visual-novel mode**, with its
+dialogue box and its column of menu icons; **Settings ▸ Appearance**, the six themes and the scene
+switches. Individual screenshots in [`docs/images/`](docs/images). Example avatar in every shot:
+**Seed-san** by **VirtualCast, Inc.** — [VRM Public License 1.0](https://vrm.dev/licenses/1.0/),
+from the [VRM Consortium samples](https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san);
+it ships with Hanami, see the [credits](#credits).</sub>
+
 Hanami is a minimal alternative to SillyTavern, built around one thing: talking to a
 character, and doing it well. No macro language, no forty nested menus, no hidden magic.
 
@@ -220,14 +236,17 @@ Language and theme apply immediately; everything else takes effect when you save
   stay on your disk only. Neither is `backups/`, where the pre-restore archives land: same
   contents.
 - **VRM models, backgrounds and portraits are never committed either**: `vrm/`, `backgrounds/` and
-  `portraits/` are git-ignored except for their `README.md`. Most VRoid Hub / Booth models forbid
-  redistribution, so each user brings their own.
+  `portraits/` are git-ignored except for their `README.md` — and for the single example avatar,
+  `vrm/Seed-san.vrm`, whose licence explicitly allows redistribution (the proof, copied out of the
+  file itself, sits next to it in `vrm/Seed-san.LICENCE.txt`). Most VRoid Hub / Booth models forbid
+  redistribution, so for anything else each user brings their own.
 - **`environments/` and `vrma/` are tracked on purpose**: everybody should get the same scene, so
   only freely redistributable assets go there. Animations and environments are credited in the
   [credits](#credits); the file-by-file legal detail is in `vrma/NOTICE.md` and
   `environments/CREDITS.md`.
 - `presets/hana/` is the only character shipped with the repository — an example written to be
-  nobody's in particular, bilingual, without a 3D model so that you can give her yours. On first
+  nobody's in particular, bilingual, wearing the example avatar so that a fresh install has
+  something to show on the very first launch (swap it for yours in one dropdown). On first
   launch, every folder in `presets/` is copied into `data/characters/` and never overwritten
   afterwards — so editing your character never touches the repo, and pulling never touches your
   character. Your own presets stay local: everything under `presets/` is git-ignored but `hana/`.
@@ -247,7 +266,7 @@ data/                  # YOUR data (never committed)
     chats/             # one .jsonl per conversation
 backups/               # pre-restore archives (never committed, never purged)
 presets/               # characters shipped with the app (copied into data/ on first launch)
-vrm/                   # your .vrm models
+vrm/                   # your .vrm models (+ Seed-san.vrm, the example avatar, committed)
 backgrounds/           # your background images
 portraits/             # 2D portraits from imported cards (avatar without a VRM)
 environments/          # 3D rooms (.glb) and their optional placement sidecars
@@ -256,7 +275,7 @@ vrma/extra/            # converted clips that were not kept — never loaded (se
 client/                # React front-end (Vite)
 server/                # Express server + API
 shared/                # types shared by client and server
-docs/                  # remote access and mobile guides
+docs/                  # remote access and mobile guides, and the README's screenshots
 scripts/               # mock-llm (fake OpenAI-compatible backend)
 devtools/              # animation test bench and biomechanical diagnosis (not part of the app)
 ```
@@ -341,6 +360,20 @@ attribution. Via [Sketchfab](https://sketchfab.com):
   Japanese classroom.
 - "**apartment floor plan**" by **SrMonteiro**
   ([profile](https://sketchfab.com/crispimrafael)) — the cutaway apartment.
+
+### Example avatar
+
+- "**Seed-san**" by **VirtualCast, Inc.** — *VRM Public License 1.0*
+  ([licence](https://vrm.dev/licenses/1.0/),
+  [model](https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san)). The only 3D
+  model shipped with Hanami: it is what Hana wears on first launch, and what every screenshot above
+  shows. It is here because it is one of the very few good-looking VRM models that may legally be
+  **redistributed** — its licence settings, written inside the file and readable by anyone, say
+  `allowRedistribution: true` and `modification: allowModificationRedistribution`, where nearly
+  every free VRoid Hub / Booth model allows use but forbids redistribution. The same settings carry
+  `creditNotation: required`: this credit is not a courtesy, it is the condition. The file is
+  shipped byte for byte as published, and the terms are copied out in
+  `vrm/Seed-san.LICENCE.txt`.
 
 ### Typeface
 

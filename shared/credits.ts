@@ -14,10 +14,15 @@
 // tenue à la main ne peut diverger des fichiers réellement livrés — ce qui est
 // précisément le risque que la CC BY fait courir.
 //
-// Ici vit donc uniquement ce qu'AUCUN asset ne sait dire de lui-même : les
-// animations (un .vrma ne porte pas de champ de licence), la police, et les
-// briques de code. Cette liste-là ne bouge qu'en même temps que package.json ou
-// que vrma/NOTICE.md.
+// Ici vit donc ce qu'AUCUN asset ne sait dire de lui-même : les animations (un
+// .vrma ne porte pas de champ de licence), la police, et les briques de code.
+// Cette liste-là ne bouge qu'en même temps que package.json ou que
+// vrma/NOTICE.md.
+//
+// Une seule exception à la règle « lu dans le fichier » : l'avatar d'exemple.
+// Un .vrm SAIT se décrire (l'objet `meta` de son extension VRMC_vrm), mais il
+// n'y en a qu'un seul de livré, jamais deux, et sa licence exige d'être citée —
+// une entrée écrite ici coûte moins qu'un lecteur de méta au démarrage.
 //
 // Le détail juridique — correspondance fichier par fichier, avis intégraux —
 // reste dans NOTICE.md, vrma/NOTICE.md et environments/CREDITS.md. Cet écran
@@ -146,6 +151,34 @@ export const ANIMATION_CREDITS: readonly CreditEntry[] = [
         'No shipped file derives from it any more, but the work served. The acknowledgement the ' +
         'database requires: "The data used in this project was obtained from mocap.cs.cmu.edu. ' +
         'The database was created with funding from NSF EIA-0196217."',
+    },
+  },
+]
+
+/**
+ * L'avatar d'exemple : le SEUL modèle 3D livré avec l'app, celui que porte Hana
+ * au premier lancement. Il est ici parce que sa licence l'exige — ses conditions
+ * embarquées portent `creditNotation: "required"` —, et il est là tout court
+ * parce qu'il est le seul du genre à porter `allowRedistribution: true` : la
+ * quasi-totalité des modèles VRM gratuits autorisent l'usage et interdisent la
+ * redistribution. Preuve recopiée dans `vrm/Seed-san.LICENCE.txt`.
+ */
+export const AVATAR_CREDITS: readonly CreditEntry[] = [
+  {
+    title: 'Seed-san',
+    url: 'https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san',
+    author: 'VirtualCast, Inc.',
+    license: 'VRM Public License 1.0',
+    licenseUrl: 'https://vrm.dev/licenses/1.0/',
+    note: {
+      fr:
+        'L’avatar de Hana, et le seul modèle 3D livré avec Hanami : le modèle d’exemple officiel ' +
+        'du VRM Consortium, dont les conditions embarquées autorisent explicitement la ' +
+        'redistribution et exigent cette mention.',
+      en:
+        'Hana’s avatar, and the only 3D model shipped with Hanami: the VRM Consortium’s official ' +
+        'sample model, whose embedded terms explicitly allow redistribution and require this ' +
+        'credit.',
     },
   },
 ]

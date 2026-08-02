@@ -6,6 +6,13 @@ Dépose ici tes fichiers `.vrm` — ils apparaissent automatiquement dans Hanami
 Les `.vrm` ne sont **pas committés** (licences tierces : la plupart des modèles
 VRoid Hub / Booth interdisent la redistribution — vérifie la licence de chaque modèle).
 
+**Une seule exception, livrée avec l'app :** `Seed-san.vrm`, l'avatar d'exemple que
+porte Hana au premier lancement. C'est le modèle d'exemple du VRM Consortium
+(VirtualCast, Inc.), et ses conditions embarquées autorisent explicitement la
+redistribution — c'est écrit dans le fichier, et recopié à côté dans
+`Seed-san.LICENCE.txt`. Ne le supprime pas si tu veux que Hana garde son avatar ;
+tes propres modèles vivent à côté sans se gêner.
+
 ## Les étalons du banc d'essai
 
 Les outils de `devtools/` mesurent des centimètres : ils ne se comparent d'une

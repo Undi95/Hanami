@@ -1,7 +1,7 @@
 {
   "id": "hana",
   "name": "Hana",
-  "vrm": "",
+  "vrm": "/vrm/Seed-san.vrm",
   "background": "",
   "greeting": "[happy] Oh — hello! You must be new here. I'm Hana. Take your time looking around; I'll be right here when you're ready to talk.",
   "greetings": [

@@ -9,6 +9,24 @@
 > à des angles rugueux, des commits fréquents, et un outil qui s'améliore de semaine en semaine.
 > Les issues et retours sont bienvenus.
 
+![Six captures d'écran de Hanami. Rangée du haut : un avatar 3D debout entre les pupitres d'une
+grande salle de classe japonaise ; le même avatar assis sur une chaise à côté d'une table de café,
+sous une inscription murale « Happiness is a cup of coffee » ; l'avatar dans une petite chambre rose
+avec un bureau et un écran. Rangée du bas : la vue classique, avatar à gauche et conversation à
+droite ; le mode visual novel, avatar plein écran avec une boîte de dialogue en bas ; la fenêtre
+Réglages ouverte sur l'onglet Apparence, avec les six pastilles de thème et les interrupteurs de
+scène.](docs/images/collage.png)
+
+<sub>De gauche à droite, rangée du haut : **debout dans la classe japonaise** — 75 m², la pièce
+mesurée à l'import ; **assis à une table de café**, de lui-même, dans la scène vivante ; **une
+chambre douillette**. Rangée du bas : **le face à face**, avatar et conversation côte à côte ; **le
+mode visual novel**, sa boîte de dialogue et sa colonne d'icônes ; **Réglages ▸ Apparence**, les six
+thèmes et les interrupteurs de scène. Les captures une à une dans
+[`docs/images/`](docs/images). Avatar d'exemple de toutes les captures : **Seed-san** par
+**VirtualCast, Inc.** — [VRM Public License 1.0](https://vrm.dev/licenses/1.0/), issu des
+[modèles d'exemple du VRM Consortium](https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san) ;
+il est livré avec Hanami, voir les [crédits](#crédits).</sub>
+
 Hanami est une alternative minimaliste à SillyTavern, pensée pour une seule chose : discuter
 avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
 
@@ -233,14 +251,17 @@ La langue et le thème s'appliquent immédiatement ; tout le reste prend effet �
   éventuels compris — restent uniquement sur ton disque. `backups/`, où atterrissent les archives
   d'avant-restauration, non plus : c'est le même contenu.
 - **Les modèles VRM, les fonds et les portraits non plus** : `vrm/`, `backgrounds/` et
-  `portraits/` sont ignorés par git, sauf leur `README.md`. La plupart des modèles VRoid Hub /
-  Booth interdisent la redistribution : chacun apporte les siens.
+  `portraits/` sont ignorés par git, sauf leur `README.md` — et sauf l'unique avatar d'exemple,
+  `vrm/Seed-san.vrm`, dont la licence autorise explicitement la redistribution (la preuve, recopiée
+  du fichier lui-même, est à côté dans `vrm/Seed-san.LICENCE.txt`). La plupart des modèles VRoid Hub
+  / Booth interdisent la redistribution : pour tout le reste, chacun apporte les siens.
 - **`environments/` et `vrma/` sont suivis VOLONTAIREMENT** : tout le monde doit avoir la même
   scène, donc seuls des assets librement redistribuables y vont. Animations et décors sont crédités
   dans les [crédits](#crédits) ; le détail juridique fichier par fichier est dans `vrma/NOTICE.md`
   et `environments/CREDITS.md`.
 - `presets/hana/` est le seul personnage livré avec le dépôt — un exemple écrit pour n'être
-  personnel à personne, bilingue, et sans modèle 3D pour que tu lui donnes le tien. Au premier
+  personnel à personne, bilingue, et portant l'avatar d'exemple pour qu'une installation neuve ait
+  quelque chose à montrer dès le premier lancement (remplace-le par le tien en un menu). Au premier
   lancement, chaque dossier de `presets/` est copié dans `data/characters/` puis plus jamais
   écrasé — éditer ton personnage ne touche donc pas au dépôt, et un `git pull` ne touche pas à ton
   personnage. Tes propres presets restent locaux : tout `presets/` est ignoré par git sauf `hana/`.
@@ -261,7 +282,7 @@ data/                  # TES données (jamais committées)
     chats/             # un .jsonl par conversation
 backups/               # archives d'avant-restauration (jamais committées, jamais purgées)
 presets/               # personnages livrés avec l'app (copiés dans data/ au 1er lancement)
-vrm/                   # tes modèles .vrm
+vrm/                   # tes modèles .vrm (+ Seed-san.vrm, l'avatar d'exemple, committé)
 backgrounds/           # tes fonds d'écran
 portraits/             # portraits 2D des cards importées (avatar sans VRM)
 environments/          # pièces 3D (.glb) et leurs sidecars de placement optionnels
@@ -270,7 +291,7 @@ vrma/extra/            # clips convertis non retenus — jamais chargés (cf. vr
 client/                # front React (Vite)
 server/                # serveur Express + API
 shared/                # types partagés client/serveur
-docs/                  # guides d'accès distant et mobile
+docs/                  # guides d'accès distant et mobile, et les captures du README
 scripts/               # mock-llm (faux backend compatible OpenAI)
 devtools/              # banc d'essai des animations + diagnostic biomécanique (hors app)
 ```
@@ -356,6 +377,21 @@ l'attribution. Via [Sketchfab](https://sketchfab.com) :
   salle de classe japonaise.
 - « **apartment floor plan** » par **SrMonteiro**
   ([profil](https://sketchfab.com/crispimrafael)) — l'appartement en plan de coupe.
+
+### Avatar d'exemple
+
+- « **Seed-san** » par **VirtualCast, Inc.** — *VRM Public License 1.0*
+  ([licence](https://vrm.dev/licenses/1.0/),
+  [modèle](https://github.com/vrm-c/vrm-specification/tree/master/samples/Seed-san)). Le seul
+  modèle 3D livré avec Hanami : c'est lui que porte Hana au premier lancement, et lui qu'on voit sur
+  toutes les captures ci-dessus. Il est là parce qu'il fait partie des très rares modèles VRM
+  présentables qu'on a légalement le droit de **redistribuer** — ses conditions de licence, écrites
+  DANS le fichier et lisibles par n'importe qui, portent `allowRedistribution: true` et
+  `modification: allowModificationRedistribution`, là où la quasi-totalité des modèles gratuits
+  VRoid Hub / Booth autorisent l'usage et interdisent la redistribution. Les mêmes conditions
+  portent `creditNotation: required` : ce crédit n'est pas une politesse, c'est la condition. Le
+  fichier est livré octet pour octet tel que publié, et les termes sont recopiés dans
+  `vrm/Seed-san.LICENCE.txt`.
 
 ### Police
 
