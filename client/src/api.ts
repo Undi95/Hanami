@@ -16,6 +16,7 @@ import type {
   UiPrefs,
   UiPrefsPatch,
 } from '../../shared/types'
+import type { EnvironmentCredit } from '../../shared/credits'
 import { translate as t } from './i18n'
 
 const TOKEN_KEY = 'hanami_token'
@@ -473,6 +474,16 @@ export async function getBackgrounds(): Promise<string[]> {
 /** Décors 3D disponibles (dossier environments/) — liste vide si le dossier est absent. */
 export async function getEnvironments(): Promise<string[]> {
   const r = await req<{ environments: string[] }>('GET', '/api/environments')
+  return r.environments
+}
+
+/**
+ * Attribution des décors 3D, lue par le serveur DANS les `.glb` livrés
+ * (`asset.extras`) — jamais dans une liste tenue à la main. C'est ce qui rend
+ * la CC BY 4.0 des décors visible dans l'app : Réglages → Crédits.
+ */
+export async function getEnvironmentCredits(): Promise<EnvironmentCredit[]> {
+  const r = await req<{ environments: EnvironmentCredit[] }>('GET', '/api/credits/environments')
   return r.environments
 }
 

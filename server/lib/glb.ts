@@ -144,7 +144,18 @@ interface GltfJson {
   scene?: number
   scenes?: { nodes?: number[] }[]
   extensionsRequired?: string[]
-  asset?: { generator?: string; version?: string }
+  asset?: GlbAsset
+}
+
+/**
+ * En-tête `asset` d'un modèle. `extras` est le champ libre de glTF : c'est là
+ * que l'export Sketchfab écrit l'attribution (`title`, `author`, `license`,
+ * `source`) — la seule copie qui voyage AVEC le fichier.
+ */
+export interface GlbAsset {
+  generator?: string
+  version?: string
+  extras?: Record<string, unknown>
 }
 
 const COMPONENT_SIZE: Record<number, number> = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 }
@@ -234,6 +245,45 @@ function splitContainer(buf: Buffer): { json: GltfJson; bin: Buffer | null } {
   }
   // .gltf : JSON nu, les buffers sont dans des fichiers voisins ou des data URI.
   return { json: JSON.parse(buf.toString('utf8')) as GltfJson, bin: null }
+}
+
+/** Plafond du chunk JSON qu'on accepte de lire seul : au-delà, le fichier ment. */
+const MAX_HEADER_JSON = 16 * 1024 * 1024
+
+/**
+ * Lit le SEUL en-tête `asset` d'un .glb / .gltf, sans toucher à la géométrie ni
+ * aux buffers. Un décor pèse jusqu'à 19 Mo et le chunk JSON quelques dizaines de
+ * kilo-octets : l'écran des crédits n'a aucune raison de charger le reste.
+ *
+ * Le chunk JSON est le PREMIER du conteneur (glTF 2.0 §4.4.2), donc trois
+ * lectures suffisent : l'en-tête de 12 octets, l'en-tête de chunk de 8, puis le
+ * JSON. Fichier illisible ou tronqué → `null` : un décor sans attribution
+ * lisible doit être SIGNALÉ, pas faire tomber la route.
+ */
+export function readGlbAsset(file: string): GlbAsset | null {
+  let fd: number | null = null
+  try {
+    if (!/\.glb$/i.test(file)) {
+      // .gltf : JSON nu, aucun découpage à faire.
+      const json = JSON.parse(fs.readFileSync(file, 'utf8')) as GltfJson
+      return json.asset ?? null
+    }
+    fd = fs.openSync(file, 'r')
+    const head = Buffer.alloc(20)
+    if (fs.readSync(fd, head, 0, 20, 0) < 20) return null
+    if (head.readUInt32LE(0) !== 0x46546c67) return null
+    const length = head.readUInt32LE(12)
+    const type = head.readUInt32LE(16)
+    if (type !== 0x4e4f534a || length === 0 || length > MAX_HEADER_JSON) return null
+    const chunk = Buffer.alloc(length)
+    if (fs.readSync(fd, chunk, 0, length, 20) < length) return null
+    const json = JSON.parse(chunk.toString('utf8')) as GltfJson
+    return json.asset ?? null
+  } catch {
+    return null
+  } finally {
+    if (fd !== null) fs.closeSync(fd)
+  }
 }
 
 /** Résout les buffers d'un .gltf : chunk BIN, data URI base64, ou fichier voisin. */

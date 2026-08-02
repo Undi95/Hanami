@@ -273,6 +273,7 @@ const FR = {
   tabAppearance: 'Apparence',
   tabModel: 'Modèle',
   tabFeatures: 'Fonctions',
+  tabCredits: 'Crédits',
   sectionConversation: 'Conversation',
   // Persona de l'utilisateur : deux champs, valables pour tous les personnages.
   sectionPersona: 'Vous',
@@ -379,6 +380,27 @@ const FR = {
   backupDownloading: 'Préparation…',
   backupHint:
     'Un zip de data/ et des portraits — modèles 3D, fonds, décors et animations non inclus.',
+
+  // ── Crédits ──────────────────────────────────────────────────────────────
+  // Cet onglet EST l'obligation CC BY des décors : « l'attribution doit rester
+  // accessible aux utilisateurs de l'application ». Les libellés seuls sont
+  // ici ; la liste, elle, vit dans shared/credits.ts (et, pour les décors, dans
+  // les fichiers .glb eux-mêmes).
+  creditsIntro:
+    'Hanami repose sur le travail d’autres gens. Tout est réuni ici — y compris ce qu’aucune licence n’oblige à citer.',
+  creditsEnvironments: 'Décors 3D',
+  creditsEnvironmentsNote:
+    'L’attribution ci-dessous est lue dans chaque fichier livré, jamais recopiée : un décor ajouté se crédite tout seul. La CC BY 4.0 l’impose et veut qu’elle reste accessible depuis l’application — la voici. L’échelle et le placement vivent à côté du modèle, pas dedans.',
+  creditsEnvironmentsEmpty: 'Aucun décor installé.',
+  creditsNoAttribution: 'Attribution absente du fichier — à retrouver avant toute redistribution.',
+  creditsAnimations: 'Animations',
+  creditsFont: 'Police',
+  creditsCode: 'Code',
+  creditsCodeNote: 'Rien de ce qui suit n’exige d’être cité. Tout y est quand même.',
+  creditsBy: 'par',
+  creditsAppLicense: 'Hanami lui-même est sous licence',
+  creditsDocs:
+    'Le détail juridique — correspondance fichier par fichier, avis de licence intégraux — vit dans NOTICE.md, vrma/NOTICE.md et environments/CREDITS.md. Cet écran donne le crédit ; ces fichiers le documentent.',
 
   // ── Restauration d'une sauvegarde ────────────────────────────────────────
   // Deux temps, toujours dans cet ordre : l'aperçu (qui n'écrit rien) puis la
@@ -715,6 +737,7 @@ const EN: Record<Key, string> = {
   tabAppearance: 'Appearance',
   tabModel: 'Model',
   tabFeatures: 'Features',
+  tabCredits: 'Credits',
   sectionConversation: 'Conversation',
   sectionPersona: 'You',
   personaName: 'Your name',
@@ -814,6 +837,23 @@ const EN: Record<Key, string> = {
   backupDownloading: 'Preparing…',
   backupHint:
     'A zip of data/ and the portraits — 3D models, backgrounds, environments and animations not included.',
+
+  // ── Credits ──────────────────────────────────────────────────────────────
+  creditsIntro:
+    'Hanami stands on other people’s work. It is all gathered here — including what no licence obliges us to name.',
+  creditsEnvironments: '3D environments',
+  creditsEnvironmentsNote:
+    'The attribution below is read from each shipped file, never retyped: a new environment credits itself. CC BY 4.0 requires it and wants it reachable from inside the application — here it is. Scale and placement live beside the model, not inside it.',
+  creditsEnvironmentsEmpty: 'No environment installed.',
+  creditsNoAttribution: 'Attribution missing from the file — track it down before redistributing.',
+  creditsAnimations: 'Animations',
+  creditsFont: 'Typeface',
+  creditsCode: 'Code',
+  creditsCodeNote: 'None of the following requires being named. All of it is named anyway.',
+  creditsBy: 'by',
+  creditsAppLicense: 'Hanami itself is licensed under',
+  creditsDocs:
+    'The legal detail — file-by-file mapping, full licence notices — lives in NOTICE.md, vrma/NOTICE.md and environments/CREDITS.md. This screen gives the credit; those files document it.',
 
   // ── Restoring a backup ───────────────────────────────────────────────────
   restoreTitle: 'Restore a backup',

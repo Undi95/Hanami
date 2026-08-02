@@ -20,6 +20,7 @@ import { charactersRouter } from './api/characters'
 import { memoryRouter } from './api/memory'
 import { importRouter } from './api/importer'
 import { assetsRouter } from './api/assets'
+import { creditsRouter } from './api/credits'
 import { ttsRouter } from './api/tts'
 import { statsRouter } from './api/stats'
 import { backupRouter } from './api/backup'
@@ -84,6 +85,7 @@ async function main(): Promise<void> {
   app.use(memoryRouter)
   app.use(importRouter)
   app.use(assetsRouter)
+  app.use(creditsRouter)
   app.use(ttsRouter)
   app.use(statsRouter)
   app.use(uiRouter)

@@ -16,6 +16,18 @@ use, **on the sole condition that the author is credited**. The attribution
 notices below fulfil that obligation: they must be preserved and remain
 reachable by users of the application.
 
+**FR — Où l'application les montre :** *Réglages ▸ Crédits*. Cet écran ne recopie
+rien de ce fichier : il lit l'attribution dans `asset.extras` de chaque `.glb`
+livré (voir « Notes techniques » plus bas), là où l'export Sketchfab l'a écrite.
+Un décor ajouté à ce dossier s'y crédite donc tout seul — et un décor dont le
+fichier ne porterait aucune attribution y apparaît signalé comme tel.
+
+**EN — Where the application shows them:** *Settings ▸ Credits*. That screen
+copies nothing from this file: it reads the attribution from each shipped
+`.glb`'s `asset.extras` (see "Technical notes" below), where the Sketchfab
+exporter wrote it. An environment added to this folder therefore credits itself
+— and one whose file carries no attribution at all is flagged there as such.
+
 Texte de la licence / License text: <https://creativecommons.org/licenses/by/4.0/>
 Version juridique intégrale / Full legal code: <https://creativecommons.org/licenses/by/4.0/legalcode>
 

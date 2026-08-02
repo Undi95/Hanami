@@ -2663,6 +2663,114 @@ select {
   pointer-events: none;
 }
 
+/* ── Crédits (Réglages ▸ Crédits) ─────────────────────────────────────────
+   Une liste, et rien d'autre : aucun logo, aucune animation, aucune couleur en
+   plus de celles du thème. Ce panneau est une obligation de licence (CC BY 4.0
+   des décors) avant d'être une page « à propos » — il doit se LIRE.
+
+   Cibles tactiles : les trois liens d'une ligne (l'œuvre, l'auteur, la licence)
+   sont des blocs inline-flex de 40 px de haut, à toutes les tailles d'écran.
+   Ils ne sont pas dans .dialog-card .btn : la règle mobile des commandes de
+   dialog ne les couvrirait pas. */
+
+.credits-panel .section-title {
+  margin-top: 24px;
+}
+
+.credits {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.credit {
+  padding: 2px 0 8px;
+  border-top: 1px solid var(--border);
+}
+
+.credit:first-child {
+  border-top: none;
+}
+
+.credit-title,
+.credit-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  /* Un titre long (« CMU Graphics Lab Motion Capture Database ») doit se couper
+     plutôt que d'élargir le dialog. */
+  max-width: 100%;
+}
+
+.credit-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+a.credit-title:hover,
+a.credit-link:hover {
+  text-decoration: underline;
+}
+
+a.credit-title {
+  color: var(--accent);
+}
+
+.credit-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  margin: -6px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.credit-by {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.credit-link {
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+a.credit-link {
+  color: var(--text);
+}
+
+/* La licence : la donnée qui compte le plus dans une ligne de crédit, donc la
+   seule chose de ce panneau qui porte un fond. */
+.credit-license {
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.credit-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* Décor livré sans attribution lisible : le trou se voit. */
+.credit-warn {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+.credits-docs {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
 /* ── Grille de personnages ────────────────────────────────────────────── */
 
 .char-grid {

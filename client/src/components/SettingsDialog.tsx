@@ -25,6 +25,7 @@ import {
   type AppTheme,
   type CustomTheme,
 } from '../themes'
+import CreditsPanel from './CreditsPanel'
 import Dialog from './Dialog'
 import Toggle from './Toggle'
 import VoicePicker from './VoicePicker'
@@ -378,12 +379,19 @@ const VISION_MODE_OPTIONS: readonly VisionMode[] = ['auto', 'on', 'off']
 
 // Trois onglets pour ne pas dérouler un formulaire à rallonge. Le découpage est
 // thématique : ce qu'on voit, le modèle qui parle, ce que Hanami sait faire.
-type Tab = 'appearance' | 'model' | 'features'
-const TAB_OPTIONS: readonly Tab[] = ['appearance', 'model', 'features']
+//
+// Le quatrième, « Crédits », ne règle rien : il AFFICHE. Il est ici et pas dans
+// un pied de page parce que la CC BY 4.0 des décors veut que l'attribution
+// reste accessible aux utilisateurs de l'application — un onglet est le seul
+// endroit de cette app qu'on trouve sans le chercher. Il ne touche pas au
+// formulaire : en sortir n'a rien enregistré ni rien perdu, comme les autres.
+type Tab = 'appearance' | 'model' | 'features' | 'credits'
+const TAB_OPTIONS: readonly Tab[] = ['appearance', 'model', 'features', 'credits']
 const TAB_LABELS: Record<Tab, Key> = {
   appearance: 'tabAppearance',
   model: 'tabModel',
   features: 'tabFeatures',
+  credits: 'tabCredits',
 }
 
 export default function SettingsDialog({
@@ -1086,6 +1094,9 @@ export default function SettingsDialog({
           </div>
         </>
       )}
+
+      {/* Lecture seule : rien de ce panneau n'écrit quoi que ce soit. */}
+      {tab === 'credits' && <CreditsPanel />}
     </Dialog>
   )
 }
