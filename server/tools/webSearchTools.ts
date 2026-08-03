@@ -130,7 +130,13 @@ async function fetchSearxng(baseUrl: string, query: string, count: number, signa
   }))
 }
 
-/** Exécute web_search ; renvoie un texte court pour le modèle. Erreurs → throw (jamais de crash). */
+// Garde-fou : un échec ou une recherche vide reste un résultat d'outil NORMAL
+// (jamais un throw) avec une consigne directive — sans ça, un modèle « thinking »
+// (observé avec Qwen A3B) rumine la marche à suivre et peut cramer tout son
+// maxTokens dessus au lieu de répondre.
+const NO_RESULTS_GUARD = 'Answer from your own knowledge, or briefly tell the user the search failed. Do not retry.'
+
+/** Exécute web_search ; renvoie toujours un texte pour le modèle (jamais de throw ni de crash sur un échec réseau). */
 export async function executeWebSearchTool(settings: Settings, args: Record<string, unknown>): Promise<string> {
   const query = typeof args.query === 'string' ? args.query.trim() : ''
   if (!query) throw new Error('query est requis')
@@ -144,9 +150,9 @@ export async function executeWebSearchTool(settings: Settings, args: Record<stri
       ? await fetchSearxng(searxngUrl, query, count, AbortSignal.timeout(TIMEOUT_MS))
       : await fetchDdg(query, count, AbortSignal.timeout(TIMEOUT_MS))
   } catch (e) {
-    if (e instanceof Error && e.name === 'TimeoutError') throw new Error('recherche web : délai dépassé')
-    throw new Error(`recherche web échouée : ${e instanceof Error ? e.message : String(e)}`)
+    const reason = e instanceof Error && e.name === 'TimeoutError' ? 'timed out' : e instanceof Error ? e.message : String(e)
+    return `Web search failed (${reason}). ${NO_RESULTS_GUARD}`
   }
-  if (results.length === 0) return `Aucun résultat pour « ${query} ».`
+  if (results.length === 0) return `No web results found for "${query}". ${NO_RESULTS_GUARD}`
   return results.map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.snippet}`).join('\n\n')
 }
