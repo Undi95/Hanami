@@ -11,6 +11,10 @@ data/
 # supprimées automatiquement non plus : c'est le seul retour en arrière.
 backups/
 
+# Instance SearXNG locale (settings.yml y compris) : contient un secret_key
+# généré à l'installation — jamais committée.
+searxng/
+
 # Presets personnels : ce sont des données perso (mémoire, prompt system, résumés,
 # character.json d'un personnage de test) — JAMAIS committés, purgés de l'historique.
 # Vos propres presets restent en local (copiés vers data/ au 1er lancement).

@@ -13,7 +13,7 @@ import { VnBoxGrip } from './ResizeGrips'
 
 export type FeedItem =
   | { kind: 'msg'; msg: ChatMessage; pending?: boolean }
-  | { kind: 'tool'; name: string; args: string }
+  | { kind: 'tool'; name: string; args: string; result: string }
   | { kind: 'error'; text: string }
   | { kind: 'info'; text: string } // ligne discrète (compaction…) — jamais sauvegardée
   | { kind: 'greeting'; text: string }
@@ -251,6 +251,27 @@ function summarizeArgs(args: string): string {
     /* args non JSON : on tronque le brut */
   }
   return out.length > 48 ? out.slice(0, 45) + '…' : out
+}
+
+interface SearchResultEntry {
+  title: string
+  url: string
+  snippet: string
+}
+
+// Format produit par server/tools/webSearchTools.ts : "N. Titre\nURL\nExtrait",
+// un résultat par paragraphe. Liste vide = format non reconnu (échec, garde-fou,
+// « aucun résultat ») — la puce retombe alors sur le texte brut du résultat.
+function parseSearchResults(result: string): SearchResultEntry[] {
+  const entries: SearchResultEntry[] = []
+  for (const block of result.split('\n\n')) {
+    const lines = block.split('\n')
+    const m = /^\d+\.\s*(.+)$/.exec(lines[0] ?? '')
+    const url = (lines[1] ?? '').trim()
+    if (!m || !/^https?:\/\//.test(url)) continue
+    entries.push({ title: m[1].trim(), url, snippet: lines.slice(2).join(' ').trim() })
+  }
+  return entries
 }
 
 export default function MessageList({
@@ -658,43 +679,68 @@ export default function MessageList({
         // web_search a sa propre ligne (« Recherche sur le Web… ») : plus lisible
         // que le nom technique de l'outil, même style discret que les autres.
         const isSearch = item.name === 'web_search'
+        const results = parseSearchResults(item.result)
         return (
-          <div
-            className="tool-chip"
-            title={item.args}
+          <details
+            className="tool-chip-wrap"
             onMouseLeave={() => setArmedTool((a) => (a !== null && a === index ? null : a))}
           >
-            {isSearch ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="10.5" cy="10.5" r="6.5" />
-                <path d="M20 20l-5-5" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14.5 6.5a4 4 0 015.5-3.7l-3 3 1.2 1.2 3-3a4 4 0 01-5.2 5.2l-8.5 8.5a1.8 1.8 0 01-2.5-2.5l8.5-8.5a4 4 0 011-.2z" />
-              </svg>
-            )}
-            <span>
-              {isSearch
-                ? t('webSearchStatus', { query: summarizeArgs(item.args) })
-                : t('toolCall', { name: item.name, args: summarizeArgs(item.args) })}
-            </span>
-            {editable && (
-              <button
-                className={armedTool === index ? 'msg-edit armed' : 'msg-edit'}
-                title={armedTool === index ? t('deleteMessageArmed') : t('deleteMessage')}
-                aria-label={armedTool === index ? t('deleteMessageArmed') : t('deleteMessage')}
-                onClick={() => removeTool(index)}
-                onBlur={() => setArmedTool((a) => (a === index ? null : a))}
-              >
+            <summary className="tool-chip" title={t('toolResultsHint')}>
+              {isSearch ? (
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 7.2h12" />
-                  <path d="M9.7 7.2V5.4h4.6v1.8" />
-                  <path d="M7.6 7.2l.8 11.4h7.2l.8-11.4" />
+                  <circle cx="10.5" cy="10.5" r="6.5" />
+                  <path d="M20 20l-5-5" />
                 </svg>
-              </button>
-            )}
-          </div>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14.5 6.5a4 4 0 015.5-3.7l-3 3 1.2 1.2 3-3a4 4 0 01-5.2 5.2l-8.5 8.5a1.8 1.8 0 01-2.5-2.5l8.5-8.5a4 4 0 011-.2z" />
+                </svg>
+              )}
+              <span>
+                {isSearch
+                  ? t('webSearchStatus', { query: summarizeArgs(item.args) })
+                  : t('toolCall', { name: item.name, args: summarizeArgs(item.args) })}
+              </span>
+              {editable && (
+                <button
+                  className={armedTool === index ? 'msg-edit armed' : 'msg-edit'}
+                  title={armedTool === index ? t('deleteMessageArmed') : t('deleteMessage')}
+                  aria-label={armedTool === index ? t('deleteMessageArmed') : t('deleteMessage')}
+                  onClick={(e) => {
+                    // Le clic sur la corbeille ne doit pas AUSSI ouvrir/fermer le
+                    // panneau — c'est le comportement natif par défaut d'un clic
+                    // dans un <summary>, qu'il faut donc explicitement couper.
+                    e.preventDefault()
+                    removeTool(index)
+                  }}
+                  onBlur={() => setArmedTool((a) => (a === index ? null : a))}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 7.2h12" />
+                    <path d="M9.7 7.2V5.4h4.6v1.8" />
+                    <path d="M7.6 7.2l.8 11.4h7.2l.8-11.4" />
+                  </svg>
+                </button>
+              )}
+            </summary>
+            <div className="tool-chip-body">
+              {results.length > 0 ? (
+                results.map((r, i) => (
+                  <div className="result-entry" key={i}>
+                    <a className="result-title" href={r.url} target="_blank" rel="noopener noreferrer">
+                      {r.title}
+                    </a>
+                    <a className="result-url" href={r.url} target="_blank" rel="noopener noreferrer">
+                      {r.url}
+                    </a>
+                    {r.snippet && <div className="result-snippet">{r.snippet}</div>}
+                  </div>
+                ))
+              ) : (
+                <div className="result-snippet">{item.result}</div>
+              )}
+            </div>
+          </details>
         )
       }
       case 'error':

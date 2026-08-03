@@ -152,6 +152,7 @@ const FR = {
   replyInProgress: 'Réponse en cours',
   toolCall: '{name} : {args}',
   webSearchStatus: 'Recherche sur le Web : {query}',
+  toolResultsHint: 'Cliquer pour voir les résultats',
   regenerate: 'Régénérer',
   continueReply: 'Continuer',
   copyMessage: 'Copier le message',
@@ -374,6 +375,8 @@ const FR = {
   allowDeleteSub: 'Danger : le modèle pourra supprimer des fichiers dans le dossier sandbox.',
   sandboxDir: 'Dossier sandbox des outils',
   sectionWebSearch: 'Recherche web',
+  webSearchHelp:
+    'Activez la recherche web pour que le personnage puisse chercher des infos récentes. Pour des résultats plus fiables, collez l’URL d’une instance SearXNG (ex. http://127.0.0.1:8888) — sinon DuckDuckGo est utilisé automatiquement, sans clé.',
   webSearchToggle: 'Recherche web',
   webSearchToggleSub: 'Le personnage peut chercher sur le Web (DuckDuckGo, sans clé) quand c’est utile — et /search force une recherche.',
   webSearchUrlLabel: 'Instance SearXNG (optionnel)',
@@ -643,6 +646,7 @@ const EN: Record<Key, string> = {
   replyInProgress: 'Reply in progress',
   toolCall: '{name}: {args}',
   webSearchStatus: 'Searching the web: {query}',
+  toolResultsHint: 'Click to see the results',
   regenerate: 'Regenerate',
   continueReply: 'Continue',
   copyMessage: 'Copy message',
@@ -846,6 +850,8 @@ const EN: Record<Key, string> = {
   allowDeleteSub: 'Danger: the model will be able to delete files in the sandbox folder.',
   sandboxDir: 'Tools sandbox folder',
   sectionWebSearch: 'Web search',
+  webSearchHelp:
+    'Turn this on so the character can look up recent information. For more reliable results, paste the URL of a SearXNG instance (e.g. http://127.0.0.1:8888) — otherwise DuckDuckGo is used automatically, no key needed.',
   webSearchToggle: 'Web search',
   webSearchToggleSub: 'The character can search the Web (DuckDuckGo, no API key) when it helps — and /search forces a search.',
   webSearchUrlLabel: 'SearXNG instance (optional)',

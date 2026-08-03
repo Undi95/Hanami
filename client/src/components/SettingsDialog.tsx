@@ -1045,6 +1045,7 @@ export default function SettingsDialog({
           </div>
 
           <h3 className="section-title">{t('sectionWebSearch')}</h3>
+          <p className="hint">{t('webSearchHelp')}</p>
           <Toggle
             label={t('webSearchToggle')}
             sub={t('webSearchToggleSub')}

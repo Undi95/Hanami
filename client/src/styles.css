@@ -960,8 +960,14 @@ select {
   overflow-y: auto;
 }
 
-.tool-chip {
+/* La puce ENTIÈRE est le <summary> d'un <details> : cliquer dessus (la loupe
+   comprise) déplie le résumé complet des résultats, juste en dessous. */
+.tool-chip-wrap {
   align-self: flex-start;
+  max-width: 90%;
+}
+
+.tool-chip {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -971,7 +977,13 @@ select {
   border: 1px dashed var(--border);
   border-radius: 999px;
   padding: 5px 13px;
-  max-width: 90%;
+  max-width: 100%;
+  cursor: pointer;
+  list-style: none; /* la loupe suffit à dire « cliquable » — pas de triangle natif */
+}
+
+.tool-chip::-webkit-details-marker {
+  display: none;
 }
 
 .tool-chip svg {
@@ -984,6 +996,55 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Résultats complets, dépliés sous la puce — un résultat par bloc, avec son
+   lien cliquable et son extrait. Même esprit sobre que .thoughts-body. */
+.tool-chip-body {
+  margin-top: 4px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.result-entry + .result-entry {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.result-title {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.result-title:hover {
+  color: var(--accent);
+}
+
+.result-url {
+  display: block;
+  color: var(--text-dim);
+  font-size: 11px;
+  word-break: break-all;
+  text-decoration: none;
+}
+
+.result-url:hover {
+  color: var(--accent);
+}
+
+.result-snippet {
+  margin-top: 2px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .error-bubble {

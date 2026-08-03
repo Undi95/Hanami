@@ -1041,7 +1041,7 @@ function AppInner() {
               f.map((it) => (it.kind === 'msg' && it.pending ? { ...it, msg: { ...it.msg, thinking } } : it)),
             )
           } else if (ev.type === 'tool') {
-            const chip: FeedItem = { kind: 'tool', name: ev.name, args: ev.args }
+            const chip: FeedItem = { kind: 'tool', name: ev.name, args: ev.args, result: ev.result }
             setFeed((f) => {
               const i = f.findIndex((it) => it.kind === 'msg' && it.pending)
               return i === -1 ? [...f, chip] : [...f.slice(0, i), chip, ...f.slice(i)]
