@@ -1634,6 +1634,9 @@ function AppInner() {
             pinned={chatMeta?.pinned ?? null}
             onSaveEdit={handleEditMessage}
             onDeleteMessage={handleDeleteMessage}
+            // Une puce d'outil n'est jamais sauvegardée (cf. server/api/chat.ts) :
+            // la retirer du fil est un pur geste d'affichage, sans aller-retour serveur.
+            onDeleteTool={(index) => setFeed((f) => f.filter((_, i) => i !== index))}
             onSwitchVariant={handleSwitchVariant}
             onReply={setReplyTo}
             onPin={(ordinal) => {

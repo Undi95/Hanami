@@ -43,6 +43,12 @@ interface Props {
   /** Retire un message du fil — même ordinal que l'édition. */
   onDeleteMessage: (ordinal: number) => Promise<void>
   /**
+   * Retire une puce d'appel d'outil (ex. « Recherche sur le Web… ») du fil —
+   * index BRUT dans `items` (une puce n'a pas d'ordinal : rien n'est sauvegardé
+   * pour elle, la suppression est donc purement locale, sans aller-retour serveur).
+   */
+  onDeleteTool: (index: number) => void
+  /**
    * Change la variante affichée d'une réponse (« Régénérer » les empile). Même
    * ordinal que l'édition : une variante ne crée aucun message, elle vit DANS
    * celui-ci.
@@ -257,6 +263,7 @@ export default function MessageList({
   pinned,
   onSaveEdit,
   onDeleteMessage,
+  onDeleteTool,
   onSwitchVariant,
   onRemember,
   onReply,
@@ -283,6 +290,9 @@ export default function MessageList({
   // Corbeille armée (ordinal) : le premier clic arme, le second supprime — même
   // grammaire que les suppressions des dialogs. Désarmée dès qu'on la quitte.
   const [armed, setArmed] = useState<number | null>(null)
+  // Même grammaire pour la corbeille d'une puce d'outil, mais indexée sur sa
+  // position BRUTE dans `items` (une puce n'a pas d'ordinal).
+  const [armedTool, setArmedTool] = useState<number | null>(null)
   // Recherche : rien à l'écran tant qu'elle n'est pas ouverte (Ctrl+F).
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -435,6 +445,16 @@ export default function MessageList({
     onDeleteMessage(ordinal).catch((e) => console.error('[delete]', e))
   }
 
+  /** Même geste que removeMessage, mais purement local — rien n'est sauvegardé pour une puce. */
+  function removeTool(index: number) {
+    if (armedTool !== index) {
+      setArmedTool(index)
+      return
+    }
+    setArmedTool(null)
+    onDeleteTool(index)
+  }
+
   function submitEdit() {
     if (editing === null || !draft.trim()) return
     setSaving(true)
@@ -445,7 +465,7 @@ export default function MessageList({
       .finally(() => setSaving(false))
   }
 
-  function renderItem(item: FeedItem, ordinal: number | null) {
+  function renderItem(item: FeedItem, ordinal: number | null, index: number) {
     switch (item.kind) {
       case 'msg': {
         const isUser = item.msg.role === 'user'
@@ -634,25 +654,49 @@ export default function MessageList({
             <div className="bubble">{highlightAll(renderMarkdown(stripEmotionTags(item.text)), hits)}</div>
           </div>
         )
-      case 'tool':
+      case 'tool': {
         // web_search a sa propre ligne (« Recherche sur le Web… ») : plus lisible
         // que le nom technique de l'outil, même style discret que les autres.
-        return item.name === 'web_search' ? (
-          <div className="tool-chip" title={item.args}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="10.5" cy="10.5" r="6.5" />
-              <path d="M20 20l-5-5" />
-            </svg>
-            <span>{t('webSearchStatus', { query: summarizeArgs(item.args) })}</span>
-          </div>
-        ) : (
-          <div className="tool-chip" title={item.args}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14.5 6.5a4 4 0 015.5-3.7l-3 3 1.2 1.2 3-3a4 4 0 01-5.2 5.2l-8.5 8.5a1.8 1.8 0 01-2.5-2.5l8.5-8.5a4 4 0 011-.2z" />
-            </svg>
-            <span>{t('toolCall', { name: item.name, args: summarizeArgs(item.args) })}</span>
+        const isSearch = item.name === 'web_search'
+        return (
+          <div
+            className="tool-chip"
+            title={item.args}
+            onMouseLeave={() => setArmedTool((a) => (a !== null && a === index ? null : a))}
+          >
+            {isSearch ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="10.5" cy="10.5" r="6.5" />
+                <path d="M20 20l-5-5" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14.5 6.5a4 4 0 015.5-3.7l-3 3 1.2 1.2 3-3a4 4 0 01-5.2 5.2l-8.5 8.5a1.8 1.8 0 01-2.5-2.5l8.5-8.5a4 4 0 011-.2z" />
+              </svg>
+            )}
+            <span>
+              {isSearch
+                ? t('webSearchStatus', { query: summarizeArgs(item.args) })
+                : t('toolCall', { name: item.name, args: summarizeArgs(item.args) })}
+            </span>
+            {editable && (
+              <button
+                className={armedTool === index ? 'msg-edit armed' : 'msg-edit'}
+                title={armedTool === index ? t('deleteMessageArmed') : t('deleteMessage')}
+                aria-label={armedTool === index ? t('deleteMessageArmed') : t('deleteMessage')}
+                onClick={() => removeTool(index)}
+                onBlur={() => setArmedTool((a) => (a === index ? null : a))}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 7.2h12" />
+                  <path d="M9.7 7.2V5.4h4.6v1.8" />
+                  <path d="M7.6 7.2l.8 11.4h7.2l.8-11.4" />
+                </svg>
+              </button>
+            )}
           </div>
         )
+      }
       case 'error':
         return <div className="error-bubble">{item.text}</div>
       case 'info':
@@ -664,7 +708,7 @@ export default function MessageList({
   // correspondances (hits.n), et la barre en affiche le total.
   const rows = items.map((it, i) => (
     <div key={i} style={{ display: 'contents' }}>
-      {renderItem(it, ordinals[i])}
+      {renderItem(it, ordinals[i], i)}
     </div>
   ))
   const total = hits.n

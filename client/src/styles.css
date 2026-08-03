@@ -1073,6 +1073,8 @@ select {
   }
   .msg:hover .msg-edit,
   .msg:focus-within .msg-edit,
+  .tool-chip:hover .msg-edit,
+  .tool-chip:focus-within .msg-edit,
   .msg-edit:focus-visible {
     opacity: 0.55;
   }
