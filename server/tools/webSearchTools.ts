@@ -11,13 +11,13 @@ export const webSearchToolDefs: unknown[] = [
     function: {
       name: 'web_search',
       description:
-        'Cherche sur le Web (DuckDuckGo, ou une instance SearXNG si configurée) et renvoie les meilleurs résultats ' +
-        '(titre, URL, extrait). À utiliser pour toute information récente, précise ou vérifiable que tu ne connais pas.',
+        'Search the Web (DuckDuckGo, or a SearXNG instance if configured) and return the top results ' +
+        '(title, URL, snippet). Use it for any recent, precise or verifiable information you do not know.',
       parameters: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'Termes de recherche' },
-          count: { type: 'number', description: 'Nombre de résultats souhaités (défaut 3, max 5)' },
+          query: { type: 'string', description: 'Search terms' },
+          count: { type: 'number', description: 'Desired number of results (default 3, max 5)' },
         },
         required: ['query'],
       },
@@ -107,7 +107,7 @@ async function fetchDdg(query: string, count: number, signal: AbortSignal): Prom
     signal,
     headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8' },
   })
-  if (!res.ok) throw new Error(`DuckDuckGo a répondu HTTP ${res.status}`)
+  if (!res.ok) throw new Error(`DuckDuckGo responded HTTP ${res.status}`)
   return parseDdgHtml(await res.text()).slice(0, count)
 }
 
@@ -120,7 +120,7 @@ interface SearxngResult {
 async function fetchSearxng(baseUrl: string, query: string, count: number, signal: AbortSignal): Promise<SearchResult[]> {
   const url = `${baseUrl.replace(/\/+$/, '')}/search?q=${encodeURIComponent(query)}&format=json`
   const res = await fetch(url, { signal, headers: { Accept: 'application/json' } })
-  if (!res.ok) throw new Error(`SearXNG a répondu HTTP ${res.status}`)
+  if (!res.ok) throw new Error(`SearXNG responded HTTP ${res.status}`)
   const data = (await res.json()) as { results?: SearxngResult[] }
   const results = Array.isArray(data.results) ? data.results : []
   return results.slice(0, count).map((r) => ({
@@ -139,7 +139,7 @@ const NO_RESULTS_GUARD = 'Answer from your own knowledge, or briefly tell the us
 /** Exécute web_search ; renvoie toujours un texte pour le modèle (jamais de throw ni de crash sur un échec réseau). */
 export async function executeWebSearchTool(settings: Settings, args: Record<string, unknown>): Promise<string> {
   const query = typeof args.query === 'string' ? args.query.trim() : ''
-  if (!query) throw new Error('query est requis')
+  if (!query) throw new Error('query is required')
   const rawCount = Number(args.count)
   const count = Number.isFinite(rawCount) && rawCount > 0 ? Math.min(Math.floor(rawCount), MAX_COUNT) : DEFAULT_COUNT
 

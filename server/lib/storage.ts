@@ -363,11 +363,14 @@ Example: \`[happy] Hello! I'm glad you're here.\`
 `
 }
 
+// Anglais, comme le reste de ce qui part au modèle (defaultSystemPrompt, buildMemoryBlock…) :
+// ce fichier EST injecté dans le contexte à chaque message (si la mémoire est activée), donc
+// « langue de travail des prompts », pas la langue de l'UI qui l'a créé.
 function defaultMemoryIndex(name: string): string {
-  return `# Mémoire de ${name}
+  return `# ${name}'s memory
 
-Index des souvenirs — une ligne par fichier, format : \`- [Titre](fichier.md) — résumé court\`.
-Ce fichier est injecté dans le contexte à chaque message (si la mémoire est activée).
+Index of memories — one line per file, format: \`- [Title](file.md) — short summary\`.
+This file is injected into the context on every message (if memory is enabled).
 `
 }
 

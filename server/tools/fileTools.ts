@@ -14,11 +14,11 @@ export const fileToolDefs: unknown[] = [
     type: 'function',
     function: {
       name: 'list_files',
-      description: 'Liste les fichiers du dossier de travail (les dossiers sont suffixés par "/").',
+      description: 'Lists the files in the working folder (folders are suffixed with "/").',
       parameters: {
         type: 'object',
         properties: {
-          dir: { type: 'string', description: 'Sous-dossier relatif (défaut : racine du dossier de travail)' },
+          dir: { type: 'string', description: 'Relative subfolder (default: root of the working folder)' },
         },
       },
     },
@@ -27,11 +27,11 @@ export const fileToolDefs: unknown[] = [
     type: 'function',
     function: {
       name: 'read_file',
-      description: 'Lit un fichier texte du dossier de travail (tronqué à 256 Ko).',
+      description: 'Reads a text file from the working folder (truncated at 256 KB).',
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Chemin relatif du fichier' },
+          path: { type: 'string', description: 'Relative file path' },
         },
         required: ['path'],
       },
@@ -41,12 +41,12 @@ export const fileToolDefs: unknown[] = [
     type: 'function',
     function: {
       name: 'write_file',
-      description: 'Écrit (crée ou remplace) un fichier dans le dossier de travail.',
+      description: 'Writes (creates or replaces) a file in the working folder.',
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Chemin relatif du fichier' },
-          content: { type: 'string', description: 'Contenu complet à écrire' },
+          path: { type: 'string', description: 'Relative file path' },
+          content: { type: 'string', description: 'Full content to write' },
         },
         required: ['path', 'content'],
       },
@@ -57,13 +57,13 @@ export const fileToolDefs: unknown[] = [
     function: {
       name: 'edit_file',
       description:
-        'Remplace UNE occurrence exacte de old_string par new_string dans un fichier. Erreur si old_string est absent ou présent plusieurs fois.',
+        'Replaces ONE exact occurrence of old_string with new_string in a file. Errors if old_string is absent or appears more than once.',
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Chemin relatif du fichier' },
-          old_string: { type: 'string', description: 'Texte exact à remplacer (unique dans le fichier)' },
-          new_string: { type: 'string', description: 'Texte de remplacement' },
+          path: { type: 'string', description: 'Relative file path' },
+          old_string: { type: 'string', description: 'Exact text to replace (must be unique in the file)' },
+          new_string: { type: 'string', description: 'Replacement text' },
         },
         required: ['path', 'old_string', 'new_string'],
       },
@@ -73,11 +73,11 @@ export const fileToolDefs: unknown[] = [
     type: 'function',
     function: {
       name: 'delete_file',
-      description: 'Supprime un fichier du dossier de travail (uniquement si la suppression est autorisée dans les réglages).',
+      description: 'Deletes a file from the working folder (only if deletion is allowed in settings).',
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Chemin relatif du fichier' },
+          path: { type: 'string', description: 'Relative file path' },
         },
         required: ['path'],
       },
@@ -87,7 +87,7 @@ export const fileToolDefs: unknown[] = [
 
 function requireString(args: Record<string, unknown>, field: string): string {
   const v = args[field]
-  if (typeof v !== 'string') throw new Error(`paramètre "${field}" manquant ou invalide`)
+  if (typeof v !== 'string') throw new Error(`missing or invalid parameter "${field}"`)
   return v
 }
 
@@ -96,7 +96,7 @@ function sandboxRoot(settings: Settings): string {
   // Défense en profondeur (loadSettings valide déjà) : une racine vide ou relative
   // retomberait sur le cwd, c'est-à-dire la racine du projet.
   if (typeof settings.toolsRoot !== 'string' || !settings.toolsRoot.trim() || !path.isAbsolute(settings.toolsRoot)) {
-    throw new Error('toolsRoot invalide : un chemin absolu est requis dans les réglages')
+    throw new Error('invalid toolsRoot: an absolute path is required in settings')
   }
   const root = path.resolve(settings.toolsRoot)
   // Refuse la racine projet, data/ et tout ancêtre de ceux-ci : le modèle pourrait
@@ -105,9 +105,7 @@ function sandboxRoot(settings: Settings): string {
   for (const forbidden of [ROOT, DATA_DIR]) {
     const f = path.resolve(forbidden)
     if (norm(root) === norm(f) || isInside(norm(root), norm(f))) {
-      throw new Error(
-        `toolsRoot invalide : ${root} englobe les fichiers de l'app — choisis un dossier dédié (ex. data/workspace)`,
-      )
+      throw new Error(`invalid toolsRoot: ${root} contains the app's own files — pick a dedicated folder (e.g. data/workspace)`)
     }
   }
   fs.mkdirSync(root, { recursive: true })
@@ -128,9 +126,9 @@ function isInside(root: string, candidate: string): boolean {
  */
 function resolveSafe(root: string, p: string): string {
   const resolved = path.resolve(root, p)
-  if (!isInside(root, resolved)) throw new Error(`chemin hors du dossier autorisé : ${p}`)
+  if (!isInside(root, resolved)) throw new Error(`path outside the allowed folder: ${p}`)
   if (fs.lstatSync(resolved, { throwIfNoEntry: false })?.isSymbolicLink()) {
-    throw new Error(`chemin hors du dossier autorisé (lien symbolique) : ${p}`)
+    throw new Error(`path outside the allowed folder (symbolic link): ${p}`)
   }
   let probe = path.dirname(resolved)
   while (!fs.lstatSync(probe, { throwIfNoEntry: false })) {
@@ -140,7 +138,7 @@ function resolveSafe(root: string, p: string): string {
   }
   const realDir = fs.realpathSync(probe)
   const target = path.join(realDir, path.relative(probe, resolved))
-  if (!isInside(root, target)) throw new Error(`chemin hors du dossier autorisé (lien symbolique) : ${p}`)
+  if (!isInside(root, target)) throw new Error(`path outside the allowed folder (symbolic link): ${p}`)
   return target
 }
 
@@ -152,19 +150,19 @@ export function executeFileTool(settings: Settings, tool: string, args: Record<s
       const dir = typeof args.dir === 'string' && args.dir.length > 0 ? args.dir : '.'
       const target = resolveSafe(root, dir)
       if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
-        throw new Error(`dossier introuvable : ${dir}`)
+        throw new Error(`folder not found: ${dir}`)
       }
       const entries = fs
         .readdirSync(target, { withFileTypes: true })
         .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
         .sort()
-      return entries.length > 0 ? entries.join('\n') : '(dossier vide)'
+      return entries.length > 0 ? entries.join('\n') : '(empty folder)'
     }
     case 'read_file': {
       const p = requireString(args, 'path')
       const target = resolveSafe(root, p)
       if (!fs.existsSync(target) || !fs.statSync(target).isFile()) {
-        throw new Error(`fichier introuvable : ${p}`)
+        throw new Error(`file not found: ${p}`)
       }
       const size = fs.statSync(target).size
       const fd = fs.openSync(target, 'r')
@@ -172,7 +170,7 @@ export function executeFileTool(settings: Settings, tool: string, args: Record<s
         const buf = Buffer.alloc(Math.min(size, READ_CAP))
         fs.readSync(fd, buf, 0, buf.length, 0)
         let text = buf.toString('utf8')
-        if (size > READ_CAP) text += `\n… [tronqué : ${size} octets au total, cap de lecture 256 Ko]`
+        if (size > READ_CAP) text += `\n… [truncated: ${size} bytes total, 256 KB read cap]`
         return text
       } finally {
         fs.closeSync(fd)
@@ -184,41 +182,39 @@ export function executeFileTool(settings: Settings, tool: string, args: Record<s
       const target = resolveSafe(root, p)
       fs.mkdirSync(path.dirname(target), { recursive: true })
       fs.writeFileSync(target, content)
-      return `Fichier écrit : ${p} (${Buffer.byteLength(content)} octets)`
+      return `File written: ${p} (${Buffer.byteLength(content)} bytes)`
     }
     case 'edit_file': {
       const p = requireString(args, 'path')
       const oldStr = requireString(args, 'old_string')
       const newStr = requireString(args, 'new_string')
-      if (oldStr.length === 0) throw new Error('old_string est vide')
+      if (oldStr.length === 0) throw new Error('old_string is empty')
       const target = resolveSafe(root, p)
       if (!fs.existsSync(target) || !fs.statSync(target).isFile()) {
-        throw new Error(`fichier introuvable : ${p}`)
+        throw new Error(`file not found: ${p}`)
       }
       const text = fs.readFileSync(target, 'utf8')
       const count = text.split(oldStr).length - 1
-      if (count === 0) throw new Error(`old_string introuvable dans ${p}`)
-      if (count > 1) throw new Error(`old_string présent ${count} fois dans ${p} — fournis un extrait unique`)
+      if (count === 0) throw new Error(`old_string not found in ${p}`)
+      if (count > 1) throw new Error(`old_string appears ${count} times in ${p} — provide a unique excerpt`)
       fs.writeFileSync(target, text.replace(oldStr, () => newStr))
-      return `Fichier modifié : ${p}`
+      return `File edited: ${p}`
     }
     case 'delete_file': {
       if (!settings.allowDelete) {
-        throw new Error(
-          'delete_file est désactivé — l’utilisateur doit activer « Autoriser la suppression » (allowDelete) dans les réglages',
-        )
+        throw new Error('delete_file is disabled — the user must enable "Allow deletion" (allowDelete) in settings')
       }
       const p = requireString(args, 'path')
       const target = resolveSafe(root, p)
-      if (!fs.existsSync(target)) throw new Error(`fichier introuvable : ${p}`)
-      if (!fs.statSync(target).isFile()) throw new Error(`pas un fichier : ${p}`)
+      if (!fs.existsSync(target)) throw new Error(`file not found: ${p}`)
+      if (!fs.statSync(target).isFile()) throw new Error(`not a file: ${p}`)
       // unlinkSync et non rmSync : sous Node 25/Windows, rmSync échoue EN SILENCE
       // sur un chemin non-ASCII — l'outil répondrait « supprimé » en laissant le
       // fichier en place (même piège que deleteMemoryFile, cf. lib/storage.ts).
       fs.unlinkSync(target)
-      return `Fichier supprimé : ${p}`
+      return `File deleted: ${p}`
     }
     default:
-      throw new Error(`outil fichier inconnu : ${tool}`)
+      throw new Error(`unknown file tool: ${tool}`)
   }
 }

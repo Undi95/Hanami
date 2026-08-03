@@ -10,15 +10,15 @@ export const memoryToolDefs: unknown[] = [
     function: {
       name: 'memory_save',
       description:
-        "Enregistre un souvenir durable : crée (ou remplace) un fichier mémoire .md et ajoute/remplace sa ligne dans l'index MEMORY.md.",
+        'Saves a durable memory: creates (or replaces) a memory .md file and adds/replaces its line in the MEMORY.md index.',
       parameters: {
         type: 'object',
         properties: {
-          name: { type: 'string', description: 'Nom du fichier, ex : "famille.md"' },
-          content: { type: 'string', description: 'Contenu markdown du souvenir' },
+          name: { type: 'string', description: 'File name, e.g. "family.md"' },
+          content: { type: 'string', description: 'Markdown content of the memory' },
           indexLine: {
             type: 'string',
-            description: "Ligne d'index pour MEMORY.md, format : - [Titre](fichier.md) — résumé court",
+            description: 'Index line for MEMORY.md, format: - [Title](file.md) — short summary',
           },
         },
         required: ['name', 'content'],
@@ -29,11 +29,11 @@ export const memoryToolDefs: unknown[] = [
     type: 'function',
     function: {
       name: 'memory_read',
-      description: 'Lit un fichier mémoire du personnage et renvoie son contenu.',
+      description: "Reads one of the character's memory files and returns its content.",
       parameters: {
         type: 'object',
         properties: {
-          name: { type: 'string', description: 'Nom du fichier, ex : "famille.md"' },
+          name: { type: 'string', description: 'File name, e.g. "family.md"' },
         },
         required: ['name'],
       },
@@ -43,12 +43,12 @@ export const memoryToolDefs: unknown[] = [
     type: 'function',
     function: {
       name: 'memory_update',
-      description: 'Remplace le contenu d’un fichier mémoire existant (y compris MEMORY.md, l’index).',
+      description: 'Replaces the content of an existing memory file (including MEMORY.md, the index).',
       parameters: {
         type: 'object',
         properties: {
-          name: { type: 'string', description: 'Nom du fichier existant' },
-          content: { type: 'string', description: 'Nouveau contenu complet' },
+          name: { type: 'string', description: 'Existing file name' },
+          content: { type: 'string', description: 'New, complete content' },
         },
         required: ['name', 'content'],
       },
@@ -58,11 +58,11 @@ export const memoryToolDefs: unknown[] = [
     type: 'function',
     function: {
       name: 'memory_delete',
-      description: 'Supprime un fichier mémoire (MEMORY.md, l’index, est refusé).',
+      description: 'Deletes a memory file (MEMORY.md, the index, is refused).',
       parameters: {
         type: 'object',
         properties: {
-          name: { type: 'string', description: 'Nom du fichier à supprimer' },
+          name: { type: 'string', description: 'File name to delete' },
         },
         required: ['name'],
       },
@@ -72,7 +72,7 @@ export const memoryToolDefs: unknown[] = [
 
 function requireString(args: Record<string, unknown>, field: string): string {
   const v = args[field]
-  if (typeof v !== 'string') throw new Error(`paramètre "${field}" manquant ou invalide`)
+  if (typeof v !== 'string') throw new Error(`missing or invalid parameter "${field}"`)
   return v
 }
 
@@ -119,30 +119,30 @@ export function executeMemoryTool(charId: string, tool: string, args: Record<str
         const line = raw || `- [${name.replace(/\.md$/i, '')}](${name})`
         upsertIndexLine(charId, name, line)
       }
-      return `Souvenir enregistré : ${name} (${content.length} caractères), index mis à jour.`
+      return `Memory saved: ${name} (${content.length} characters), index updated.`
     }
     case 'memory_read': {
       const name = normalizeName(requireString(args, 'name'))
       const content = readMemoryFile(charId, name)
-      if (content === null) throw new Error(`fichier mémoire introuvable : ${name}`)
+      if (content === null) throw new Error(`memory file not found: ${name}`)
       return content
     }
     case 'memory_update': {
       const name = normalizeName(requireString(args, 'name'))
       const content = requireString(args, 'content')
       if (readMemoryFile(charId, name) === null) {
-        throw new Error(`fichier mémoire introuvable : ${name} (utilise memory_save pour le créer)`)
+        throw new Error(`memory file not found: ${name} (use memory_save to create it)`)
       }
       writeMemoryFile(charId, name, content)
-      return `Fichier mémoire mis à jour : ${name}.`
+      return `Memory file updated: ${name}.`
     }
     case 'memory_delete': {
       const name = normalizeName(requireString(args, 'name'))
       deleteMemoryFile(charId, name) // refuse MEMORY.md (throw côté storage)
       removeIndexLine(charId, name)
-      return `Fichier mémoire supprimé : ${name}.`
+      return `Memory file deleted: ${name}.`
     }
     default:
-      throw new Error(`outil mémoire inconnu : ${tool}`)
+      throw new Error(`unknown memory tool: ${tool}`)
   }
 }

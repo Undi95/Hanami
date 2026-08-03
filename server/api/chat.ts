@@ -427,25 +427,25 @@ async function executeTool(characterId: string, settings: Settings, name: string
   try {
     args = rawArgs.trim() ? (JSON.parse(rawArgs) as Record<string, unknown>) : {}
   } catch {
-    throw new Error(`arguments JSON invalides pour ${name}`)
+    throw new Error(`invalid JSON arguments for ${name}`)
   }
   if ((MEMORY_TOOL_NAMES as readonly string[]).includes(name)) {
-    if (!settings.memoryEnabled) throw new Error('outils mémoire désactivés dans les réglages')
+    if (!settings.memoryEnabled) throw new Error('memory tools are disabled in settings')
     return executeMemoryTool(characterId, name, args)
   }
   if ((CHAT_TOOL_NAMES as readonly string[]).includes(name)) {
-    if (!settings.memoryEnabled) throw new Error('outils mémoire désactivés dans les réglages')
+    if (!settings.memoryEnabled) throw new Error('memory tools are disabled in settings')
     return executeChatTool(characterId, name, args)
   }
   if ((FILE_TOOL_NAMES as readonly string[]).includes(name)) {
-    if (!settings.fileToolsEnabled) throw new Error('outils fichiers désactivés dans les réglages')
+    if (!settings.fileToolsEnabled) throw new Error('file tools are disabled in settings')
     return executeFileTool(settings, name, args)
   }
   if ((WEB_SEARCH_TOOL_NAMES as readonly string[]).includes(name)) {
-    if (!settings.webSearchEnabled) throw new Error('recherche web désactivée dans les réglages')
+    if (!settings.webSearchEnabled) throw new Error('web search is disabled in settings')
     return executeWebSearchTool(settings, args)
   }
-  throw new Error(`Outil inconnu : ${name}`)
+  throw new Error(`unknown tool: ${name}`)
 }
 
 function writeEvent(res: Response, ev: ChatEvent): void {
@@ -537,12 +537,12 @@ async function runToolLoop<R extends { content: string; toolCalls: StreamedToolC
     for (const tc of last.toolCalls) {
       let toolResult: string
       if (!allowed.has(tc.name)) {
-        toolResult = `Erreur : outil non proposé dans cette requête : ${tc.name}`
+        toolResult = `Error: tool not offered in this request: ${tc.name}`
       } else {
         try {
           toolResult = await executeTool(characterId, settings, tc.name, tc.arguments)
         } catch (e) {
-          toolResult = `Erreur : ${e instanceof Error ? e.message : String(e)}`
+          toolResult = `Error: ${e instanceof Error ? e.message : String(e)}`
         }
       }
       onTool?.(tc.name, tc.arguments, toolResult)
@@ -968,7 +968,7 @@ const FACTS_DIRECTIVE =
   'List the important durable facts from this conversation worth remembering long-term, one per line, ' +
   'each line starting with "FACT: " — nothing else.'
 const AUTO_MEMORY_FILE = 'auto-memory.md'
-const AUTO_MEMORY_INDEX_LINE = `- [Faits retenus](${AUTO_MEMORY_FILE}) — faits extraits automatiquement lors des compactions`
+const AUTO_MEMORY_INDEX_LINE = `- [Remembered facts](${AUTO_MEMORY_FILE}) — facts extracted automatically during compaction`
 const AUTO_MEMORY_MAX_FACTS = 20 // garde-fou : un modèle bavard ne noie pas la mémoire
 const AUTO_MEMORY_MAX_CHARS = 500 // par fait
 
@@ -994,7 +994,7 @@ function appendAutoFacts(charId: string, facts: string[]): void {
   const date = new Date().toISOString().slice(0, 10)
   const existing =
     readMemoryFile(charId, AUTO_MEMORY_FILE) ??
-    '# Faits retenus\n\nExtraits automatiquement des conversations lors des compactions (mode simple).\n'
+    '# Remembered facts\n\nExtracted automatically from conversations during compaction (simple mode).\n'
   const lines = facts.map((f) => `- **${date}** — ${f}`).join('\n')
   writeMemoryFile(charId, AUTO_MEMORY_FILE, existing.replace(/\n*$/, '\n') + '\n' + lines + '\n')
   // Upsert de la ligne d'index. index === null : MEMORY.md illisible — on

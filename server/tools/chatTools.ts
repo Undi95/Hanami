@@ -37,9 +37,9 @@ export function executeChatTool(
   name: string,
   args: Record<string, unknown>,
 ): string {
-  if (name !== 'chat_search') throw new Error(`Outil inconnu : ${name}`)
+  if (name !== 'chat_search') throw new Error(`unknown tool: ${name}`)
   const query = typeof args.query === 'string' ? args.query.trim() : ''
-  if (!query) throw new Error('query est requis')
+  if (!query) throw new Error('query is required')
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean)
 
   const results: string[] = []

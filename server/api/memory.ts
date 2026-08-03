@@ -71,7 +71,7 @@ memoryRouter.post('/api/characters/:id/memory/remember', (req, res) => {
     const date = new Date().toISOString().slice(0, 10)
     const existing =
       readMemoryFile(charId, 'moments.md') ??
-      '# Moments retenus\n\nPassages épinglés depuis le fil de conversation (« Retiens ça »).\n'
+      '# Remembered moments\n\nPassages pinned from the conversation ("Remember this").\n'
     writeMemoryFile(
       charId,
       'moments.md',
@@ -83,7 +83,7 @@ memoryRouter.post('/api/characters/:id/memory/remember', (req, res) => {
       writeMemoryFile(
         charId,
         'MEMORY.md',
-        index.replace(/\n*$/, '\n') + '- [Moments](moments.md) — passages épinglés depuis la conversation\n',
+        index.replace(/\n*$/, '\n') + '- [Moments](moments.md) — passages pinned from the conversation\n',
       )
     }
     res.json({ ok: true })
