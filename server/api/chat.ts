@@ -19,6 +19,7 @@ import { streamChatCompletion, type StreamedToolCall } from '../llm/openai'
 import { MEMORY_TOOL_NAMES, executeMemoryTool, memoryToolDefs } from '../tools/memoryTools'
 import { FILE_TOOL_NAMES, executeFileTool, fileToolDefs } from '../tools/fileTools'
 import { CHAT_TOOL_NAMES, chatToolDefs, executeChatTool } from '../tools/chatTools'
+import { WEB_SEARCH_TOOL_NAMES, executeWebSearchTool, webSearchToolDefs } from '../tools/webSearchTools'
 import { firstEmotionTag } from '../../shared/emotions'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
 import type { ChatEvent, ChatMessage, ContextInfo, MessageVariant, Settings } from '../../shared/types'
@@ -242,6 +243,7 @@ export function buildPayload(
           // chat_search voyage avec la mémoire : c'est le même « souvenir de l'autre ».
           ...(settings.memoryEnabled ? [...memoryToolDefs, ...chatToolDefs] : []),
           ...(settings.fileToolsEnabled ? fileToolDefs : []),
+          ...(settings.webSearchEnabled ? webSearchToolDefs : []),
         ]
   const payload: BackendPayload = {
     messages,
@@ -420,7 +422,7 @@ function pruneVariants(m: ChatMessage): ChatMessage {
  * write_file s'exécutait même outils fichiers désactivés. Le throw est rendu au
  * modèle comme résultat d'outil (« Erreur : … ») — transparent, jamais fatal.
  */
-function executeTool(characterId: string, settings: Settings, name: string, rawArgs: string): string {
+async function executeTool(characterId: string, settings: Settings, name: string, rawArgs: string): Promise<string> {
   let args: Record<string, unknown>
   try {
     args = rawArgs.trim() ? (JSON.parse(rawArgs) as Record<string, unknown>) : {}
@@ -438,6 +440,10 @@ function executeTool(characterId: string, settings: Settings, name: string, rawA
   if ((FILE_TOOL_NAMES as readonly string[]).includes(name)) {
     if (!settings.fileToolsEnabled) throw new Error('outils fichiers désactivés dans les réglages')
     return executeFileTool(settings, name, args)
+  }
+  if ((WEB_SEARCH_TOOL_NAMES as readonly string[]).includes(name)) {
+    if (!settings.webSearchEnabled) throw new Error('recherche web désactivée dans les réglages')
+    return executeWebSearchTool(settings, args)
   }
   throw new Error(`Outil inconnu : ${name}`)
 }
@@ -534,7 +540,7 @@ async function runToolLoop<R extends { content: string; toolCalls: StreamedToolC
         toolResult = `Erreur : outil non proposé dans cette requête : ${tc.name}`
       } else {
         try {
-          toolResult = executeTool(characterId, settings, tc.name, tc.arguments)
+          toolResult = await executeTool(characterId, settings, tc.name, tc.arguments)
         } catch (e) {
           toolResult = `Erreur : ${e instanceof Error ? e.message : String(e)}`
         }
@@ -557,10 +563,16 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     content?: unknown
     images?: unknown
     mode?: unknown
+    forceSearch?: unknown
   }
   const characterId = typeof body.characterId === 'string' ? body.characterId : ''
   const chatId = typeof body.chatId === 'string' ? body.chatId : ''
   const content = typeof body.content === 'string' ? body.content : ''
+  // /search du composer : force une recherche web AVANT le premier appel au
+  // modèle (voir plus bas), au lieu de compter sur le modèle pour décider d'y
+  // recourir. Sans effet hors message normal (mode défini, ou recherche web
+  // désactivée/indisponible) — /search dégrade alors en simple message.
+  const forceSearch = body.forceSearch === true
   const mode =
     body.mode === 'regenerate' || body.mode === 'continue' || body.mode === 'open' || body.mode === 'impersonate'
       ? body.mode
@@ -677,6 +689,31 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   res.on('close', () => {
     if (!res.writableEnded) abort.abort()
   })
+
+  // /search : la recherche a lieu ICI, avant tout appel au modèle — un aller-
+  // retour d'outil authentique (assistant tool_calls + tool) est inséré dans
+  // `messages`, exactement comme si le modèle avait choisi d'appeler l'outil
+  // lui-même. « Forcer » veut dire ne pas dépendre de sa décision : le modèle
+  // garde la main pour chercher PLUS s'il le juge utile (l'outil reste exposé).
+  if (!mode && forceSearch && content.trim() && settings.webSearchEnabled && settings.modelMode !== 'simple') {
+    const query = content.trim()
+    const toolCallId = `search_${Date.now()}`
+    let result: string
+    try {
+      result = await executeWebSearchTool(settings, { query })
+    } catch (e) {
+      result = `Erreur : ${e instanceof Error ? e.message : String(e)}`
+    }
+    messages.push({
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        { id: toolCallId, type: 'function', function: { name: 'web_search', arguments: JSON.stringify({ query }) } },
+      ],
+    })
+    messages.push({ role: 'tool', tool_call_id: toolCallId, content: result })
+    writeEvent(res, { type: 'tool', name: 'web_search', args: JSON.stringify({ query }), result })
+  }
 
   let assistantText = ''
   let assistantThinking = ''

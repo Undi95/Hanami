@@ -3,13 +3,13 @@
 // (images) n'apparaît QUE si le modèle sait lire une image — sinon aucun pixel
 // n'est ajouté à l'interface. Même règle pour le micro (dictée) : sans API de
 // reconnaissance vocale, le bouton n'existe pas. Taper « / » en tête de message
-// ouvre le menu des commandes (/compact, /clean) — invisible tant qu'on ne le
-// cherche pas.
+// ouvre le menu des commandes (/compact, /clean, /search) — invisible tant
+// qu'on ne le cherche pas.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { localeOf, useI18n, type Key } from '../i18n'
 
 /** Nom d'une commande slash du composer. */
-export type CommandName = 'compact' | 'clean'
+export type CommandName = 'compact' | 'clean' | 'search'
 
 interface Props {
   disabled: boolean
@@ -17,7 +17,7 @@ interface Props {
   /** Le modèle configuré lit les images (GET /api/vision) : le trombone existe. */
   vision: boolean
   onSend: (text: string, images: string[]) => void
-  /** Commande slash validée — arg = ce qui suit le nom (instruction de /compact). */
+  /** Commande slash validée — arg = ce qui suit le nom (instruction de /compact, requête de /search). */
   onCommand: (name: CommandName, arg: string) => void
   /**
    * Flèche HAUT dans un champ vide : réflexe de terminal et de messagerie —
@@ -45,19 +45,22 @@ interface Props {
   prefill: { text: string; token: number } | null
 }
 
-// Les DEUX commandes de Hanami — pas de framework de commandes, pas d'alias.
+// Les commandes de Hanami — pas de framework de commandes, pas d'alias (sauf
+// /clear, synonyme muet de /clean).
 const COMMANDS: readonly { name: CommandName; hint: Key }[] = [
   { name: 'compact', hint: 'cmdCompactHint' },
   { name: 'clean', hint: 'cmdCleanHint' },
+  { name: 'search', hint: 'cmdSearchHint' },
 ]
 
 // « /comp » pendant la frappe (menu ouvert) ; l'espace ferme le menu, l'argument
-// éventuel appartient à la commande. Multiligne exclu : une commande tient sur
-// sa ligne, un message qui COMMENCE par « / » mais continue ailleurs part au modèle.
+// éventuel appartient à la commande (l'instruction de /compact, la requête de
+// /search). Multiligne exclu : une commande tient sur sa ligne, un message qui
+// COMMENCE par « / » mais continue ailleurs part au modèle.
 // /clear : synonyme muet de /clean (le réflexe des habitués de CLI) — accepté à
 // l'exécution, jamais affiché dans le menu.
 const TYPING_RE = /^\/([a-z]*)$/
-const COMMAND_RE = /^\/(compact|clean|clear)(?:\s+([\s\S]*))?$/
+const COMMAND_RE = /^\/(compact|clean|clear|search)(?:\s+([\s\S]*))?$/
 
 /** Nom canonique d'une commande capturée par COMMAND_RE (résout les synonymes). */
 function canonical(name: string): CommandName {

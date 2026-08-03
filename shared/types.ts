@@ -45,6 +45,8 @@ export interface Settings {
   spontaneousStartHour: number // heure locale à partir de laquelle il peut écrire (0-23)
   spontaneousEndHour: number // heure locale après laquelle il n'écrit plus (0-23)
   visionMode: VisionMode // envoi d'images au modèle (détection auprès du backend par défaut)
+  webSearchEnabled: boolean // expose l'outil web_search au modèle (DuckDuckGo, sans clé — SearXNG si webSearchUrl est renseignée)
+  webSearchUrl: string // base d'une instance SearXNG (ex: http://localhost:8080) — '' = DuckDuckGo
 }
 
 // Comment s'ouvre une conversation vide : 'written' = une des salutations écrites

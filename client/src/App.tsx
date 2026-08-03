@@ -922,6 +922,8 @@ function AppInner() {
     content?: string
     images?: string[] // data URLs jointes au message courant (modèles à vision)
     mode?: api.ChatMode
+    // /search du composer : force une recherche web sur `content` — voir api.streamChat.
+    forceSearch?: boolean
     // Ouverture automatique : le personnage et le chat viennent d'être chargés,
     // les états React ne sont pas encore à jour — openChat les passe en direct.
     char?: CharacterFull
@@ -1015,6 +1017,7 @@ function AppInner() {
         content: opts.content,
         images: opts.images,
         mode,
+        forceSearch: opts.forceSearch,
         signal: ac.signal,
         onEvent: (ev) => {
           if (ev.type === 'delta') {
@@ -1779,6 +1782,19 @@ function AppInner() {
             const char = character
             const chat = chatMeta
             if (!char || !chat) return
+            // /search <requête> — un message normal (visible dans le fil), mais
+            // avec une recherche web FORCÉE avant le premier appel au modèle (au
+            // lieu de compter sur lui pour y penser). Une requête vide (menu
+            // validé sans rien taper après) ne part pas.
+            if (name === 'search') {
+              const query = arg.trim()
+              if (!query) return
+              runGeneration({ content: query, images: [], forceSearch: true }).catch((e) => {
+                if (e instanceof api.AuthRequiredError) setNeedLogin(true)
+                else setFeed((f) => [...f, { kind: 'error', text: api.errorMessage(e) }])
+              })
+              return
+            }
             // /compact [instruction] — même chemin que l'Inspecteur (pastille +
             // ligne d'info) ; /clean — conversation vierge, même chemin que le
             // bouton « Nouvelle conversation » (l'ancienne reste dans la liste).

@@ -689,6 +689,10 @@ export interface StreamChatOptions {
   content?: string // requis en mode normal (sauf si des images l'accompagnent), ignoré en regenerate/continue/open
   images?: string[] // data URLs jointes au message courant (modèles à vision)
   mode?: ChatMode
+  // /search du composer : force une recherche web sur `content` avant le premier
+  // appel au modèle (au lieu de compter sur lui pour décider d'y recourir).
+  // Sans effet si mode est défini, ou si la recherche web est indisponible.
+  forceSearch?: boolean
   signal: AbortSignal
   onEvent: (ev: ChatEvent) => void
 }
@@ -705,6 +709,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<void> {
         ...(opts.content !== undefined ? { content: opts.content } : {}),
         ...(opts.images && opts.images.length > 0 ? { images: opts.images } : {}),
         ...(opts.mode ? { mode: opts.mode } : {}),
+        ...(opts.forceSearch ? { forceSearch: true } : {}),
       }),
       signal: opts.signal,
     })

@@ -70,6 +70,8 @@ interface FormState {
   fileToolsEnabled: boolean
   allowDelete: boolean
   toolsRoot: string
+  webSearchEnabled: boolean
+  webSearchUrl: string
   password: string
   contextSize: string
   autoCompact: boolean
@@ -102,6 +104,9 @@ function toForm(s: Settings): FormState {
     fileToolsEnabled: s.fileToolsEnabled,
     allowDelete: s.allowDelete,
     toolsRoot: s.toolsRoot,
+    // Réglage optionnel (config.json d'avant le réglage) : absent = éteint.
+    webSearchEnabled: s.webSearchEnabled === true,
+    webSearchUrl: s.webSearchUrl ?? '',
     password: '',
     contextSize: String(s.contextSize),
     autoCompact: s.autoCompact,
@@ -140,6 +145,8 @@ function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassw
     fileToolsEnabled: f.fileToolsEnabled,
     allowDelete: f.allowDelete,
     toolsRoot: f.toolsRoot.trim(),
+    webSearchEnabled: f.webSearchEnabled,
+    webSearchUrl: f.webSearchUrl.trim(),
     password: clearPassword ? api.CLEAR_SECRET : f.password,
     contextSize: Math.round(num(f.contextSize, base.contextSize)),
     autoCompact: f.autoCompact,
@@ -1035,6 +1042,25 @@ export default function SettingsDialog({
           <div className="field">
             <label htmlFor="set-root">{t('sandboxDir')}</label>
             <input id="set-root" type="text" value={form.toolsRoot} onChange={(e) => set('toolsRoot', e.target.value)} />
+          </div>
+
+          <h3 className="section-title">{t('sectionWebSearch')}</h3>
+          <Toggle
+            label={t('webSearchToggle')}
+            sub={t('webSearchToggleSub')}
+            checked={form.webSearchEnabled}
+            onChange={(v) => set('webSearchEnabled', v)}
+          />
+          <div className="field">
+            <label htmlFor="set-websearch-url">{t('webSearchUrlLabel')}</label>
+            <input
+              id="set-websearch-url"
+              type="url"
+              value={form.webSearchUrl}
+              placeholder={t('webSearchUrlPlaceholder')}
+              onChange={(e) => set('webSearchUrl', e.target.value)}
+            />
+            <span className="hint">{t('webSearchUrlHint')}</span>
           </div>
 
           <h3 className="section-title">{t('sectionAccess')}</h3>

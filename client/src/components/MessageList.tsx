@@ -635,7 +635,17 @@ export default function MessageList({
           </div>
         )
       case 'tool':
-        return (
+        // web_search a sa propre ligne (« Recherche sur le Web… ») : plus lisible
+        // que le nom technique de l'outil, même style discret que les autres.
+        return item.name === 'web_search' ? (
+          <div className="tool-chip" title={item.args}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="M20 20l-5-5" />
+            </svg>
+            <span>{t('webSearchStatus', { query: summarizeArgs(item.args) })}</span>
+          </div>
+        ) : (
           <div className="tool-chip" title={item.args}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14.5 6.5a4 4 0 015.5-3.7l-3 3 1.2 1.2 3-3a4 4 0 01-5.2 5.2l-8.5 8.5a1.8 1.8 0 01-2.5-2.5l8.5-8.5a4 4 0 011-.2z" />

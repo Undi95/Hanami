@@ -38,6 +38,9 @@ export const DEFAULT_SETTINGS: Settings = {
   spontaneousEndHour: 22,
   // 'auto' : Hanami demande au backend si le modèle voit les images (GET /api/vision).
   visionMode: 'auto',
+  // Opt-in : DuckDuckGo (sans clé) tant que webSearchUrl est vide ; une URL SearXNG y bascule.
+  webSearchEnabled: false,
+  webSearchUrl: '',
 }
 
 /** Heure locale valide (entier 0-23) — sinon la valeur par défaut. */
