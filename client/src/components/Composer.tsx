@@ -450,25 +450,6 @@ export default function Composer({
         </button>
       )}
 
-      {/* Impersonate : écrit le PROCHAIN message de l'utilisateur à sa place
-          (perspective inversée côté serveur), poussé dans le champ ci-dessous
-          — jamais envoyé tout seul. Toujours monté (pas de détection de
-          fonctionnalité navigateur ici), grisé sans historique à imiter. */}
-      <button
-        className="icon-btn impersonate-btn"
-        disabled={disabled || streaming || !canImpersonate}
-        title={t('impersonate')}
-        aria-label={t('impersonate')}
-        onClick={onImpersonate}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 12a3.4 3.4 0 100-6.8 3.4 3.4 0 000 6.8z" />
-          <path d="M5.5 19.5c.7-3.3 3.3-5.5 6.5-5.5s5.8 2.2 6.5 5.5" />
-          <path d="M3.3 8.3l2-2-2-2M3.6 6.3h4.2" />
-          <path d="M20.7 15.7l-2 2 2 2M20.4 17.7h-4.2" />
-        </svg>
-      </button>
-
       <textarea
         ref={taRef}
         rows={1}
@@ -550,6 +531,29 @@ export default function Composer({
           ))}
         </div>
       )}
+
+      {/* Impersonate : écrit le PROCHAIN message de l'utilisateur à sa place
+          (perspective inversée côté serveur), poussé dans le champ ci-dessus
+          — jamais envoyé tout seul. Juste avant Envoyer (marge propre à la
+          règle .impersonate-btn) : à portée du pouce, mais un cran à part pour
+          ne pas se faire happer par le tap d'envoi. Toujours monté (pas de
+          détection de fonctionnalité navigateur ici), grisé sans historique à
+          imiter. */}
+      <button
+        className="icon-btn impersonate-btn"
+        disabled={disabled || streaming || !canImpersonate}
+        title={t('impersonate')}
+        aria-label={t('impersonate')}
+        onClick={onImpersonate}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 12a3.4 3.4 0 100-6.8 3.4 3.4 0 000 6.8z" />
+          <path d="M5.5 19.5c.7-3.3 3.3-5.5 6.5-5.5s5.8 2.2 6.5 5.5" />
+          <path d="M3.3 8.3l2-2-2-2M3.6 6.3h4.2" />
+          <path d="M20.7 15.7l-2 2 2 2M20.4 17.7h-4.2" />
+        </svg>
+      </button>
+
       {streaming ? (
         <button className="send-btn stop" onClick={onStop} title={t('stop')} aria-label={t('stop')}>
           <svg viewBox="0 0 24 24" fill="currentColor">

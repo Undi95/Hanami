@@ -1539,12 +1539,18 @@ select {
 }
 
 /* ── Impersonate ──────────────────────────────────────────────────────────
-   Même gabarit que le trombone et le micro : toujours monté (contrairement
-   à eux, sans détection de fonctionnalité), juste grisé sans historique. */
+   Même gabarit que le trombone et le micro (cohérence du langage visuel des
+   icon-btn du composer), mais posé juste AVANT Envoyer, pas dans le cluster
+   de gauche : c'est la dernière action avant d'envoyer, pas un réglage du
+   message. La marge droite ajoute un cran au gap de .composer (8px) — 12px
+   au total avant Envoyer — pour qu'un pouce visant Impersonate n'effleure pas
+   le bouton d'envoi juste à côté. Toujours monté (contrairement au trombone
+   et au micro, sans détection de fonctionnalité), juste grisé sans historique. */
 .impersonate-btn {
   width: 36px;
   height: 44px;
   border-radius: 12px;
+  margin-right: 4px;
 }
 
 .impersonate-btn svg {
@@ -1659,13 +1665,12 @@ select {
     width: 12px;
     height: 12px;
   }
-  /* Trombone, micro et impersonate : 36 px de large, 4 px sous le seuil. Les
-     8 px repris au champ de saisie ne lui coûtent plus rien depuis que le
-     libellé affiché est court. La hauteur, elle, était déjà à 44. Impersonate
-     est TOUJOURS monté (pas de détection de fonctionnalité, contrairement au
-     trombone et au micro) : à vérifier au banc si les trois cumulés serrent
-     trop le champ en 320 px (VN) — au pire le texte passe à la ligne, le champ
-     grandit, rien ne déborde. */
+  /* Trombone, micro (cluster de gauche) et impersonate (juste avant Envoyer,
+     à droite) : 40 px de large sous ce seuil — un cran plus large que leur
+     gabarit par défaut (36 px), pour une cible tactile plus sûre au pouce sur
+     petit écran. Les 8 px repris au champ de saisie ne lui coûtent plus rien
+     depuis que le libellé affiché est court : au pire le texte passe à la
+     ligne (le champ grandit en hauteur), rien ne déborde en largeur. */
   .clip-btn,
   .mic-btn,
   .impersonate-btn {
