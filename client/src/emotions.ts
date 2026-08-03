@@ -30,12 +30,17 @@ const PARTIAL_TAG = /^\[\s*[a-z]*\s*$/i
  *
  * FORME D'ÉMOTION UNIQUEMENT, et le reste est épargné :
  *  - en TÊTE de texte seulement — « un [tableau] ici » n'est pas touché ;
- *  - UN SEUL MOT, 2 à 12 lettres ASCII MINUSCULES, sans espace ni chiffre :
- *    « [Note] », « [OOC] », « [Système] », « [exc ited] », « [v2] » sont donc
- *    hors d'atteinte — un marqueur écrit par un humain porte presque toujours
- *    une majuscule ou un accent, un tag d'émotion jamais ;
+ *  - UN SEUL MOT, 2 à 12 lettres ASCII (SANS accent), sans espace ni chiffre :
+ *    « [Système] », « [exc ited] », « [v2] » sont donc hors d'atteinte ;
  *  - PAS un lien Markdown : « [texte](url) » et « [texte][1] » commencent de la
  *    même façon, et amputer le libellé casserait le lien (garde `(?![([])`).
+ *
+ * Insensible à la casse : un vrai cas observé en prod, « [Trusting] » (majuscule
+ * initiale), a fui tel quel dans une bulle — l'hypothèse « un tag d'émotion
+ * n'est jamais capitalisé » ne tient pas face à un modèle qui capitalise ses
+ * adjectifs inventés. On ne peut plus se fier à la casse pour distinguer un
+ * tag d'émotion halluciné d'un marqueur écrit par un humain ; NOT_EMOTIONS
+ * (ci-dessous) porte donc seule la liste des exceptions à épargner.
  *
  * Le pire cas d'un faux positif est un mot de tête absent de l'AFFICHAGE — le
  * texte sauvegardé, lui, reste intégral (édition, recherche, payload LLM) ;
@@ -43,10 +48,11 @@ const PARTIAL_TAG = /^\[\s*[a-z]*\s*$/i
  * pour toujours. On tranche pour le retrait.
  *
  * Seule exception nommée : « ooc » (out of character), le seul marqueur de jeu
- * de rôle courant qui ait exactement la forme d'un tag d'émotion. Le masquer
- * silencieusement retournerait le sens d'une réplique.
+ * de rôle courant qui ait exactement la forme d'un tag d'émotion, quelle que
+ * soit sa casse (« [OOC] », « [Ooc] »…). Le masquer silencieusement
+ * retournerait le sens d'une réplique.
  */
-const UNKNOWN_HEAD_TAG = /^\[([a-z]{2,12})\](?![([])[ \t]*/
+const UNKNOWN_HEAD_TAG = /^\[([a-z]{2,12})\](?![([])[ \t]*/i
 const NOT_EMOTIONS = new Set(['ooc'])
 
 /**
@@ -57,7 +63,7 @@ const NOT_EMOTIONS = new Set(['ooc'])
 export function stripEmotionTags(text: string, streaming = false): string {
   let clean = text.replace(ALL_TAGS, '').replace(/^[ \t]+/, '')
   const unknown = UNKNOWN_HEAD_TAG.exec(clean)
-  if (unknown && !NOT_EMOTIONS.has(unknown[1])) clean = clean.slice(unknown[0].length)
+  if (unknown && !NOT_EMOTIONS.has(unknown[1].toLowerCase())) clean = clean.slice(unknown[0].length)
   return streaming && PARTIAL_TAG.test(clean) ? '' : clean
 }
 
