@@ -33,6 +33,16 @@ interface Props {
    */
   onTyping: (on: boolean) => void
   onStop: () => void
+  /** Y a-t-il au moins un message dans le fil ? Sans ça, Impersonate n'a rien à imiter. */
+  canImpersonate: boolean
+  /** Génère le prochain message de l'utilisateur (perspective inversée côté serveur). */
+  onImpersonate: () => void
+  /**
+   * Texte poussé par Impersonate — `token` change à chaque delta reçu (même
+   * texte ou non) pour que l'effet qui le recopie dans le champ se déclenche à
+   * coup sûr tout au long du flux, pas seulement à la fin.
+   */
+  prefill: { text: string; token: number } | null
 }
 
 // Les DEUX commandes de Hanami — pas de framework de commandes, pas d'alias.
@@ -179,6 +189,9 @@ export default function Composer({
   onEditLast,
   onTyping,
   onStop,
+  canImpersonate,
+  onImpersonate,
+  prefill,
 }: Props) {
   const { t, lang } = useI18n()
   const [text, setText] = useState('')
@@ -271,6 +284,18 @@ export default function Composer({
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 160) + 'px'
   }
+
+  // Impersonate pousse son texte ici au fil du flux (comme un delta de chat,
+  // mais dans le champ plutôt que dans une bulle) — `token` en dépendance,
+  // pas `prefill.text` : le même texte peut revenir (fin de flux qui répète le
+  // dernier delta) et doit quand même écraser ce que l'utilisateur a pu taper
+  // entre-temps.
+  useEffect(() => {
+    if (!prefill) return
+    setText(prefill.text)
+    requestAnimationFrame(autosize)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.token])
 
   /**
    * Micro : démarre l'écoute, ou la coupe si elle tourne déjà. Tout échec est
@@ -424,6 +449,25 @@ export default function Composer({
           </svg>
         </button>
       )}
+
+      {/* Impersonate : écrit le PROCHAIN message de l'utilisateur à sa place
+          (perspective inversée côté serveur), poussé dans le champ ci-dessous
+          — jamais envoyé tout seul. Toujours monté (pas de détection de
+          fonctionnalité navigateur ici), grisé sans historique à imiter. */}
+      <button
+        className="icon-btn impersonate-btn"
+        disabled={disabled || streaming || !canImpersonate}
+        title={t('impersonate')}
+        aria-label={t('impersonate')}
+        onClick={onImpersonate}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 12a3.4 3.4 0 100-6.8 3.4 3.4 0 000 6.8z" />
+          <path d="M5.5 19.5c.7-3.3 3.3-5.5 6.5-5.5s5.8 2.2 6.5 5.5" />
+          <path d="M3.3 8.3l2-2-2-2M3.6 6.3h4.2" />
+          <path d="M20.7 15.7l-2 2 2 2M20.4 17.7h-4.2" />
+        </svg>
+      </button>
 
       <textarea
         ref={taRef}

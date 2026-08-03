@@ -253,6 +253,96 @@ export function buildPayload(
   return { systemText, characterPrompt, injected, payload }
 }
 
+// ── Impersonate ─────────────────────────────────────────────────────────────
+// « Écrire à la place de l'utilisateur » — PAS un simple ajout en fin du prompt
+// du personnage (le piège de SillyTavern, qui laisse la persona du perso
+// dominer) : le system prompt est ici reconstruit avec l'UTILISATEUR comme
+// locuteur et {{char}} comme interlocuteur, et l'historique est ÉCHANGÉ
+// (assistant ↔ user) — le modèle, qui complète toujours le rôle « assistant »,
+// écrit donc naturellement dans SA voix à lui. characterPrompt (les
+// instructions de rôle du personnage) n'entre JAMAIS dans ce payload : c'est
+// justement lui qu'il faut faire taire pour que la persona utilisateur tienne.
+
+const IMPERSONATE_LENGTH_SAMPLE = 12 // derniers tours utilisateur considérés représentatifs
+
+/** Longueur (caractères) typique des messages récents de l'utilisateur — null si aucun. */
+function typicalUserLength(history: ChatMessage[]): number | null {
+  const lens = history
+    .filter((m) => m.role === 'user' && m.content.trim())
+    .slice(-IMPERSONATE_LENGTH_SAMPLE)
+    .map((m) => m.content.trim().length)
+  if (lens.length === 0) return null
+  return Math.round(lens.reduce((a, b) => a + b, 0) / lens.length)
+}
+
+/** System prompt d'impersonation : l'utilisateur EST le locuteur, {{char}} est l'autre. */
+function impersonateSystemPrompt(
+  characterName: string,
+  personaName: string,
+  personaDescription: string,
+  typicalLen: number | null,
+): string {
+  const who = personaName || 'the user'
+  let block = `You are ${who}, a real person in an ongoing conversation with ${characterName}.\n`
+  if (personaDescription) block += `About you: ${personaDescription}\n`
+  block +=
+    `\nWrite YOUR OWN next message to ${characterName} — from your own point of view, in your own voice, ` +
+    `never theirs. Below, ${characterName}'s turns are tagged "user" and yours are tagged "assistant", so that ` +
+    `you naturally continue as yourself when completing the assistant turn.\n` +
+    `Match your own tone, habits and phrasing as shown earlier in the conversation.`
+  if (typicalLen !== null) {
+    block += ` Your messages usually run about ${typicalLen} characters long — stay close to that, don't ramble.`
+  }
+  block += ' Reply with ONLY that message: no narration, no emotion tags, no meta-commentary.'
+  return block
+}
+
+/**
+ * Payload d'impersonation : réutilise les blocs neutres de buildPayload
+ * (résumé, notes de scène, heure — de simples faits, jamais des instructions
+ * de rôle) mais jamais characterPrompt, et échange les rôles de l'historique.
+ * Aucun outil exposé : impersonate écrit une réplique, jamais une action.
+ */
+function buildImpersonatePayload(
+  characterId: string,
+  chatId: string,
+  settings: Settings,
+): { payload: BackendPayload } {
+  const character = getCharacter(characterId)
+  if (!character) throw new Error(`Personnage introuvable : ${characterId}`)
+  const { meta, messages: all } = readChat(characterId, chatId)
+  const names = macroNamesFor(character.name, settings)
+
+  let injected = ''
+  if (meta.summary) injected += summaryBlock(meta.summary)
+  if (meta.sceneNotes) injected += sceneNotesBlock(meta.sceneNotes)
+  if (settings.timeAwareness) injected += timeBlock(all.length > 0 ? all[all.length - 1].ts : null)
+
+  const base = impersonateSystemPrompt(
+    character.name,
+    settings.personaName.trim(),
+    settings.personaDescription.trim(),
+    typicalUserLength(all),
+  )
+  const systemText = substituteMacros(base + injected, names)
+
+  const upto = meta.summary ? Math.min(meta.summaryUpto ?? 0, all.length) : 0
+  const live = all.slice(upto)
+  const recent = settings.maxHistoryMessages > 0 ? live.slice(-settings.maxHistoryMessages) : []
+  const messages: unknown[] = [
+    { role: 'system', content: systemText },
+    // Perspective inversée : le tour de {{char}} devient "user", celui de
+    // l'utilisateur devient "assistant" — voir le commentaire de section plus haut.
+    ...recent.map((m) => ({
+      role: m.role === 'assistant' ? 'user' : 'assistant',
+      content: subContent(messageContent(m), names),
+    })),
+  ]
+  return {
+    payload: { messages, model: settings.model, temperature: settings.temperature, max_tokens: settings.maxTokens },
+  }
+}
+
 function toAssistantMessage(text: string, thinking?: string): ChatMessage {
   const emotion = firstEmotionTag(text)
   const msg: ChatMessage = { role: 'assistant', content: text, ts: new Date().toISOString() }
@@ -472,7 +562,9 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   const chatId = typeof body.chatId === 'string' ? body.chatId : ''
   const content = typeof body.content === 'string' ? body.content : ''
   const mode =
-    body.mode === 'regenerate' || body.mode === 'continue' || body.mode === 'open' ? body.mode : undefined
+    body.mode === 'regenerate' || body.mode === 'continue' || body.mode === 'open' || body.mode === 'impersonate'
+      ? body.mode
+      : undefined
   // Validé avant toute autre chose : la réponse est encore du JSON à ce stade
   // (une fois le flux SSE ouvert, plus aucun code d'erreur HTTP n'est possible).
   const parsedImages = parseImages(body.images)
@@ -534,6 +626,10 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     // Le premier message ne se génère que dans une conversation encore vierge.
     res.status(400).json({ error: "La conversation n'est pas vide (rien à ouvrir)" })
     return
+  } else if (mode === 'impersonate' && existing.length === 0) {
+    // Impersonate a besoin d'au moins un tour à imiter (ton, longueur, sujet).
+    res.status(400).json({ error: 'Rien à impersonner (conversation vide)' })
+    return
   }
 
   // Payload construit AVANT la sauvegarde : le message courant passe par pendingUserContent,
@@ -544,12 +640,17 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       ? CONTINUE_DIRECTIVE
       : mode === 'open' || regenOpens
         ? OPEN_DIRECTIVE
-        : mode === 'regenerate'
+        : mode === 'regenerate' || mode === 'impersonate'
           ? undefined
           : images.length > 0
             ? multimodalContent(content, images)
             : content
-  const { payload } = buildPayload(characterId, chatId, settings, pendingUser, regenBase !== null)
+  // Impersonate ne passe JAMAIS par buildPayload : son system prompt et son
+  // historique (rôles échangés) sont d'une nature différente — voir buildImpersonatePayload.
+  const { payload } =
+    mode === 'impersonate'
+      ? buildImpersonatePayload(characterId, chatId, settings)
+      : buildPayload(characterId, chatId, settings, pendingUser, regenBase !== null)
   const messages = payload.messages as Record<string, unknown>[]
 
   // Le message user est sauvegardé AVANT l'appel backend : il survit à toute erreur en aval.
@@ -621,6 +722,13 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   // est AJOUTÉE en message à part : rien d'écrasé, rien de perdu, et le `done`
   // renvoie ce qui est réellement sur le disque.
   const persistAssistant = (): ChatMessage => {
+    if (mode === 'impersonate') {
+      // Jamais écrit sur le disque : impersonate ne fait qu'écrire dans le
+      // composer du client (à éditer avant envoi) — la conversation elle-même
+      // n'avance pas d'un message. `role: 'user'` par cohérence de type
+      // seulement, rien n'est lu au-delà de `content` côté client.
+      return { role: 'user', content: assistantText, ts: new Date().toISOString() }
+    }
     if (mode === 'continue' && continueBase) {
       const base = continueBase
       const joiner = base.content.endsWith('\n') || assistantText.startsWith('\n') ? '' : ' '

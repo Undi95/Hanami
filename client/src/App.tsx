@@ -123,6 +123,9 @@ function AppInner() {
   const [feed, setFeed] = useState<FeedItem[]>([])
   // Message visé par le prochain envoi : sa citation sera écrite dans le message.
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
+  // Texte poussé par Impersonate dans le composer — `token` change à chaque
+  // delta reçu, y compris si le texte lui-même se répète (fin de flux).
+  const [impersonatePrefill, setImpersonatePrefill] = useState<{ text: string; token: number } | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   // Onglet d'ouverture de l'Inspecteur : 'system' par la barre du haut, 'scene'
@@ -1143,6 +1146,51 @@ function AppInner() {
     abortRef.current?.abort()
   }
 
+  /**
+   * Impersonate : demande au serveur le PROCHAIN message de l'UTILISATEUR
+   * (perspective inversée — {{char}} devient l'interlocuteur, voir
+   * buildImpersonatePayload côté serveur) et pousse le résultat dans le
+   * composer au fil du flux. Rien n'entre dans `feed` ni dans `chatMeta` :
+   * ce n'est qu'une PROPOSITION, à éditer et envoyer soi-même — ou à jeter.
+   */
+  function runImpersonate() {
+    const char = character
+    const chat = chatMeta
+    if (!char || !chat || abortRef.current !== null) return
+    const ac = new AbortController()
+    abortRef.current = ac
+    setStreaming(true)
+    let acc = ''
+    let token = 0
+    api
+      .streamChat({
+        characterId: char.id,
+        chatId: chat.id,
+        mode: 'impersonate',
+        signal: ac.signal,
+        onEvent: (ev) => {
+          if (ev.type === 'delta') {
+            acc += ev.text
+            setImpersonatePrefill({ text: acc, token: ++token })
+          } else if (ev.type === 'done') {
+            setImpersonatePrefill({ text: ev.message.content, token: ++token })
+          } else if (ev.type === 'error') {
+            setFeed((f) => [...f, { kind: 'error', text: ev.message }])
+          }
+        },
+      })
+      .catch((e) => {
+        if (e instanceof api.AuthRequiredError) setNeedLogin(true)
+        else if ((e as Error).name !== 'AbortError') {
+          setFeed((f) => [...f, { kind: 'error', text: api.errorMessage(e) }])
+        }
+      })
+      .finally(() => {
+        setStreaming(false)
+        abortRef.current = null
+      })
+  }
+
   // Édition d'un message en place — ordinal = position parmi les messages
   // SAUVEGARDÉS (les chips outil/erreur/info et le greeting ne comptent pas).
   async function handleEditMessage(ordinal: number, content: string) {
@@ -1297,6 +1345,8 @@ function AppInner() {
   })()
   const canRegen = !!lastFeedMsg && !lastFeedMsg.pending
   const canContinue = canRegen && lastFeedMsg.msg.role === 'assistant'
+  // Impersonate a besoin d'au moins un tour de conversation à imiter (ton, longueur, sujet).
+  const canImpersonate = feed.some((it) => it.kind === 'msg')
   // Variantes de la dernière réponse, et son ordinal : le mode VN n'a pas de
   // bulle à survoler, ses flèches vivent dans la bande basse — à côté du
   // « Régénérer » qui les produit.
@@ -1749,6 +1799,9 @@ function AppInner() {
           // appel : le socle de repos continue de tourner.
           onTyping={(on) => stageRef.current?.setListening(on)}
           onStop={stopStreaming}
+          canImpersonate={canImpersonate}
+          onImpersonate={runImpersonate}
+          prefill={impersonatePrefill}
         />
       </div>
 

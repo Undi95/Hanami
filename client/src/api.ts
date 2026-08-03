@@ -676,8 +676,12 @@ export function updateChatSceneNotes(
 
 // ── Chat streaming (SSE sur fetch) ─────────────────────────────────────────
 
-/** 'open' = le modèle écrit le premier message d'une conversation vide (refusé si elle ne l'est pas). */
-export type ChatMode = 'regenerate' | 'continue' | 'open'
+/**
+ * 'open' = le modèle écrit le premier message d'une conversation vide (refusé si elle ne l'est pas).
+ * 'impersonate' = le modèle écrit le PROCHAIN message de l'UTILISATEUR (perspective inversée côté
+ * serveur) — jamais persisté, le résultat est poussé dans le composer pour être édité avant envoi.
+ */
+export type ChatMode = 'regenerate' | 'continue' | 'open' | 'impersonate'
 
 export interface StreamChatOptions {
   characterId: string

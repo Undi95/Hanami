@@ -1538,6 +1538,20 @@ select {
   animation: mic-pulse 1.7s ease-in-out infinite;
 }
 
+/* ── Impersonate ──────────────────────────────────────────────────────────
+   Même gabarit que le trombone et le micro : toujours monté (contrairement
+   à eux, sans détection de fonctionnalité), juste grisé sans historique. */
+.impersonate-btn {
+  width: 36px;
+  height: 44px;
+  border-radius: 12px;
+}
+
+.impersonate-btn svg {
+  width: 19px;
+  height: 19px;
+}
+
 @keyframes mic-pulse {
   0%,
   100% {
@@ -1645,12 +1659,16 @@ select {
     width: 12px;
     height: 12px;
   }
-  /* Trombone et micro : 36 px de large, 4 px sous le seuil. Les 8 px repris au
-     champ de saisie ne lui coûtent plus rien depuis que le libellé affiché est
-     court : il reste 92 px utiles au pire (mode VN à 320 px) pour 69,3 px de
-     « Message… ». La hauteur, elle, était déjà à 44. */
+  /* Trombone, micro et impersonate : 36 px de large, 4 px sous le seuil. Les
+     8 px repris au champ de saisie ne lui coûtent plus rien depuis que le
+     libellé affiché est court. La hauteur, elle, était déjà à 44. Impersonate
+     est TOUJOURS monté (pas de détection de fonctionnalité, contrairement au
+     trombone et au micro) : à vérifier au banc si les trois cumulés serrent
+     trop le champ en 320 px (VN) — au pire le texte passe à la ligne, le champ
+     grandit, rien ne déborde. */
   .clip-btn,
-  .mic-btn {
+  .mic-btn,
+  .impersonate-btn {
     width: 40px;
   }
   /* Commandes secondaires des dialogs : gabarit uniforme de 36 px, dessiné pour
