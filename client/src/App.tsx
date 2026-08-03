@@ -1174,9 +1174,13 @@ function AppInner() {
         onEvent: (ev) => {
           if (ev.type === 'delta') {
             acc += ev.text
-            setImpersonatePrefill({ text: acc, token: ++token })
+            // Le prompt d'impersonation interdit les tags d'émotion, mais un petit
+            // modèle peut les écrire quand même (cf. le fix sur les réponses du
+            // personnage) — un tag qui fuirait ici finirait dans un message UTILISATEUR,
+            // jamais passé par stripEmotionTags à l'affichage. Filet identique ici.
+            setImpersonatePrefill({ text: stripEmotionTags(acc, true), token: ++token })
           } else if (ev.type === 'done') {
-            setImpersonatePrefill({ text: ev.message.content, token: ++token })
+            setImpersonatePrefill({ text: stripEmotionTags(ev.message.content), token: ++token })
           } else if (ev.type === 'error') {
             setFeed((f) => [...f, { kind: 'error', text: ev.message }])
           }
