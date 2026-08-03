@@ -1497,7 +1497,11 @@ select {
   /* Enveloppe : la bande de vignettes (.shots, largeur pleine) prend la ligne
      du dessus SANS sortir du composer — la mise en page du mode VN est intacte. */
   flex-wrap: wrap;
-  gap: 8px;
+  /* 6px et non 8 : chaque px repris ici va DIRECTEMENT au champ de texte (flex:1),
+     le seul élément élastique de la rangée — sensible sur petit écran, où trois
+     icon-btn de chaque côté du champ (clip, micro, impersonate) grignotaient sa
+     largeur. */
+  gap: 6px;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--border);
 }
@@ -1506,16 +1510,18 @@ select {
    Rien de tout ceci n'existe si le modèle ne lit pas les images : le trombone
    n'est même pas monté (App → visionEnabled). */
 
-/* Trombone : une .icon-btn resserrée, alignée sur la hauteur du champ. */
+/* Trombone : une .icon-btn resserrée, alignée sur la hauteur du champ. 32 px
+   de large (et non 44, la base de .icon-btn) : le champ de texte est le seul
+   élément élastique de la rangée, chaque icon-btn resserrée lui revient. */
 .clip-btn {
-  width: 36px;
+  width: 32px;
   height: 44px;
   border-radius: 12px;
 }
 
 .clip-btn svg {
-  width: 19px;
-  height: 19px;
+  width: 17px;
+  height: 17px;
 }
 
 /* ── Micro (dictée) ───────────────────────────────────────────────────────
@@ -1523,14 +1529,14 @@ select {
    sait reconnaître la parole. Pendant l'écoute il respire doucement — une
    lueur accent, pas un gyrophare. */
 .mic-btn {
-  width: 36px;
+  width: 32px;
   height: 44px;
   border-radius: 12px;
 }
 
 .mic-btn svg {
-  width: 19px;
-  height: 19px;
+  width: 17px;
+  height: 17px;
 }
 
 .mic-btn.listening {
@@ -1542,20 +1548,20 @@ select {
    Même gabarit que le trombone et le micro (cohérence du langage visuel des
    icon-btn du composer), mais posé juste AVANT Envoyer, pas dans le cluster
    de gauche : c'est la dernière action avant d'envoyer, pas un réglage du
-   message. La marge droite ajoute un cran au gap de .composer (8px) — 12px
+   message. La marge droite ajoute un cran au gap de .composer (6px) — 10px
    au total avant Envoyer — pour qu'un pouce visant Impersonate n'effleure pas
    le bouton d'envoi juste à côté. Toujours monté (contrairement au trombone
    et au micro, sans détection de fonctionnalité), juste grisé sans historique. */
 .impersonate-btn {
-  width: 36px;
+  width: 32px;
   height: 44px;
   border-radius: 12px;
   margin-right: 4px;
 }
 
 .impersonate-btn svg {
-  width: 19px;
-  height: 19px;
+  width: 17px;
+  height: 17px;
 }
 
 @keyframes mic-pulse {
@@ -1665,17 +1671,11 @@ select {
     width: 12px;
     height: 12px;
   }
-  /* Trombone, micro (cluster de gauche) et impersonate (juste avant Envoyer,
-     à droite) : 40 px de large sous ce seuil — un cran plus large que leur
-     gabarit par défaut (36 px), pour une cible tactile plus sûre au pouce sur
-     petit écran. Les 8 px repris au champ de saisie ne lui coûtent plus rien
-     depuis que le libellé affiché est court : au pire le texte passe à la
-     ligne (le champ grandit en hauteur), rien ne déborde en largeur. */
-  .clip-btn,
-  .mic-btn,
-  .impersonate-btn {
-    width: 40px;
-  }
+  /* Trombone, micro et impersonate ne grandissent PAS ici, à l'inverse des
+     autres cibles tactiles de ce bloc : sur petit écran c'est le champ de
+     texte (seul élément élastique de la rangée) qui doit rester confortable,
+     pas ces trois icônes secondaires — leur gabarit resserré (32 px, cf.
+     .clip-btn/.mic-btn/.impersonate-btn) vaut donc à toutes les tailles. */
   /* Commandes secondaires des dialogs : gabarit uniforme de 36 px, dessiné pour
      la souris. Seule la HAUTEUR manque (les libellés font 56 à 158 px de large),
      et rien ne dépend de cette hauteur : les groupes segmentés passent déjà à la
