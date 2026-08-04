@@ -2,8 +2,8 @@
 // édition en place, autoscroll intelligent, recherche Ctrl+F. Contient aussi la
 // boîte de dialogue du mode visual novel (VnBox), qui rejoue la dernière
 // réplique du même fil.
-import { cloneElement, isValidElement, useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import { cloneElement, isValidElement, memo, useCallback, useEffect, useRef, useState } from 'react'
+import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { createPortal } from 'react-dom'
 import type { ChatMessage } from '../../../shared/types'
 import { stripEmotionTags } from '../emotions'
@@ -274,6 +274,312 @@ function parseSearchResults(result: string): SearchResultEntry[] {
   return entries
 }
 
+// ── Rendu mémoïsé (hors recherche/édition) ─────────────────────────────────
+// Pendant le streaming, App.tsx re-render à chaque delta de texte (setFeed) :
+// SANS mémoïsation, chaque token relance renderMarkdown + reconstruit tout le
+// JSX pour la TOTALITÉ de l'historique, alors qu'un seul message change. Ces
+// deux composants (React.memo) ne re-render que si LEURS props changent —
+// items non modifiés (référence stable, cf. App.tsx qui ne recrée QUE l'item
+// en cours de streaming) + drapeaux dérivés (isArmed, isCopied…) à false pour
+// tous les autres. N'entrent en jeu que hors recherche ET hors édition : ces
+// deux modes gardent le rendu séquentiel d'origine (renderItem plus bas),
+// seuls capables de numéroter les correspondances de recherche à cheval sur
+// plusieurs messages — un besoin que la mémoïsation par item ne peut pas
+// satisfaire sans casser cette numérotation.
+
+const ToolChip = memo(function ToolChip({
+  item,
+  index,
+  editable,
+  isArmed,
+  setArmedTool,
+  onDeleteTool,
+}: {
+  item: Extract<FeedItem, { kind: 'tool' }>
+  index: number
+  editable: boolean
+  isArmed: boolean
+  setArmedTool: Dispatch<SetStateAction<number | null>>
+  onDeleteTool: (index: number) => void
+}) {
+  const { t } = useI18n()
+  const isSearch = item.name === 'web_search'
+  const results = parseSearchResults(item.result)
+
+  function handleDeleteClick(e: React.MouseEvent) {
+    // Le clic sur la corbeille ne doit pas AUSSI ouvrir/fermer le panneau —
+    // comportement natif par défaut d'un clic dans un <summary>.
+    e.preventDefault()
+    if (!isArmed) {
+      setArmedTool(index)
+      return
+    }
+    setArmedTool(null)
+    onDeleteTool(index)
+  }
+
+  return (
+    <details
+      className="tool-chip-wrap"
+      onMouseLeave={() => setArmedTool((a) => (a !== null && a === index ? null : a))}
+    >
+      <summary className="tool-chip" title={t('toolResultsHint')}>
+        {isSearch ? (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <path d="M20 20l-5-5" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.5 6.5a4 4 0 015.5-3.7l-3 3 1.2 1.2 3-3a4 4 0 01-5.2 5.2l-8.5 8.5a1.8 1.8 0 01-2.5-2.5l8.5-8.5a4 4 0 011-.2z" />
+          </svg>
+        )}
+        <span>
+          {isSearch
+            ? t('webSearchStatus', { query: summarizeArgs(item.args) })
+            : t('toolCall', { name: item.name, args: summarizeArgs(item.args) })}
+        </span>
+        {editable && (
+          <button
+            className={isArmed ? 'msg-edit armed' : 'msg-edit'}
+            title={isArmed ? t('deleteMessageArmed') : t('deleteMessage')}
+            aria-label={isArmed ? t('deleteMessageArmed') : t('deleteMessage')}
+            onClick={handleDeleteClick}
+            onBlur={() => setArmedTool((a) => (a === index ? null : a))}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 7.2h12" />
+              <path d="M9.7 7.2V5.4h4.6v1.8" />
+              <path d="M7.6 7.2l.8 11.4h7.2l.8-11.4" />
+            </svg>
+          </button>
+        )}
+      </summary>
+      <div className="tool-chip-body">
+        {results.length > 0 ? (
+          results.map((r, i) => (
+            <div className="result-entry" key={i}>
+              <a className="result-title" href={r.url} target="_blank" rel="noopener noreferrer">
+                {r.title}
+              </a>
+              <a className="result-url" href={r.url} target="_blank" rel="noopener noreferrer">
+                {r.url}
+              </a>
+              {r.snippet && <div className="result-snippet">{r.snippet}</div>}
+            </div>
+          ))
+        ) : (
+          <div className="result-snippet">{item.result}</div>
+        )}
+      </div>
+    </details>
+  )
+})
+
+interface MessageBubbleProps {
+  item: Extract<FeedItem, { kind: 'msg' }>
+  ordinal: number | null
+  editable: boolean
+  showThoughts: boolean
+  isArmed: boolean
+  isCopied: boolean
+  isPinned: boolean
+  isSpeaking: boolean
+  setArmed: Dispatch<SetStateAction<number | null>>
+  setCopied: Dispatch<SetStateAction<number | null>>
+  setZoom: Dispatch<SetStateAction<string | null>>
+  onStartEdit: (ordinal: number, msg: ChatMessage) => void
+  onDeleteMessage: (ordinal: number) => Promise<void>
+  onSwitchVariant: (ordinal: number, variant: number) => Promise<void>
+  onReply: (msg: ChatMessage) => void
+  onRemember: (msg: ChatMessage) => void
+  onPin: (ordinal: number | null) => void
+  onReplay: ((msg: ChatMessage) => void) | null
+  onStopTts: () => void
+}
+
+const MessageBubble = memo(function MessageBubble({
+  item,
+  ordinal,
+  editable,
+  showThoughts,
+  isArmed,
+  isCopied,
+  isPinned,
+  isSpeaking,
+  setArmed,
+  setCopied,
+  setZoom,
+  onStartEdit,
+  onDeleteMessage,
+  onSwitchVariant,
+  onReply,
+  onRemember,
+  onPin,
+  onReplay,
+  onStopTts,
+}: MessageBubbleProps) {
+  const { lang, t } = useI18n()
+  const isUser = item.msg.role === 'user'
+  const text = isUser ? item.msg.content : stripEmotionTags(item.msg.content, item.pending)
+
+  function handleCopy() {
+    if (ordinal === null) return
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(ordinal)
+        window.setTimeout(() => setCopied((c) => (c === ordinal ? null : c)), 2000)
+      })
+      .catch((e) => console.error('[copy]', e))
+  }
+
+  function handleDeleteClick() {
+    if (ordinal === null) return
+    if (!isArmed) {
+      setArmed(ordinal)
+      return
+    }
+    setArmed(null)
+    onDeleteMessage(ordinal).catch((e) => console.error('[delete]', e))
+  }
+
+  return (
+    <div
+      className={`msg ${isUser ? 'user' : 'assistant'}`}
+      onMouseLeave={() => setArmed((a) => (a !== null && a === ordinal ? null : a))}
+    >
+      {!isUser && showThoughts && item.msg.thinking && (
+        <details className="thoughts">
+          <summary>{t('thoughts')}</summary>
+          <div className="thoughts-body">{item.msg.thinking}</div>
+        </details>
+      )}
+      <div className="bubble">
+        {item.pending && !text ? (
+          <span className="typing" aria-label={t('replyInProgress')}>
+            <i />
+            <i />
+            <i />
+          </span>
+        ) : (
+          <>
+            {item.msg.images && item.msg.images.length > 0 && <Shots images={item.msg.images} onOpen={setZoom} />}
+            {renderMarkdown(text)}
+            <span className="bubble-ts">{fmtTime(item.msg.ts, lang)}</span>
+          </>
+        )}
+      </div>
+      {!item.pending && (
+        <div className="msg-ts">
+          {editable && ordinal !== null && (
+            <>
+              <Variants
+                msg={item.msg}
+                onSwitch={(variant) => {
+                  onSwitchVariant(ordinal, variant).catch((e) => console.error('[variant]', e))
+                }}
+              />
+              <button
+                className="msg-edit"
+                title={isCopied ? t('copied') : t('copyMessage')}
+                aria-label={isCopied ? t('copied') : t('copyMessage')}
+                onClick={handleCopy}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  {isCopied ? (
+                    <path d="M5 12.5l4.5 4.5L19 6.5" />
+                  ) : (
+                    <>
+                      <path d="M11 9.5h6.5A1.5 1.5 0 0119 11v6.5a1.5 1.5 0 01-1.5 1.5H11a1.5 1.5 0 01-1.5-1.5V11A1.5 1.5 0 0111 9.5z" />
+                      <path d="M6.5 14.5H6A1.5 1.5 0 014.5 13V6A1.5 1.5 0 016 4.5h7A1.5 1.5 0 0114.5 6v.5" />
+                    </>
+                  )}
+                </svg>
+              </button>
+              <button
+                className="msg-edit"
+                title={t('editMessage')}
+                aria-label={t('editMessage')}
+                onClick={() => onStartEdit(ordinal, item.msg)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17z" />
+                </svg>
+              </button>
+              <button
+                className="msg-edit"
+                title={t('replyToMessage')}
+                aria-label={t('replyToMessage')}
+                onClick={() => onReply(item.msg)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9.5 7.5L5 12l4.5 4.5" />
+                  <path d="M5 12h8a6 6 0 016 6v1" />
+                </svg>
+              </button>
+              <button
+                className="msg-edit"
+                title={t('rememberThis')}
+                aria-label={t('rememberThis')}
+                onClick={() => onRemember(item.msg)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6.5 3.5h11v17l-5.5-4-5.5 4z" />
+                </svg>
+              </button>
+              <button
+                className={isPinned ? 'msg-edit pinned' : 'msg-edit'}
+                title={isPinned ? t('unpin') : t('pinMessage')}
+                aria-label={isPinned ? t('unpin') : t('pinMessage')}
+                onClick={() => onPin(isPinned ? null : ordinal)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9.5 3.5h5l-.8 5.4 3.3 3.1H7l3.3-3.1z" />
+                  <path d="M12 12v8" />
+                </svg>
+              </button>
+              {onReplay && item.msg.role === 'assistant' && (
+                <button
+                  className={isSpeaking ? 'msg-edit playing' : 'msg-edit'}
+                  title={isSpeaking ? t('stopTts') : t('replayTts')}
+                  aria-label={isSpeaking ? t('stopTts') : t('replayTts')}
+                  onClick={() => (isSpeaking ? onStopTts() : onReplay(item.msg))}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    {isSpeaking ? (
+                      <rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none" />
+                    ) : (
+                      <>
+                        <path d="M10.5 5.5L6.5 9H4v6h2.5l4 3.5z" />
+                        <path d="M14.5 9.5a3.5 3.5 0 010 5" />
+                        <path d="M17 7a7 7 0 010 10" />
+                      </>
+                    )}
+                  </svg>
+                </button>
+              )}
+              <button
+                className={isArmed ? 'msg-edit armed' : 'msg-edit'}
+                title={isArmed ? t('deleteMessageArmed') : t('deleteMessage')}
+                aria-label={isArmed ? t('deleteMessageArmed') : t('deleteMessage')}
+                onClick={handleDeleteClick}
+                onBlur={() => setArmed((a) => (a === ordinal ? null : a))}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 7.2h12" />
+                  <path d="M9.7 7.2V5.4h4.6v1.8" />
+                  <path d="M7.6 7.2l.8 11.4h7.2l.8-11.4" />
+                </svg>
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+})
+
 export default function MessageList({
   items,
   showThoughts,
@@ -405,11 +711,13 @@ export default function MessageList({
     for (const it of items) ordinals.push(it.kind === 'msg' ? ++n : null)
   }
 
-  function startEdit(ordinal: number, msg: ChatMessage) {
+  // Identité STABLE (ne dépend que de setters useState) : passée telle quelle
+  // à MessageBubble (mémoïsé), elle ne casse donc jamais sa mémoïsation.
+  const startEdit = useCallback((ordinal: number, msg: ChatMessage) => {
     setEditing(ordinal)
     setDraft(msg.content)
     setEditError(null)
-  }
+  }, [])
 
   // Flèche haut du composer : le DERNIER message de l'utilisateur repasse en
   // édition. Rien ne se produit pendant un stream ou une compaction (`editable`
@@ -752,11 +1060,64 @@ export default function MessageList({
 
   // Le fil est construit AVANT la barre : c'est ce rendu qui compte les
   // correspondances (hits.n), et la barre en affiche le total.
-  const rows = items.map((it, i) => (
-    <div key={i} style={{ display: 'contents' }}>
-      {renderItem(it, ordinals[i], i)}
-    </div>
-  ))
+  //
+  // Deux chemins de rendu : la recherche a besoin de numéroter les
+  // correspondances SÉQUENTIELLEMENT à travers tout le fil (hits.n, compteur
+  // partagé) et l'édition ne concerne qu'un seul message à la fois — dans les
+  // deux cas, renderItem (inchangé) reste la source de vérité, appelé pour
+  // CHAQUE item comme avant. Hors de ces deux modes (l'immense majorité du
+  // temps, streaming compris), les composants mémoïsés ci-dessus prennent le
+  // relai : seul l'item qui a réellement changé se re-render.
+  const useFastPath = hits.needle === '' && editing === null
+  const rows = items.map((it, i) => {
+    const ordinal = ordinals[i]
+    if (useFastPath && it.kind === 'msg') {
+      return (
+        <div key={i} style={{ display: 'contents' }}>
+          <MessageBubble
+            item={it}
+            ordinal={ordinal}
+            editable={editable}
+            showThoughts={showThoughts}
+            isArmed={armed === ordinal}
+            isCopied={copied === ordinal}
+            isPinned={ordinal !== null && ordinal === pinned}
+            isSpeaking={ttsPlaying !== null && ttsPlaying === it.msg.ts}
+            setArmed={setArmed}
+            setCopied={setCopied}
+            setZoom={setZoom}
+            onStartEdit={startEdit}
+            onDeleteMessage={onDeleteMessage}
+            onSwitchVariant={onSwitchVariant}
+            onReply={onReply}
+            onRemember={onRemember}
+            onPin={onPin}
+            onReplay={onReplay}
+            onStopTts={onStopTts}
+          />
+        </div>
+      )
+    }
+    if (useFastPath && it.kind === 'tool') {
+      return (
+        <div key={i} style={{ display: 'contents' }}>
+          <ToolChip
+            item={it}
+            index={i}
+            editable={editable}
+            isArmed={armedTool === i}
+            setArmedTool={setArmedTool}
+            onDeleteTool={onDeleteTool}
+          />
+        </div>
+      )
+    }
+    return (
+      <div key={i} style={{ display: 'contents' }}>
+        {renderItem(it, ordinal, i)}
+      </div>
+    )
+  })
   const total = hits.n
 
   // Les deux effets ci-dessous dépendent du total, donc du rendu du fil.

@@ -76,6 +76,9 @@ export class IdleAnimator {
   // overrideMouth (VRM 1.0) d'origine de chaque expression d'émotion (nom résolu),
   // pour la restaurer telle quelle une fois la parole retombée — cf. applyMouthPriority.
   private originalOverrideMouth = new Map<string, VRMExpressionOverrideType>()
+  // État déjà appliqué par applyMouthPriority (cf. son commentaire) — permet
+  // de ne refaire le travail qu'aux deux frames de transition de `speaking`.
+  private mouthPriorityApplied = false
 
   // Table nom canonique → nom disponible sur le modèle (résolue au chargement
   // par vrmStage). Expression absente = no-op silencieux, sans warn par frame.
@@ -146,6 +149,7 @@ export class IdleAnimator {
     // Nouveau modèle = nouvelles instances VRMExpression : un nom résolu
     // identique à l'ancien modèle ne doit pas hériter de SON overrideMouth.
     this.originalOverrideMouth.clear()
+    this.mouthPriorityApplied = false
   }
 
   /** Une frame d'idle. `bones` : poses de base mémorisées par vrmStage. */
@@ -297,7 +301,17 @@ export class IdleAnimator {
   // restaure leur valeur d'origine dès que la parole s'arrête (elle ne change
   // alors plus rien, "aa" étant retombé à 0, mais ça laisse le modèle intact
   // pour toute expression jouée hors parole).
+  //
+  // Effet de bord SUR TRANSITION seulement (mouthPriorityApplied) : la table
+  // de résolution (this.expressions) est figée au chargement du modèle, donc
+  // neutraliser/restaurer overrideMouth ne change de résultat qu'aux instants
+  // où `speaking` bascule — le refaire à chaque frame (60×/s, y compris
+  // pendant toute la durée d'une réponse parlée) ne faisait que réécrire la
+  // même valeur. Mesuré : ~10 lookups + écritures évités par frame en dehors
+  // des deux frames de transition.
   private applyMouthPriority(manager: VRMExpressionManager): void {
+    if (this.speaking === this.mouthPriorityApplied) return
+    this.mouthPriorityApplied = this.speaking
     for (const name of EMOTION_EXPRESSIONS) {
       const resolved = this.expressions.get(name)
       if (resolved === undefined) continue

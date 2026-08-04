@@ -11,6 +11,7 @@ import type {
 import type { EnvNotice, FrameMode, VrmStage } from './scene/types'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
 import * as api from './api'
+import { useStableCallback } from './hooks'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
 import { disposeNotify, playNotify } from './sound'
 import {
@@ -110,6 +111,34 @@ function pickGreeting(pool: string[]): string {
  */
 function frameModeOf(mode: ViewMode): FrameMode {
   return mode === 'vn' ? 'centered' : 'left'
+}
+
+/**
+ * Regroupe des appels rapprochés en au plus un par `intervalMs` (façon
+ * requestAnimationFrame throttlé), avec un déclenchement en fin de fenêtre
+ * garanti (trailing) : rien n'est perdu, juste retardé de quelques ms au pire.
+ * Utilisé pour les deltas de streaming — un token du modèle arrive bien plus
+ * vite que 30-60 fps, inutile de re-render le fil à cette cadence-là ; les
+ * DONNÉES (accumulateur `acc`) restent à jour à chaque appel, seul le
+ * `flush` (donc le `setFeed` déclenché) est cadencé.
+ */
+function throttled(intervalMs: number, flush: () => void): () => void {
+  let last = 0
+  let timer: ReturnType<typeof setTimeout> | null = null
+  return () => {
+    const now = performance.now()
+    const elapsed = now - last
+    if (elapsed >= intervalMs) {
+      last = now
+      flush()
+    } else if (timer === null) {
+      timer = setTimeout(() => {
+        timer = null
+        last = performance.now()
+        flush()
+      }, intervalMs - elapsed)
+    }
+  }
 }
 
 function AppInner() {
@@ -1009,6 +1038,24 @@ function AppInner() {
     // gardée pour la re-poser à la fin, cf. l'événement `done`.
     let liveEmotion: string | null = null
     let finished = false
+    // Le fil ne se re-render pas à CHAQUE token — ~30 fps suffit à l'œil et
+    // évite de reconstruire tout l'historique plusieurs fois par frame sur un
+    // flux rapide. `acc`/`thinkingAcc` restent à jour à chaque delta ; seul le
+    // `setFeed` (donc le re-render) est cadencé. Le lip-sync ne dépend pas de
+    // ce flux : `pokeSpeaking` reste appelé plus bas sur CHAQUE delta, jamais
+    // throttlé.
+    const flushContent = throttled(33, () => {
+      const text = acc
+      setFeed((f) =>
+        f.map((it) => (it.kind === 'msg' && it.pending ? { ...it, msg: { ...it.msg, content: text } } : it)),
+      )
+    })
+    const flushThinking = throttled(33, () => {
+      const thinking = thinkingAcc
+      setFeed((f) =>
+        f.map((it) => (it.kind === 'msg' && it.pending ? { ...it, msg: { ...it.msg, thinking } } : it)),
+      )
+    })
 
     try {
       await api.streamChat({
@@ -1030,16 +1077,10 @@ function AppInner() {
                 applyEmotion(em, true)
               }
             }
-            const text = acc
-            setFeed((f) =>
-              f.map((it) => (it.kind === 'msg' && it.pending ? { ...it, msg: { ...it.msg, content: text } } : it)),
-            )
+            flushContent()
           } else if (ev.type === 'thinking') {
             thinkingAcc += ev.text
-            const thinking = thinkingAcc
-            setFeed((f) =>
-              f.map((it) => (it.kind === 'msg' && it.pending ? { ...it, msg: { ...it.msg, thinking } } : it)),
-            )
+            flushThinking()
           } else if (ev.type === 'tool') {
             const chip: FeedItem = { kind: 'tool', name: ev.name, args: ev.args, result: ev.result }
             setFeed((f) => {
@@ -1281,6 +1322,36 @@ function AppInner() {
       handleError(e, 'pin')
     }
   }
+
+  // Callbacks STABLES pour MessageList : App re-render à chaque delta de
+  // streaming (setFeed), donc une fonction inline recréée à chaque render
+  // casserait la mémoïsation des bulles (React.memo, cf. MessageList.tsx) —
+  // la ref suit toujours la dernière fermeture, sans jamais changer d'identité.
+  const stableSaveEdit = useStableCallback(handleEditMessage)
+  const stableDeleteMessage = useStableCallback(handleDeleteMessage)
+  const stableSwitchVariant = useStableCallback(handleSwitchVariant)
+  const stableStopTts = useStableCallback(stopTts)
+  const stableDeleteTool = useStableCallback((index: number) => setFeed((f) => f.filter((_, i) => i !== index)))
+  const stablePin = useStableCallback((ordinal: number | null) => {
+    handlePin(ordinal).catch((e) => console.error('[pin]', e))
+  })
+  const stableRemember = useStableCallback((msg: ChatMessage) => {
+    const char = character
+    if (!char) return
+    api
+      .rememberText(char.id, stripEmotionTags(msg.content).trim())
+      .then(() => setFeed((f) => [...f, { kind: 'info', text: t('remembered') }]))
+      .catch((e) => {
+        if (e instanceof api.AuthRequiredError) setNeedLogin(true)
+        else setFeed((f) => [...f, { kind: 'error', text: api.errorMessage(e) }])
+      })
+  })
+  const stableReplay = useStableCallback((msg: ChatMessage) => {
+    if (!character) return
+    playTts(msg.content, msg.ts, character.ttsVoice ?? '').catch((e) =>
+      setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }]),
+    )
+  })
 
   // ── Callbacks des dialogs ────────────────────────────────────────────────
 
@@ -1636,38 +1707,18 @@ function AppInner() {
             searchSignal={searchSignal}
             editLastSignal={editLastSignal}
             pinned={chatMeta?.pinned ?? null}
-            onSaveEdit={handleEditMessage}
-            onDeleteMessage={handleDeleteMessage}
+            onSaveEdit={stableSaveEdit}
+            onDeleteMessage={stableDeleteMessage}
             // Une puce d'outil n'est jamais sauvegardée (cf. server/api/chat.ts) :
             // la retirer du fil est un pur geste d'affichage, sans aller-retour serveur.
-            onDeleteTool={(index) => setFeed((f) => f.filter((_, i) => i !== index))}
-            onSwitchVariant={handleSwitchVariant}
+            onDeleteTool={stableDeleteTool}
+            onSwitchVariant={stableSwitchVariant}
             onReply={setReplyTo}
-            onPin={(ordinal) => {
-              handlePin(ordinal).catch((e) => console.error('[pin]', e))
-            }}
-            onRemember={(msg) => {
-              const char = character
-              if (!char) return
-              api
-                .rememberText(char.id, stripEmotionTags(msg.content).trim())
-                .then(() => setFeed((f) => [...f, { kind: 'info', text: t('remembered') }]))
-                .catch((e) => {
-                  if (e instanceof api.AuthRequiredError) setNeedLogin(true)
-                  else setFeed((f) => [...f, { kind: 'error', text: api.errorMessage(e) }])
-                })
-            }}
+            onPin={stablePin}
+            onRemember={stableRemember}
             ttsPlaying={ttsPlaying}
-            onStopTts={stopTts}
-            onReplay={
-              ttsSpeaks
-                ? (msg) => {
-                    playTts(msg.content, msg.ts, character.ttsVoice ?? '').catch((e) =>
-                      setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }]),
-                    )
-                  }
-                : null
-            }
+            onStopTts={stableStopTts}
+            onReplay={ttsSpeaks ? stableReplay : null}
           />
         )}
 
