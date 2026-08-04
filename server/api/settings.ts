@@ -18,13 +18,17 @@ const PERSONA_NAME_MAX = 60
 const PERSONA_DESCRIPTION_MAX = 1000
 
 /** Vue publique des réglages : secrets masqués + indicateurs de présence. */
-function publicView(s: Settings): Settings & { passwordSet: boolean; apiKeySet: boolean } {
+function publicView(
+  s: Settings,
+): Settings & { passwordSet: boolean; apiKeySet: boolean; tavilyApiKeySet: boolean } {
   return {
     ...s,
     password: '',
     apiKey: '',
+    tavilyApiKey: '',
     passwordSet: s.password.length > 0,
     apiKeySet: s.apiKey.length > 0,
+    tavilyApiKeySet: s.tavilyApiKey.length > 0,
   }
 }
 
@@ -51,7 +55,7 @@ settingsRouter.put('/api/settings', (req, res) => {
     patch.personaDescription = patch.personaDescription.trim().slice(0, PERSONA_DESCRIPTION_MAX)
   }
   // Secrets : '' = inchangé (le client affiche les champs vides), sentinelle = effacé.
-  for (const key of ['password', 'apiKey'] as const) {
+  for (const key of ['password', 'apiKey', 'tavilyApiKey'] as const) {
     if (patch[key] === '') delete patch[key]
     else if (patch[key] === CLEAR_SECRET) patch[key] = ''
   }

@@ -893,6 +893,31 @@ select {
   max-width: 100%;
 }
 
+/* Bloc de code avec bouton Copier — guide d'installation SearXNG. */
+.code-copy {
+  position: relative;
+  margin: 6px 0;
+}
+
+.code-copy pre {
+  margin: 0;
+  padding: 10px 64px 10px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.code-copy .btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
 .bubble em,
 .vn-text em {
   color: rgba(236, 231, 242, 0.85);

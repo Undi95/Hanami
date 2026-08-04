@@ -127,7 +127,7 @@ export async function login(password: string): Promise<string> {
 
 // Le serveur ne renvoie JAMAIS les secrets en clair : password/apiKey arrivent
 // vides, accompagnés d'indicateurs de présence. Type local (shared/types.ts intact).
-export type SettingsView = Settings & { passwordSet: boolean; apiKeySet: boolean }
+export type SettingsView = Settings & { passwordSet: boolean; apiKeySet: boolean; tavilyApiKeySet: boolean }
 
 // Sentinelle du PUT : '' = secret inchangé, CLEAR_SECRET = secret effacé (contrat serveur).
 export const CLEAR_SECRET = '__clear__'

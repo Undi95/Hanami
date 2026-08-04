@@ -10,6 +10,11 @@ export type ModelMode = 'full' | 'simple'
 // négative) le trombone du composer n'existe même pas.
 export type VisionMode = 'auto' | 'on' | 'off'
 
+// Moteur utilisé par l'outil web_search : 'duckduckgo' (défaut, sans clé, mais
+// sujet au rate-limit), 'searxng' (via Settings.webSearchUrl, le plus privé),
+// 'tavily' (via Settings.tavilyApiKey, une clé API gratuite).
+export type WebSearchEngine = 'duckduckgo' | 'searxng' | 'tavily'
+
 export interface Settings {
   backendUrl: string // base OpenAI-compat, ex: http://127.0.0.1:5001/v1
   apiKey: string // optionnel (backends locaux : souvent vide)
@@ -45,8 +50,10 @@ export interface Settings {
   spontaneousStartHour: number // heure locale à partir de laquelle il peut écrire (0-23)
   spontaneousEndHour: number // heure locale après laquelle il n'écrit plus (0-23)
   visionMode: VisionMode // envoi d'images au modèle (détection auprès du backend par défaut)
-  webSearchEnabled: boolean // expose l'outil web_search au modèle (DuckDuckGo, sans clé — SearXNG si webSearchUrl est renseignée)
-  webSearchUrl: string // base d'une instance SearXNG (ex: http://localhost:8080) — '' = DuckDuckGo
+  webSearchEnabled: boolean // expose l'outil web_search au modèle
+  webSearchEngine: WebSearchEngine // moteur utilisé par web_search
+  webSearchUrl: string // base d'une instance SearXNG (ex: http://localhost:8080) — utilisée si webSearchEngine === 'searxng'
+  tavilyApiKey: string // clé API Tavily — utilisée si webSearchEngine === 'tavily' ; jamais renvoyée en clair (cf. api/settings.ts)
 }
 
 // Comment s'ouvre une conversation vide : 'written' = une des salutations écrites

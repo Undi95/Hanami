@@ -1,6 +1,7 @@
-// Outil web_search exposé au modèle — DuckDuckGo (endpoint HTML, sans clé) par défaut,
-// ou une instance SearXNG (settings.webSearchUrl) si l'utilisateur en a renseigné une.
-// Aucune dépendance : fetch natif + un petit parseur regex du HTML de DuckDuckGo.
+// Outil web_search exposé au modèle — trois moteurs au choix (settings.webSearchEngine) :
+// DuckDuckGo (endpoint HTML, sans clé, par défaut), SearXNG (settings.webSearchUrl) ou
+// Tavily (settings.tavilyApiKey). Aucune dépendance : fetch natif + un petit parseur
+// regex pour le HTML de DuckDuckGo (les deux autres répondent déjà en JSON).
 import type { Settings } from '../../shared/types'
 
 export const WEB_SEARCH_TOOL_NAMES = ['web_search'] as const
@@ -11,7 +12,7 @@ export const webSearchToolDefs: unknown[] = [
     function: {
       name: 'web_search',
       description:
-        'Search the Web (DuckDuckGo, or a SearXNG instance if configured) and return the top results ' +
+        'Search the Web using the configured search engine and return the top results ' +
         '(title, URL, snippet). Use it for any recent, precise or verifiable information you do not know.',
       parameters: {
         type: 'object',
@@ -130,6 +131,29 @@ async function fetchSearxng(baseUrl: string, query: string, count: number, signa
   }))
 }
 
+interface TavilyResult {
+  title?: unknown
+  url?: unknown
+  content?: unknown
+}
+
+async function fetchTavily(apiKey: string, query: string, count: number, signal: AbortSignal): Promise<SearchResult[]> {
+  const res = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    signal,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: apiKey, query, max_results: count }),
+  })
+  if (!res.ok) throw new Error(`Tavily responded HTTP ${res.status}`)
+  const data = (await res.json()) as { results?: TavilyResult[] }
+  const results = Array.isArray(data.results) ? data.results : []
+  return results.slice(0, count).map((r) => ({
+    title: trimTo(String(r.title ?? '').trim(), TITLE_MAX),
+    url: String(r.url ?? '').trim(),
+    snippet: trimTo(String(r.content ?? '').trim(), SNIPPET_MAX),
+  }))
+}
+
 // Garde-fou : un échec ou une recherche vide reste un résultat d'outil NORMAL
 // (jamais un throw) avec une consigne directive — sans ça, un modèle « thinking »
 // (observé avec Qwen A3B) rumine la marche à suivre et peut cramer tout son
@@ -143,12 +167,19 @@ export async function executeWebSearchTool(settings: Settings, args: Record<stri
   const rawCount = Number(args.count)
   const count = Number.isFinite(rawCount) && rawCount > 0 ? Math.min(Math.floor(rawCount), MAX_COUNT) : DEFAULT_COUNT
 
-  const searxngUrl = settings.webSearchUrl.trim()
   let results: SearchResult[]
   try {
-    results = searxngUrl
-      ? await fetchSearxng(searxngUrl, query, count, AbortSignal.timeout(TIMEOUT_MS))
-      : await fetchDdg(query, count, AbortSignal.timeout(TIMEOUT_MS))
+    if (settings.webSearchEngine === 'tavily') {
+      const apiKey = settings.tavilyApiKey.trim()
+      if (!apiKey) return `Tavily API key is not configured. ${NO_RESULTS_GUARD}`
+      results = await fetchTavily(apiKey, query, count, AbortSignal.timeout(TIMEOUT_MS))
+    } else if (settings.webSearchEngine === 'searxng') {
+      const searxngUrl = settings.webSearchUrl.trim()
+      if (!searxngUrl) return `SearXNG URL is not configured. ${NO_RESULTS_GUARD}`
+      results = await fetchSearxng(searxngUrl, query, count, AbortSignal.timeout(TIMEOUT_MS))
+    } else {
+      results = await fetchDdg(query, count, AbortSignal.timeout(TIMEOUT_MS))
+    }
   } catch (e) {
     const reason = e instanceof Error && e.name === 'TimeoutError' ? 'timed out' : e instanceof Error ? e.message : String(e)
     return `Web search failed (${reason}). ${NO_RESULTS_GUARD}`

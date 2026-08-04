@@ -3,6 +3,7 @@
 // les champs démarrent vides ('' = conserver la valeur configurée) et le bouton
 // « Retirer » envoie la sentinelle CLEAR_SECRET.
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import type {
   ModelMode,
   RestorePreview,
@@ -10,6 +11,7 @@ import type {
   RestoreWarning,
   Settings,
   VisionMode,
+  WebSearchEngine,
 } from '../../../shared/types'
 import * as api from '../api'
 import { isPlural, localeOf, useI18n, type Key, type Lang } from '../i18n'
@@ -71,7 +73,9 @@ interface FormState {
   allowDelete: boolean
   toolsRoot: string
   webSearchEnabled: boolean
+  webSearchEngine: WebSearchEngine
   webSearchUrl: string
+  tavilyApiKey: string
   password: string
   contextSize: string
   autoCompact: boolean
@@ -106,7 +110,10 @@ function toForm(s: Settings): FormState {
     toolsRoot: s.toolsRoot,
     // Réglage optionnel (config.json d'avant le réglage) : absent = éteint.
     webSearchEnabled: s.webSearchEnabled === true,
+    webSearchEngine: s.webSearchEngine ?? 'duckduckgo',
     webSearchUrl: s.webSearchUrl ?? '',
+    // Secret jamais pré-rempli (le serveur le renvoie vide) : '' = inchangé.
+    tavilyApiKey: '',
     password: '',
     contextSize: String(s.contextSize),
     autoCompact: s.autoCompact,
@@ -127,7 +134,13 @@ function toForm(s: Settings): FormState {
   }
 }
 
-function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassword: boolean): Partial<Settings> {
+function fromForm(
+  f: FormState,
+  base: Settings,
+  clearApiKey: boolean,
+  clearPassword: boolean,
+  clearTavilyKey: boolean,
+): Partial<Settings> {
   const num = (v: string, fallback: number) => {
     const n = Number(v.replace(',', '.'))
     return Number.isFinite(n) ? n : fallback
@@ -146,7 +159,9 @@ function fromForm(f: FormState, base: Settings, clearApiKey: boolean, clearPassw
     allowDelete: f.allowDelete,
     toolsRoot: f.toolsRoot.trim(),
     webSearchEnabled: f.webSearchEnabled,
+    webSearchEngine: f.webSearchEngine,
     webSearchUrl: f.webSearchUrl.trim(),
+    tavilyApiKey: clearTavilyKey ? api.CLEAR_SECRET : f.tavilyApiKey,
     password: clearPassword ? api.CLEAR_SECRET : f.password,
     contextSize: Math.round(num(f.contextSize, base.contextSize)),
     autoCompact: f.autoCompact,
@@ -380,9 +395,79 @@ function RestoreBlock({ done, onDone }: { done: RestoreResult | null; onDone: (r
   )
 }
 
+// Bloc de code avec un bouton « Copier » — la commande docker et le settings.yml
+// du guide SearXNG en ont chacun un, même geste que le code de thème perso.
+function CopyBlock({ code }: { code: string }) {
+  const { t } = useI18n()
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="code-copy">
+      <pre>
+        <code>{code}</code>
+      </pre>
+      <button
+        className="btn small"
+        type="button"
+        onClick={() => {
+          navigator.clipboard
+            .writeText(code)
+            .then(() => {
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1500)
+            })
+            .catch((e) => console.error('[copy]', e))
+        }}
+      >
+        {copied ? t('copied') : t('copy')}
+      </button>
+    </div>
+  )
+}
+
+// Contenu du fichier à coller (secret_key à personnaliser) et de la commande
+// docker qui le monte — universels, jamais traduits (un terminal ne parle
+// qu'une langue). Le format JSON est ce qui évite le 403 côté Hanami.
+const SEARXNG_SETTINGS_YAML = `use_default_settings: true
+server:
+  secret_key: "change-me-to-anything-random"
+  limiter: false
+search:
+  formats:
+    - html
+    - json
+`
+const SEARXNG_DOCKER_CMD =
+  'docker run -d --name searxng -p 8888:8080 -v ./settings.yml:/etc/searxng/settings.yml searxng/searxng'
+
+/** Guide d'installation SearXNG — panneau à part (portail), ouvert depuis la section Recherche web. */
+function SearxngGuide({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n()
+  return createPortal(
+    <Dialog title={t('searxngGuideTitle')} onClose={onClose}>
+      <p>{t('searxngGuideIntro')}</p>
+      <p>{t('searxngGuideStep1')}</p>
+      <p>{t('searxngGuideStep2')}</p>
+      <CopyBlock code={SEARXNG_SETTINGS_YAML} />
+      <p>{t('searxngGuideStep3')}</p>
+      <CopyBlock code={SEARXNG_DOCKER_CMD} />
+      <p>{t('searxngGuideStep4')}</p>
+      <p className="hint">{t('searxngGuideNote')}</p>
+    </Dialog>,
+    document.body,
+  )
+}
+
 const LANG_OPTIONS: readonly Lang[] = ['fr', 'en']
 const MODEL_MODE_OPTIONS: readonly ModelMode[] = ['full', 'simple']
 const VISION_MODE_OPTIONS: readonly VisionMode[] = ['auto', 'on', 'off']
+const WEB_SEARCH_ENGINE_OPTIONS: readonly WebSearchEngine[] = ['duckduckgo', 'searxng', 'tavily']
+// Un hint différent par moteur (compromis mis en avant) plutôt qu'un seul
+// sous-texte statique — les trois options n'ont pas le même arbitrage.
+const WEB_SEARCH_ENGINE_HINT: Record<WebSearchEngine, Key> = {
+  duckduckgo: 'webSearchEngineDdgHint',
+  searxng: 'webSearchEngineSearxngHint',
+  tavily: 'webSearchEngineTavilyHint',
+}
 
 // Trois onglets pour ne pas dérouler un formulaire à rallonge. Le découpage est
 // thématique : ce qu'on voit, le modèle qui parle, ce que Hanami sait faire.
@@ -460,6 +545,10 @@ export default function SettingsDialog({
   // Demandes d'effacement des secrets (envoient la sentinelle au PUT).
   const [clearApiKey, setClearApiKey] = useState(false)
   const [clearPassword, setClearPassword] = useState(false)
+  const [clearTavilyKey, setClearTavilyKey] = useState(false)
+  // Guide d'installation SearXNG : panneau à part, ouvert depuis la section
+  // Recherche web — voir SearxngGuide plus bas.
+  const [searxngGuideOpen, setSearxngGuideOpen] = useState(false)
   // Sonde du backend LLM : une ligne de résultat + les modèles annoncés, sur le
   // même modèle que la sonde TTS plus bas. Le résultat ne vaut que pour l'URL
   // testée, donc il s'efface dès qu'elle change.
@@ -479,9 +568,11 @@ export default function SettingsDialog({
 
   // Indicateurs de présence des secrets — la réponse serveur les porte (type local api.SettingsView),
   // shared/types.ts reste intact, d'où la lecture défensive.
-  const flags = settings as Settings & Partial<Pick<api.SettingsView, 'passwordSet' | 'apiKeySet'>>
+  const flags = settings as Settings &
+    Partial<Pick<api.SettingsView, 'passwordSet' | 'apiKeySet' | 'tavilyApiKeySet'>>
   const apiKeySet = flags.apiKeySet === true
   const passwordSet = flags.passwordSet === true
+  const tavilyApiKeySet = flags.tavilyApiKeySet === true
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -490,6 +581,7 @@ export default function SettingsDialog({
   const dirty =
     clearApiKey ||
     clearPassword ||
+    clearTavilyKey ||
     (Object.keys(form) as (keyof FormState)[]).some((k) => form[k] !== initialForm[k])
 
   function secretPlaceholder(configured: boolean, clearing: boolean): string {
@@ -559,7 +651,7 @@ export default function SettingsDialog({
     try {
       const passwordChanged = clearPassword || form.password.length > 0
       const newPassword = clearPassword ? '' : form.password
-      const next = await api.putSettings(fromForm(form, settings, clearApiKey, clearPassword))
+      const next = await api.putSettings(fromForm(form, settings, clearApiKey, clearPassword, clearTavilyKey))
       // Le PUT ne renvoie plus les secrets, et un changement de mot de passe
       // révoque toutes les sessions côté serveur : on se reconnecte tout de
       // suite via le flux login standard pour garder une session valide.
@@ -595,6 +687,7 @@ export default function SettingsDialog({
   }
 
   return (
+    <>
     <Dialog
       title={t('settings')}
       onClose={restored ? reloadAfterRestore : onClose}
@@ -1052,17 +1145,80 @@ export default function SettingsDialog({
             checked={form.webSearchEnabled}
             onChange={(v) => set('webSearchEnabled', v)}
           />
-          <div className="field">
-            <label htmlFor="set-websearch-url">{t('webSearchUrlLabel')}</label>
-            <input
-              id="set-websearch-url"
-              type="url"
-              value={form.webSearchUrl}
-              placeholder={t('webSearchUrlPlaceholder')}
-              onChange={(e) => set('webSearchUrl', e.target.value)}
-            />
-            <span className="hint">{t('webSearchUrlHint')}</span>
-          </div>
+          {form.webSearchEnabled && (
+            <>
+              <div className="field">
+                <label>{t('webSearchEngineLabel')}</label>
+                {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+                <div>
+                  <Seg
+                    value={form.webSearchEngine}
+                    options={WEB_SEARCH_ENGINE_OPTIONS}
+                    labels={{
+                      duckduckgo: t('webSearchEngineDdg'),
+                      searxng: t('webSearchEngineSearxng'),
+                      tavily: t('webSearchEngineTavily'),
+                    }}
+                    onPick={(v) => set('webSearchEngine', v)}
+                    ariaLabel={t('webSearchEngineLabel')}
+                  />
+                </div>
+                <span className="hint">{t(WEB_SEARCH_ENGINE_HINT[form.webSearchEngine])}</span>
+              </div>
+
+              {form.webSearchEngine === 'searxng' && (
+                <div className="field">
+                  <label htmlFor="set-websearch-url">{t('webSearchUrlLabel')}</label>
+                  <input
+                    id="set-websearch-url"
+                    type="url"
+                    value={form.webSearchUrl}
+                    placeholder={t('webSearchUrlPlaceholder')}
+                    onChange={(e) => set('webSearchUrl', e.target.value)}
+                  />
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <span className="hint">{t('webSearchUrlHint')}</span>
+                    <button className="btn small" type="button" onClick={() => setSearxngGuideOpen(true)}>
+                      {t('searxngGuideButton')}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {form.webSearchEngine === 'tavily' && (
+                <div className="field">
+                  <label htmlFor="set-tavily-key">{t('tavilyApiKeyLabel')}</label>
+                  <div className="row">
+                    <input
+                      id="set-tavily-key"
+                      type="password"
+                      value={form.tavilyApiKey}
+                      placeholder={secretPlaceholder(tavilyApiKeySet, clearTavilyKey)}
+                      autoComplete="off"
+                      style={{ flex: 1, minWidth: 0 }}
+                      onChange={(e) => {
+                        setClearTavilyKey(false)
+                        set('tavilyApiKey', e.target.value)
+                      }}
+                    />
+                    {tavilyApiKeySet && !clearTavilyKey && (
+                      <button
+                        className="btn small"
+                        type="button"
+                        onClick={() => {
+                          setClearTavilyKey(true)
+                          set('tavilyApiKey', '')
+                        }}
+                      >
+                        {t('removeSecret')}
+                      </button>
+                    )}
+                  </div>
+                  <span className="hint">{t('tavilyApiKeyHint')}</span>
+                </div>
+              )}
+            </>
+          )}
 
           <h3 className="section-title">{t('sectionAccess')}</h3>
           <div className="field">
@@ -1125,5 +1281,7 @@ export default function SettingsDialog({
       {/* Lecture seule : rien de ce panneau n'écrit quoi que ce soit. */}
       {tab === 'credits' && <CreditsPanel />}
     </Dialog>
+    {searxngGuideOpen && <SearxngGuide onClose={() => setSearxngGuideOpen(false)} />}
+    </>
   )
 }

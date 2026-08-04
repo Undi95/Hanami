@@ -38,9 +38,11 @@ export const DEFAULT_SETTINGS: Settings = {
   spontaneousEndHour: 22,
   // 'auto' : Hanami demande au backend si le modèle voit les images (GET /api/vision).
   visionMode: 'auto',
-  // Opt-in : DuckDuckGo (sans clé) tant que webSearchUrl est vide ; une URL SearXNG y bascule.
+  // Opt-in : DuckDuckGo (sans clé) par défaut — SearXNG ou Tavily au choix, via le sélecteur.
   webSearchEnabled: false,
+  webSearchEngine: 'duckduckgo',
   webSearchUrl: '',
+  tavilyApiKey: '',
 }
 
 /** Heure locale valide (entier 0-23) — sinon la valeur par défaut. */
@@ -76,6 +78,15 @@ export function loadSettings(): Settings {
     }
     if (merged.visionMode !== 'auto' && merged.visionMode !== 'on' && merged.visionMode !== 'off') {
       merged.visionMode = DEFAULT_SETTINGS.visionMode
+    }
+    // raw, pas merged : merged.webSearchEngine vaut déjà 'duckduckgo' par le
+    // spread du défaut même quand le fichier ne porte pas la clé — c'est
+    // justement CE cas (config d'avant le sélecteur) qu'il faut détecter.
+    if (raw.webSearchEngine !== 'duckduckgo' && raw.webSearchEngine !== 'searxng' && raw.webSearchEngine !== 'tavily') {
+      // Migration : avant le sélecteur, une URL SearXNG renseignée suffisait à
+      // basculer dessus — on préserve ce choix plutôt que de retomber sur
+      // DuckDuckGo en silence pour qui l'avait déjà configurée.
+      merged.webSearchEngine = merged.webSearchUrl?.trim() ? 'searxng' : DEFAULT_SETTINGS.webSearchEngine
     }
     // Même raison : le PUT accepte n'importe quel nombre, la plage horaire doit
     // rester un couple d'heures réelles (sinon le moteur spontané ne s'ouvrirait jamais).
