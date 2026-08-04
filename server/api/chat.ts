@@ -19,7 +19,12 @@ import { streamChatCompletion, type StreamedToolCall } from '../llm/openai'
 import { MEMORY_TOOL_NAMES, executeMemoryTool, memoryToolDefs } from '../tools/memoryTools'
 import { FILE_TOOL_NAMES, executeFileTool, fileToolDefs } from '../tools/fileTools'
 import { CHAT_TOOL_NAMES, chatToolDefs, executeChatTool } from '../tools/chatTools'
-import { WEB_SEARCH_TOOL_NAMES, executeWebSearchTool, webSearchToolDefs } from '../tools/webSearchTools'
+import {
+  WEB_SEARCH_TOOL_NAMES,
+  detectSearchIntent,
+  executeWebSearchTool,
+  webSearchToolDefs,
+} from '../tools/webSearchTools'
 import { firstEmotionTag } from '../../shared/emotions'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
 import type { ChatEvent, ChatMessage, ContextInfo, MessageVariant, Settings } from '../../shared/types'
@@ -690,13 +695,24 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     if (!res.writableEnded) abort.abort()
   })
 
-  // /search : la recherche a lieu ICI, avant tout appel au modèle — un aller-
-  // retour d'outil authentique (assistant tool_calls + tool) est inséré dans
-  // `messages`, exactement comme si le modèle avait choisi d'appeler l'outil
-  // lui-même. « Forcer » veut dire ne pas dépendre de sa décision : le modèle
-  // garde la main pour chercher PLUS s'il le juge utile (l'outil reste exposé).
-  if (!mode && forceSearch && content.trim() && settings.webSearchEnabled && settings.modelMode !== 'simple') {
-    const query = content.trim()
+  // Recherche forcée AVANT tout appel au modèle — un aller-retour d'outil
+  // authentique (assistant tool_calls + tool) est inséré dans `messages`,
+  // exactement comme si le modèle avait choisi d'appeler l'outil lui-même.
+  // « Forcer » veut dire ne pas dépendre de sa décision : le modèle garde la
+  // main pour chercher PLUS s'il le juge utile (l'outil reste exposé).
+  // Deux déclencheurs : /search explicite (tout `content` = la requête), ou —
+  // filet indépendant du modèle — une intention de recherche EXPLICITE
+  // détectée dans un message normal (« cherche sur le web… », « google it »…) :
+  // certains modèles préfèrent « jouer » la recherche en roleplay plutôt que
+  // d'appeler l'outil ; ce filet la garantit quand même.
+  const trimmedContent = content.trim()
+  const forcedQuery = forceSearch
+    ? trimmedContent
+    : !mode && trimmedContent
+      ? detectSearchIntent(trimmedContent)
+      : null
+  if (!mode && forcedQuery && settings.webSearchEnabled && settings.modelMode !== 'simple') {
+    const query = forcedQuery
     const toolCallId = `search_${Date.now()}`
     let result: string
     try {

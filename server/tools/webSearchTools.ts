@@ -13,7 +13,10 @@ export const webSearchToolDefs: unknown[] = [
       name: 'web_search',
       description:
         'Search the Web using the configured search engine and return the top results ' +
-        '(title, URL, snippet). Use it for any recent, precise or verifiable information you do not know.',
+        '(title, URL, snippet). Use it for any recent, precise or verifiable information you do not know. ' +
+        'When the user explicitly asks you to search, look up, or google something, you MUST call this ' +
+        'tool — never pretend to search, never role-play doing a search, never invent results. Only ' +
+        'report what this tool actually returns.',
       parameters: {
         type: 'object',
         properties: {
@@ -25,6 +28,45 @@ export const webSearchToolDefs: unknown[] = [
     },
   },
 ]
+
+// Filet indépendant du modèle : une intention de recherche EXPLICITE dans le
+// message force une vraie recherche (chat.ts), exactement comme /search — un
+// modèle qui préfère « jouer » la recherche en roleplay plutôt que d'appeler
+// l'outil ne peut plus la contourner. Volontairement strict (verbe d'action +
+// contexte web explicite) : une simple mention ne doit PAS déclencher.
+const SEARCH_INTENT_PATTERNS: RegExp[] = [
+  // FR : « cherche/recherche ... sur le web/internet/net »
+  /\b(?:cherch\w*|recherch\w*)\b[^.!?]{0,40}?\bsur\s+(?:le\s+)?(?:web|internet|net)\b/i,
+  // FR : « fais(-moi) une recherche (sur le web/internet…) »
+  /\bfais(?:ons|-moi)?\s+une\s+recherche\b(?:[^.!?]{0,40}?\bsur\s+(?:le\s+)?(?:web|internet|net)\b)?/i,
+  // EN : « search the web/internet/online (for) »
+  /\bsearch\w*\b[^.!?]{0,40}?\b(?:the\s+web|the\s+internet|online)\b(?:\s+for)?/i,
+  // EN : « look ... up » (look up X, look that up)
+  /\blook\w*\s+(?:\w+\s+)?up\b/i,
+  // FR/EN : « google » à l'impératif seulement (google-moi/le/la/ça/it/that/the,
+  // ou « (can/could) you google ») — jamais sur une simple mention de la marque
+  // (« j'ai un compte Google »).
+  /\bgoogle[sz]?[- ]?(?:moi|le|la|ça|ca|it|that|this|the)\b/i,
+  /\b(?:can|could|would)\s+you\s+google\b|\bpeux(?:-tu|-vous)?\s+google\b/i,
+]
+
+/**
+ * Détecte une intention de recherche EXPLICITE dans un message utilisateur et
+ * en extrait une requête exploitable (la formule déclencheuse retirée, le
+ * reste du message gardé tel quel). `null` si aucune intention claire.
+ */
+export function detectSearchIntent(content: string): string | null {
+  for (const re of SEARCH_INTENT_PATTERNS) {
+    const m = re.exec(content)
+    if (!m) continue
+    const query = (content.slice(0, m.index) + ' ' + content.slice(m.index + m[0].length))
+      .replace(/^[\s:,.\-–—]+|[\s:,.\-–—]+$/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+    return query || content.trim()
+  }
+  return null
+}
 
 const DEFAULT_COUNT = 3
 const MAX_COUNT = 5

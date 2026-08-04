@@ -3,7 +3,7 @@
 // PAR-DESSUS la pose de base mémorisée (base + offset) — jamais de cumul,
 // donc aucune dérive possible.
 import type { Euler, Object3D } from 'three'
-import type { VRM, VRMExpressionManager, VRMHumanBoneName } from '@pixiv/three-vrm'
+import type { VRM, VRMExpressionManager, VRMExpressionOverrideType, VRMHumanBoneName } from '@pixiv/three-vrm'
 import type { Emotion } from '../../../shared/types'
 import { EMOTION_EXPRESSIONS } from './emotionMap'
 import type { CanonicalExpression, EmotionExpression, ExpressionTable } from './emotionMap'
@@ -60,6 +60,9 @@ export class IdleAnimator {
   private mouthPhase = 0 // 0..1, un cycle = une "syllabe"
   private mouthFreq = 9 // Hz, retiré au hasard à chaque cycle (8–10)
   private mouthAmp = 0.4 // amplitude, retirée à chaque cycle (0.15–0.7)
+  // overrideMouth (VRM 1.0) d'origine de chaque expression d'émotion (nom résolu),
+  // pour la restaurer telle quelle une fois la parole retombée — cf. applyMouthPriority.
+  private originalOverrideMouth = new Map<string, VRMExpressionOverrideType>()
 
   // Table nom canonique → nom disponible sur le modèle (résolue au chargement
   // par vrmStage). Expression absente = no-op silencieux, sans warn par frame.
@@ -126,6 +129,9 @@ export class IdleAnimator {
     this.mouth = 0
     this.mouthPhase = 0
     for (const name of EMOTION_EXPRESSIONS) this.weights[name] = 0
+    // Nouveau modèle = nouvelles instances VRMExpression : un nom résolu
+    // identique à l'ancien modèle ne doit pas hériter de SON overrideMouth.
+    this.originalOverrideMouth.clear()
   }
 
   /** Une frame d'idle. `bones` : poses de base mémorisées par vrmStage. */
@@ -138,6 +144,7 @@ export class IdleAnimator {
     this.updateEmotion(manager, dt)
     this.updateBlink(manager, dt)
     this.updateMouth(manager, dt)
+    this.applyMouthPriority(manager)
   }
 
   /** setValue via la table de résolution ; expression non résolue = no-op. */
@@ -250,5 +257,35 @@ export class IdleAnimator {
       this.mouth = moveTowards(this.mouth, 0, dt / MOUTH_DECAY)
     }
     this.setExpr(manager, 'aa', this.mouth)
+  }
+
+  // ── Priorité du lipsync sur les émotions ─────────────────────────────────
+  // Le spec VRM 1.0 laisse une expression déclarer overrideMouth ('block' ou
+  // 'blend') : le VRMExpressionManager multiplie ALORS le poids de "aa" (et des
+  // autres visèmes) par (1 - le poids de cette expression) AU MOMENT de
+  // vrm.update() — après que cette classe ait posé une bouche qui parle
+  // correctement. C'est réglé par défaut sur "happy" (et souvent les autres
+  // émotions) par la plupart des exporteurs VRM 1.0 : bouche coupée pendant un
+  // grand sourire, quel que soit ce que "aa" vaut. Pendant qu'on parle, le
+  // lipsync doit gagner : on neutralise l'override des émotions actives, et on
+  // restaure leur valeur d'origine dès que la parole s'arrête (elle ne change
+  // alors plus rien, "aa" étant retombé à 0, mais ça laisse le modèle intact
+  // pour toute expression jouée hors parole).
+  private applyMouthPriority(manager: VRMExpressionManager): void {
+    for (const name of EMOTION_EXPRESSIONS) {
+      const resolved = this.expressions.get(name)
+      if (resolved === undefined) continue
+      const expr = manager.getExpression(resolved)
+      if (!expr) continue
+      if (this.speaking) {
+        if (!this.originalOverrideMouth.has(resolved)) {
+          this.originalOverrideMouth.set(resolved, expr.overrideMouth)
+        }
+        expr.overrideMouth = 'none'
+      } else {
+        const original = this.originalOverrideMouth.get(resolved)
+        if (original !== undefined) expr.overrideMouth = original
+      }
+    }
   }
 }
