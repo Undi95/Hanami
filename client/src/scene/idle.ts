@@ -20,6 +20,15 @@ const BLINK_DURATION = 0.12 // s — enveloppe fermeture + ouverture
 const EMOTION_FADE = 0.4 // s — transition douce entre émotions
 const EMOTION_HOLD = 10 // s sans nouvelle émotion → retour progressif au neutre
 const MOUTH_DECAY = 0.15 // s — retombée de la bouche quand le speaking s'arrête
+// Pendant qu'on parle, le poids des émotions (donc leur forme de bouche —
+// coins relevés d'un sourire, etc.) est réduit à ce facteur : la forme reste
+// nettement visible, mais laisse la place au lip-sync par-dessus plutôt que
+// de saturer les mêmes blendshapes de bouche à pleine intensité côte à côte
+// (l'addition des deux à 100% donne une bouche disproportionnée). Pur
+// réglage visuel — les yeux/joues de l'émotion suivent la même atténuation,
+// faute de pouvoir isoler la seule composante bouche d'un blendshape composite.
+const SPEAKING_EMOTION_FACTOR = 0.55
+const MOUTH_BLEND_FADE = 0.25 // s — transition douce de cette atténuation, pas de saccade
 
 /** Avance `value` vers `target` d'au plus `maxDelta`, sans dépassement. */
 function moveTowards(value: number, target: number, maxDelta: number): number {
@@ -56,6 +65,10 @@ export class IdleAnimator {
 
   // Lipsync
   private speaking = false
+  // Atténuation courante du poids des émotions pendant la parole (1 = poids
+  // plein, SPEAKING_EMOTION_FACTOR = pleinement en train de parler) — sa
+  // propre transition douce, indépendante de celle de l'émotion elle-même.
+  private mouthBlend = 1
   private mouth = 0
   private mouthPhase = 0 // 0..1, un cycle = une "syllabe"
   private mouthFreq = 9 // Hz, retiré au hasard à chaque cycle (8–10)
@@ -128,6 +141,7 @@ export class IdleAnimator {
     this.nextBlinkAt = this.t + 1 + Math.random() * 3
     this.mouth = 0
     this.mouthPhase = 0
+    this.mouthBlend = 1
     for (const name of EMOTION_EXPRESSIONS) this.weights[name] = 0
     // Nouveau modèle = nouvelles instances VRMExpression : un nom résolu
     // identique à l'ancien modèle ne doit pas hériter de SON overrideMouth.
@@ -140,6 +154,9 @@ export class IdleAnimator {
     this.updateBones(bones)
     const manager = vrm?.expressionManager
     if (!manager) return // pas de modèle, ou modèle sans expressions : os seulement
+    // Atténuation liée à la parole calculée avant l'émotion : updateEmotion
+    // l'applique au poids qu'elle pose cette frame.
+    this.updateMouthBlend(dt)
     // Émotion d'abord : le clignement atténue selon les poids de CETTE frame.
     this.updateEmotion(manager, dt)
     this.updateBlink(manager, dt)
@@ -229,6 +246,12 @@ export class IdleAnimator {
 
   // ── Émotion (poids cibles + interpolation douce) ─────────────────────────
 
+  /** Transition douce de l'atténuation « parole » — cf. SPEAKING_EMOTION_FACTOR. */
+  private updateMouthBlend(dt: number): void {
+    const target = this.speaking ? SPEAKING_EMOTION_FACTOR : 1
+    this.mouthBlend = moveTowards(this.mouthBlend, target, dt / MOUTH_BLEND_FADE)
+  }
+
   private updateEmotion(manager: VRMExpressionManager, dt: number): void {
     if (this.emotion !== 'neutral' && this.t - this.emotionSetAt > EMOTION_HOLD) {
       this.emotion = 'neutral' // retour progressif au neutre (le fade fait le reste)
@@ -237,7 +260,10 @@ export class IdleAnimator {
     for (const name of EMOTION_EXPRESSIONS) {
       const target = name === this.emotion ? 1 : 0
       this.weights[name] = moveTowards(this.weights[name], target, step)
-      this.setExpr(manager, name, this.weights[name])
+      // Poids RÉEL du modèle atténué par mouthBlend (cf. SPEAKING_EMOTION_FACTOR) :
+      // le poids « conceptuel » (this.weights, lu par emotionActive/ocularWeight)
+      // reste intact, seul ce qui est posé sur le mesh est réduit pendant la parole.
+      this.setExpr(manager, name, this.weights[name] * this.mouthBlend)
     }
   }
 
