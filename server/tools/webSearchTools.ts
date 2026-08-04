@@ -41,6 +41,10 @@ const SEARCH_INTENT_PATTERNS: RegExp[] = [
   /\bfais(?:ons|-moi)?\s+une\s+recherche\b(?:[^.!?]{0,40}?\bsur\s+(?:le\s+)?(?:web|internet|net)\b)?/i,
   // EN : « search the web/internet/online (for) »
   /\bsearch\w*\b[^.!?]{0,40}?\b(?:the\s+web|the\s+internet|online)\b(?:\s+for)?/i,
+  // EN : « (can/could/would) you search (for) » — sans « the web » explicite,
+  // le préfixe de requête directe suffit à lever l'ambiguïté (cf. le même
+  // traitement pour « google » ci-dessous).
+  /\b(?:can|could|would)\s+you\s+search\b(?:[^.!?]{0,40}?\bfor\b)?/i,
   // EN : « look ... up » (look up X, look that up)
   /\blook\w*\s+(?:\w+\s+)?up\b/i,
   // FR/EN : « google » à l'impératif seulement (google-moi/le/la/ça/it/that/the,
