@@ -86,6 +86,9 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
   quel message, **répondre à un message** (la citation est écrite en tête de ton envoi — rien de
   caché), **épingler** un message par conversation (un bandeau, purement visuel, jamais dans le
   payload) et **Retiens ça** pour ranger un message dans la mémoire du personnage (`moments.md`).
+- 🎭 **Impersonate** : le bouton juste avant Envoyer écrit *ton* prochain message à ta place, dans
+  ta propre voix, à la suite de la conversation — déposé directement dans le composer, à toi de le
+  modifier avant d'envoyer. Il n'envoie jamais tout seul.
 - 🔀 **Variantes de réponse** : régénérer n'écrase rien, ça empile. Deux flèches ‹ › et un
   compteur *n/m* sous la réponse font défiler les versions ; celle qui est affichée au moment où
   tu envoies le message suivant est celle qui reste.
@@ -114,7 +117,8 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
 ### L'avatar et l'écran
 
 - 🧍 **Avatar VRM 3D** : idle animé (respiration, clignements), expressions pilotées par le modèle
-  via des tags `[happy]`…, lipsync pendant la réponse — dépose tes `.vrm` dans `vrm/`. Glisser pour
+  via des tags `[happy]`… (filtrés de ce que tu lis), lipsync pendant la réponse — dépose tes
+  `.vrm` dans `vrm/`. Glisser pour
   déplacer, molette ou pincement pour zoomer, clic droit pour tourner ; le cadrage est mémorisé par
   personnage **et par mode d'affichage**.
 - 💃 **Animations gestuelles (`.vrma`)** : un idle en boucle, un geste joué une fois quand le
@@ -171,6 +175,13 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
   retienne de lui-même — panneau d'édition inclus. `MEMORY.md` sert d'index.
 - 🔦 **`chat_search`** : le modèle peut fouiller **toutes** les anciennes conversations avec toi
   (transcripts complets, pas seulement sa mémoire distillée) et citer le passage exact avec sa date.
+- 🔍 **Recherche web** : le modèle peut chercher sur le Web de lui-même (`web_search`) quand une
+  question s'y prête, ou tu forces une recherche avec `/search <requête>` dans le composer. Trois
+  moteurs au choix, dans *Réglages > Fonctions > Recherche web* : **DuckDuckGo** (par défaut,
+  aucun réglage, parfois limité), **SearXNG** (le plus privé et le plus fiable — un guide intégré,
+  pas à pas, explique l'installation Docker), ou **Tavily** (une clé API gratuite). Les résultats
+  apparaissent en petite puce dans le fil : clique la loupe pour déplier titres, liens et extraits
+  complets, ou supprime la puce comme un message.
 - 🛠️ **Outils fichiers** optionnels pour le modèle (`list_files`, `read_file`, `write_file`,
   `edit_file`, et `delete_file` derrière un toggle dédié), sandboxés dans un dossier de ton choix.
 - 🐣 **Mode du modèle** : *Complet* expose les outils ; *Simple* n'en expose **aucun** — Hanami
@@ -238,7 +249,8 @@ Trois onglets, un seul formulaire — changer d'onglet ne perd rien et n'enregis
 - **Modèle** — URL du backend, clé API, modèle, images (vision), température, tokens max, longueur
   d'historique, taille de contexte du modèle, mode du modèle, compaction automatique.
 - **Fonctions** — notion du temps, pensées, synthèse vocale, messages spontanés, mémoire, outils
-  fichiers, dossier sandbox, mot de passe d'accès, sauvegarde et restauration des données.
+  fichiers, dossier sandbox, recherche web, mot de passe d'accès, sauvegarde et restauration des
+  données.
 
 La langue et le thème s'appliquent immédiatement ; tout le reste prend effet à l'enregistrement.
 

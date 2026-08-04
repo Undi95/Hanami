@@ -82,6 +82,9 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
   **reply to one** (the quote is written at the top of what you send — nothing hidden),
   **pin** one message per conversation (a ribbon, purely visual, never in the payload), and
   **Remember this** to file a message into the character's memory (`moments.md`).
+- 🎭 **Impersonate**: the button next to Send writes *your* next message for you, in your own
+  voice, continuing the conversation where you left it — dropped straight into the composer,
+  yours to edit before sending. It never sends on its own.
 - 🔀 **Reply variants**: regenerating overwrites nothing, it stacks. Two arrows ‹ › and an *n/m*
   counter under the reply scroll through the versions; whichever one is on screen when you send
   your next message is the one that stays.
@@ -108,7 +111,8 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
 ### The avatar and the screen
 
 - 🧍 **3D VRM avatar**: animated idle (breathing, blinking), expressions driven by the model
-  through `[happy]`-style tags, lipsync while it speaks — drop your `.vrm` files into `vrm/`.
+  through `[happy]`-style tags (filtered out of what you read), lipsync while it speaks — drop
+  your `.vrm` files into `vrm/`.
   Drag to pan, wheel or pinch to zoom, right-click to rotate; the framing is remembered per
   character **and per display mode**.
 - 💃 **Gesture animations (`.vrma`)**: a looping idle, a one-shot gesture when the character
@@ -161,6 +165,13 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
   remember on its own — with a built-in editing panel. `MEMORY.md` is the index.
 - 🔦 **`chat_search`**: the model can search **all** past conversations with you (full
   transcripts, not just its distilled memory) and quote the exact passage with its date.
+- 🔍 **Web search**: the model can search the Web on its own (`web_search`) when a question
+  calls for it, or you can force one with `/search <query>` in the composer. Three engines,
+  picked in *Settings > Features > Web search*: **DuckDuckGo** (default, no setup, occasionally
+  rate-limited), **SearXNG** (the most private and reliable — an in-app step-by-step guide covers
+  the Docker install), or **Tavily** (a free API key). Results appear as a small chip in the
+  thread: click the magnifying glass to unfold the full titles, links and snippets, or delete the
+  chip like any message.
 - 🛠️ Optional **file tools** for the model (`list_files`, `read_file`, `write_file`,
   `edit_file`, and `delete_file` behind its own dedicated toggle), sandboxed to a folder you pick.
 - 🐣 **Model mode**: *Full* exposes the tools; *Simple* exposes **none** — Hanami injects the
@@ -225,7 +236,7 @@ Three tabs, one single form — switching tabs neither loses nor saves anything:
 - **Model** — backend URL, API key, model, images (vision), temperature, max tokens, history
   length, model context size, model mode, automatic compaction.
 - **Features** — sense of time, thoughts, text-to-speech, spontaneous messages, memory, file
-  tools, sandbox folder, access password, data backup and restore.
+  tools, sandbox folder, web search, access password, data backup and restore.
 
 Language and theme apply immediately; everything else takes effect when you save.
 
