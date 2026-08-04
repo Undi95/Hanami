@@ -1,3 +1,5 @@
+[English](README.md) | **Français**
+
 # Matrice de scène — le harnais des transitions d'état
 
 Un décor 3D qui arrive en cours de conversation, un décor qu'on retire, les
@@ -154,7 +156,7 @@ l'analyse a déjà écrites dans le `.scene.json` :
 C'est le cas d'un décor dont le modèle n'a pas son origine au sol (un quai de
 métro posé au-dessus de sa voie, par exemple). Il s'analyse sans erreur, il
 s'affiche, et l'écran est noir. Un sidecar `spawn` le corrige — voir
-`environments/README.md`.
+`environments/README.fr.md`.
 
 ## Le décor jetable
 

@@ -1,3 +1,5 @@
+[English](README.md) | **Français**
+
 # devtools/rendu — VOIR une animation sans navigateur
 
 Banc de rendu des `.vrma` de Hanami : il charge un **vrai .vrm** (squelette +

@@ -1,3 +1,5 @@
+[English](README.md) | **Français**
+
 # devtools/diagnostic — VOIR et JUGER les animations, sans navigateur
 
 Trois outils, un contrat : répondre à « **est-ce que c'est LOGIQUE et est-ce que

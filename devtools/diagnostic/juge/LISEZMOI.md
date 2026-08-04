@@ -1,3 +1,5 @@
+[English](README.md) | **Français**
+
 # Le juge biomécanique
 
 **Est-ce que ça ressemble à un être humain ?** — et la réponse avec les chiffres qui la justifient.
@@ -52,7 +54,7 @@ résultats committés ici (cf. `devtools/LISEZMOI.md`).
 ## La sortie
 
 Pour chaque clip : les critères applicables (déduits de la famille, elle-même déduite du **nom** du
-fichier — la convention du projet, cf. `vrma/README.md`), la mesure, la fourchette attendue, un
+fichier — la convention du projet, cf. `vrma/README.fr.md`), la mesure, la fourchette attendue, un
 verdict par critère, un verdict global, puis — c'est le livrable — **une phrase en français par
 défaut constaté**, dite comme un humain la dirait devant l'écran :
 

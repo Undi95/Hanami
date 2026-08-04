@@ -1,3 +1,5 @@
+[English](README.md) | **Français**
+
 # Banc d'essai des animations VRM (Hanami)
 
 Outil de **diagnostic**, livré dans `devtools/` : il n'écrit **rien** dans l'app
@@ -242,7 +244,7 @@ C'est la colonne « **jugé contre** » du tableau, et la logique vit dans
 | Clip | Jugé contre | Pourquoi |
 | --- | --- | --- |
 | geste face à face | `idle` **et** `idle-talking` (entrée + sortie, pire des quatre) | il ne sait pas vers quel socle il reviendra — pendant qu'une réponse s'écrit, c'est `idle-talking` qui tourne |
-| clip de la famille **Rocketbox** (`rb-…`) | `rb-idle` **et** `rb-idle-talking` | le face à face a deux familles ÉTANCHES (cf. `vrma/README.md`) : un `rb-` n'est jamais fondu vers un socle d'Overte, et le juger contre lui mesurerait la distance entre deux studios — 16,5 à 20,3 cm — pas un défaut. Même erreur que « clip assis contre socle debout » |
+| clip de la famille **Rocketbox** (`rb-…`) | `rb-idle` **et** `rb-idle-talking` | le face à face a deux familles ÉTANCHES (cf. `vrma/README.fr.md`) : un `rb-` n'est jamais fondu vers un socle d'Overte, et le juger contre lui mesurerait la distance entre deux studios — 16,5 à 20,3 cm — pas un défaut. Même erreur que « clip assis contre socle debout » |
 | geste ou boucle **assis** (`world-sit-*`) | le socle **`world-sit-idle`** | c'est de lui qu'il part et vers lui qu'il revient, en fondu — le socle debout est à ~45 cm PAR CONSTRUCTION (la hauteur d'une chaise) |
 | **boucle** qui tourne (allures, pivots — assis compris —, repos alternés, gestes tenus, `world-sit-idle` lui-même) | sa **COUTURE** : écart de pose dernière ↔ première image (seuils stricts 0,5 / 2 / 4 cm : elle se franchit en UNE image, pas en un fondu) **et** saut de vitesse comparé au p95 du clip | aucune phase d'un cycle ne ressemble à un socle ; ce que l'œil peut y voir, c'est la couture |
 | **transition** (`walk-start`, `walk-stop*`, `sit-enter/exit`, `*-in/out`, `idle-alt*-enter/exit`, `sit-turn-*-end`) | ses **JOINTURES de séquence** : dernière image du clip amont ↔ sa première, sa dernière ↔ première du clip aval (`enchaine` de `world.json`) | c'est exactement l'enchaînement que `wander.ts` fera |
@@ -380,7 +382,7 @@ invisible) ; `neck` absent sur un seul, la mascotte (modele-02).
 # Les deux domaines
 
 La bibliothèque se partage en deux domaines, et **le préfixe du nom suffit à les
-distinguer** (cf. `vrma/README.md`) :
+distinguer** (cf. `vrma/README.fr.md`) :
 
 - **face à face** (sans préfixe) : l'avatar debout devant l'utilisateur qui
   discute — repos et gestes ;

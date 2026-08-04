@@ -1,3 +1,5 @@
+[English](README.md) | **Français**
+
 # devtools — les outils de mise au point des animations
 
 Ce dossier ne fait pas partie de l'app : rien ici n'est chargé au démarrage, et

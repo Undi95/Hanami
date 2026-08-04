@@ -1,3 +1,5 @@
+[English](README.md) | **Français**
+
 # repose-vrm — réparer la pose de repos d'un .vrm
 
 Outil de **réparation de modèle**, livré dans `devtools/` : il ne touche ni à

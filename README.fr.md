@@ -147,7 +147,7 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
   clic sur le sol l'y envoie, un clic sur un siège l'y assoit, un clic sur lui le fait acquiescer —
   une astuce le dit une fois, à la première scène vivante ; ses yeux suivent la caméra. Tout décor déposé dans `environments/` est **mesuré automatiquement à
   l'import** (sol praticable, obstacles, assises — voir
-  [`environments/README.md`](environments/README.md)) : aucune préparation manuelle, et une
+  [`environments/README.fr.md`](environments/README.fr.md)) : aucune préparation manuelle, et une
   cinématique inverse pose les pieds sur le sol réel et le bassin sur l'assise réelle, quelle que
   soit sa hauteur. Réservé au grand écran ; interrupteur dans *Réglages > Apparence > Scène*,
   éteint par défaut.
@@ -314,7 +314,7 @@ backgrounds/           # tes fonds d'écran
 portraits/             # portraits 2D des cards importées (avatar sans VRM)
 environments/          # pièces 3D (.glb) et leurs sidecars de placement optionnels
 vrma/                  # animations humanoïdes (.vrma) — libres, livrées avec l'app
-vrma/extra/            # clips convertis non retenus — jamais chargés (cf. vrma/README.md)
+vrma/extra/            # clips convertis non retenus — jamais chargés (cf. vrma/README.fr.md)
 client/                # front React (Vite)
 server/                # serveur Express + API
 shared/                # types partagés client/serveur

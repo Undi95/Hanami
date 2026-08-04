@@ -57,8 +57,7 @@ folder, which you provide yourself (a copy, or a link):
 - `reference-1x.vrm` — the **VRM 1.x** control, adult build.
 
 Any `.vrm` works to run the tools — but the numbers written in the docs only hold
-for these specific builds. Details and options: [`devtools/LISEZMOI.md`](../devtools/LISEZMOI.md)
-(French only).
+for these specific builds. Details and options: [`devtools/README.md`](../devtools/README.md).
 
 Where to find free models:
 - **VRoid Studio** (free): create your own character and export as `.vrm`.

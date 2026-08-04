@@ -225,7 +225,7 @@ The server listens on port `7788` by default; set the `PORT` environment variabl
 on a real model, measures how they join up with the idle pose, and renders contact sheets that show
 what a clip actually looks like. Start it with the app running — double-click
 `devtools/LANCER-LE-BANC.cmd` on Windows, or `node devtools/anim-lab/serve.mjs` elsewhere — then
-open <http://localhost:7799>. Details in [`devtools/LISEZMOI.md`](devtools/LISEZMOI.md) (French).
+open <http://localhost:7799>. Details in [`devtools/README.md`](devtools/README.md).
 
 ## Settings
 
