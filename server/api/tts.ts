@@ -7,6 +7,17 @@ import { loadSettings } from '../config'
 
 export const ttsRouter = Router()
 
+// ~0,077 s/caractère mesuré sur Qwen3-TTS 1.7B ; marge large pour absorber un
+// serveur chargé, plancher pour les textes courts (démarrage du modèle),
+// plafond pour ne jamais laisser une requête pendre indéfiniment.
+const TTS_MS_PER_CHAR = 150
+const TTS_TIMEOUT_MIN_MS = 90_000
+const TTS_TIMEOUT_MAX_MS = 240_000
+
+function ttsTimeoutMs(textLength: number): number {
+  return Math.min(TTS_TIMEOUT_MAX_MS, Math.max(TTS_TIMEOUT_MIN_MS, textLength * TTS_MS_PER_CHAR))
+}
+
 ttsRouter.post('/api/tts', async (req, res) => {
   const settings = loadSettings()
   if (!settings.ttsEnabled || !settings.ttsUrl) {
@@ -30,7 +41,12 @@ ttsRouter.post('/api/tts', async (req, res) => {
   if (voice || settings.ttsVoice) payload.voice = voice || settings.ttsVoice
 
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 60_000)
+  // 60 s fixes faisaient 502 dès que Sakura dépassait ~780 caractères — le
+  // serveur Qwen3-TTS mesuré tourne à ~0,077 s/caractère. Le client découpe
+  // désormais le texte en phrases (chaque requête ici est donc courte), mais
+  // ce timeout reste généreux et proportionnel à la longueur du texte : appel
+  // direct à l'API sans passer par le découpage, très longue phrase isolée…
+  const timer = setTimeout(() => ctrl.abort(), ttsTimeoutMs(text.length))
   try {
     const r = await fetch(url, {
       method: 'POST',

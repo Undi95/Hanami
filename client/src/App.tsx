@@ -14,6 +14,7 @@ import * as api from './api'
 import { useStableCallback } from './hooks'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
 import { disposeNotify, playNotify } from './sound'
+import { splitIntoSpeechSegments } from './tts'
 import {
   applyTheme,
   normalizeTheme,
@@ -225,6 +226,15 @@ function AppInner() {
   // outils ne font pas bouger les lèvres) + audio TTS en cours de lecture.
   const speakTimerRef = useRef<number | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  // Callback qui débloque le `await new Promise` en cours dans playTts quand on
+  // coupe la lecture de l'extérieur (bouton stop, nouvelle génération, rejeu
+  // d'une autre bulle) — sans lui, `audio.pause()` seul ne déclenche pas
+  // `onended` et la boucle de lecture des segments resterait suspendue.
+  const audioEndRef = useRef<(() => void) | null>(null)
+  // Identifiant de session TTS : incrémenté à chaque coupure. Un pipeline de
+  // segments en cours (lecture ou synthèse en attente) vérifie ce compteur
+  // avant d'agir — s'il a changé, la session est périmée et s'arrête net.
+  const ttsSeqRef = useRef(0)
   // Compteur de génération : invalide les chargements perso/chat dépassés par un
   // choix plus récent (évite qu'une réponse lente écrase la sélection courante).
   const loadGenRef = useRef(0)
@@ -349,13 +359,23 @@ function AppInner() {
     stageRef.current?.setSpeaking(false)
   }
 
+  /**
+   * Coupe net l'audio en cours ET débloque une éventuelle attente de synthèse
+   * (segment suivant en cours de préparation) — sans remettre `ttsPlaying` ni
+   * `speaking` à zéro : c'est à l'appelant de décider (stop réel → silence ;
+   * nouvelle session `playTts` → un autre segment va reprendre la main).
+   */
+  function cancelTtsPlayback() {
+    ttsSeqRef.current++
+    audioRef.current?.pause()
+    const end = audioEndRef.current
+    audioEndRef.current = null
+    end?.()
+  }
+
   function stopTts() {
+    cancelTtsPlayback()
     setTtsPlaying(null)
-    const audio = audioRef.current
-    if (!audio) return
-    audioRef.current = null
-    audio.pause()
-    if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src)
     stageRef.current?.setSpeaking(false)
   }
 
@@ -404,18 +424,30 @@ function AppInner() {
   }
 
   /**
-   * Lit une réplique à voix haute. `key` = le `ts` du message lu : il désigne la
-   * bulle dont l'icône doit devenir un carré « stop », et il se nettoie tout
-   * seul quand la lecture s'achève (ou échoue). Sans clé, la voix parle mais
-   * aucune bulle ne s'annonce parlante.
+   * Lit une réplique à voix haute, phrase par phrase (voir `splitIntoSpeechSegments`) :
+   * chaque segment est synthétisé puis joué, le suivant se prépare pendant la
+   * lecture du précédent — le son démarre dès la première phrase prête au lieu
+   * d'attendre la synthèse de tout le message (qui peut dépasser la minute).
+   * `key` = le `ts` du message lu : il désigne la bulle dont l'icône doit
+   * devenir un carré « stop » (posé au premier son réellement audible, pas à
+   * la demande), et il se nettoie tout seul quand la lecture s'achève (ou
+   * échoue). Sans clé, la voix parle mais aucune bulle ne s'annonce parlante.
    * `voice` = la voix du personnage qui parle ; vide, le serveur prend celle
    * des Réglages (le serveur de synthèse, lui, est toujours celui des Réglages).
    */
   async function playTts(text: string, key?: string, voice = '') {
     const clean = stripEmotionTags(text).trim()
     if (!clean) return
-    const blob = await api.tts(clean, voice)
-    stopTts()
+    const segments = splitIntoSpeechSegments(clean)
+    if (segments.length === 0) return
+
+    // Nouvelle session : coupe la précédente (audio + synthèse en attente) et
+    // se rend infalsifiable — tout pipeline plus ancien s'arrête au prochain
+    // point de contrôle (`isCurrent`) en voyant `ttsSeqRef` avoir changé.
+    cancelTtsPlayback()
+    const seq = ttsSeqRef.current
+    const isCurrent = () => ttsSeqRef.current === seq
+
     // Le timer des lèvres « texte » ne doit pas refermer la bouche en pleine
     // lecture audio : l'audio pilote seul à partir d'ici.
     speakUntilRef.current = 0
@@ -423,29 +455,75 @@ function AppInner() {
       window.clearTimeout(speakTimerRef.current)
       speakTimerRef.current = null
     }
-    const url = URL.createObjectURL(blob)
-    const audio = new Audio(url)
-    audioRef.current = audio
-    audio.onplay = () => stageRef.current?.setSpeaking(true)
-    const end = () => {
-      if (audioRef.current === audio) {
-        audioRef.current = null
-        setTtsPlaying(null)
-        stageRef.current?.setSpeaking(false)
+
+    let lastSynthError: unknown = null
+    const synth = async (segment: string): Promise<string | null> => {
+      try {
+        const blob = await api.tts(segment, voice)
+        return isCurrent() ? URL.createObjectURL(blob) : null
+      } catch (e) {
+        console.warn('[tts] segment échoué, on continue avec le suivant', e)
+        lastSynthError = e
+        return null
       }
-      URL.revokeObjectURL(url)
     }
-    audio.onended = end
-    audio.onerror = end
-    setTtsPlaying(key ?? null)
-    try {
-      await audio.play()
-    } catch (e) {
-      // Lecture refusée (autoplay bloqué, format illisible) : aucune bulle ne
-      // doit rester en « stop » — l'erreur, elle, remonte à l'appelant.
-      end()
-      throw e
+
+    let nextUrlPromise = synth(segments[0])
+    let played = false
+    let fatalError: unknown = null
+
+    for (let i = 0; i < segments.length; i++) {
+      if (!isCurrent()) break
+      const url = await nextUrlPromise
+      if (!isCurrent()) {
+        if (url) URL.revokeObjectURL(url)
+        break
+      }
+      // Préchauffe le segment suivant PENDANT la lecture de celui-ci — c'est
+      // ce qui permet un enchaînement sans blanc entre deux phrases.
+      if (i + 1 < segments.length) nextUrlPromise = synth(segments[i + 1])
+      if (!url) continue // segment perdu (déjà loggé) : on tente le suivant plutôt que d'abandonner toute la réplique
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const audio = new Audio(url)
+          audioRef.current = audio
+          const end = () => {
+            if (audioRef.current === audio) audioRef.current = null
+            if (audioEndRef.current === end) audioEndRef.current = null
+            URL.revokeObjectURL(url)
+            resolve()
+          }
+          audioEndRef.current = end
+          // `speaking` posé ici (pas entre les segments) : la bouche reste
+          // animée en continu d'une phrase à l'autre, elle ne se referme
+          // qu'à la toute fin de la réplique (ou sur coupure/erreur).
+          audio.onplay = () => {
+            played = true
+            setTtsPlaying(key ?? null)
+            stageRef.current?.setSpeaking(true)
+          }
+          audio.onended = end
+          audio.onerror = end
+          audio.play().catch((e) => {
+            end()
+            reject(e)
+          })
+        })
+      } catch (e) {
+        // Lecture refusée (autoplay bloqué, format illisible) : inutile de
+        // retenter sur les segments suivants, l'erreur remonte à l'appelant.
+        fatalError = e
+        break
+      }
     }
+
+    if (isCurrent()) {
+      setTtsPlaying(null)
+      stageRef.current?.setSpeaking(false)
+    }
+    if (fatalError) throw fatalError
+    if (!played) throw lastSynthError ?? new Error('Synthèse vocale : tous les segments ont échoué')
   }
 
   // ── Scène 3D (import lazy, contrat scene/types.ts) ───────────────────────
