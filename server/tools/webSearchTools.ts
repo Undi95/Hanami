@@ -222,7 +222,16 @@ export async function executeWebSearchTool(settings: Settings, args: Record<stri
     } else if (settings.webSearchEngine === 'searxng') {
       const searxngUrl = settings.webSearchUrl.trim()
       if (!searxngUrl) return `SearXNG URL is not configured. ${NO_RESULTS_GUARD}`
-      results = await fetchSearxng(searxngUrl, query, count, AbortSignal.timeout(TIMEOUT_MS))
+      try {
+        results = await fetchSearxng(searxngUrl, query, count, AbortSignal.timeout(TIMEOUT_MS))
+      } catch (e) {
+        // SearXNG injoignable (Docker arrêté, réseau, timeout, statut ou JSON invalide) :
+        // on retombe sur DuckDuckGo pour cette requête plutôt que d'échouer — Tavily n'a
+        // pas ce filet, c'est un choix explicite de l'utilisateur donc on le respecte tel quel.
+        const reason = e instanceof Error && e.name === 'TimeoutError' ? 'timed out' : e instanceof Error ? e.message : String(e)
+        console.warn(`[web_search] SearXNG unreachable (${reason}), falling back to DuckDuckGo`)
+        results = await fetchDdg(query, count, AbortSignal.timeout(TIMEOUT_MS))
+      }
     } else {
       results = await fetchDdg(query, count, AbortSignal.timeout(TIMEOUT_MS))
     }
