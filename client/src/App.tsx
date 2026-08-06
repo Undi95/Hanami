@@ -14,7 +14,7 @@ import * as api from './api'
 import { useStableCallback } from './hooks'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
 import { disposeNotify, playNotify } from './sound'
-import { splitIntoSpeechSegments } from './tts'
+import { cleanForSpeech, splitIntoSpeechSegments } from './tts'
 import {
   applyTheme,
   normalizeTheme,
@@ -436,7 +436,10 @@ function AppInner() {
    * des Réglages (le serveur de synthèse, lui, est toujours celui des Réglages).
    */
   async function playTts(text: string, key?: string, voice = '') {
-    const clean = stripEmotionTags(text).trim()
+    // Le texte AFFICHÉ (bulle, historique) ne passe jamais par `cleanForSpeech` —
+    // seule la copie envoyée au TTS perd ses tags d'émotion, ses didascalies
+    // entre astérisques et ses symboles markdown (~ _ ` * émojis…).
+    const clean = cleanForSpeech(stripEmotionTags(text)).trim()
     if (!clean) return
     const segments = splitIntoSpeechSegments(clean)
     if (segments.length === 0) return
@@ -1221,7 +1224,12 @@ function AppInner() {
             }
             // Voix ou ding, jamais les deux : quand le TTS lit la réponse, la
             // voix EST la notification. Le TTS se tait sur un texte sans mot
-            // (tags d'émotion seuls) — dans ce cas le ding reprend son rôle.
+            // (tags d'émotion seuls, ou qui ne contenait que de l'action/des
+            // symboles une fois nettoyé pour la voix) — dans ce cas le ding
+            // reprend son rôle. Même nettoyage qu'à l'intérieur de `playTts` :
+            // sinon un « *sourit* 😊 » sans texte prononçable déclencherait un
+            // `playTts` qui se tait silencieusement, sans jamais laisser sa
+            // place au ding.
             const toSpeak = ev.message.content.slice(ttsFromIndex)
             // La voix appartient au PERSONNAGE : l'interrupteur des Réglages
             // ouvre le service, le sien décide s'il parle. `char` et non l'état
@@ -1230,7 +1238,7 @@ function AppInner() {
             const ttsWillSpeak =
               settings?.ttsEnabled === true &&
               char.ttsEnabled === true &&
-              stripEmotionTags(toSpeak).trim().length > 0
+              cleanForSpeech(stripEmotionTags(toSpeak)).trim().length > 0
             if (ttsWillSpeak) {
               playTts(toSpeak, ev.message.ts, char.ttsVoice ?? '').catch((e) => {
                 setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }])
