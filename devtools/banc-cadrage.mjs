@@ -39,6 +39,7 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
 import { chargerDecor } from './banc-clics-sol.mjs'
 import { buildEnvBvh, raycastFirst } from '../client/src/scene/bvh'
 import { mergeEnvironment } from '../client/src/scene/envMerge'
+import { normalizedFacesPlusZ } from '../client/src/scene/jointLimits'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const args = process.argv.slice(2)
@@ -63,7 +64,9 @@ const TOUS_RIGS = ['reference.vrm', 'reference-1x.vrm']
 // ── Constantes RECOPIÉES de vrmStage.ts (frameCamera) ───────────────────────
 // Recopiées faute de pouvoir importer vrmStage.ts hors navigateur : il tire
 // client/src/prefs.ts, qui touche `window` au chargement du module. Le seul
-// calcul qui compte — le lancer de rayon — vient, lui, du VRAI bvh.ts.
+// calcul qui compte — le lancer de rayon — vient, lui, du VRAI bvh.ts, et le
+// sens de la pose de repos du VRAI jointLimits.ts (normalizedFacesPlusZ).
+// REST_POSE_Z est écrite dans le repère normalisé qui regarde le −Z (VRM 0.x).
 const REST_POSE_Z = [
   ['leftUpperArm', 1.25],
   ['rightUpperArm', -1.25],
@@ -179,9 +182,12 @@ async function chargerRig(nom) {
   const vrm = gltf.userData.vrm
   if (!vrm) throw new Error(`${nom} : aucune extension VRM`)
   VRMUtils.rotateVRM0(vrm)
+  // Le signe suit le sens MESURÉ du repère normalisé : sur un VRM 1.x, la pose
+  // telle quelle LÈVE les bras — et la hauteur h (boîte englobante) avec eux.
+  const sens = normalizedFacesPlusZ(vrm) ? -1 : 1
   for (const [os, z] of REST_POSE_Z) {
     const node = vrm.humanoid.getNormalizedBoneNode(os)
-    if (node) node.rotation.z = z
+    if (node) node.rotation.z = sens * z
   }
   vrm.humanoid.update()
   vrm.scene.updateMatrixWorld(true)
