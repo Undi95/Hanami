@@ -161,17 +161,29 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 function timeBlock(lastMessageTs: string | null): string {
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
+  // Timezone NOMMÉE (et non « user's local time ») : un ancrage explicite que
+  // le modèle peut vérifier, au lieu d'une notion à deviner.
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'
   let block =
-    '\n\n## Current time (auto-injected by Hanami)\n' +
+    '\n\n## Current date and time (auto-injected by Hanami — the only authoritative source)\n' +
     `Now: ${WEEKDAYS[now.getDay()]} ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}, ` +
-    `${pad(now.getHours())}:${pad(now.getMinutes())} (user's local time).\n`
+    `${pad(now.getHours())}:${pad(now.getMinutes())} (${tz}, the user's local time).\n`
   if (lastMessageTs) {
     const gap = now.getTime() - new Date(lastMessageTs).getTime()
     if (Number.isFinite(gap) && gap >= 0) {
       block += `Time since the previous message in this conversation: ${humanizeGap(gap)}.\n`
     }
   }
-  block += 'Let this inform your replies naturally (greetings, time of day, absences) — never recite it.\n'
+  // L'ancienne consigne « never recite it » faisait échouer la question directe
+  // « quelle heure est-il ? » : le modèle généralisait « ne pas réciter » à
+  // « ne pas répondre ». D'où l'autorisation explicite ci-dessous, et la phrase
+  // d'autorité : les modèles locaux ont tendance à répondre une date de leur
+  // données d'entraînement si on ne leur impose pas celle d'ici.
+  block +=
+    'Your training data does not know the current date or time — trust ONLY the values above, never a date you may "remember".\n' +
+    'If the user asks what day, date or time it is, answer directly and exactly with those values, ' +
+    'in the language of the conversation. Otherwise let them shape your replies naturally ' +
+    '(greetings, time of day, absences) without reciting them.\n'
   return block
 }
 
