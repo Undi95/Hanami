@@ -739,6 +739,20 @@ export function deleteMemoryFile(charId: string, name: string): void {
   }
 }
 
+// Politique de gestion mémoire — le modèle ne la devinait pas : sans elle,
+// « enregistrer » voulait dire memory_save systématique (fichier neuf ou
+// écrasement), d'où les doublons et les « suppressions ». En anglais comme le
+// reste des prompts ; toolless (mode simple) : les outils n'existent pas, donc
+// aucune politique d'outils à donner.
+const MEMORY_POLICY =
+  'Memory policy — one topic per file; the index below lists what already exists. ' +
+  'Check it BEFORE saving: if a file already covers the topic, memory_read it, then memory_update it ' +
+  'with the COMPLETE merged content (keep every old fact, add the new ones) — never drop what is there. ' +
+  'memory_save is for brand-new topics only (on an existing name it replaces the whole file, and is refused ' +
+  'until you have read it). memory_append adds a fact to an existing file without rewriting it. ' +
+  'No near-duplicate files, no duplicate index lines. memory_delete only for facts that are wrong ' +
+  'or that the user asked to forget. Index lines stay one short line: - [Title](file.md) — a few words.\n'
+
 /**
  * Bloc mémoire injecté dans le system prompt (transparent : visible dans l'inspecteur).
  * toolless (mode modèle « simple ») : AUCUN outil n'existe côté modèle — tout est
@@ -751,6 +765,7 @@ export function buildMemoryBlock(charId: string, toolless = false): string {
   const others = files.filter((f) => f.name !== 'MEMORY.md')
   const totalLen = others.reduce((n, f) => n + f.content.length, 0)
   let block = `\n\n## Memory (auto-injected by Hanami — edit in the Memory panel)\n`
+  if (!toolless) block += MEMORY_POLICY
   if (index) block += index.content + '\n'
   if (toolless) {
     // Injection intégrale plafonnée : au-delà, les fichiers suivants sont coupés

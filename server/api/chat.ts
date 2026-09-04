@@ -16,7 +16,13 @@ import {
   writeMemoryFile,
 } from '../lib/storage'
 import { streamChatCompletion, type StreamedToolCall } from '../llm/openai'
-import { MEMORY_TOOL_NAMES, executeMemoryTool, memoryToolDefs } from '../tools/memoryTools'
+import {
+  createMemorySession,
+  MEMORY_TOOL_NAMES,
+  executeMemoryTool,
+  memoryToolDefs,
+  type MemorySession,
+} from '../tools/memoryTools'
 import { FILE_TOOL_NAMES, executeFileTool, fileToolDefs } from '../tools/fileTools'
 import { CHAT_TOOL_NAMES, chatToolDefs, executeChatTool } from '../tools/chatTools'
 import {
@@ -31,7 +37,10 @@ import type { ChatEvent, ChatMessage, ContextInfo, MessageVariant, Settings } fr
 
 export const chatRouter = Router()
 
-const MAX_TOOL_ITERATIONS = 6
+// Budget de la boucle d'outils d'un chat. Huit et non six : le garde-fou
+// « lire avant d'écrire » des outils mémoire ajoute un aller-retour
+// (memory_read puis memory_update) à chaque fait déposé sur une mémoire existante.
+const MAX_TOOL_ITERATIONS = 8
 
 interface BackendPayload {
   messages: unknown[]
@@ -439,7 +448,13 @@ function pruneVariants(m: ChatMessage): ChatMessage {
  * write_file s'exécutait même outils fichiers désactivés. Le throw est rendu au
  * modèle comme résultat d'outil (« Erreur : … ») — transparent, jamais fatal.
  */
-async function executeTool(characterId: string, settings: Settings, name: string, rawArgs: string): Promise<string> {
+async function executeTool(
+  characterId: string,
+  settings: Settings,
+  name: string,
+  rawArgs: string,
+  mem: MemorySession,
+): Promise<string> {
   let args: Record<string, unknown>
   try {
     args = rawArgs.trim() ? (JSON.parse(rawArgs) as Record<string, unknown>) : {}
@@ -448,7 +463,7 @@ async function executeTool(characterId: string, settings: Settings, name: string
   }
   if ((MEMORY_TOOL_NAMES as readonly string[]).includes(name)) {
     if (!settings.memoryEnabled) throw new Error('memory tools are disabled in settings')
-    return executeMemoryTool(characterId, name, args)
+    return executeMemoryTool(characterId, name, args, mem)
   }
   if ((CHAT_TOOL_NAMES as readonly string[]).includes(name)) {
     if (!settings.memoryEnabled) throw new Error('memory tools are disabled in settings')
@@ -535,6 +550,9 @@ async function runToolLoop<R extends { content: string; toolCalls: StreamedToolC
   // halluciné (ou hors du périmètre de la compaction) devient une erreur
   // d'outil rendue au modèle, jamais une exécution.
   allowed: ReadonlySet<string>,
+  // Fichiers mémoire lus pendant CETTE requête — le garde-fou « lire avant
+  // d'écrire » de memoryTools s'appuie dessus.
+  mem: MemorySession,
   call: (withTools: boolean) => Promise<R>,
   onTool?: (name: string, args: string, result: string) => void,
 ): Promise<{ last: R; exhausted: boolean }> {
@@ -557,7 +575,7 @@ async function runToolLoop<R extends { content: string; toolCalls: StreamedToolC
         toolResult = `Error: tool not offered in this request: ${tc.name}`
       } else {
         try {
-          toolResult = await executeTool(characterId, settings, tc.name, tc.arguments)
+          toolResult = await executeTool(characterId, settings, tc.name, tc.arguments, mem)
         } catch (e) {
           toolResult = `Error: ${e instanceof Error ? e.message : String(e)}`
         }
@@ -863,12 +881,14 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     // Les agrégations (truncated, finishReason, promptTokens — le dernier usage
     // NON NUL fait foi) restent ici, par fermeture : la boucle partagée ne
     // s'occupe que de la mécanique d'outils.
+    const mem = createMemorySession() // lectures mémoire de CETTE requête (garde-fou)
     const { exhausted } = await runToolLoop(
       characterId,
       settings,
       messages,
       MAX_TOOL_ITERATIONS,
       toolNamesOf(payload.tools),
+      mem,
       async (withTools) => {
         const result = await streamOnce(withTools)
         truncated = result.truncated
@@ -986,7 +1006,9 @@ chatRouter.post('/api/chat', async (req, res) => {
 // (le modèle se contente de lister des faits en texte).
 
 const COMPACT_MIN_MESSAGES = 6
-const COMPACT_MAX_ITERATIONS = 4
+// Six et non quatre : la passe mémoire sous garde-fou coûte un aller-retour de
+// lecture par fichier existant touché (memory_read puis memory_update/append).
+const COMPACT_MAX_ITERATIONS = 6
 // Garde-fou d'horloge d'une compaction : au-delà, l'appel backend est abandonné
 // et le verrou compactionsInFlight se libère (10 min — large, jamais infini).
 const COMPACT_TIMEOUT_MS = 10 * 60_000
@@ -1055,7 +1077,9 @@ function compactDirective(hasPrevSummary: boolean, memoryTools: boolean, instruc
   }
   if (memoryTools) {
     d +=
-      '- BEFORE writing the summary, use the memory tools (memory_save / memory_update) to persist any durable facts worth remembering beyond this conversation.\n'
+      '- BEFORE writing the summary, persist any durable facts worth remembering beyond this conversation: ' +
+      'memory_read an existing memory file before memory_update (complete merged content), ' +
+      'memory_append a fact to an existing file, memory_save only brand-new topics.\n'
   }
   if (instruction) d += `- User instruction for this compaction: ${instruction}\n`
   d += 'Reply with ONLY the summary text (no preamble, no emotion tag).'
@@ -1168,12 +1192,14 @@ async function runCompaction(
     // Boucle agentique silencieuse (partagée avec le chat, cf. runToolLoop) :
     // le résumé = le texte du DERNIER appel — celui sans appels d'outils, ou le
     // dernier forcé sans outils quand le budget est épuisé.
+    const mem = createMemorySession() // lectures mémoire de CETTE compaction (garde-fou)
     const { last } = await runToolLoop(
       characterId,
       settings,
       messages,
       COMPACT_MAX_ITERATIONS,
       toolNamesOf(tools),
+      mem,
       async (withTools) => {
         const result = await streamChatCompletion({
           settings: compactSettings,
