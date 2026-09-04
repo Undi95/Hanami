@@ -134,5 +134,17 @@ export function saveSettings(patch: Partial<Settings>): Settings {
   return next
 }
 
+// Fenêtre de travail de la jauge : jamais plus de ça, même pour un modèle au
+// contexte géant (262k…). Au-delà, un modèle local n'est que plus lent — pas
+// plus attentif — et un seuil d'auto-compaction calé sur la fenêtre complète
+// serait injoignable en pratique (la jauge plafonnerait à ~15 % et ne
+// compacterait jamais). Les petits contextes (8k…) gardent leur valeur réelle.
+export const WORKING_WINDOW_MAX = 65536
+
+/** Fenêtre sur laquelle la jauge et l'auto-compaction se normalisent. 0 = inconnue. */
+export function workingWindow(settings: Settings): number {
+  return settings.contextSize > 0 ? Math.min(settings.contextSize, WORKING_WINDOW_MAX) : 0
+}
+
 export const PORT = Number(process.env.PORT ?? 7788)
 export const IS_PROD = process.argv.includes('--prod') || process.env.NODE_ENV === 'production'

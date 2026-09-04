@@ -4,7 +4,7 @@
 // buildPayload est LA source unique, partagée avec /api/prompt-preview.
 import { Router } from 'express'
 import type { Request, Response } from 'express'
-import { loadSettings } from '../config'
+import { loadSettings, workingWindow } from '../config'
 import {
   appendChatMessage,
   buildMemoryBlock,
@@ -884,10 +884,14 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     const tokens =
       (promptTokens > 0 ? promptTokens : estimateTokens(messages) + estimateTokens(payload.tools ?? [])) +
       estimateTokens(assistantText)
+    // Fenêtre de TRAVAIL (plafonnée) et non le contexte complet du modèle :
+    // avec une fenêtre de 262k, la jauge plafonnait à ~15 % et l'auto-compaction
+    // ne se déclenchait jamais (voir workingWindow dans config.ts).
+    const limit = workingWindow(settings)
     const context: ContextInfo = {
       tokens,
-      limit: settings.contextSize,
-      percent: settings.contextSize > 0 ? Math.min(100, Math.round((tokens / settings.contextSize) * 100)) : 0,
+      limit,
+      percent: limit > 0 ? Math.min(100, Math.round((tokens / limit) * 100)) : 0,
     }
     writeEvent(res, { type: 'done', message, context })
     // Signalé APRÈS la sauvegarde et le done : le client affiche la bulle d'erreur discrète.
@@ -1478,11 +1482,13 @@ chatRouter.get('/api/prompt-preview', (req, res) => {
       characterPrompt,
       injected,
       payload,
-      // Jauge de contexte : estimation du prochain envoi + limite configurée.
-      // Les définitions d'outils partent aussi dans le payload (et l'usage réel
-      // du backend les compte) : sans elles, la jauge sautait au premier message.
+      // Jauge de contexte : estimation du prochain envoi + fenêtre de travail
+      // (plafonnée, cf. workingWindow) — MÊME limite que l'événement « done » du
+      // chat, sinon la jauge sauterait à l'ouverture d'une conversation. Les
+      // définitions d'outils partent aussi dans le payload (et l'usage réel du
+      // backend les compte) : sans elles, elle sautait au premier message.
       tokens: estimateTokens(payload.messages) + estimateTokens(payload.tools ?? []),
-      contextSize: settings.contextSize,
+      contextSize: workingWindow(settings),
     })
   } catch (e) {
     res.status(404).json({ error: e instanceof Error ? e.message : String(e) })

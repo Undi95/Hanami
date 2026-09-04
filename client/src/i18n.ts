@@ -327,7 +327,7 @@ const FR = {
   timeAwarenessSub:
     'Le personnage sait la date, l’heure et le temps écoulé depuis votre dernier message (visible dans l’Inspecteur).',
   autoCompactSub:
-    'Quand la jauge atteint 100 % : les faits importants sont sauvés en mémoire, puis la conversation est résumée. Le résumé reste visible et modifiable.',
+    'Quand la jauge atteint 100 % : les faits importants sont sauvés en mémoire, puis la conversation est résumée. Le résumé reste visible et modifiable. La jauge mesure une fenêtre de travail plafonnée à 65 536 tokens : au-delà, un modèle local est plus lent, pas plus précis.',
   contextBadge: '{percent} %',
   contextBadgeTitle: 'Contexte utilisé : ~{tokens} / {limit} tokens',
   contextUsage: 'Prochain envoi : ~{tokens} tokens / {limit} ({percent} %)',
