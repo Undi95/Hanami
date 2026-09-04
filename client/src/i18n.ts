@@ -513,7 +513,9 @@ const FR = {
   loginHint: 'Cette instance est protégée par un mot de passe.',
   password: 'Mot de passe',
   loggingIn: 'Connexion…',
-  login: 'Entrer',
+  // « Entrer » est le calque du bouton anglais « Enter » : en français, un bouton
+  // de connexion dit « Se connecter » (cohérent avec « Connexion… » ci-dessus).
+  login: 'Se connecter',
 
   // ── Mémoire ──────────────────────────────────────────────────────────────
   memoryHelp:
@@ -588,7 +590,7 @@ const EN: Record<Key, string> = {
     'The character inhabits the room: turns to face you, walks around, sits on whatever it finds. Off: it stays put, as before.',
   sceneLiveNoMobile:
     'Large screens only: on a narrow screen the scene is just a strip, and the avatar stays in front of the environment.',
-  sceneLiveNoVrma: 'Needs gesture animations: without the .vrma files there is no step to play.',
+  sceneLiveNoVrma: 'Needs gesture animations: without the .vrma files it has no steps to play.',
   scene3dHint:
     'Click the floor to send it there, a seat to sit it down, the character to get its attention.',
 
@@ -661,7 +663,7 @@ const EN: Record<Key, string> = {
   stop: 'Stop generating',
   dictate: 'Dictate',
   dictateListening: 'Listening…',
-  impersonate: 'Impersonate me',
+  impersonate: 'Write for me',
   replyInProgress: 'Reply in progress',
   toolCall: '{name}: {args}',
   webSearchStatus: 'Searching the web: {query}',
@@ -688,11 +690,11 @@ const EN: Record<Key, string> = {
   attachImage: 'Attach an image',
   removeImage: 'Remove this image',
   imageAlt: 'Attached image',
-  viewImage: 'View the image larger',
+  viewImage: 'View the image full-size',
   closeImage: 'Close the image',
 
   // ── In-conversation search (Ctrl+F, or the magnifier in the bar) ─────────
-  searchInChat: 'Search in conversation',
+  searchInChat: 'Search the conversation',
   searchPlaceholder: 'Search…',
   searchCount: '{n}/{m}',
   searchPrev: 'Previous match',
@@ -826,7 +828,7 @@ const EN: Record<Key, string> = {
   timeAwarenessSub:
     'The character knows the date, the time, and how long since your last message (visible in the Inspector).',
   autoCompactSub:
-    'When the gauge reaches 100%: important facts are saved to memory, then the conversation is summarized. The summary stays visible and editable.',
+    'When the gauge reaches 100%: important facts are saved to memory, then the conversation is summarized. The summary stays visible and editable. The gauge measures a working window capped at 65,536 tokens: beyond that, a local model is just slower, not sharper.',
   contextBadge: '{percent}%',
   contextBadgeTitle: 'Context used: ~{tokens} / {limit} tokens',
   contextUsage: 'Next request: ~{tokens} tokens / {limit} ({percent}%)',
@@ -857,7 +859,7 @@ const EN: Record<Key, string> = {
   sectionSpontaneous: 'Spontaneous messages',
   spontaneousEnabled: 'The character can write on their own',
   spontaneousEnabledSub:
-    'While you are away: a little message after a few hours, then more and more spaced out, then one last understanding note — and silence until you return. Never outside the time window.',
+    'While you are away: a little message after a few hours, then more and more spaced out, then a final note of understanding — and silence until you return. Never outside the time window.',
   spontaneousStart: 'Not before (hour)',
   spontaneousEnd: 'Not after (hour)',
   sectionMemoryTools: 'Memory & tools',
@@ -963,13 +965,13 @@ const EN: Record<Key, string> = {
     'data/config.json will be replaced: backend, API key and access password will be the ones from the backup.',
   restoreWarnPassword:
     'The backup carries a different access password: every session will drop, and you will have to sign in with THAT password.',
-  restoreWarnNoManifest: 'Archive made by a Hanami older than the manifest — recognised by its structure.',
+  restoreWarnNoManifest: 'Archive made by an older build of Hanami, before the manifest — recognised by its structure.',
   restoreWarnEmpty: 'This installation is empty: the restore will not replace anything.',
   restoreArm: 'Restore…',
   restoreConfirm: 'Confirm the restore',
   restoreWarn:
     'Restoring overwrites the files the archive carries. The current state is archived right before, into backups/.',
-  restoreArmed: 'Confirm: {added} and {replaced}. Click a second time to write.',
+  restoreArmed: 'Confirm: {added} and {replaced}. Click again to write.',
   restoreBusy: 'Restoring…',
   restoreDone: 'Restore done — {files}.',
   restoreNet: 'The previous state is archived here (never removed automatically):',
