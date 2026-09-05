@@ -729,9 +729,11 @@ function memoryDir(charId: string): string {
 export function listMemory(charId: string): MemoryFile[] {
   const dir = memoryDir(charId)
   if (!fs.existsSync(dir)) return []
+  // withFileTypes : ne descend JAMAIS dans les sous-dossiers (backups/ vit ici).
   return fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('.md'))
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith('.md'))
+    .map((e) => e.name)
     .sort((a, b) => (a === 'MEMORY.md' ? -1 : b === 'MEMORY.md' ? 1 : a.localeCompare(b)))
     .map((f) => ({ name: f, content: fs.readFileSync(path.join(dir, f), 'utf8') }))
 }
@@ -764,6 +766,98 @@ export function deleteMemoryFile(charId: string, name: string): void {
   }
 }
 
+// ── Sauvegardes mémoire (feature « Ranger ») ──────────────────────────────
+// Un snapshot = une copie de TOUS les fichiers .md dans memory/backups/<ts>/.
+// Les snapshots s'empilent : le rangement ET chaque restauration en prennent
+// un d'abord — l'historique de la mémoire est réversible à l'infini.
+
+export interface MemoryBackupInfo {
+  name: string // nom du dossier = horodatage YYYY-MM-DD_HHmmss
+  files: number
+  chars: number
+}
+
+function backupsDir(charId: string): string {
+  return path.join(memoryDir(charId), 'backups')
+}
+
+/** Fichiers mémoire actuels (top-level .md uniquement, hors backups/). */
+function currentMemoryFiles(charId: string): string[] {
+  const dir = memoryDir(charId)
+  if (!fs.existsSync(dir)) return []
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith('.md'))
+    .map((e) => e.name)
+}
+
+function backupTimestamp(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+}
+
+/**
+ * Copie la mémoire courante dans memory/backups/<ts>/ — renvoie le nom du
+ * snapshot (ou '' si la mémoire est vide : un snapshot vide est inutile).
+ * Anti-collision : deux snapshots dans la même seconde se démarquent par -2, -3…
+ */
+export function snapshotMemory(charId: string): string {
+  const files = currentMemoryFiles(charId)
+  if (files.length === 0) return ''
+  const base = backupsDir(charId)
+  let name = backupTimestamp()
+  for (let i = 2; fs.existsSync(path.join(base, name)); i++) name = `${backupTimestamp()}-${i}`
+  const dest = path.join(base, name)
+  fs.mkdirSync(dest, { recursive: true })
+  for (const f of files) fs.copyFileSync(path.join(memoryDir(charId), f), path.join(dest, f))
+  return name
+}
+
+/** Snapshots existants, les plus récents d'abord (les noms se trient). */
+export function listMemoryBackups(charId: string): MemoryBackupInfo[] {
+  const dir = backupsDir(charId)
+  if (!fs.existsSync(dir)) return []
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => {
+      const sub = path.join(dir, e.name)
+      const entries = fs.readdirSync(sub, { withFileTypes: true }).filter((f) => f.isFile())
+      let chars = 0
+      for (const f of entries) chars += fs.statSync(path.join(sub, f.name)).size
+      return { name: e.name, files: entries.length, chars }
+    })
+    .sort((a, b) => b.name.localeCompare(a.name))
+}
+
+/**
+ * Restaure un snapshot : snapshot de sécurité de l'état courant D'ABORD (les
+ * sauvegardes s'empilent — on ne perd jamais l'état qu'on remplace), puis
+ * remplacement des fichiers par le contenu du snapshot.
+ * Renvoie le nom du snapshot de sécurité (ou '' si la mémoire était vide).
+ */
+export function restoreMemoryBackup(charId: string, name: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(name)) throw new Error('Nom de sauvegarde invalide')
+  const src = path.join(backupsDir(charId), name)
+  if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) {
+    throw new Error(`Sauvegarde introuvable : ${name}`)
+  }
+  const safety = snapshotMemory(charId)
+  for (const f of currentMemoryFiles(charId)) {
+    // unlinkSync et non rmSync : piège Node 25/Windows sur les noms non-ASCII.
+    try {
+      fs.unlinkSync(path.join(memoryDir(charId), f))
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+    }
+  }
+  for (const f of fs.readdirSync(src, { withFileTypes: true }).filter((e) => e.isFile())) {
+    fs.copyFileSync(path.join(src, f.name), path.join(memoryDir(charId), f.name))
+  }
+  return safety
+}
+
 // Politique de gestion mémoire — le modèle ne la devinait pas : sans elle,
 // « enregistrer » voulait dire memory_save systématique (fichier neuf ou
 // écrasement), d'où les doublons et les « suppressions ». En anglais comme le
@@ -777,6 +871,11 @@ const MEMORY_POLICY =
   'until you have read it). memory_append adds a fact to an existing file without rewriting it. ' +
   'No near-duplicate files, no duplicate index lines. memory_delete only for facts that are wrong ' +
   'or that the user asked to forget. Index lines stay one short line: - [Title](file.md) — a few words.\n'
+
+// Seuils d'injection mémoire — exportés pour que le panneau mémoire puisse
+// afficher CE QUI sera réellement injecté (même logique que le bloc ci-dessous).
+export const MEMORY_FULL_INJECT_LIMIT = 8000 // mode outils : ≤ → tout, > → index seul
+export const MEMORY_TOOLLESS_CAP = 24000 // mode simple : plafond de l'injection intégrale
 
 /**
  * Bloc mémoire injecté dans le system prompt (transparent : visible dans l'inspecteur).
@@ -795,7 +894,7 @@ export function buildMemoryBlock(charId: string, toolless = false): string {
   if (toolless) {
     // Injection intégrale plafonnée : au-delà, les fichiers suivants sont coupés
     // (les plus gros en dernier pour sacrifier le moins de fichiers possible).
-    const CAP = 24000
+    const CAP = MEMORY_TOOLLESS_CAP
     let used = 0
     for (const f of [...others].sort((a, b) => a.content.length - b.content.length)) {
       if (used + f.content.length > CAP) {
@@ -805,7 +904,7 @@ export function buildMemoryBlock(charId: string, toolless = false): string {
       used += f.content.length
       block += `\n### ${f.name}\n${f.content}\n`
     }
-  } else if (totalLen <= 8000) {
+  } else if (totalLen <= MEMORY_FULL_INJECT_LIMIT) {
     // Petits volumes : tout injecter.
     for (const f of others) block += `\n### ${f.name}\n${f.content}\n`
   } else if (others.length > 0) {

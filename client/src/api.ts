@@ -367,8 +367,55 @@ export function getStats(charId: string): Promise<CharacterStats> {
 
 // ── Mémoire ────────────────────────────────────────────────────────────────
 
-export function listMemory(charId: string): Promise<MemoryFile[]> {
+/** Ce que le serveur injectera réellement dans le system prompt (buildMemoryBlock). */
+export type MemoryInjection = 'none' | 'full' | 'index-only' | 'capped'
+
+export interface MemoryListing {
+  files: MemoryFile[]
+  injection: MemoryInjection
+  totalChars: number
+}
+
+export function listMemory(charId: string): Promise<MemoryListing> {
   return req('GET', `/api/characters/${encodeURIComponent(charId)}/memory`)
+}
+
+/** Snapshots de la mémoire (feature « Ranger »), les plus récents d'abord. */
+export interface MemoryBackup {
+  name: string // horodatage YYYY-MM-DD_HHmmss
+  files: number
+  chars: number
+}
+
+export interface TidyReport {
+  ok: true
+  before: { files: number; chars: number }
+  after: { files: number; chars: number }
+  backup: string
+}
+
+/**
+ * Rangement mémoire : UN appel LLM fusionne/comprime les fichiers (tous les
+ * faits conservés), backup automatique d'avant, plan validé en dur côté serveur.
+ */
+export function tidyMemory(charId: string): Promise<TidyReport> {
+  return req('POST', `/api/characters/${encodeURIComponent(charId)}/memory/tidy`, {})
+}
+
+export function listMemoryBackups(charId: string): Promise<MemoryBackup[]> {
+  return req('GET', `/api/characters/${encodeURIComponent(charId)}/memory/backups`)
+}
+
+/** Restaure un snapshot (un snapshot de sécurité de l'état courant est pris d'abord). */
+export function restoreMemoryBackup(
+  charId: string,
+  name: string,
+): Promise<{ ok: true; restored: string; backup: string }> {
+  return req(
+    'POST',
+    `/api/characters/${encodeURIComponent(charId)}/memory/backups/${encodeURIComponent(name)}/restore`,
+    {},
+  )
 }
 
 export function createMemoryFile(charId: string, name: string, content: string): Promise<{ ok: true }> {

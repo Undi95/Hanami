@@ -540,6 +540,24 @@ const FR = {
   memoryFileContent: 'Contenu de {name}',
   deleteFile: 'Supprimer',
   noMemoryFiles: 'Aucun fichier mémoire.',
+  memoryTidy: 'Ranger la mémoire',
+  memoryTidyArmed: 'Confirmer le rangement ?',
+  memoryTidyHint:
+    'Un seul appel au modèle fusionne et compresse les fichiers en gardant tous les faits. Une sauvegarde est prise avant, et restaurable ci-dessous.',
+  memoryTidyRunning: 'Rangement en cours…',
+  memoryTidyReport:
+    'Rangé : {bf} fichiers / {bc} car. → {af} fichiers / {ac} car. (sauvegarde automatique faite)',
+  memoryBackups: 'Sauvegardes mémoire',
+  memoryBackupMeta: '{files} fichiers · {chars} car.',
+  memoryBackupRestore: 'Restaurer',
+  memoryBackupRestoreArmed: 'Confirmer ?',
+  memoryBackupRestored: 'Sauvegarde {name} restaurée (l’état actuel a d’abord été sauvegardé).',
+  memoryInjectFull: 'Injecté dans le prompt : toute la mémoire ({chars} car.)',
+  memoryInjectIndex:
+    'Injecté dans le prompt : seul l’index — le modèle lit les fichiers via l’outil memory_read ({chars} car. au total)',
+  memoryInjectCapped:
+    'Injecté dans le prompt : mémoire coupée au-delà de la limite du mode simple ({chars} car.)',
+  memoryInjectNone: 'Aucune mémoire injectée (mémoire désactivée ou vide)',
 
   // ── Inspecteur de prompt ─────────────────────────────────────────────────
   promptInspectorNote: 'Ceci est exactement ce que Hanami envoie au backend — rien d’autre.',
@@ -1040,6 +1058,22 @@ const EN: Record<Key, string> = {
   memoryFileContent: 'Contents of {name}',
   deleteFile: 'Delete',
   noMemoryFiles: 'No memory files.',
+  memoryTidy: 'Tidy memory',
+  memoryTidyArmed: 'Confirm tidying?',
+  memoryTidyHint:
+    'One model call merges and compresses the files, keeping every fact. A backup is taken first and can be restored below.',
+  memoryTidyRunning: 'Tidying…',
+  memoryTidyReport: 'Tidied: {bf} files / {bc} chars → {af} files / {ac} chars (automatic backup taken)',
+  memoryBackups: 'Memory backups',
+  memoryBackupMeta: '{files} files · {chars} chars',
+  memoryBackupRestore: 'Restore',
+  memoryBackupRestoreArmed: 'Confirm?',
+  memoryBackupRestored: 'Backup {name} restored (the current state was backed up first).',
+  memoryInjectFull: 'Injected into the prompt: full memory ({chars} chars)',
+  memoryInjectIndex:
+    'Injected into the prompt: index only — the model reads files via the memory_read tool ({chars} chars total)',
+  memoryInjectCapped: 'Injected into the prompt: memory capped by the simple-mode limit ({chars} chars)',
+  memoryInjectNone: 'No memory injected (memory disabled or empty)',
 
   // ── Prompt inspector ─────────────────────────────────────────────────────
   promptInspectorNote: 'This is exactly what Hanami sends to the backend — nothing else.',
