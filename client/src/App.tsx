@@ -106,6 +106,25 @@ function pickGreeting(pool: string[]): string {
 }
 
 /**
+ * Reconstruit le fil depuis les messages sauvegardés : les traces d'outils
+ * (m.tools) réapparaissent en puces, juste AVANT le message qui les a portées
+ * — la même place que pendant le stream. Champ optionnel : les vieux chats
+ * n'en ont pas, rien à réinsérer.
+ */
+function feedFromMessages(messages: ChatMessage[]): FeedItem[] {
+  const items: FeedItem[] = []
+  for (const m of messages) {
+    if (Array.isArray(m.tools)) {
+      for (const tr of m.tools) {
+        items.push({ kind: 'tool', name: tr.name, args: tr.args, result: tr.result })
+      }
+    }
+    items.push({ kind: 'msg', msg: m })
+  }
+  return items
+}
+
+/**
  * Cadrage par défaut de l'avatar selon le mode d'affichage : en visual novel la
  * scène est plein écran (avatar centré) ; en desktop le panneau de chat occupe la
  * droite, l'avatar est décalé pour rester entier dans la partie visible.
@@ -798,7 +817,7 @@ function AppInner() {
       setContext(null)
       ctxEstimatedRef.current = null
       setActiveChat(char.id, meta.id)
-      const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
+      const items = feedFromMessages(messages)
       // Premier message d'un chat VIDE (jamais sur un chat importé — il n'est pas
       // vide), selon le mode du personnage : 'written' (défaut) affiche une
       // salutation écrite tirée au hasard, 'generated' laisse le modèle ouvrir,
@@ -956,7 +975,7 @@ function AppInner() {
         .then(({ meta, messages }) => {
           if (chatIdRef.current !== chat.id || meta.messageCount === chat.messageCount) return
           setChatMeta(meta)
-          const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
+          const items = feedFromMessages(messages)
           // Même accueil que partout ailleurs : macros résolues (cf. greetingPool).
           if (items.length === 0 && char.greeting) {
             const names = macroNamesOf(char, personaNameRef.current)
@@ -1008,6 +1027,10 @@ function AppInner() {
       for (const it of f) {
         if (it.kind === 'msg' && it.pending) {
           if (it.msg.content) out.push({ kind: 'msg', msg: it.msg })
+        } else if (it.kind === 'tool' && it.pending) {
+          // Action interrompue avant son résultat : la puce pulse à jamais,
+          // on la retire (le rafraîchissement doux la rétablira si le serveur
+          // a fini et sauvegardé l'action).
         } else out.push(it)
       }
       if (extra) out.push(extra)
@@ -1079,8 +1102,15 @@ function AppInner() {
         const last = out[out.length - 1]
         if (mode === 'regenerate' || mode === 'open') {
           // regenerate : la dernière bulle assistant disparaît (le serveur retire
-          // la sienne). open : le fil est vide, il n'y a rien à retirer.
-          if (mode === 'regenerate' && last && last.kind === 'msg' && last.msg.role === 'assistant') out.pop()
+          // la sienne) — et les puces d'outils qui la précèdent juste avant avec
+          // elle (les nouvelles viendront avec cette génération). open : le fil
+          // est vide, il n'y a rien à retirer.
+          if (mode === 'regenerate') {
+            let i = out.length
+            while (i > 0 && out[i - 1].kind === 'tool') i--
+            const before = i > 0 ? out[i - 1] : null
+            if (before && before.kind === 'msg' && before.msg.role === 'assistant') out.length = i
+          }
           out.push({
             kind: 'msg',
             msg: { role: 'assistant', content: '', ts: new Date().toISOString() },
@@ -1162,9 +1192,30 @@ function AppInner() {
           } else if (ev.type === 'thinking') {
             thinkingAcc += ev.text
             flushThinking()
-          } else if (ev.type === 'tool') {
-            const chip: FeedItem = { kind: 'tool', name: ev.name, args: ev.args, result: ev.result }
+          } else if (ev.type === 'tool_start') {
+            // L'action DÉMARRE : une puce « en cours » pulse devant le message
+            // en cours de génération ; l'événement `tool` la figera avec son
+            // résultat (même place).
+            const chip: FeedItem = { kind: 'tool', name: ev.name, args: ev.args, pending: true }
             setFeed((f) => {
+              const i = f.findIndex((it) => it.kind === 'msg' && it.pending)
+              return i === -1 ? [...f, chip] : [...f.slice(0, i), chip, ...f.slice(i)]
+            })
+          } else if (ev.type === 'tool') {
+            // L'action est FINIE : on fige sa puce « en cours » (la DERNIÈRE —
+            // le même outil peut courir deux fois de suite) avec son résultat.
+            // À défaut de puce en attente (tool_start manqué, cas défensif),
+            // on insère la trace complète comme avant.
+            setFeed((f) => {
+              for (let i = f.length - 1; i >= 0; i--) {
+                const it = f[i]
+                if (it.kind === 'tool' && it.pending && it.name === ev.name && it.args === ev.args) {
+                  const out = [...f]
+                  out[i] = { kind: 'tool', name: ev.name, args: ev.args, result: ev.result }
+                  return out
+                }
+              }
+              const chip: FeedItem = { kind: 'tool', name: ev.name, args: ev.args, result: ev.result }
               const i = f.findIndex((it) => it.kind === 'msg' && it.pending)
               return i === -1 ? [...f, chip] : [...f.slice(0, i), chip, ...f.slice(i)]
             })
@@ -1353,11 +1404,21 @@ function AppInner() {
     const out = await api.deleteChatMessage(char.id, chat.id, ordinal)
     setFeed((f) => {
       let n = -1
-      return f.filter((it) => {
-        if (it.kind !== 'msg') return true
+      const next: FeedItem[] = []
+      for (const it of f) {
+        if (it.kind !== 'msg') {
+          next.push(it)
+          continue
+        }
         n++
-        return n !== ordinal
-      })
+        if (n === ordinal) {
+          // Le message part, ses puces d'outils avec lui (elles sont juste devant).
+          while (next.length > 0 && next[next.length - 1].kind === 'tool') next.pop()
+          continue
+        }
+        next.push(it)
+      }
+      return next
     })
     setChatMeta((m) =>
       m && m.id === chat.id
@@ -1377,11 +1438,27 @@ function AppInner() {
     const out = await api.setChatMessageVariant(char.id, chat.id, ordinal, variant)
     setFeed((f) => {
       let n = -1
-      return f.map((it) => {
-        if (it.kind !== 'msg') return it
+      const next: FeedItem[] = []
+      for (const it of f) {
+        if (it.kind !== 'msg') {
+          next.push(it)
+          continue
+        }
         n++
-        return n === ordinal ? { kind: 'msg' as const, msg: out.message } : it
-      })
+        if (n === ordinal) {
+          // La variante affichée change : les puces qui précédaient le message
+          // appartenaient à l'ancienne — on les remplace par le journal de la
+          // nouvelle (le serveur vient de le copier dans le corps du message).
+          while (next.length > 0 && next[next.length - 1].kind === 'tool') next.pop()
+          for (const tr of out.message.tools ?? []) {
+            next.push({ kind: 'tool', name: tr.name, args: tr.args, result: tr.result })
+          }
+          next.push({ kind: 'msg', msg: out.message })
+        } else {
+          next.push(it)
+        }
+      }
+      return next
     })
     // Le visage suit la variante affichée : chacune porte SON tag. `live` —
     // cette réplique-là s'affiche maintenant, exactement comme une réponse qui

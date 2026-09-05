@@ -7,13 +7,15 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { createPortal } from 'react-dom'
 import type { ChatMessage } from '../../../shared/types'
 import { stripEmotionTags } from '../emotions'
-import { localeOf, useI18n, type Lang } from '../i18n'
+import { localeOf, useI18n, type Key, type Lang, type Vars } from '../i18n'
 import { renderMarkdown } from '../markdown'
 import { VnBoxGrip } from './ResizeGrips'
 
 export type FeedItem =
   | { kind: 'msg'; msg: ChatMessage; pending?: boolean }
-  | { kind: 'tool'; name: string; args: string; result: string }
+  // `pending` = l'action est EN COURS (pas de résultat encore) : la puce
+  // pulse, l'événement `tool` la fige en trace au même endroit.
+  | { kind: 'tool'; name: string; args: string; result?: string; pending?: boolean }
   | { kind: 'error'; text: string }
   | { kind: 'info'; text: string } // ligne discrète (compaction…) — jamais sauvegardée
   | { kind: 'greeting'; text: string }
@@ -274,6 +276,48 @@ function parseSearchResults(result: string): SearchResultEntry[] {
   return entries
 }
 
+/**
+ * Libellé lisible d'une trace d'action : « Modifie notes.md » plutôt que
+ * « edit_file : {"path":"notes.md"} ». La cible est l'argument propre à
+ * l'outil (`path` pour les fichiers, `name` pour la mémoire) ; sans cible
+ * identifiable, on retombe sur l'affichage technique (`toolCall`). `pending`
+ * ajoute la suite de points « en cours ».
+ */
+function toolLabel(name: string, args: string, pending: boolean, t: (key: Key, vars?: Vars) => string): string {
+  const suffix = pending ? '…' : ''
+  let target = ''
+  try {
+    const a = JSON.parse(args) as Record<string, unknown>
+    target = typeof a.path === 'string' ? a.path : typeof a.name === 'string' ? a.name : ''
+  } catch {
+    /* args non JSON : affichage technique */
+  }
+  if (target) {
+    switch (name) {
+      case 'read_file':
+        return t('toolTraceRead', { target }) + suffix
+      case 'write_file':
+        return t('toolTraceWrite', { target }) + suffix
+      case 'edit_file':
+        return t('toolTraceEdit', { target }) + suffix
+      case 'delete_file':
+        return t('toolTraceDelete', { target }) + suffix
+      case 'memory_save':
+        return t('toolTraceMemSave', { target }) + suffix
+      case 'memory_update':
+        return t('toolTraceMemUpdate', { target }) + suffix
+      case 'memory_append':
+        return t('toolTraceMemAppend', { target }) + suffix
+      case 'memory_read':
+        return t('toolTraceMemRead', { target }) + suffix
+      case 'memory_delete':
+        return t('toolTraceMemDelete', { target }) + suffix
+    }
+  }
+  if (name === 'list_files') return t('toolTraceList') + suffix
+  return t('toolCall', { name, args: summarizeArgs(args) }) + suffix
+}
+
 // ── Rendu mémoïsé (hors recherche/édition) ─────────────────────────────────
 // Pendant le streaming, App.tsx re-render à chaque delta de texte (setFeed) :
 // SANS mémoïsation, chaque token relance renderMarkdown + reconstruit tout le
@@ -304,7 +348,31 @@ const ToolChip = memo(function ToolChip({
 }) {
   const { t } = useI18n()
   const isSearch = item.name === 'web_search'
-  const results = parseSearchResults(item.result)
+  const results = parseSearchResults(item.result ?? '')
+
+  // En cours : pillule simple, non interactive, qui pulse doucement —
+  // l'événement `tool` la fige en trace (même endroit, avec le résultat).
+  if (item.pending) {
+    return (
+      <span className="tool-chip tool-chip-pending" title={t('toolRunningHint')}>
+        {isSearch ? (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <path d="M20 20l-5-5" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.5 6.5a4 4 0 015.5-3.7l-3 3 1.2 1.2 3-3a4 4 0 01-5.2 5.2l-8.5 8.5a1.8 1.8 0 01-2.5-2.5l8.5-8.5a4 4 0 011-.2z" />
+          </svg>
+        )}
+        <span>
+          {isSearch
+            ? t('webSearchStatus', { query: summarizeArgs(item.args) })
+            : toolLabel(item.name, item.args, true, t)}
+        </span>
+      </span>
+    )
+  }
 
   function handleDeleteClick(e: React.MouseEvent) {
     // Le clic sur la corbeille ne doit pas AUSSI ouvrir/fermer le panneau —
@@ -337,7 +405,7 @@ const ToolChip = memo(function ToolChip({
         <span>
           {isSearch
             ? t('webSearchStatus', { query: summarizeArgs(item.args) })
-            : t('toolCall', { name: item.name, args: summarizeArgs(item.args) })}
+            : toolLabel(item.name, item.args, false, t)}
         </span>
         {editable && (
           <button
@@ -369,7 +437,7 @@ const ToolChip = memo(function ToolChip({
             </div>
           ))
         ) : (
-          <div className="result-snippet">{item.result}</div>
+          <div className="result-snippet">{item.result ?? ''}</div>
         )}
       </div>
     </details>
@@ -983,74 +1051,20 @@ export default function MessageList({
             <div className="bubble">{highlightAll(renderMarkdown(stripEmotionTags(item.text)), hits)}</div>
           </div>
         )
-      case 'tool': {
-        // web_search a sa propre ligne (« Recherche sur le Web… ») : plus lisible
-        // que le nom technique de l'outil, même style discret que les autres.
-        const isSearch = item.name === 'web_search'
-        const results = parseSearchResults(item.result)
+      case 'tool':
+        // La même pillule que le fast path — l'état « en cours » et les
+        // libellés lisibles ne vivent qu'une fois, dans ToolChip. `removeTool`
+        // a exactement le même arming en deux clics que son handleDeleteClick.
         return (
-          <details
-            className="tool-chip-wrap"
-            onMouseLeave={() => setArmedTool((a) => (a !== null && a === index ? null : a))}
-          >
-            <summary className="tool-chip" title={t('toolResultsHint')}>
-              {isSearch ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="10.5" cy="10.5" r="6.5" />
-                  <path d="M20 20l-5-5" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14.5 6.5a4 4 0 015.5-3.7l-3 3 1.2 1.2 3-3a4 4 0 01-5.2 5.2l-8.5 8.5a1.8 1.8 0 01-2.5-2.5l8.5-8.5a4 4 0 011-.2z" />
-                </svg>
-              )}
-              <span>
-                {isSearch
-                  ? t('webSearchStatus', { query: summarizeArgs(item.args) })
-                  : t('toolCall', { name: item.name, args: summarizeArgs(item.args) })}
-              </span>
-              {editable && (
-                <button
-                  className={armedTool === index ? 'msg-edit armed' : 'msg-edit'}
-                  title={armedTool === index ? t('deleteMessageArmed') : t('deleteMessage')}
-                  aria-label={armedTool === index ? t('deleteMessageArmed') : t('deleteMessage')}
-                  onClick={(e) => {
-                    // Le clic sur la corbeille ne doit pas AUSSI ouvrir/fermer le
-                    // panneau — c'est le comportement natif par défaut d'un clic
-                    // dans un <summary>, qu'il faut donc explicitement couper.
-                    e.preventDefault()
-                    removeTool(index)
-                  }}
-                  onBlur={() => setArmedTool((a) => (a === index ? null : a))}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 7.2h12" />
-                    <path d="M9.7 7.2V5.4h4.6v1.8" />
-                    <path d="M7.6 7.2l.8 11.4h7.2l.8-11.4" />
-                  </svg>
-                </button>
-              )}
-            </summary>
-            <div className="tool-chip-body">
-              {results.length > 0 ? (
-                results.map((r, i) => (
-                  <div className="result-entry" key={i}>
-                    <a className="result-title" href={r.url} target="_blank" rel="noopener noreferrer">
-                      {r.title}
-                    </a>
-                    <a className="result-url" href={r.url} target="_blank" rel="noopener noreferrer">
-                      {r.url}
-                    </a>
-                    {r.snippet && <div className="result-snippet">{r.snippet}</div>}
-                  </div>
-                ))
-              ) : (
-                <div className="result-snippet">{item.result}</div>
-              )}
-            </div>
-          </details>
+          <ToolChip
+            item={item}
+            index={index}
+            editable={editable}
+            isArmed={armedTool === index}
+            setArmedTool={setArmedTool}
+            onDeleteTool={removeTool}
+          />
         )
-      }
       case 'error':
         return <div className="error-bubble">{item.text}</div>
       case 'info':

@@ -119,17 +119,33 @@ export interface CharacterFull extends CharacterMeta {
 }
 
 /**
+ * Trace d'une action exécutée par le modèle pendant la génération d'une réponse
+ * (outil fichier du workspace, mémoire, recherche web…). C'est le journal
+ * d'activité du message — destiné à l'AFFICHAGE uniquement : le serveur n'envoie
+ * jamais `tools` au backend (le payload ne porte que rôle et texte, comme
+ * `thinking`). `result` est plafonné à la persistance (un read_file peut faire
+ * 256 Ko ; le .jsonl ne doit pas gonfler), `args` reste le JSON brut — l'affichage
+ * en extrait la cible (chemin, nom de mémoire…).
+ */
+export interface ToolTrace {
+  name: string // nom de l'outil (write_file, memory_save…)
+  args: string // arguments JSON bruts
+  result?: string // résultat ou erreur — plafonné à la persistance
+}
+
+/**
  * Une VARIANTE de réponse : le corps d'un message assistant, tel qu'il a été
  * généré. « Régénérer » en ajoute une au lieu d'écraser l'ancienne — on feuillette
  * ensuite. Une variante porte tout ce qui dépend du texte : l'heure de SA
- * génération, SON tag d'émotion (le visage suit la variante affichée) et SON
- * raisonnement.
+ * génération, SON tag d'émotion (le visage suit la variante affichée), SON
+ * raisonnement et les actions QUE SA génération a exécutées.
  */
 export interface MessageVariant {
   content: string
   ts: string
   emotion?: string
   thinking?: string
+  tools?: ToolTrace[] // actions exécutées pendant CETTE génération
 }
 
 export interface ChatMessage {
@@ -139,6 +155,7 @@ export interface ChatMessage {
   ts: string
   emotion?: string // tag d'émotion détecté en tête de message ([happy] etc.)
   thinking?: string // raisonnement du modèle (<think> ou champ reasoning) — jamais renvoyé au backend
+  tools?: ToolTrace[] // journal d'activité : actions exécutées pendant la génération — jamais renvoyé au backend
   spontaneous?: true // message écrit à l'initiative du personnage (moteur server/lib/spontaneous.ts)
   // ── Variantes de réponse ─────────────────────────────────────────────────
   // Clés ABSENTES = message ordinaire : tous les chats écrits avant les
@@ -146,7 +163,8 @@ export interface ChatMessage {
   // n'est inventé à la relecture, cf. normalizeMessage dans lib/storage.ts).
   //
   // INVARIANT DU FORMAT — quand `variants` est présent (toujours ≥ 2 entrées),
-  // `content`, `ts`, `emotion` et `thinking` RECOPIENT `variants[variant]`.
+  // `content`, `ts`, `emotion`, `thinking` (et `tools` quand la variante en
+  // porte) RECOPIENT `variants[variant]`.
   // Tout le reste de l'app lit `content` sans rien savoir des variantes :
   // payload du prochain envoi, export .md, voix, copie, recherche, émotion.
   // Changer la variante affichée, c'est donc changer ce que TOUT le monde voit.
@@ -192,6 +210,7 @@ export interface MemoryFile {
 export type ChatEvent =
   | { type: 'delta'; text: string }
   | { type: 'thinking'; text: string }
+  | { type: 'tool_start'; name: string; args: string } // l'action DÉMARRE (la puce s'anime) — `tool` apporte le résultat
   | { type: 'tool'; name: string; args: string; result: string }
   | { type: 'done'; message: ChatMessage; context?: ContextInfo }
   | { type: 'error'; message: string; partial?: ChatMessage } // partial = message sauvegardé malgré l'erreur

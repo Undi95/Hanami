@@ -1023,6 +1023,23 @@ select {
   white-space: nowrap;
 }
 
+/* Trace EN COURS : pillule simple et non interactive qui pulse doucement —
+   l'événement `tool` la fige en puce ordinaire (même place, avec le résultat). */
+.tool-chip-pending {
+  cursor: default;
+  animation: tool-chip-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tool-chip-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 /* Résultats complets, dépliés sous la puce — un résultat par bloc, avec son
    lien cliquable et son extrait. Même esprit sobre que .thoughts-body. */
 .tool-chip-body {

@@ -33,7 +33,7 @@ import {
 } from '../tools/webSearchTools'
 import { firstEmotionTag } from '../../shared/emotions'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
-import type { ChatEvent, ChatMessage, ContextInfo, MessageVariant, Settings } from '../../shared/types'
+import type { ChatEvent, ChatMessage, ContextInfo, MessageVariant, Settings, ToolTrace } from '../../shared/types'
 
 export const chatRouter = Router()
 
@@ -379,6 +379,14 @@ function toAssistantMessage(text: string, thinking?: string): ChatMessage {
   return msg
 }
 
+// Résultat plafonné pour la PERSISTANCE : un read_file peut faire 256 Ko et le
+// .jsonl ne doit pas gonfler — la puce dépliée n'a besoin que du début du
+// résultat. En session (event SSE), le client garde le résultat intégral.
+const TRACE_RESULT_CAP = 2048
+function cappedTraceResult(result: string): string {
+  return result.length > TRACE_RESULT_CAP ? result.slice(0, TRACE_RESULT_CAP) + '…' : result
+}
+
 // ── Variantes de réponse ───────────────────────────────────────────────────
 // « Régénérer » n'écrase plus la dernière réponse : elle devient une variante du
 // MÊME message, la nouvelle s'ajoute à côté et devient celle qui est affichée.
@@ -400,6 +408,7 @@ function bodyOf(m: ChatMessage): MessageVariant {
     ts: m.ts,
     ...(m.emotion ? { emotion: m.emotion } : {}),
     ...(m.thinking ? { thinking: m.thinking } : {}),
+    ...(m.tools && m.tools.length > 0 ? { tools: m.tools } : {}),
   }
 }
 
@@ -416,6 +425,8 @@ function withVariants(m: ChatMessage, variants: MessageVariant[], index: number)
   if (active.emotion) out.emotion = active.emotion
   delete out.thinking
   if (active.thinking) out.thinking = active.thinking
+  delete out.tools
+  if (active.tools) out.tools = active.tools
   if (variants.length >= 2) {
     out.variants = variants
     out.variant = index
@@ -555,6 +566,7 @@ async function runToolLoop<R extends { content: string; toolCalls: StreamedToolC
   mem: MemorySession,
   call: (withTools: boolean) => Promise<R>,
   onTool?: (name: string, args: string, result: string) => void,
+  onToolStart?: (name: string, args: string) => void,
 ): Promise<{ last: R; exhausted: boolean }> {
   let last = await call(true)
   for (let iteration = 1; ; iteration++) {
@@ -574,6 +586,10 @@ async function runToolLoop<R extends { content: string; toolCalls: StreamedToolC
       if (!allowed.has(tc.name)) {
         toolResult = `Error: tool not offered in this request: ${tc.name}`
       } else {
+        // Signalé AVANT l'exécution : l'interface anime la puce pendant
+        // l'action (sans elle, le fil semble figé tant que le modèle
+        // n'a pas « fini » de parler).
+        onToolStart?.(tc.name, tc.arguments)
         try {
           toolResult = await executeTool(characterId, settings, tc.name, tc.arguments, mem)
         } catch (e) {
@@ -735,6 +751,11 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   // détectée dans un message normal (« cherche sur le web… », « google it »…) :
   // certains modèles préfèrent « jouer » la recherche en roleplay plutôt que
   // d'appeler l'outil ; ce filet la garantit quand même.
+  // Journal d'activité de la génération : chaque action exécutée y est notée,
+  // puis rattachée au message persisté (l'affichage en fait les puces — jamais
+  // renvoyé au backend, cf. shared/types.ts).
+  const toolTraces: ToolTrace[] = []
+
   const trimmedContent = content.trim()
   const forcedQuery = forceSearch
     ? trimmedContent
@@ -744,6 +765,8 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   if (!mode && forcedQuery && settings.webSearchEnabled && settings.modelMode !== 'simple') {
     const query = forcedQuery
     const toolCallId = `search_${Date.now()}`
+    const searchArgs = JSON.stringify({ query })
+    writeEvent(res, { type: 'tool_start', name: 'web_search', args: searchArgs })
     let result: string
     try {
       result = await executeWebSearchTool(settings, { query })
@@ -753,12 +776,11 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     messages.push({
       role: 'assistant',
       content: null,
-      tool_calls: [
-        { id: toolCallId, type: 'function', function: { name: 'web_search', arguments: JSON.stringify({ query }) } },
-      ],
+      tool_calls: [{ id: toolCallId, type: 'function', function: { name: 'web_search', arguments: searchArgs } }],
     })
     messages.push({ role: 'tool', tool_call_id: toolCallId, content: result })
-    writeEvent(res, { type: 'tool', name: 'web_search', args: JSON.stringify({ query }), result })
+    toolTraces.push({ name: 'web_search', args: searchArgs, result: cappedTraceResult(result) })
+    writeEvent(res, { type: 'tool', name: 'web_search', args: searchArgs, result })
   }
 
   let assistantText = ''
@@ -821,6 +843,9 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       if (assistantThinking) {
         merged.thinking = base.thinking ? base.thinking + '\n\n' + assistantThinking : assistantThinking
       }
+      // Les actions de la passée de continuation s'ajoutent au journal de la
+      // variante affichée (le corps du message la recopie — cf. invariant).
+      if (toolTraces.length > 0) merged.tools = [...(base.tools ?? []), ...toolTraces]
       // Le message porte des variantes : c'est la variante AFFICHÉE qui s'allonge
       // (« Continuer » continue ce qu'on lit) — les autres restent feuilletables.
       const active = merged.variant
@@ -837,12 +862,14 @@ async function handleChat(req: Request, res: Response): Promise<void> {
           return msgs
         }
         saved = toAssistantMessage(assistantText, assistantThinking)
+        if (toolTraces.length > 0) saved.tools = [...toolTraces]
         msgs.push(saved)
         return msgs
       })
       return saved
     }
     const message = toAssistantMessage(assistantText, assistantThinking)
+    if (toolTraces.length > 0) message.tools = [...toolTraces]
     // Régénération : la nouvelle réponse rejoint les précédentes DANS le message,
     // et devient celle qui est affichée. Comme pour la continuation, l'IDENTITÉ
     // du message visé est vérifiée (ts + contenu) : un message spontané a pu
@@ -898,6 +925,10 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       },
       (name, args, toolResult) => {
         writeEvent(res, { type: 'tool', name, args, result: toolResult })
+        toolTraces.push({ name, args, result: cappedTraceResult(toolResult) })
+      },
+      (name, args) => {
+        writeEvent(res, { type: 'tool_start', name, args })
       },
     )
 

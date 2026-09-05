@@ -14,6 +14,7 @@ import type {
   GreetingMode,
   MemoryFile,
   MessageVariant,
+  ToolTrace,
 } from '../../shared/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -404,6 +405,26 @@ function normalizeHeader(raw: ChatHeader): ChatHeader {
 }
 
 /**
+ * Journal d'activité lu sur le disque : data/ s'édite à la main, seules les
+ * entrées strictement typées sont conservées — une ligne mal formée est écartée
+ * (l'affichage ne peut pas se casser sur un .jsonl retouché).
+ */
+function normalizeTools(raw: unknown): ToolTrace[] | null {
+  if (!Array.isArray(raw)) return null
+  const out: ToolTrace[] = []
+  for (const t of raw) {
+    if (t === null || typeof t !== 'object') continue
+    const tr = t as Partial<ToolTrace>
+    if (typeof tr.name !== 'string' || !tr.name) continue
+    if (typeof tr.args !== 'string') continue
+    const entry: ToolTrace = { name: tr.name, args: tr.args }
+    if (typeof tr.result === 'string') entry.result = tr.result
+    out.push(entry)
+  }
+  return out.length > 0 ? out : null
+}
+
+/**
  * Une variante lue sur le disque : texte obligatoire, heure de repli sur celle
  * du message (data/ s'édite à la main). null = entrée inexploitable, écartée.
  */
@@ -414,6 +435,8 @@ function normalizeVariant(raw: unknown, fallbackTs: string): MessageVariant | nu
   const out: MessageVariant = { content: v.content, ts: typeof v.ts === 'string' ? v.ts : fallbackTs }
   if (typeof v.emotion === 'string' && v.emotion) out.emotion = v.emotion
   if (typeof v.thinking === 'string' && v.thinking) out.thinking = v.thinking
+  const tools = normalizeTools(v.tools)
+  if (tools) out.tools = tools
   return out
 }
 
@@ -451,6 +474,8 @@ function normalizeMessage(raw: ChatMessage): ChatMessage {
   if (active.emotion) msg.emotion = active.emotion
   delete msg.thinking
   if (active.thinking) msg.thinking = active.thinking
+  delete msg.tools
+  if (active.tools) msg.tools = active.tools
   return msg
 }
 
