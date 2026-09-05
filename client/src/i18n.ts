@@ -341,7 +341,7 @@ const FR = {
   timeAwarenessSub:
     'Le personnage sait la date, l’heure et le temps écoulé depuis votre dernier message (visible dans l’Inspecteur).',
   autoCompactSub:
-    'Quand la jauge atteint 100 % : les faits importants sont sauvés en mémoire, puis la conversation est résumée. Le résumé reste visible et modifiable. Le niveau auquel la jauge se remplit se règle dans « Seuil de compaction ».',
+    'Elle se déclenche sur le nombre de TOKENS dans le contexte (la jauge), pas sur le nombre de messages : quand la jauge atteint 100 %, les faits importants sont sauvés en mémoire, puis la conversation est résumée. Le résumé reste visible et modifiable. Le niveau auquel la jauge se remplit se règle dans « Seuil de compaction » ; « Messages d’historique max envoyés » ne coupe que l’historique envoyé, sans rien déclencher.',
   contextBadge: '{percent} %',
   contextBadgeTitle: 'Contexte utilisé : ~{tokens} / {limit} tokens',
   contextUsage: 'Prochain envoi : ~{tokens} tokens / {limit} ({percent} %)',
@@ -856,7 +856,7 @@ const EN: Record<Key, string> = {
   timeAwarenessSub:
     'The character knows the date, the time, and how long since your last message (visible in the Inspector).',
   autoCompactSub:
-    'When the gauge reaches 100%: important facts are saved to memory, then the conversation is summarized. The summary stays visible and editable. The level at which the gauge fills is set in the compaction threshold field above.',
+    'Triggered by the TOKEN COUNT in the context (the gauge), not by the message count: when the gauge reaches 100%, important facts are saved to memory, then the conversation is summarized. The summary stays visible and editable. How fast the gauge fills is set in the compaction threshold; “Max history messages sent” only trims the sent history, it triggers nothing.',
   contextBadge: '{percent}%',
   contextBadgeTitle: 'Context used: ~{tokens} / {limit} tokens',
   contextUsage: 'Next request: ~{tokens} tokens / {limit} ({percent}%)',
