@@ -28,8 +28,9 @@ export interface Settings {
   allowDelete: boolean // autorise delete_file (toggle ON/OFF)
   toolsRoot: string // dossier sandbox des outils fichiers
   password: string // '' = pas d'authentification (usage local)
-  contextSize: number // taille de contexte du modèle (tokens) — sert à la jauge et à l'auto-compaction
-  autoCompact: boolean // compacte automatiquement la conversation à ~80 % du contexte
+  contextSize: number // taille de contexte du modèle (tokens) — la vraie limite du modèle
+  compactThreshold: number // seuil (tokens) de la jauge et de l'auto-compaction ; 0 = aucun (jauge sur tout le contexte)
+  autoCompact: boolean // compacte automatiquement la conversation quand la jauge atteint 80 % de la fenêtre de travail
   timeAwareness: boolean // injecte date/heure + temps écoulé depuis le dernier message
   // Persona de l'utilisateur : qui il est, pour TOUS ses personnages. Deux
   // champs libres, tous deux optionnels ('' = rien d'injecté). Le nom alimente
@@ -178,7 +179,7 @@ export interface ChatMeta {
 // Jauge de contexte jointe à l'événement done (estimation, ou usage réel du backend).
 export interface ContextInfo {
   tokens: number // tokens du dernier payload envoyé (+ réponse)
-  limit: number // taille de contexte configurée (Settings.contextSize)
+  limit: number // fenêtre de travail : min(contextSize, compactThreshold) — 0 si inconnue
   percent: number // tokens / limit, arrondi (0 si limit inconnue)
 }
 

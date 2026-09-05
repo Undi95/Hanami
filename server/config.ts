@@ -20,6 +20,10 @@ export const DEFAULT_SETTINGS: Settings = {
   toolsRoot: path.join(DATA_DIR, 'workspace'),
   password: '',
   contextSize: 8192,
+  // Seuil par défaut de la jauge : avec un contexte géant (262k…), un seuil calé
+  // sur la fenêtre complète serait injoignable en pratique — et au-delà, un
+  // modèle local n'est que plus lent, pas plus attentif. Réglable dans l'UI.
+  compactThreshold: 65536,
   autoCompact: true,
   timeAwareness: true,
   // Persona : vide = aucun bloc injecté, et {{user}} retombe sur « User ».
@@ -134,16 +138,17 @@ export function saveSettings(patch: Partial<Settings>): Settings {
   return next
 }
 
-// Fenêtre de travail de la jauge : jamais plus de ça, même pour un modèle au
-// contexte géant (262k…). Au-delà, un modèle local n'est que plus lent — pas
-// plus attentif — et un seuil d'auto-compaction calé sur la fenêtre complète
-// serait injoignable en pratique (la jauge plafonnerait à ~15 % et ne
-// compacterait jamais). Les petits contextes (8k…) gardent leur valeur réelle.
-export const WORKING_WINDOW_MAX = 65536
-
-/** Fenêtre sur laquelle la jauge et l'auto-compaction se normalisent. 0 = inconnue. */
+// Fenêtre de travail de la jauge : la plus petite des deux valeurs réglables —
+// le seuil de compaction choisi par l'utilisateur (jamais au-delà du contexte
+// réel du modèle). Le seuil par défaut (65k) rend l'auto-compaction atteignable
+// même pour un modèle au contexte géant (262k…), où un seuil calé sur la
+// fenêtre complète ne se déclencherait jamais (jauge plafonnée à ~15 %).
+// 0 = pas de seuil : la jauge couvre tout le contexte (choix assumé).
 export function workingWindow(settings: Settings): number {
-  return settings.contextSize > 0 ? Math.min(settings.contextSize, WORKING_WINDOW_MAX) : 0
+  if (settings.contextSize <= 0) return 0
+  return settings.compactThreshold > 0
+    ? Math.min(settings.contextSize, settings.compactThreshold)
+    : settings.contextSize
 }
 
 export const PORT = Number(process.env.PORT ?? 7788)

@@ -78,6 +78,7 @@ interface FormState {
   tavilyApiKey: string
   password: string
   contextSize: string
+  compactThreshold: string
   autoCompact: boolean
   spontaneousEnabled: boolean
   spontaneousStartHour: string
@@ -116,6 +117,7 @@ function toForm(s: Settings): FormState {
     tavilyApiKey: '',
     password: '',
     contextSize: String(s.contextSize),
+    compactThreshold: String(s.compactThreshold),
     autoCompact: s.autoCompact,
     spontaneousEnabled: s.spontaneousEnabled,
     spontaneousStartHour: String(s.spontaneousStartHour),
@@ -164,6 +166,7 @@ function fromForm(
     tavilyApiKey: clearTavilyKey ? api.CLEAR_SECRET : f.tavilyApiKey,
     password: clearPassword ? api.CLEAR_SECRET : f.password,
     contextSize: Math.round(num(f.contextSize, base.contextSize)),
+    compactThreshold: Math.round(num(f.compactThreshold, base.compactThreshold)),
     autoCompact: f.autoCompact,
     spontaneousEnabled: f.spontaneousEnabled,
     spontaneousStartHour: Math.round(num(f.spontaneousStartHour, base.spontaneousStartHour)),
@@ -959,6 +962,11 @@ export default function SettingsDialog({
               <label htmlFor="set-ctx">{t('contextSize')}</label>
               <input id="set-ctx" type="number" step="1" min="0" value={form.contextSize} onChange={(e) => set('contextSize', e.target.value)} />
             </div>
+          </div>
+          <div className="field">
+            <label htmlFor="set-compact-th">{t('compactThreshold')}</label>
+            <input id="set-compact-th" type="number" step="1" min="0" value={form.compactThreshold} onChange={(e) => set('compactThreshold', e.target.value)} />
+            <span className="hint">{t('compactThresholdSub')}</span>
           </div>
           <div className="field">
             <label>{t('modelMode')}</label>

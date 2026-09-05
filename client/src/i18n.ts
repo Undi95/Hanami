@@ -322,12 +322,15 @@ const FR = {
   notifySound: 'Son de notification',
   notifySoundSub: 'Un petit son à la fin de chaque réponse.',
   contextSize: 'Taille de contexte du modèle (tokens)',
+  compactThreshold: 'Seuil de compaction (tokens)',
+  compactThresholdSub:
+    'La jauge et l’auto-compaction se calent sur cette valeur, jamais au-delà de la taille de contexte. 0 = pas de seuil : la jauge couvre tout le contexte. Au-delà du seuil, un modèle local est plus lent, pas plus précis.',
   autoCompact: 'Compaction automatique',
   timeAwareness: 'Notion du temps',
   timeAwarenessSub:
     'Le personnage sait la date, l’heure et le temps écoulé depuis votre dernier message (visible dans l’Inspecteur).',
   autoCompactSub:
-    'Quand la jauge atteint 100 % : les faits importants sont sauvés en mémoire, puis la conversation est résumée. Le résumé reste visible et modifiable. La jauge mesure une fenêtre de travail plafonnée à 65 536 tokens : au-delà, un modèle local est plus lent, pas plus précis.',
+    'Quand la jauge atteint 100 % : les faits importants sont sauvés en mémoire, puis la conversation est résumée. Le résumé reste visible et modifiable. Le niveau auquel la jauge se remplit se règle dans « Seuil de compaction ».',
   contextBadge: '{percent} %',
   contextBadgeTitle: 'Contexte utilisé : ~{tokens} / {limit} tokens',
   contextUsage: 'Prochain envoi : ~{tokens} tokens / {limit} ({percent} %)',
@@ -823,12 +826,15 @@ const EN: Record<Key, string> = {
   notifySound: 'Notification sound',
   notifySoundSub: 'A soft chime at the end of each reply.',
   contextSize: 'Model context size (tokens)',
+  compactThreshold: 'Compaction threshold (tokens)',
+  compactThresholdSub:
+    'The gauge and auto-compaction are driven by this value, never beyond the context size. 0 = no threshold: the gauge spans the whole context. Past the threshold, a local model is just slower, not smarter.',
   autoCompact: 'Automatic compaction',
   timeAwareness: 'Sense of time',
   timeAwarenessSub:
     'The character knows the date, the time, and how long since your last message (visible in the Inspector).',
   autoCompactSub:
-    'When the gauge reaches 100%: important facts are saved to memory, then the conversation is summarized. The summary stays visible and editable. The gauge measures a working window capped at 65,536 tokens: beyond that, a local model is just slower, not sharper.',
+    'When the gauge reaches 100%: important facts are saved to memory, then the conversation is summarized. The summary stays visible and editable. The level at which the gauge fills is set in the compaction threshold field above.',
   contextBadge: '{percent}%',
   contextBadgeTitle: 'Context used: ~{tokens} / {limit} tokens',
   contextUsage: 'Next request: ~{tokens} tokens / {limit} ({percent}%)',
