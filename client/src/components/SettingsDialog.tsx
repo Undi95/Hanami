@@ -78,6 +78,7 @@ interface FormState {
   // Budget de raisonnement : 0 = auto (aucun paramètre envoyé au backend).
   thinkingBudget: string
   maxHistoryMessages: string
+  historyLimit: boolean
   memoryEnabled: boolean
   fileToolsEnabled: boolean
   allowDelete: boolean
@@ -121,6 +122,8 @@ function toForm(s: Settings): FormState {
     maxTokens: String(s.maxTokens),
     thinkingBudget: String(s.thinkingBudget),
     maxHistoryMessages: String(s.maxHistoryMessages),
+    // Réglage optionnel (config.json d'avant le toggle) : absent = on.
+    historyLimit: s.historyLimit !== false,
     memoryEnabled: s.memoryEnabled,
     fileToolsEnabled: s.fileToolsEnabled,
     allowDelete: s.allowDelete,
@@ -178,6 +181,7 @@ function fromForm(
     // renormalise de toute façon (thinkingBudgetParam : 0 ou budget réel).
     thinkingBudget: Math.max(0, Math.round(num(f.thinkingBudget, base.thinkingBudget))),
     maxHistoryMessages: Math.round(num(f.maxHistoryMessages, base.maxHistoryMessages)),
+    historyLimit: f.historyLimit,
     memoryEnabled: f.memoryEnabled,
     fileToolsEnabled: f.fileToolsEnabled,
     allowDelete: f.allowDelete,
@@ -1031,13 +1035,16 @@ export default function SettingsDialog({
           <div className="grid-2">
             <div className="field">
               <label htmlFor="set-hist">{t('maxHistory')}</label>
-              <input id="set-hist" type="number" step="1" min="0" value={form.maxHistoryMessages} onChange={(e) => set('maxHistoryMessages', e.target.value)} />
+              {/* Désactivé quand la limite est coupée : le nombre est ignoré,
+                  inutile de pouvoir l'éditer dans un état mort. */}
+              <input id="set-hist" type="number" step="1" min="0" value={form.maxHistoryMessages} disabled={!form.historyLimit} onChange={(e) => set('maxHistoryMessages', e.target.value)} />
             </div>
             <div className="field">
               <label htmlFor="set-ctx">{t('contextSize')}</label>
               <input id="set-ctx" type="number" step="1" min="0" value={form.contextSize} onChange={(e) => set('contextSize', e.target.value)} />
             </div>
           </div>
+          <Toggle label={t('historyLimit')} sub={t('historyLimitSub')} checked={form.historyLimit} onChange={(v) => set('historyLimit', v)} />
           <div className="field">
             <label htmlFor="set-compact-th">{t('compactThreshold')}</label>
             <input id="set-compact-th" type="number" step="1" min="0" value={form.compactThreshold} onChange={(e) => set('compactThreshold', e.target.value)} />

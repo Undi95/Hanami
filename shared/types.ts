@@ -35,7 +35,8 @@ export interface Settings {
   // réponse en thinking si on ne le borne pas — issue #4c). Posé, il plafonne le
   // think ; au-delà de maxTokens, c'est Ollama qui recadre.
   thinkingBudget: number
-  maxHistoryMessages: number // nb max de messages d'historique envoyés
+  maxHistoryMessages: number // quand historyLimit est ON : nb max de messages d'historique envoyés (0 = aucun)
+  historyLimit: boolean // ON : l'historique envoyé est capé à maxHistoryMessages (0 = aucun) ; OFF : pas de cap, tout l'historique part
   memoryEnabled: boolean // injecte le bloc mémoire + expose les outils mémoire
   fileToolsEnabled: boolean // expose les outils fichiers au modèle
   allowDelete: boolean // autorise delete_file (toggle ON/OFF)
@@ -260,7 +261,7 @@ export interface ChatMeta {
 // Jauge de contexte jointe à l'événement done (estimation, ou usage réel du backend).
 export interface ContextInfo {
   tokens: number // tokens du dernier payload envoyé (+ réponse)
-  limit: number // fenêtre de travail : min(contextSize, compactThreshold) — 0 si inconnue
+  limit: number // fenêtre de travail (workingWindow : le seuil de compaction ou la taille de contexte) — 0 si inconnue
   percent: number // tokens / limit, arrondi (0 si limit inconnue)
 }
 

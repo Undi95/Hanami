@@ -357,6 +357,9 @@ const FR = {
   thinkingBudgetSub:
     'Plafonne le raisonnement (« thinking ») des modèles qui réfléchissent, comme Qwen3 (via Ollama). 0 = auto : aucun paramètre n’est envoyé, le modèle décide — sans borne, un modèle qui réfléchit peut brûler la réponse en thinking.',
   maxHistory: 'Messages d’historique max envoyés',
+  historyLimit: 'Limite de messages',
+  historyLimitSub:
+    'Activée : l’historique envoyé est coupé à « Messages d’historique max envoyés » (0 = aucun historique). Désactivée : tout l’historique est envoyé, sans coupure.',
   showThoughts: 'Afficher les pensées du modèle',
   showThoughtsSub: 'Montre le raisonnement (« thinking ») dans un bloc repliable au-dessus de la réponse.',
   thoughts: 'Pensées',
@@ -1046,6 +1049,9 @@ const EN: Record<Key, string> = {
   thinkingBudgetSub:
     'Caps the reasoning (“thinking”) of models that think, like Qwen3 (via Ollama). 0 = auto: no parameter is sent, the model decides — unbounded, a thinking model can burn the reply on thinking alone.',
   maxHistory: 'Max history messages sent',
+  historyLimit: 'Message limit',
+  historyLimitSub:
+    'On: the sent history is cut at “Max history messages sent” (0 = no history at all). Off: the whole history is sent, uncapped.',
   showThoughts: 'Show the model’s thoughts',
   showThoughtsSub: 'Shows the reasoning (“thinking”) in a collapsible block above the reply.',
   thoughts: 'Thoughts',

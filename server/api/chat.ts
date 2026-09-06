@@ -4,7 +4,7 @@
 // buildPayload est LA source unique, partagée avec /api/prompt-preview.
 import { Router } from 'express'
 import type { Request, Response } from 'express'
-import { effectiveSettings, workingWindow } from '../config'
+import { effectiveSettings, historyWindow, workingWindow } from '../config'
 import {
   appendChatMessage,
   buildMemoryBlock,
@@ -272,7 +272,7 @@ export function buildPayload(
   const names = macroNamesFor(character, settings)
   const systemText = substituteMacros(characterPrompt + injected, names)
   const live = history.slice(upto)
-  const recent = settings.maxHistoryMessages > 0 ? live.slice(-settings.maxHistoryMessages) : []
+  const recent = historyWindow(live, settings)
   const messages: unknown[] = [
     { role: 'system', content: systemText },
     // Un message d'historique porteur d'images repart en multimodal : le modèle
@@ -386,7 +386,7 @@ function buildImpersonatePayload(
 
   const upto = meta.summary ? Math.min(meta.summaryUpto ?? 0, all.length) : 0
   const live = all.slice(upto)
-  const recent = settings.maxHistoryMessages > 0 ? live.slice(-settings.maxHistoryMessages) : []
+  const recent = historyWindow(live, settings)
   const messages: unknown[] = [
     { role: 'system', content: systemText },
     // Perspective inversée : le tour de {{char}} devient "user", celui de

@@ -1,7 +1,7 @@
 // Réglages de l'app — data/config.json, mergé avec les défauts.
 import fs from 'node:fs'
 import path from 'node:path'
-import type { CharacterMeta, Settings } from '../shared/types'
+import type { CharacterMeta, ChatMessage, Settings } from '../shared/types'
 import { normalizeLlm, thinkingBudgetParam } from '../shared/llm'
 import { normalizePersonas } from '../shared/personas'
 import { CodedError, ErrorCodes } from '../shared/errorCodes'
@@ -20,6 +20,10 @@ export const DEFAULT_SETTINGS: Settings = {
   // avant ce réglage (un config d'avant la clé reste inchangé).
   thinkingBudget: 0,
   maxHistoryMessages: 40,
+  // ON (défaut) : l'historique envoyé est capé à maxHistoryMessages (0 = aucun).
+  // OFF : PAS de cap — tout l'historique part. C'est le « off » propre que le
+  // nombre seul ne pouvait pas exprimer (0 veut dire « zéro », pas « illimité »).
+  historyLimit: true,
   memoryEnabled: true,
   fileToolsEnabled: false,
   allowDelete: false,
@@ -198,6 +202,17 @@ export function workingWindow(settings: Settings): number {
   if (settings.contextSize <= 0) return 0
   if (settings.compactBasis === 'context') return settings.contextSize
   return settings.compactThreshold > 0 ? settings.compactThreshold : settings.contextSize
+}
+
+/**
+ * Les messages d'historique RÉELLEMENT envoyés au modèle — source unique des
+ * deux chemins de server/api/chat.ts (chat normal et impersonation).
+ * `historyLimit` coupée → PAS de cap, tout l'historique part. Limitée → les
+ * `maxHistoryMessages` derniers (0 = aucun, le comportement d'origine).
+ */
+export function historyWindow(messages: ChatMessage[], settings: Settings): ChatMessage[] {
+  if (!settings.historyLimit) return messages
+  return settings.maxHistoryMessages > 0 ? messages.slice(-settings.maxHistoryMessages) : []
 }
 
 /**
