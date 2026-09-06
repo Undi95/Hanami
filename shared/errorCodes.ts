@@ -67,6 +67,7 @@ export const ErrorCodes = {
   noSummaryYet: 'noSummaryYet',
   responseTruncated: 'responseTruncated',
   responseLengthLimit: 'responseLengthLimit',
+  emptyResponse: 'emptyResponse',
   nothingToCompact: 'nothingToCompact', // { min }
   windowTooSmallForCompact: 'windowTooSmallForCompact',
   compactNoSummary: 'compactNoSummary', // { finish }

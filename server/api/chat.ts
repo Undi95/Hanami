@@ -986,9 +986,17 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       },
     )
 
-    if (exhausted && assistantText.length === 0) {
-      // Rien à sauvegarder : pas de message vide, pas de done.
-      writeEvent(res, { type: 'error', code: ErrorCodes.toolBudgetExhausted })
+    if (assistantText.length === 0 && toolTraces.length === 0) {
+      // Le modèle n'a produit NI texte NI action : budget de sortie absorbé
+      // par le raisonnement, fin de génération avant le premier mot… Rien à
+      // sauvegarder — pas de message vide, pas de done. (Avant, seul le cas
+      // « outils épuisés » était gardé : une réponse vide sans ce flag était
+      // persistée telle quelle et s'affichait comme une bulle vide.) Le cas
+      // épuisement garde son code spécifique : plus précis côté client.
+      writeEvent(res, {
+        type: 'error',
+        code: exhausted ? ErrorCodes.toolBudgetExhausted : ErrorCodes.emptyResponse,
+      })
       res.end()
       return
     }
