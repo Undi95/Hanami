@@ -1207,11 +1207,9 @@ function AppInner() {
           // la sienne) — et les puces d'outils qui la précèdent juste avant avec
           // elle (les nouvelles viendront avec cette génération). open : le fil
           // est vide, il n'y a rien à retirer.
-          if (mode === 'regenerate') {
-            let i = out.length
-            while (i > 0 && out[i - 1].kind === 'tool') i--
-            const before = i > 0 ? out[i - 1] : null
-            if (before && before.kind === 'msg' && before.msg.role === 'assistant') out.length = i
+          if (mode === 'regenerate' && last && last.kind === 'msg' && last.msg.role === 'assistant') {
+            out.pop()
+            while (out.length > 0 && out[out.length - 1].kind === 'tool') out.pop()
           }
           out.push({
             kind: 'msg',
