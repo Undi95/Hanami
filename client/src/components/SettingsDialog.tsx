@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import type {
+  CompactBasis,
   ModelMode,
   RestorePreview,
   RestoreResult,
@@ -88,6 +89,7 @@ interface FormState {
   password: string
   contextSize: string
   compactThreshold: string
+  compactBasis: CompactBasis
   autoCompact: boolean
   spontaneousEnabled: boolean
   spontaneousStartHour: string
@@ -132,6 +134,8 @@ function toForm(s: Settings): FormState {
     password: '',
     contextSize: String(s.contextSize),
     compactThreshold: String(s.compactThreshold),
+    // Réglage optionnel (config.json d'avant la base) : absent = seuil.
+    compactBasis: s.compactBasis ?? 'threshold',
     autoCompact: s.autoCompact,
     spontaneousEnabled: s.spontaneousEnabled,
     spontaneousStartHour: String(s.spontaneousStartHour),
@@ -185,6 +189,7 @@ function fromForm(
     password: clearPassword ? api.CLEAR_SECRET : f.password,
     contextSize: Math.round(num(f.contextSize, base.contextSize)),
     compactThreshold: Math.round(num(f.compactThreshold, base.compactThreshold)),
+    compactBasis: f.compactBasis,
     autoCompact: f.autoCompact,
     spontaneousEnabled: f.spontaneousEnabled,
     spontaneousStartHour: Math.round(num(f.spontaneousStartHour, base.spontaneousStartHour)),
@@ -482,6 +487,7 @@ function SearxngGuide({ onClose }: { onClose: () => void }) {
 
 const LANG_OPTIONS: readonly Lang[] = ['fr', 'en']
 const MODEL_MODE_OPTIONS: readonly ModelMode[] = ['full', 'simple']
+const COMPACT_BASIS_OPTIONS: readonly CompactBasis[] = ['threshold', 'context']
 const VISION_MODE_OPTIONS: readonly VisionMode[] = ['auto', 'on', 'off']
 const WEB_SEARCH_ENGINE_OPTIONS: readonly WebSearchEngine[] = ['duckduckgo', 'searxng', 'tavily']
 // Un hint différent par moteur (compromis mis en avant) plutôt qu'un seul
@@ -1036,6 +1042,20 @@ export default function SettingsDialog({
             <label htmlFor="set-compact-th">{t('compactThreshold')}</label>
             <input id="set-compact-th" type="number" step="1" min="0" value={form.compactThreshold} onChange={(e) => set('compactThreshold', e.target.value)} />
             <span className="hint">{t('compactThresholdSub')}</span>
+          </div>
+          <div className="field">
+            <label>{t('compactBasis')}</label>
+            {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+            <div>
+              <Seg
+                value={form.compactBasis}
+                options={COMPACT_BASIS_OPTIONS}
+                labels={{ threshold: t('compactBasisThreshold'), context: t('compactBasisContext') }}
+                onPick={(v) => set('compactBasis', v)}
+                ariaLabel={t('compactBasis')}
+              />
+            </div>
+            <span className="hint">{t('compactBasisSub')}</span>
           </div>
           <div className="field">
             <label>{t('modelMode')}</label>

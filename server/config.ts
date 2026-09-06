@@ -30,6 +30,10 @@ export const DEFAULT_SETTINGS: Settings = {
   // sur la fenêtre complète serait injoignable en pratique — et au-delà, un
   // modèle local n'est que plus lent, pas plus attentif. Réglable dans l'UI.
   compactThreshold: 65536,
+  // La jauge et l'auto-compaction suivent le SEUIL de compaction (défaut : le
+  // comportement d'origine — le seuil est presque toujours < la taille de
+  // contexte). L'utilisateur peut basculer sur la taille de contexte.
+  compactBasis: 'threshold',
   autoCompact: true,
   timeAwareness: true,
   // Personas utilisateur : vide = aucun bloc injecté, et {{user}} retombe sur
@@ -90,6 +94,11 @@ export function loadSettings(): Settings {
     }
     if (merged.visionMode !== 'auto' && merged.visionMode !== 'on' && merged.visionMode !== 'off') {
       merged.visionMode = DEFAULT_SETTINGS.visionMode
+    }
+    // Le PUT ne valide que le TYPE (string) : une base inconnue retombe sur le
+    // défaut plutôt que de casser workingWindow.
+    if (merged.compactBasis !== 'threshold' && merged.compactBasis !== 'context') {
+      merged.compactBasis = DEFAULT_SETTINGS.compactBasis
     }
     // raw, pas merged : merged.webSearchEngine vaut déjà 'duckduckgo' par le
     // spread du défaut même quand le fichier ne porte pas la clé — c'est
@@ -176,17 +185,19 @@ export function saveSettings(patch: Partial<Settings>): Settings {
   return next
 }
 
-// Fenêtre de travail de la jauge : la plus petite des deux valeurs réglables —
-// le seuil de compaction choisi par l'utilisateur (jamais au-delà du contexte
-// réel du modèle). Le seuil par défaut (65k) rend l'auto-compaction atteignable
-// même pour un modèle au contexte géant (262k…), où un seuil calé sur la
-// fenêtre complète ne se déclencherait jamais (jauge plafonnée à ~15 %).
-// 0 = pas de seuil : la jauge couvre tout le contexte (choix assumé).
+// Fenêtre de travail de la jauge et de l'auto-compaction : UNE valeur, au choix
+// de l'utilisateur (compactBasis) — plus le plus petit des deux réglages.
+//   'context'   = la taille de contexte du modèle (la compaction arrive tard,
+//                 à 80 % d'elle — le choix le plus simple) ;
+//   'threshold' = le seuil de compaction (défaut — le plus lisible sur un
+//                 modèle local : on compacte avant la zone où le modèle
+//                 ralentit ; à garder ≤ la taille de contexte), avec repli sur
+//                 la taille de contexte quand le seuil vaut 0.
+// Taille de contexte à 0 (inconnue) = pas de fenêtre : la jauge est neutre.
 export function workingWindow(settings: Settings): number {
   if (settings.contextSize <= 0) return 0
-  return settings.compactThreshold > 0
-    ? Math.min(settings.contextSize, settings.compactThreshold)
-    : settings.contextSize
+  if (settings.compactBasis === 'context') return settings.contextSize
+  return settings.compactThreshold > 0 ? settings.compactThreshold : settings.contextSize
 }
 
 /**

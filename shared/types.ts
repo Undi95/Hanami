@@ -6,6 +6,12 @@ import type { ErrorCode, ErrorParams } from './errorCodes'
 // dont le tool-calling est le talon d'Achille.
 export type ModelMode = 'full' | 'simple'
 
+// Base de la limite d'auto-compaction : quelle valeur pilote la jauge et
+// l'auto-compaction. 'threshold' = le seuil de compaction (compactThreshold),
+// 'context' = la taille de contexte du modèle (contextSize). L'utilisateur
+// choisit : la limite suit UNE des deux valeurs, plus le plus petit des deux.
+export type CompactBasis = 'threshold' | 'context'
+
 // Envoi d'images au modèle : 'auto' = détecté auprès du backend (Ollama expose
 // les capacités du modèle), 'on' = forcé, 'off' = jamais. En 'off' (ou détection
 // négative) le trombone du composer n'existe même pas.
@@ -36,7 +42,8 @@ export interface Settings {
   toolsRoot: string // dossier sandbox des outils fichiers
   password: string // '' = pas d'authentification (usage local)
   contextSize: number // taille de contexte du modèle (tokens) — la vraie limite du modèle
-  compactThreshold: number // seuil (tokens) de la jauge et de l'auto-compaction ; 0 = aucun (jauge sur tout le contexte)
+  compactThreshold: number // seuil (tokens) de compaction ; limite quand compactBasis = 'threshold' ; 0 = repli sur contextSize
+  compactBasis: CompactBasis // quelle valeur pilote la jauge et l'auto-compaction : le seuil de compaction ou la taille de contexte
   autoCompact: boolean // compacte automatiquement la conversation quand la jauge atteint 80 % de la fenêtre de travail
   timeAwareness: boolean // injecte date/heure + temps écoulé depuis le dernier message
   // Personas de l'utilisateur : des « moi » nommés et décrits (médecin,

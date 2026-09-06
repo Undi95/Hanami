@@ -365,7 +365,12 @@ const FR = {
   contextSize: 'Taille de contexte du modèle (tokens)',
   compactThreshold: 'Seuil de compaction (tokens)',
   compactThresholdSub:
-    'La jauge et l’auto-compaction se calent sur cette valeur, jamais au-delà de la taille de contexte. 0 = pas de seuil : la jauge couvre tout le contexte. Au-delà du seuil, un modèle local est plus lent, pas plus précis.',
+    'Sert de limite d’auto-compaction quand la base est « Seuil de compaction ». 0 = pas de seuil : la limite devient la taille de contexte. Au-delà, un modèle local est plus lent, pas plus précis.',
+  compactBasis: 'Base de la limite d’auto-compaction',
+  compactBasisThreshold: 'Seuil de compaction',
+  compactBasisContext: 'Taille de contexte',
+  compactBasisSub:
+    'La jauge et l’auto-compaction suivent la valeur choisie, pas les deux à la fois. « Seuil de compaction » = le seuil ci-dessus (à garder ≤ la taille de contexte) ; « Taille de contexte » = la taille du modèle (la compaction arrive plus tard).',
   autoCompact: 'Compaction automatique',
   timeAwareness: 'Notion du temps',
   timeAwarenessSub:
@@ -1049,7 +1054,12 @@ const EN: Record<Key, string> = {
   contextSize: 'Model context size (tokens)',
   compactThreshold: 'Compaction threshold (tokens)',
   compactThresholdSub:
-    'The gauge and auto-compaction are driven by this value, never beyond the context size. 0 = no threshold: the gauge spans the whole context. Past the threshold, a local model is just slower, not smarter.',
+    'Used as the auto-compaction limit when the basis is "Compaction threshold". 0 = no threshold: the limit becomes the context size. Past it, a local model is just slower, not smarter.',
+  compactBasis: 'Auto-compaction limit basis',
+  compactBasisThreshold: 'Compaction threshold',
+  compactBasisContext: 'Context size',
+  compactBasisSub:
+    'The gauge and auto-compaction follow the chosen value, not both at once. "Compaction threshold" = the value above (keep it at or below the context size); "Context size" = the model’s context (compaction happens later).',
   autoCompact: 'Automatic compaction',
   timeAwareness: 'Sense of time',
   timeAwarenessSub:
