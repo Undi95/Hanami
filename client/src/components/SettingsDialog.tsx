@@ -565,8 +565,14 @@ export default function SettingsDialog({
   // sur « Apparence » à l'ouverture. Le formulaire ci-dessous reste UNIQUE :
   // changer d'onglet ne perd rien et n'enregistre rien.
   const [tab, setTab] = useState<Tab>('appearance')
-  const [form, setForm] = useState<FormState>(() => toForm(settings))
+  // toForm() UNIQUE partagé par les deux états : le contrôle `dirty` compare
+  // les clés par RÉFÉRENCE, et `userPersonas` est un tableau — un second
+  // toForm() donnerait une référence neuve même sans changement, et le dialog
+  // serait « modifié » en permanence (la confirmation de fermeture à chaque fois).
+  // Aucune mutation in place en aval (setPersonaField/add/remove reconstruisent
+  // l'array), donc partager l'objet initial est sans risque.
   const [initialForm] = useState<FormState>(() => toForm(settings))
+  const [form, setForm] = useState<FormState>(initialForm)
   // Demandes d'effacement des secrets (envoient la sentinelle au PUT).
   const [clearApiKey, setClearApiKey] = useState(false)
   const [clearPassword, setClearPassword] = useState(false)
