@@ -1,7 +1,8 @@
 // Réglages de l'app — data/config.json, mergé avec les défauts.
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Settings } from '../shared/types'
+import type { CharacterMeta, Settings } from '../shared/types'
+import { normalizeLlm } from '../shared/llm'
 import { DATA_DIR } from './lib/storage'
 
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json')
@@ -149,6 +150,23 @@ export function workingWindow(settings: Settings): number {
   return settings.compactThreshold > 0
     ? Math.min(settings.contextSize, settings.compactThreshold)
     : settings.contextSize
+}
+
+/**
+ * Les réglages EFFECTIFS pour un personnage : les réglages globaux avec les
+ * overrides du personnage posés par-dessus (un champ absent retombe sur le
+ * réglage de l'app). C'est l'objet que DOIVENT utiliser tous les call-sites
+ * qui génèrent « pour » un personnage — chat, compaction, aperçu du prompt,
+ * messages spontanés, rangement de mémoire — : repasser `loadSettings()` brut
+ * là, c'est ignorer la carte du personnage. Sans `llm` (ou `llm` vide),
+ * retourne tel quel les réglages globaux : un personnage écrit avant ce
+ * réglage ne change d'aucune façon.
+ */
+export function effectiveSettings(character: Pick<CharacterMeta, 'llm'>): Settings {
+  const base = loadSettings()
+  const llm = normalizeLlm(character.llm)
+  if (!llm) return base
+  return { ...base, ...llm }
 }
 
 export const PORT = Number(process.env.PORT ?? 7788)

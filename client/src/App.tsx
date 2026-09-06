@@ -2140,6 +2140,9 @@ function AppInner() {
               ? () => stageRef.current?.snapshot() ?? null
               : null
           }
+          // Réglages globaux en filigrane des overrides (« Global : 0.8 ») —
+          // null tant que le chargement du boot n'est pas revenu.
+          settings={settings}
           onClose={() => setDialog(null)}
         />
       )}

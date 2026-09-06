@@ -1,6 +1,6 @@
 // Personnages : grille de sélection, création, édition (prompt système inclus), suppression.
 import { useEffect, useRef, useState } from 'react'
-import type { AnimationFamily, CharacterFull, CharacterMeta, GreetingMode } from '../../../shared/types'
+import type { AnimationFamily, CharacterFull, CharacterLlm, CharacterMeta, GreetingMode, Settings } from '../../../shared/types'
 import * as api from '../api'
 import { translate, useI18n } from '../i18n'
 import { THEMES, THEME_LABELS } from '../themes'
@@ -31,6 +31,13 @@ interface Props {
    * personnage ACTIF — c'est le seul dont le modèle est affiché.
    */
   snapshotAvatar?: (() => string | null) | null
+  /**
+   * Réglages globaux de l'app : la section « Modèle (ce personnage) » en fait
+   * des FILIGRANES (« Global : 0.8 ») — l'utilisateur voit sur quoi un champ
+   * vide retombe. Le dialog ne les modifie jamais. Null tant que le chargement
+   * du boot n'est pas revenu (les filigranes sont alors vides).
+   */
+  settings: Settings | null
 }
 
 type View = { kind: 'list' } | { kind: 'create' } | { kind: 'edit'; id: string }
@@ -48,6 +55,15 @@ interface FormState {
   systemPrompt: string
   ttsEnabled: boolean
   ttsVoice: string
+  // Overrides de génération : chaînes de formulaire, '' = réglage global
+  // (le filigrane du champ affiche la valeur d'origine).
+  llmModel: string
+  llmModelMode: '' | 'full' | 'simple'
+  llmTemperature: string
+  llmMaxTokens: string
+  llmMaxHistory: string
+  llmContextSize: string
+  llmCompactThreshold: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -64,6 +80,14 @@ const EMPTY_FORM: FormState = {
   // Voix : éteinte par défaut, comme pour tout personnage qui n'a rien demandé.
   ttsEnabled: false,
   ttsVoice: '',
+  // Overrides : tout est vide = tout est global (le comportement d'origine).
+  llmModel: '',
+  llmModelMode: '',
+  llmTemperature: '',
+  llmMaxTokens: '',
+  llmMaxHistory: '',
+  llmContextSize: '',
+  llmCompactThreshold: '',
 }
 
 const GREETING_MODES: readonly GreetingMode[] = ['written', 'generated', 'ask']
@@ -94,6 +118,20 @@ function fileOptions(noneLabel: string, current: string, urls: string[]): Select
   const opts: SelectOption[] = [{ value: '', label: noneLabel }]
   if (current && !urls.includes(current)) opts.push({ value: current, label: displayName(current) })
   for (const url of urls) opts.push({ value: url, label: displayName(url) })
+  return opts
+}
+
+/**
+ * Options du menu de MODÈLES : l'entrée « global » en tête (valeur vide), puis
+ * les modèles sondés chez le backend, et la valeur courante si la sonde ne la
+ * propose plus (modèle renommé côté backend) — pour ne pas l'effacer en
+ * silence. PAS `displayName` ici : un nom de modèle (« qwen2.5:7b ») n'est pas
+ * un fichier, il n'a ni extension à retirer ni % à décodérer.
+ */
+function modelOptions(current: string, models: string[]): SelectOption[] {
+  const opts: SelectOption[] = [{ value: '', label: translate('llmUseGlobal') }]
+  if (current && !models.includes(current)) opts.push({ value: current, label: current })
+  for (const m of models) opts.push({ value: m, label: m })
   return opts
 }
 
@@ -177,6 +215,7 @@ export default function CharactersDialog({
   onClose,
   ttsAvailable,
   snapshotAvatar,
+  settings,
 }: Props) {
   const { t } = useI18n()
   const [view, setView] = useState<View>({ kind: 'list' })
@@ -186,6 +225,9 @@ export default function CharactersDialog({
   const [vrms, setVrms] = useState<string[]>([])
   const [bgs, setBgs] = useState<string[]>([])
   const [envs, setEnvs] = useState<string[]>([])
+  // Modèles offerts par le backend (sonde du réglage global) — le menu des
+  // overrides propose la même liste : le backend ne change pas avec le perso.
+  const [models, setModels] = useState<string[]>([])
   // Portrait 2D du personnage édité : HORS du formulaire, car il ne s'édite pas
   // ici (l'import de la card le pose, le serveur le conserve d'une édition à
   // l'autre) — il se montre seulement, tant qu'aucun modèle 3D ne le remplace.
@@ -208,11 +250,19 @@ export default function CharactersDialog({
     api.getVrmModels().then(setVrms).catch((e) => console.error('[characters]', e))
     api.getBackgrounds().then(setBgs).catch((e) => console.error('[characters]', e))
     api.getEnvironments().then(setEnvs).catch((e) => console.error('[characters]', e))
+    // La sonde peut échouer (backend éteint) : le menu garde alors son entrée
+    // « global » et la valeur courante — les champs restent remplissables à la main.
+    api.getModels().then(setModels).catch((e) => console.error('[characters]', e))
   }, [view.kind])
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))
   }
+
+  // Filigrane des overrides : « Global : X » — vide si les réglages n'ont pas
+  // encore chargé (le champ reste utilisable, il retombe sur le global).
+  const globalPh = (v: number | undefined): string =>
+    settings && v !== undefined ? t('llmGlobal', { value: String(v) }) : ''
 
   function backToList() {
     setView({ kind: 'list' })
@@ -268,6 +318,14 @@ export default function CharactersDialog({
         systemPrompt: c.systemPrompt,
         ttsEnabled: c.ttsEnabled === true,
         ttsVoice: c.ttsVoice ?? '',
+        // Overrides : champ absent = réglage global, donc formulaire vide.
+        llmModel: c.llm?.model ?? '',
+        llmModelMode: c.llm?.modelMode ?? '',
+        llmTemperature: c.llm?.temperature !== undefined ? String(c.llm.temperature) : '',
+        llmMaxTokens: c.llm?.maxTokens !== undefined ? String(c.llm.maxTokens) : '',
+        llmMaxHistory: c.llm?.maxHistoryMessages !== undefined ? String(c.llm.maxHistoryMessages) : '',
+        llmContextSize: c.llm?.contextSize !== undefined ? String(c.llm.contextSize) : '',
+        llmCompactThreshold: c.llm?.compactThreshold !== undefined ? String(c.llm.compactThreshold) : '',
       }
       setForm(f)
       setInitialForm(f)
@@ -359,6 +417,31 @@ export default function CharactersDialog({
     setForm((f) => ({ ...f, greetings: f.greetings.filter((_, j) => j !== i) }))
   }
 
+  /**
+   * Assemble les overrides depuis le formulaire : seuls les champs remplis
+   * passent. Un objet vide = tout retombe sur le réglage global — à la création
+   * on n'envoie alors rien, à l'édition on envoie `null` (qui RETIRE la clé).
+   * Les nombres invalides sont écartés sans bloquer (le champ reste modifiable).
+   */
+  function llmFromForm(): CharacterLlm {
+    const out: CharacterLlm = {}
+    if (form.llmModel.trim()) out.model = form.llmModel.trim()
+    if (form.llmModelMode) out.modelMode = form.llmModelMode
+    const t = Number(form.llmTemperature)
+    if (form.llmTemperature.trim() !== '' && Number.isFinite(t) && t >= 0) out.temperature = t
+    for (const [key, field] of [
+      ['maxTokens', 'llmMaxTokens'],
+      ['maxHistoryMessages', 'llmMaxHistory'],
+      ['contextSize', 'llmContextSize'],
+      ['compactThreshold', 'llmCompactThreshold'],
+    ] as const) {
+      const v = form[field].trim()
+      const n = Number(v)
+      if (v !== '' && Number.isFinite(n) && n >= 0) out[key] = Math.round(n)
+    }
+    return out
+  }
+
   async function submit() {
     if (!form.name.trim()) {
       setError(t('nameRequired'))
@@ -370,6 +453,7 @@ export default function CharactersDialog({
     // et ses variantes sont conservés même en mode « généré » (simplement masqués) :
     // repasser en « écrit » les retrouve intacts.
     const greetings = form.greetings.filter((g) => g.trim().length > 0)
+    const llm = llmFromForm()
     try {
       if (view.kind === 'create') {
         const c = await api.createCharacter({
@@ -384,6 +468,8 @@ export default function CharactersDialog({
           greetingMode: form.greetingMode,
           ttsEnabled: form.ttsEnabled,
           ttsVoice: form.ttsVoice.trim(),
+          // Vide = tout est global : la clé `llm` n'entre pas dans le fichier.
+          ...(Object.keys(llm).length > 0 ? { llm } : {}),
           // Vide = le serveur écrit son prompt par défaut. Ce n'est PAS un repli
           // silencieux : le champ est proposé, ne rien y mettre est un choix.
           ...(form.systemPrompt.trim() ? { systemPrompt: form.systemPrompt } : {}),
@@ -404,6 +490,10 @@ export default function CharactersDialog({
           ttsEnabled: form.ttsEnabled,
           ttsVoice: form.ttsVoice.trim(),
           systemPrompt: form.systemPrompt,
+          // `null` explicite : le formulaire a tout vidé = retour au global
+          // (la clé `llm` doit DISPARAÎTRE — un `undefined` ne ferait que
+          // conserver l'ancien objet, cf. storage.updateCharacter).
+          llm: Object.keys(llm).length > 0 ? llm : null,
         })
         onUpdated(c)
         backToList()
@@ -708,6 +798,113 @@ export default function CharactersDialog({
               <span className="hint">{t('characterVoiceHint')}</span>
             </div>
           )}
+
+          {/* MODÈLE DU PERSONNAGE — overrides posés par-dessus les réglages
+              globaux : un champ vide retombe sur la valeur globale (le
+              filigrane l'affiche). Le backend et la clé API restent globaux :
+              c'est le moteur de la maison, pas la propriété du personnage. */}
+          <div className="field">
+            <label>{t('llmSection')}</label>
+            <span className="hint">{t('llmSectionHint')}</span>
+            <div className="grid-2">
+              <div className="field">
+                <label htmlFor="char-llm-model">{t('model')}</label>
+                <SelectMenu
+                  id="char-llm-model"
+                  value={form.llmModel}
+                  options={modelOptions(form.llmModel, models)}
+                  onChange={(v) => set('llmModel', v)}
+                />
+              </div>
+              <div className="field">
+                <label>{t('modelMode')}</label>
+                {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+                <div>
+                  <div className="seg" role="group" aria-label={t('modelMode')}>
+                    {(
+                      [
+                        ['', t('llmModeGlobal')],
+                        ['full', t('modelModeFull')],
+                        ['simple', t('modelModeSimple')],
+                      ] as const
+                    ).map(([v, label]) => (
+                      <button
+                        key={v === '' ? 'global' : v}
+                        type="button"
+                        className="seg-btn"
+                        aria-pressed={form.llmModelMode === v}
+                        onClick={() => set('llmModelMode', v)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="field">
+                <label htmlFor="char-llm-temp">{t('temperature')}</label>
+                <input
+                  id="char-llm-temp"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.llmTemperature}
+                  onChange={(e) => set('llmTemperature', e.target.value)}
+                  placeholder={globalPh(settings?.temperature)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="char-llm-maxtokens">{t('maxTokens')}</label>
+                <input
+                  id="char-llm-maxtokens"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={form.llmMaxTokens}
+                  onChange={(e) => set('llmMaxTokens', e.target.value)}
+                  placeholder={globalPh(settings?.maxTokens)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="char-llm-history">{t('maxHistory')}</label>
+                <input
+                  id="char-llm-history"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={form.llmMaxHistory}
+                  onChange={(e) => set('llmMaxHistory', e.target.value)}
+                  placeholder={globalPh(settings?.maxHistoryMessages)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="char-llm-context">{t('contextSize')}</label>
+                <input
+                  id="char-llm-context"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={form.llmContextSize}
+                  onChange={(e) => set('llmContextSize', e.target.value)}
+                  placeholder={globalPh(settings?.contextSize)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="char-llm-compact">{t('compactThreshold')}</label>
+                <input
+                  id="char-llm-compact"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={form.llmCompactThreshold}
+                  onChange={(e) => set('llmCompactThreshold', e.target.value)}
+                  placeholder={globalPh(settings?.compactThreshold)}
+                />
+              </div>
+            </div>
+          </div>
 
           <div className="field">
             <label>{t('greetingMode')}</label>

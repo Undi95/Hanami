@@ -4,7 +4,7 @@
 // buildPayload est LA source unique, partagée avec /api/prompt-preview.
 import { Router } from 'express'
 import type { Request, Response } from 'express'
-import { loadSettings, workingWindow } from '../config'
+import { effectiveSettings, workingWindow } from '../config'
 import {
   appendChatMessage,
   buildMemoryBlock,
@@ -643,11 +643,16 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'characterId, chatId et content (ou images, ou mode) sont requis' })
     return
   }
-  const settings = loadSettings()
-  if (!getCharacter(characterId)) {
+  const character = getCharacter(characterId)
+  if (!character) {
     res.status(404).json({ error: `Personnage introuvable : ${characterId}` })
     return
   }
+  // Réglages EFFECTIFS du personnage : les overrides de sa carte posés par-dessus
+  // le réglage global. Toutes les étapes de ce handler (payload, outils,
+  // recherche forcée, jauge) voient le MÊME objet — sinon le modèle d'envoi et
+  // la fenêtre de la jauge divergeraient.
+  const settings = effectiveSettings(character)
   let existing: ChatMessage[]
   try {
     existing = readChat(characterId, chatId).messages
@@ -1122,9 +1127,11 @@ async function runCompaction(
   chatId: string,
   instruction: string,
 ): Promise<{ summary: string; summaryUpto: number; compacted: number }> {
-  const settings = loadSettings()
   const character = getCharacter(characterId)
   if (!character) throw new Error(`Personnage introuvable : ${characterId}`)
+  // La compaction compresse la conversation DE CE PERSONNAGE : elle doit tenir
+  // dans SA fenêtre et écrire avec SON modèle (réglages effectifs, pas globaux).
+  const settings = effectiveSettings(character)
   const { meta, messages: history } = readChat(characterId, chatId)
   const prevUpto = meta.summary ? Math.min(meta.summaryUpto ?? 0, history.length) : 0
   const candidates = history.slice(prevUpto)
@@ -1542,7 +1549,11 @@ chatRouter.get('/api/prompt-preview', (req, res) => {
     return
   }
   try {
-    const settings = loadSettings()
+    const character = getCharacter(characterId)
+    if (!character) throw new Error(`Personnage introuvable : ${characterId}`)
+    // MÊME réglages effectifs que POST /api/chat : l'inspecteur affiche ce qui
+    // sera VRAIMENT envoyé, overrides de la carte du personnage compris.
+    const settings = effectiveSettings(character)
     const { systemText, characterPrompt, injected, payload } = buildPayload(characterId, chatId, settings)
     res.json({
       systemText,

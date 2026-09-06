@@ -285,6 +285,15 @@ const FR = {
   deleteCharacterArmed:
     'Dernière chance : cette action supprime le personnage, ses chats et sa mémoire. Irréversible.',
   deleteCharacter: 'Supprimer le personnage',
+  // Overrides de génération par personnage : un champ vide retombe sur le
+  // réglage global de l'app (le placeholder le dit). Le backend et la clé API
+  // ne se surchargent PAS ici : c'est le moteur de la maison.
+  llmSection: 'Modèle (ce personnage)',
+  llmSectionHint:
+    'Overrides pour ce personnage uniquement — un champ vide retombe sur le réglage global de l’app (indiqué en filigrane). Backend et clé API restent globaux : c’est le moteur, pas la propriété du personnage.',
+  llmUseGlobal: 'Modèle global (réglages)',
+  llmModeGlobal: 'Global',
+  llmGlobal: 'Global : {value}',
 
   // ── Réglages ─────────────────────────────────────────────────────────────
   // Onglets du dialog : trois groupes, un seul formulaire.
@@ -821,6 +830,15 @@ const EN: Record<Key, string> = {
   deleteCharacterWarn: 'Deleting this character also deletes all of its chats and its memory.',
   deleteCharacterArmed: 'Last chance: this deletes the character, its chats and its memory. There is no undo.',
   deleteCharacter: 'Delete character',
+  // Per-character generation overrides: an empty field falls back to the app's
+  // global setting (the placeholder says which one). Backend and API key are
+  // NOT overridable here: that is the house engine, not a character property.
+  llmSection: 'Model (this character)',
+  llmSectionHint:
+    'Overrides for this character only — an empty field uses the app’s global setting (shown as a placeholder). Backend and API key stay global: that is the engine, not a property of the character.',
+  llmUseGlobal: 'Global model (settings)',
+  llmModeGlobal: 'Global',
+  llmGlobal: 'Global: {value}',
 
   // ── Settings ─────────────────────────────────────────────────────────────
   tabAppearance: 'Appearance',

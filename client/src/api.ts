@@ -4,6 +4,7 @@
 import type {
   AnimationFamily,
   CharacterFull,
+  CharacterLlm,
   CharacterMeta,
   ChatEvent,
   ChatMessage,
@@ -216,6 +217,8 @@ export function createCharacter(input: {
   /** Voix du personnage : absent = muet (opt-in strict), voix vide = celle des Réglages. */
   ttsEnabled?: boolean
   ttsVoice?: string
+  /** Overrides de génération : absent = réglages globaux (un champ vide retombe dessus). */
+  llm?: CharacterLlm
   /** Absent = prompt par défaut écrit par le serveur (à partir du nom). */
   systemPrompt?: string
 }): Promise<CharacterFull> {
@@ -226,7 +229,17 @@ export function getCharacter(id: string): Promise<CharacterFull> {
   return req('GET', `/api/characters/${encodeURIComponent(id)}`)
 }
 
-export function updateCharacter(id: string, patch: Partial<CharacterFull>): Promise<CharacterFull> {
+/**
+ * `llm` tolère `null` : c'est le contrat d'effacement (le serveur retire la
+ * clé du character.json) — `undefined` signifierait « inchangé », l'inverse.
+ */
+export function updateCharacter(
+  id: string,
+  // Omit d'abord : une intersection `Partial<CharacterFull> & { llm?: … | null }`
+  // rétrécirait le type de `llm` à l'intersection des deux déclarations
+  // (et `null` en sortirait exclu).
+  patch: Partial<Omit<CharacterFull, 'llm'>> & { llm?: CharacterLlm | null },
+): Promise<CharacterFull> {
   return req('PUT', `/api/characters/${encodeURIComponent(id)}`, patch)
 }
 

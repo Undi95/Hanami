@@ -2,7 +2,7 @@
 // + feature « Ranger » : UN appel LLM restructure la mémoire (backup d'avant,
 // plan JSON validé en dur — une réponse moche ne modifie RIEN).
 import express, { Router, type Response } from 'express'
-import { loadSettings } from '../config'
+import { effectiveSettings } from '../config'
 import {
   MEMORY_FULL_INJECT_LIMIT,
   MEMORY_TOOLLESS_CAP,
@@ -57,12 +57,16 @@ function injectionState(
 
 memoryRouter.get('/api/characters/:id/memory', (req, res) => {
   try {
-    if (!characterExists(req.params.id)) {
+    const character = getCharacter(req.params.id)
+    if (!character) {
       res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
       return
     }
     const files = listMemory(req.params.id)
-    res.json({ files, ...injectionState(files, loadSettings()) })
+    // L'état d'injection se juge sur le mode du modèle (simple = intégrale
+    // plafonnée) : celui du personnage EFFECTIF, pas le global — sinon le
+    // panneau annoncerait une injection que le payload ne ferait pas.
+    res.json({ files, ...injectionState(files, effectiveSettings(character)) })
   } catch (e) {
     sendError(res, 500, e)
   }
@@ -210,7 +214,11 @@ function validateTidyPlan(obj: Record<string, unknown>): TidyPlan {
 async function tidyMemory(
   charId: string,
 ): Promise<{ ok: true; before: { files: number; chars: number }; after: { files: number; chars: number }; backup: string }> {
-  const settings = loadSettings()
+  const character = getCharacter(charId)
+  if (!character) throw new Error(`Personnage introuvable : ${charId}`)
+  // Le rangement écrit AVEC LE MODÈLE DE CE PERSONNAGE (réglages effectifs) :
+  // sa fenêtre de travail et son budget de sortie, pas ceux du réglage global.
+  const settings = effectiveSettings(character)
   const files = listMemory(charId)
   const index = files.find((f) => f.name === 'MEMORY.md')
   const others = files.filter((f) => f.name !== 'MEMORY.md')

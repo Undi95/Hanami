@@ -1,6 +1,6 @@
 // Router personnages : CRUD + chats. Toute la persistance passe par lib/storage.
 import express, { Router, type Response } from 'express'
-import type { CharacterFull, GreetingMode } from '../../shared/types'
+import type { CharacterFull, CharacterLlm, GreetingMode } from '../../shared/types'
 import {
   createCharacter,
   createChat,
@@ -83,6 +83,12 @@ charactersRouter.post('/api/characters', (req, res) => {
       // Voix : `true` explicite seulement (storage n'écrit la clé qu'allumée).
       ttsEnabled: body.ttsEnabled === true,
       ttsVoice: typeof body.ttsVoice === 'string' ? body.ttsVoice : undefined,
+      // Overrides de génération : tout objet passe tel quel — storage le
+      // normalise (normalizeLlm) et n'écrit la clé que si elle porte un champ
+      // valide. `null`/absent = aucun override.
+      llm: body.llm !== null && typeof body.llm === 'object' && !Array.isArray(body.llm)
+        ? (body.llm as CharacterLlm)
+        : undefined,
       // Prompt système dès la création : sans lui, un personnage en accueil
       // « généré » ouvre la conversation AVANT qu'on ait pu lui écrire son
       // caractère — le modèle parle alors sous le prompt par défaut, et le

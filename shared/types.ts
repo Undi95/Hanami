@@ -74,6 +74,23 @@ export type GreetingMode = 'written' | 'generated' | 'ask'
  */
 export type AnimationFamily = 'overte' | 'rocketbox'
 
+/**
+ * Overrides de génération D'UN PERSONNAGE, posés par-dessus les réglages
+ * globaux : seul le champ présent est appliqué, l'absent retombe sur le
+ * réglage de l'app (un personnage sans cette clé se comporte exactement comme
+ * avant). Le backend (URL, clé API) ne se surcharge PAS ici : c'est le moteur
+ * de la maison, pas une propriété du personnage.
+ */
+export interface CharacterLlm {
+  model?: string
+  modelMode?: ModelMode
+  temperature?: number
+  maxTokens?: number
+  maxHistoryMessages?: number
+  contextSize?: number
+  compactThreshold?: number
+}
+
 export interface CharacterMeta {
   id: string
   name: string
@@ -111,6 +128,10 @@ export interface CharacterMeta {
   greeting: string // premier message affiché dans un nouveau chat
   greetings?: string[] // variantes supplémentaires (tirage au hasard avec greeting)
   greetingMode?: GreetingMode // absent = 'written'
+  // Overrides de génération de ce personnage (cf. CharacterLlm). Clé absente ou
+  // vide = tout retombe sur les réglages globaux — un personnage écrit avant ce
+  // réglage se comporte exactement comme avant.
+  llm?: CharacterLlm
   createdAt: string
 }
 

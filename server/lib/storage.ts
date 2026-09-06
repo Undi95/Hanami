@@ -5,9 +5,11 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { emotionTagList } from '../../shared/emotions'
+import { normalizeLlm } from '../../shared/llm'
 import type {
   AnimationFamily,
   CharacterFull,
+  CharacterLlm,
   CharacterMeta,
   ChatMessage,
   ChatMeta,
@@ -114,6 +116,14 @@ function normalizeMeta(raw: CharacterMeta, id: string): CharacterMeta {
   // "mixamo"`) doit rendre le défaut, pas voyager jusqu'au client — la scène en
   // ferait un catalogue vide, donc un avatar en pose de repos, sans un message.
   if (raw.animations !== 'rocketbox') delete meta.animations
+  // Overrides de génération : un `llm` malformé écrit à la main ne doit pas
+  // voyager jusqu'au client — normalisé, ou la clé disparaît (tout devient
+  // global, comportement d'origine).
+  if (raw.llm !== undefined) {
+    const llm = normalizeLlm(raw.llm)
+    if (llm) meta.llm = llm
+    else delete meta.llm
+  }
   return meta
 }
 
@@ -154,6 +164,7 @@ export interface CreateCharacterInput {
   systemPrompt?: string
   ttsEnabled?: boolean
   ttsVoice?: string
+  llm?: CharacterLlm
 }
 
 /** Thème par personnage : clé écrite seulement quand elle porte une valeur. */
@@ -201,6 +212,16 @@ function photoField(photo: unknown): Partial<CharacterMeta> {
 }
 
 /**
+ * Overrides de génération : normalisés avant écriture (un objet sans champ
+ * valide ne produit pas de clé vide), et c'est ainsi qu'un `null` explicite
+ * retire TOUT — retour aux réglages globaux.
+ */
+function llmField(llm: unknown): Partial<CharacterMeta> {
+  const clean = normalizeLlm(llm)
+  return clean ? { llm: clean } : {}
+}
+
+/**
  * Champs d'accueil optionnels tels qu'ils sont écrits dans character.json :
  * variantes vides retirées, et mode omis quand il vaut le défaut ('written').
  * Un character.json sans ces clés reste donc parfaitement valide.
@@ -231,6 +252,7 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
     ...animationsField(input.animations),
     ...environmentField(input.environment),
     ...ttsFields(input.ttsEnabled, input.ttsVoice),
+    ...llmField(input.llm),
     createdAt: new Date().toISOString(),
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
@@ -272,6 +294,11 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     // oubli rendrait le personnage muet à la première édition. `false` explicite
     // l'éteint (false ?? current vaut false), `undefined` conserve.
     ...ttsFields(patch.ttsEnabled ?? current.ttsEnabled, patch.ttsVoice ?? current.ttsVoice),
+    // Overrides de génération : piège de la `??` — un `null` explicite (le
+    // formulaire a tout vidé = retour au global) passerait `??` et CONSERVERAIT
+    // l'ancien objet. Vérification d'`undefined` explicite : null = retirer la
+    // clé, undefined = reconduire celle du disque, objet = normaliser.
+    ...(patch.llm !== undefined ? llmField(patch.llm) : llmField(current.llm)),
     createdAt: current.createdAt,
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
