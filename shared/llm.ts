@@ -33,8 +33,17 @@ export function normalizeLlm(value: unknown): CharacterLlm | undefined {
  * Le paramètre de budget de raisonnement envoyé au backend, partagé par le
  * client streaming (server/llm/openai.ts) et l'aperçu du prompt (chat.ts) pour
  * que l'Inspecteur montre EXACTEMENT ce qui part : `think: {type:'enabled',
- * budget}` — le format Ollama, vérifié en conditions réelles (0.33.3, Qwen3.8).
- * 0 (auto) = AUCUN paramètre : le modèle décide, comportement d'origine.
+ * budget}`. 0 (auto) = AUCUN paramètre : le modèle décide, comportement
+ * d'origine.
+ *
+ * Vérité de terrain (Ollama 0.33.3, Qwen3.8, mesuré le 2026-09-06) : ce
+ * format est ACCEPTÉ mais IGNORÉ par l'endpoint OpenAI-compatible d'Ollama,
+ * et l'API native le refuse en 400 — son `think` est un booléen ou un niveau
+ * ("high"/"medium"/"low"/"max") : il n'existe AUCUN budget de tokens dans
+ * l'API Ollama. Ce qui s'applique sur l'endpoint compatible :
+ * `reasoning_effort` (mêmes niveaux ; "none" coupe le thinking à zéro,
+ * vérifié). Ce paramètre n'a donc d'effet que sur les backends qui
+ * comprennent l'objet `think`.
  */
 export function thinkingBudgetParam(budget: number): { type: 'enabled'; budget: number } | undefined {
   const n = Math.round(Number(budget))
