@@ -86,7 +86,7 @@ const FR = {
   characterVoicePlaceholder: 'identifiant exact (ex. clone:Sakurav1)',
   characterVoiceHint:
     'Laissez vide pour la voix par défaut des Réglages. « Tester » interroge le serveur de synthèse configuré et propose ses voix.',
-  characterTtsModel: 'Le modèle de sa voix',
+  characterTtsModel: 'Modèle de sa voix',
   characterTtsModelPlaceholder: 'identifiant exact chez le serveur de synthèse',
   characterTtsModelHint:
     'Laissez vide pour le modèle par défaut des Réglages. C’est le modèle qui produit la voix, pas le serveur — celui-ci reste un réglage d’application.',
@@ -1060,12 +1060,12 @@ const EN: Record<Key, string> = {
   contextSize: 'Model context size (tokens)',
   compactThreshold: 'Compaction threshold (tokens)',
   compactThresholdSub:
-    'Used as the auto-compaction limit when the basis is "Compaction threshold". 0 = no threshold: the limit becomes the context size. Past it, a local model is just slower, not smarter.',
+    'Used as the auto-compaction limit when the basis is “Compaction threshold”. 0 = no threshold: the limit becomes the context size. Past it, a local model is just slower, not smarter.',
   compactBasis: 'Auto-compaction limit basis',
   compactBasisThreshold: 'Compaction threshold',
   compactBasisContext: 'Context size',
   compactBasisSub:
-    'The gauge and auto-compaction follow the chosen value, not both at once. "Compaction threshold" = the value above (keep it at or below the context size); "Context size" = the model’s context (compaction happens later).',
+    'The gauge and auto-compaction follow the chosen value, not both at once. “Compaction threshold” = the value above (keep it at or below the context size); “Context size” = the model’s context (compaction happens later).',
   autoCompact: 'Automatic compaction',
   timeAwareness: 'Sense of time',
   timeAwarenessSub:
@@ -1244,7 +1244,7 @@ const EN: Record<Key, string> = {
   loginHint: 'This instance is password-protected.',
   password: 'Password',
   loggingIn: 'Signing in…',
-  login: 'Enter',
+  login: 'Sign in',
 
   // ── Memory ───────────────────────────────────────────────────────────────
   memoryHelp:
