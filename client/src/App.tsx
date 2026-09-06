@@ -2018,8 +2018,11 @@ function AppInner() {
             pinned={chatMeta?.pinned ?? null}
             onSaveEdit={stableSaveEdit}
             onDeleteMessage={stableDeleteMessage}
-            // Une puce d'outil n'est jamais sauvegardée (cf. server/api/chat.ts) :
-            // la retirer du fil est un pur geste d'affichage, sans aller-retour serveur.
+            // Retrait local, sans aller-retour serveur. Nuance : la trace peut
+            // être persistée dans m.tools (cf. server/api/chat.ts) — une puce
+            // supprimée réapparaît alors à la prochaine resynchronisation
+            // disque. Dans le cas orphelin (régénérer + outil + zéro texte, où
+            // la puce n'existe que dans le fil), la suppression est définitive.
             onDeleteTool={stableDeleteTool}
             onSwitchVariant={stableSwitchVariant}
             onReply={setReplyTo}
