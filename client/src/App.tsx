@@ -552,10 +552,11 @@ function AppInner() {
       }
     }
 
-    if (isCurrent()) {
-      setTtsPlaying(null)
-      stageRef.current?.setSpeaking(false)
-    }
+    // Session supplantée (nouveau playTts, rejeu, stop) : on ne jette PAS — sinon
+    // une session coupée avant le premier son ferait une chip d'erreur fausse.
+    if (!isCurrent()) return
+    setTtsPlaying(null)
+    stageRef.current?.setSpeaking(false)
     if (fatalError) throw fatalError
     if (!played) throw lastSynthError ?? new Error('Synthèse vocale : tous les segments ont échoué')
   }

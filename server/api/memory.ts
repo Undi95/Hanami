@@ -229,7 +229,7 @@ async function tidyMemory(
   const userMsg = buildTidyUserMessage(index, others)
   const inputTokens = Math.ceil((TIDY_SYSTEM.length + userMsg.length) / 4) + 512
   if (inputTokens + completionBudget > window) {
-    throw new CodedError(ErrorCodes.tidyTooBig, { k: Math.round(inputTokens / 1000), window })
+    throw new CodedError(ErrorCodes.tidyTooBig, { k: Math.round(inputTokens / 1000), window: Math.round(window / 1000) })
   }
 
   const abort = new AbortController()
@@ -247,6 +247,14 @@ async function tidyMemory(
       onDelta: () => {},
     })
     raw = result.content
+  } catch (e) {
+    // Le timer (10 min) se manifeste par une AbortError que le catch réseau de
+    // openai.ts transforme en llmUnreachable « injoignable » : faux ici, le
+    // backend est vivant mais n'a pas fini. Motif honnête, même code.
+    if (abort.signal.aborted) {
+      throw new CodedError(ErrorCodes.llmUnreachable, { detail: `no response after ${Math.round(TIDY_TIMEOUT_MS / 60000)} min` })
+    }
+    throw e
   } finally {
     clearTimeout(timer)
   }
@@ -287,7 +295,7 @@ memoryRouter.post('/api/characters/:id/memory/tidy', async (req, res) => {
   try {
     res.json(await tidyMemory(charId))
   } catch (e) {
-    // Fenêtre trop petite / backend down / JSON invalide → 500, RIEEN n'a été écrit.
+    // Fenêtre trop petite / backend down / JSON invalide → 500, RIEN n'a été écrit.
     sendJsonError(res, 500, e)
   } finally {
     tidyingInFlight.delete(charId)
