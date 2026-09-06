@@ -1,5 +1,5 @@
 // Client streaming pour backends OpenAI-compatibles (POST {backendUrl}/chat/completions, SSE).
-import { thinkingBudgetParam } from '../../shared/llm'
+import { reasoningEffortParam } from '../../shared/llm'
 import { CodedError, ErrorCodes } from '../../shared/errorCodes'
 import type { Settings } from '../../shared/types'
 
@@ -118,10 +118,10 @@ export async function streamChatCompletion(opts: {
     stream_options: { include_usage: true },
   }
   if (settings.model) body.model = settings.model
-  // Budget de raisonnement (Qwen3 et consorts via Ollama) : posé seulement quand
-  // il est réel — 0 = auto, AUCUN paramètre envoyé, comportement d'origine.
-  const think = thinkingBudgetParam(settings.thinkingBudget)
-  if (think) body.think = think
+  // Niveau de raisonnement (Qwen3 et consorts via Ollama) : posé seulement quand
+  // il est réel — 'auto' = AUCUN paramètre envoyé, comportement d'origine.
+  const effort = reasoningEffortParam(settings.thinkingLevel)
+  if (effort) body.reasoning_effort = effort
   if (tools && tools.length > 0) body.tools = tools
 
   let res: Response

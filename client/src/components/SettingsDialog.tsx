@@ -11,11 +11,13 @@ import type {
   RestoreResult,
   RestoreWarning,
   Settings,
+  ThinkingLevel,
   UserPersona,
   VisionMode,
   WebSearchEngine,
 } from '../../../shared/types'
 import { PERSONA_MAX } from '../../../shared/personas'
+import { normalizeThinkingLevel } from '../../../shared/llm'
 import * as api from '../api'
 import { isPlural, localeOf, useI18n, type Key, type Lang } from '../i18n'
 import {
@@ -76,7 +78,7 @@ interface FormState {
   temperature: string
   maxTokens: string
   // Budget de raisonnement : 0 = auto (aucun paramètre envoyé au backend).
-  thinkingBudget: string
+  thinkingLevel: string
   maxHistoryMessages: string
   historyLimit: boolean
   memoryEnabled: boolean
@@ -120,7 +122,7 @@ function toForm(s: Settings): FormState {
     visionMode: s.visionMode,
     temperature: String(s.temperature),
     maxTokens: String(s.maxTokens),
-    thinkingBudget: String(s.thinkingBudget),
+    thinkingLevel: s.thinkingLevel,
     maxHistoryMessages: String(s.maxHistoryMessages),
     // Réglage optionnel (config.json d'avant le toggle) : absent = on.
     historyLimit: s.historyLimit !== false,
@@ -178,8 +180,8 @@ function fromForm(
     temperature: num(f.temperature, base.temperature),
     maxTokens: Math.round(num(f.maxTokens, base.maxTokens)),
     // 0 = auto ; la négative (champ mal saisi) retombe dessus — le serveur
-    // renormalise de toute façon (thinkingBudgetParam : 0 ou budget réel).
-    thinkingBudget: Math.max(0, Math.round(num(f.thinkingBudget, base.thinkingBudget))),
+    // renormalise de toute façon (normalizeThinkingLevel : niveau connu ou auto).
+    thinkingLevel: normalizeThinkingLevel(f.thinkingLevel),
     maxHistoryMessages: Math.round(num(f.maxHistoryMessages, base.maxHistoryMessages)),
     historyLimit: f.historyLimit,
     memoryEnabled: f.memoryEnabled,
@@ -493,6 +495,7 @@ const LANG_OPTIONS: readonly Lang[] = ['fr', 'en']
 const MODEL_MODE_OPTIONS: readonly ModelMode[] = ['full', 'simple']
 const COMPACT_BASIS_OPTIONS: readonly CompactBasis[] = ['threshold', 'context']
 const VISION_MODE_OPTIONS: readonly VisionMode[] = ['auto', 'on', 'off']
+const THINKING_LEVEL_OPTIONS: readonly ThinkingLevel[] = ['auto', 'low', 'medium', 'high', 'max', 'none']
 const WEB_SEARCH_ENGINE_OPTIONS: readonly WebSearchEngine[] = ['duckduckgo', 'searxng', 'tavily']
 // Un hint différent par moteur (compromis mis en avant) plutôt qu'un seul
 // sous-texte statique — les trois options n'ont pas le même arbitrage.
@@ -1028,9 +1031,26 @@ export default function SettingsDialog({
             </div>
           </div>
           <div className="field">
-            <label htmlFor="set-think">{t('thinkingBudget')}</label>
-            <input id="set-think" type="number" step="256" min="0" value={form.thinkingBudget} onChange={(e) => set('thinkingBudget', e.target.value)} />
-            <span className="hint">{t('thinkingBudgetSub')}</span>
+            <label>{t('thinkingLevel')}</label>
+            {/* Six niveaux : le bloc enroule sur deux lignes (.seg flex-wrap),
+                comme le sélecteur du premier message. */}
+            <div>
+              <Seg
+                value={form.thinkingLevel}
+                options={THINKING_LEVEL_OPTIONS}
+                labels={{
+                  auto: t('thinkingLevelAuto'),
+                  low: t('thinkingLevelLow'),
+                  medium: t('thinkingLevelMedium'),
+                  high: t('thinkingLevelHigh'),
+                  max: t('thinkingLevelMax'),
+                  none: t('thinkingLevelNone'),
+                }}
+                onPick={(v) => set('thinkingLevel', v)}
+                ariaLabel={t('thinkingLevel')}
+              />
+            </div>
+            <span className="hint">{t('thinkingLevelSub')}</span>
           </div>
           <div className="grid-2">
             <div className="field">

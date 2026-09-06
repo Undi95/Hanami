@@ -34,7 +34,7 @@ import {
 import { firstEmotionTag } from '../../shared/emotions'
 import { CodedError, ErrorCodes, type ErrorCode, type ErrorParams } from '../../shared/errorCodes'
 import { httpError, sendJsonError } from '../lib/errors'
-import { thinkingBudgetParam } from '../../shared/llm'
+import { reasoningEffortParam } from '../../shared/llm'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
 import { activePersona } from '../../shared/personas'
 import type {
@@ -61,9 +61,10 @@ interface BackendPayload {
   model: string
   temperature: number
   max_tokens: number
-  // Budget de raisonnement (cf. thinkingBudgetParam) — présent seulement quand
-  // le réglage le porte : l'aperçu doit montrer EXACTEMENT ce qui part.
-  think?: { type: 'enabled'; budget: number }
+  // Niveau de raisonnement (cf. reasoningEffortParam) — présent seulement
+  // quand le réglage le porte ('auto' = clé absente) : l'aperçu doit montrer
+  // EXACTEMENT ce qui part.
+  reasoning_effort?: string
 }
 
 // ── Images (modèles à vision) ──────────────────────────────────────────────
@@ -302,8 +303,9 @@ export function buildPayload(
   }
   // MÊME règle que le client streaming (server/llm/openai.ts) : posé seulement
   // quand réel — l'aperçu est le contrat, ce qu'il montre est ce qui part.
-  const think = thinkingBudgetParam(settings.thinkingBudget)
-  if (think) payload.think = think
+  // 'auto' = AUCUNE clé (le modèle décide).
+  const effort = reasoningEffortParam(settings.thinkingLevel)
+  if (effort) payload.reasoning_effort = effort
   if (tools.length > 0) payload.tools = tools
   return { systemText, characterPrompt, injected, payload }
 }

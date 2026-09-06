@@ -22,6 +22,11 @@ export type VisionMode = 'auto' | 'on' | 'off'
 // 'tavily' (via Settings.tavilyApiKey, une clé API gratuite).
 export type WebSearchEngine = 'duckduckgo' | 'searxng' | 'tavily'
 
+// Niveaux de raisonnement du réglage thinkingLevel. 'auto' = aucun paramètre
+// envoyé (le modèle décide). Les autres sont envoyés tels quels en
+// `reasoning_effort` — d'où le vocabulaire anglais : c'est le contrat backend.
+export type ThinkingLevel = 'auto' | 'low' | 'medium' | 'high' | 'max' | 'none'
+
 export interface Settings {
   backendUrl: string // base OpenAI-compat, ex: http://127.0.0.1:5001/v1
   apiKey: string // optionnel (backends locaux : souvent vide)
@@ -29,12 +34,11 @@ export interface Settings {
   modelMode: ModelMode // 'simple' : pas d'outils, mémoire et émotions gérées sans le modèle
   temperature: number
   maxTokens: number // max_tokens de la réponse
-  // Budget de raisonnement du modèle, en tokens (Qwen3 et consorts via Ollama :
-  // `think: {type:'enabled', budget}`). 0 = AUTO : aucun paramètre n'est envoyé,
-  // le modèle décide comme avant ce réglage (un modèle qui réfléchit brûle la
-  // réponse en thinking si on ne le borne pas — issue #4c). Posé, il plafonne le
-  // think ; au-delà de maxTokens, c'est Ollama qui recadre.
-  thinkingBudget: number
+  // Niveau de raisonnement du modèle (Qwen3 et consorts via Ollama, envoyé en
+  // `reasoning_effort`). 'auto' = AUCUN paramètre n'est envoyé, le modèle
+  // décide comme avant ce réglage (un config d'avant la clé reste inchangé).
+  // Les niveaux plafonnent le raisonnement, 'none' le désactive.
+  thinkingLevel: ThinkingLevel
   maxHistoryMessages: number // quand historyLimit est ON : nb max de messages d'historique envoyés (0 = aucun)
   historyLimit: boolean // ON : l'historique envoyé est capé à maxHistoryMessages (0 = aucun) ; OFF : pas de cap, tout l'historique part
   memoryEnabled: boolean // injecte le bloc mémoire + expose les outils mémoire

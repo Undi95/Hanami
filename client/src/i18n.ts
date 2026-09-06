@@ -353,9 +353,15 @@ const FR = {
     'Simple : aucun outil n’est exposé au modèle — Hanami gère la mémoire côté serveur (les faits sont extraits à la compaction) et devine l’émotion à partir du texte. À choisir pour les petits modèles, qui échouent souvent au tool-calling.',
   temperature: 'Température',
   maxTokens: 'Tokens max (réponse)',
-  thinkingBudget: 'Budget de raisonnement (tokens)',
-  thinkingBudgetSub:
-    'Plafonne le raisonnement (« thinking ») des modèles qui réfléchissent, comme Qwen3 (via Ollama). 0 = auto : aucun paramètre n’est envoyé, le modèle décide — sans borne, un modèle qui réfléchit peut brûler la réponse en thinking.',
+  thinkingLevel: 'Raisonnement (niveau)',
+  thinkingLevelSub:
+    'Plafonne le raisonnement (« thinking ») des modèles qui réfléchissent, comme Qwen3 (via Ollama). Envoyé en reasoning_effort. Auto : aucun paramètre n’est envoyé, le modèle décide — « Aucun » désactive le raisonnement. Un backend qui ne connaît pas ce paramètre l’ignore.',
+  thinkingLevelAuto: 'Auto',
+  thinkingLevelLow: 'Faible',
+  thinkingLevelMedium: 'Moyen',
+  thinkingLevelHigh: 'Élevé',
+  thinkingLevelMax: 'Maximal',
+  thinkingLevelNone: 'Aucun',
   maxHistory: 'Messages d’historique max envoyés',
   historyLimit: 'Limite de messages',
   historyLimitSub:
@@ -1045,9 +1051,15 @@ const EN: Record<Key, string> = {
     'Simple: no tools are exposed to the model — Hanami handles memory server-side (facts are extracted during compaction) and guesses the emotion from the text. Pick this for small models, which often fail at tool calling.',
   temperature: 'Temperature',
   maxTokens: 'Max tokens (reply)',
-  thinkingBudget: 'Reasoning budget (tokens)',
-  thinkingBudgetSub:
-    'Caps the reasoning (“thinking”) of models that think, like Qwen3 (via Ollama). 0 = auto: no parameter is sent, the model decides — unbounded, a thinking model can burn the reply on thinking alone.',
+  thinkingLevel: 'Reasoning (level)',
+  thinkingLevelSub:
+    'Caps the reasoning (“thinking”) of models that think, like Qwen3 (via Ollama). Sent as reasoning_effort. Auto: no parameter is sent, the model decides — “None” turns reasoning off. A backend that does not know this parameter ignores it.',
+  thinkingLevelAuto: 'Auto',
+  thinkingLevelLow: 'Low',
+  thinkingLevelMedium: 'Medium',
+  thinkingLevelHigh: 'High',
+  thinkingLevelMax: 'Max',
+  thinkingLevelNone: 'None',
   maxHistory: 'Max history messages sent',
   historyLimit: 'Message limit',
   historyLimitSub:

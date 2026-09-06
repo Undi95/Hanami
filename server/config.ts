@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { CharacterMeta, ChatMessage, Settings } from '../shared/types'
-import { normalizeLlm, thinkingBudgetParam } from '../shared/llm'
+import { normalizeLlm, normalizeThinkingLevel } from '../shared/llm'
 import { normalizePersonas } from '../shared/personas'
 import { CodedError, ErrorCodes } from '../shared/errorCodes'
 import { DATA_DIR } from './lib/storage'
@@ -16,9 +16,9 @@ export const DEFAULT_SETTINGS: Settings = {
   modelMode: 'full',
   temperature: 0.8,
   maxTokens: 1024,
-  // 0 = auto : aucun paramètre de thinking envoyé, le modèle décide comme
+  // 'auto' : aucun paramètre de thinking envoyé, le modèle décide comme
   // avant ce réglage (un config d'avant la clé reste inchangé).
-  thinkingBudget: 0,
+  thinkingLevel: 'auto',
   maxHistoryMessages: 40,
   // ON (défaut) : l'historique envoyé est capé à maxHistoryMessages (0 = aucun).
   // OFF : PAS de cap — tout l'historique part. C'est le « off » propre que le
@@ -117,10 +117,10 @@ export function loadSettings(): Settings {
     // rester un couple d'heures réelles (sinon le moteur spontané ne s'ouvrirait jamais).
     merged.spontaneousStartHour = normalizeHour(merged.spontaneousStartHour, DEFAULT_SETTINGS.spontaneousStartHour)
     merged.spontaneousEndHour = normalizeHour(merged.spontaneousEndHour, DEFAULT_SETTINGS.spontaneousEndHour)
-    // Même raison pour le budget de raisonnement : un nombre non interprétable
-    // (config édité à la main, PUT) retombe sur l'auto — on n'envoie au backend
-    // qu'un budget bien formé ou rien du tout.
-    merged.thinkingBudget = thinkingBudgetParam(merged.thinkingBudget)?.budget ?? 0
+    // Même raison pour le niveau de raisonnement : une valeur inconnue (config
+    // édité à la main, PUT) retombe sur l'auto — on n'envoie au backend qu'un
+    // niveau documenté ou rien du tout.
+    merged.thinkingLevel = normalizeThinkingLevel(merged.thinkingLevel)
     // Migration « collection de personas » : le config d'avant portait un seul
     // couple personaName/personaDescription — il devient la persona {id:'default'}
     // de la collection (l'utilisateur ne perd pas son « moi » au premier save).
@@ -142,6 +142,9 @@ export function loadSettings(): Settings {
     delete legacy.personaDescription
     delete (merged as Record<string, unknown>).personaName
     delete (merged as Record<string, unknown>).personaDescription
+    // Le budget de tokens d'avant (thinkingBudget) n'existe plus — les niveaux
+    // l'ont remplacé : la clé morte du fichier ne doit pas survivre au save.
+    delete (merged as Record<string, unknown>).thinkingBudget
     // Cohérence du défaut : id absent de la collection → la première persona,
     // collection vide → '' (le même repli que shared/personas.ts côté lecture).
     if (!merged.userPersonas.some((p) => p.id === merged.defaultPersona)) {

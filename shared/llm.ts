@@ -3,7 +3,7 @@
 // effectiveSettings dans server/config) pour que le fichier, l'API et la
 // lecture tombent d'accord sur ce qui est un override valide. Le serveur est
 // le seul appelant : le client envoie l'objet brut, le serveur normalise.
-import type { CharacterLlm } from './types'
+import type { CharacterLlm, ThinkingLevel } from './types'
 
 /**
  * Les champs surchargeables sont exactement les paramètres posables au niveau
@@ -29,23 +29,31 @@ export function normalizeLlm(value: unknown): CharacterLlm | undefined {
   return Object.keys(out).length > 0 ? out : undefined
 }
 
+/** Les niveaux du réglage thinkingLevel, dans l'ordre du sélecteur. */
+export const THINKING_LEVELS: readonly ThinkingLevel[] = ['auto', 'low', 'medium', 'high', 'max', 'none']
+
+/** Valeur inconnue (config édité à la main, PUT) → 'auto' : on n'envoie au backend qu'un niveau documenté ou rien. */
+export function normalizeThinkingLevel(value: unknown): ThinkingLevel {
+  return typeof value === 'string' && (THINKING_LEVELS as readonly string[]).includes(value)
+    ? (value as ThinkingLevel)
+    : 'auto'
+}
+
 /**
- * Le paramètre de budget de raisonnement envoyé au backend, partagé par le
- * client streaming (server/llm/openai.ts) et l'aperçu du prompt (chat.ts) pour
- * que l'Inspecteur montre EXACTEMENT ce qui part : `think: {type:'enabled',
- * budget}`. 0 (auto) = AUCUN paramètre : le modèle décide, comportement
- * d'origine.
+ * Le paramètre de niveau de raisonnement envoyé au backend, partagé par le
+ * client streaming (server/llm/openai.ts) et l'aperçu du prompt (chat.ts)
+ * pour que l'Inspecteur montre EXACTEMENT ce qui part :
+ * `reasoning_effort: <niveau>`. 'auto' = AUCUN paramètre : le modèle décide,
+ * comportement d'origine.
  *
- * Vérité de terrain (Ollama 0.33.3, Qwen3.8, mesuré le 2026-09-06) : ce
- * format est ACCEPTÉ mais IGNORÉ par l'endpoint OpenAI-compatible d'Ollama,
- * et l'API native le refuse en 400 — son `think` est un booléen ou un niveau
- * ("high"/"medium"/"low"/"max") : il n'existe AUCUN budget de tokens dans
- * l'API Ollama. Ce qui s'applique sur l'endpoint compatible :
- * `reasoning_effort` (mêmes niveaux ; "none" coupe le thinking à zéro,
- * vérifié). Ce paramètre n'a donc d'effet que sur les backends qui
- * comprennent l'objet `think`.
+ * Vérité de terrain (Ollama 0.33.3, Qwen3.8, mesuré le 2026-09-06) : c'est
+ * le SEUL contrôle de thinking appliqué par l'endpoint OpenAI-compatible —
+ * "none" coupe le raisonnement à zéro (vérifié), les niveaux le bornent.
+ * L'ancien objet `think: {type:'enabled', budget}` (budget de tokens) était
+ * accepté mais ignoré : l'API Ollama n'a pas de budget de tokens, seulement
+ * des niveaux (la native refuse l'objet en 400). Un backend qui ne connaît
+ * pas `reasoning_effort` l'ignore comme tout champ inconnu qu'il tolère.
  */
-export function thinkingBudgetParam(budget: number): { type: 'enabled'; budget: number } | undefined {
-  const n = Math.round(Number(budget))
-  return Number.isFinite(n) && n > 0 ? { type: 'enabled', budget: Math.min(n, 1_000_000) } : undefined
+export function reasoningEffortParam(level: ThinkingLevel): string | undefined {
+  return level === 'auto' ? undefined : level
 }
