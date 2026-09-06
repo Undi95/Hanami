@@ -85,13 +85,6 @@ export type GreetingMode = 'written' | 'generated' | 'ask'
 export type AnimationFamily = 'overte' | 'rocketbox'
 
 /**
- * Overrides de génération D'UN PERSONNAGE, posés par-dessus les réglages
- * globaux : seul le champ présent est appliqué, l'absent retombe sur le
- * réglage de l'app (un personnage sans cette clé se comporte exactement comme
- * avant). Le backend (URL, clé API) ne se surcharge PAS ici : c'est le moteur
- * de la maison, pas une propriété du personnage.
- */
-/**
  * Une persona utilisateur : un « moi » parmi d'autres. `name` est ce dont le
  * personnage vous appelle (et ce que la macro {{user}} résout) ; `description`
  * est ce qu'il sait de vous dans ce rôle. Les deux peuvent être vides — une
@@ -104,6 +97,13 @@ export interface UserPersona {
   description: string
 }
 
+/**
+ * Overrides de génération D'UN PERSONNAGE, posés par-dessus les réglages
+ * globaux : seul le champ présent est appliqué, l'absent retombe sur le
+ * réglage de l'app (un personnage sans cette clé se comporte exactement comme
+ * avant). Le backend (URL, clé API) ne se surcharge PAS ici : c'est le moteur
+ * de la maison, pas une propriété du personnage.
+ */
 export interface CharacterLlm {
   model?: string
   modelMode?: ModelMode
