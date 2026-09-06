@@ -89,6 +89,9 @@ charactersRouter.post('/api/characters', (req, res) => {
       llm: body.llm !== null && typeof body.llm === 'object' && !Array.isArray(body.llm)
         ? (body.llm as CharacterLlm)
         : undefined,
+      // Persona épinglée : chaîne non vide seulement (storage la trimme et borne) ;
+      // absente = la persona par défaut des Réglages s'applique.
+      userPersona: typeof body.userPersona === 'string' ? body.userPersona : undefined,
       // Prompt système dès la création : sans lui, un personnage en accueil
       // « généré » ouvre la conversation AVANT qu'on ait pu lui écrire son
       // caractère — le modèle parle alors sous le prompt par défaut, et le

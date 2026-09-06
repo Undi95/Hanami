@@ -33,7 +33,16 @@ import {
 } from '../tools/webSearchTools'
 import { firstEmotionTag } from '../../shared/emotions'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
-import type { ChatEvent, ChatMessage, ContextInfo, MessageVariant, Settings, ToolTrace } from '../../shared/types'
+import { activePersona } from '../../shared/personas'
+import type {
+  CharacterMeta,
+  ChatEvent,
+  ChatMessage,
+  ContextInfo,
+  MessageVariant,
+  Settings,
+  ToolTrace,
+} from '../../shared/types'
 
 export const chatRouter = Router()
 
@@ -76,19 +85,24 @@ export function multimodalContent(text: string, images: string[]): ContentPart[]
 // ce qui PART vers le modèle est résolu. Le prompt du personnage renvoyé à
 // l'inspecteur reste donc la source, éditable telle quelle.
 
-/** Noms substitués : le personnage, et l'utilisateur tel que sa persona le nomme. */
-function macroNamesFor(characterName: string, settings: Settings): MacroNames {
-  return { char: characterName, user: userName(settings.personaName) }
+/**
+ * Noms substitués : le personnage, et l'utilisateur tel que SA persona le nomme
+ * (résolue pour ce personnage — épinglée sur sa carte, sinon la défaut des
+ * Réglages : shared/personas.ts, le même repli partout).
+ */
+function macroNamesFor(character: Pick<CharacterMeta, 'name' | 'userPersona'>, settings: Settings): MacroNames {
+  return { char: character.name, user: userName(activePersona(settings, character)?.name) }
 }
 
 /**
- * Bloc persona : qui est l'utilisateur, tel qu'il s'est décrit dans les
- * réglages. Faits bruts (en anglais, langue de travail des prompts), AUCUNE
- * directive ajoutée — comme le bloc heure et les notes de scène. Les deux
- * champs sont indépendants : un nom seul, une description seule, ou les deux.
+ * Bloc persona : qui est l'utilisateur, tel que la persona active le décrit
+ * (Résultats → « Vous », ou épinglée sur la carte du personnage). Faits bruts
+ * (en anglais, langue de travail des prompts), AUCUNE directive ajoutée — comme
+ * le bloc heure et les notes de scène. Les deux champs sont indépendants : un
+ * nom seul, une description seule, ou les deux.
  */
 function personaBlock(name: string, description: string): string {
-  let block = '\n\n## The user (persona, set by the user in Hanami settings)\n'
+  let block = '\n\n## The user (persona, set by the user in Hanami)\n'
   if (name) block += `The user's name is ${name}.\n`
   if (description) block += `${description}\n`
   return block
@@ -227,10 +241,12 @@ export function buildPayload(
   const characterPrompt = character.systemPrompt
   let injected = ''
   // La persona vient EN TÊTE des blocs ajoutés : savoir à qui l'on parle
-  // précède ce dont on se souvient de lui.
-  const personaName = settings.personaName.trim()
-  const personaDescription = settings.personaDescription.trim()
-  if (personaName || personaDescription) injected += personaBlock(personaName, personaDescription)
+  // précède ce dont on se souvient de lui. Résolue pour CE personnage :
+  // épinglée sur sa carte, sinon la défaut des Réglages (shared/personas.ts).
+  const persona = activePersona(settings, character)
+  if (persona && (persona.name.trim() || persona.description.trim())) {
+    injected += personaBlock(persona.name.trim(), persona.description.trim())
+  }
   if (settings.memoryEnabled) injected += buildMemoryBlock(characterId, settings.modelMode === 'simple')
 
   const { meta, messages: all } = readChat(characterId, chatId)
@@ -246,7 +262,7 @@ export function buildPayload(
   // personnage ET blocs ajoutés — une note de scène peut dire « {{char}} »),
   // l'historique et le message courant. `characterPrompt` reste brut plus bas :
   // c'est la source que l'inspecteur rend éditable.
-  const names = macroNamesFor(character.name, settings)
+  const names = macroNamesFor(character, settings)
   const systemText = substituteMacros(characterPrompt + injected, names)
   const live = history.slice(upto)
   const recent = settings.maxHistoryMessages > 0 ? live.slice(-settings.maxHistoryMessages) : []
@@ -339,17 +355,20 @@ function buildImpersonatePayload(
   const character = getCharacter(characterId)
   if (!character) throw new Error(`Personnage introuvable : ${characterId}`)
   const { meta, messages: all } = readChat(characterId, chatId)
-  const names = macroNamesFor(character.name, settings)
+  const names = macroNamesFor(character, settings)
 
   let injected = ''
   if (meta.summary) injected += summaryBlock(meta.summary)
   if (meta.sceneNotes) injected += sceneNotesBlock(meta.sceneNotes)
   if (settings.timeAwareness) injected += timeBlock(all.length > 0 ? all[all.length - 1].ts : null)
 
+  // MÊME persona que le chat de ce personnage (épinglée ou défaut) : l'écriteur
+  // impersonné EST le persona, pas une autre facette de l'utilisateur.
+  const persona = activePersona(settings, character)
   const base = impersonateSystemPrompt(
     character.name,
-    settings.personaName.trim(),
-    settings.personaDescription.trim(),
+    persona?.name.trim() ?? '',
+    persona?.description.trim() ?? '',
     typicalUserLength(all),
   )
   const systemText = substituteMacros(base + injected, names)
@@ -1141,7 +1160,7 @@ async function runCompaction(
 
   // Mode simple : pas de passe agentique, donc rien à annoncer sur les outils mémoire.
   const simple = settings.modelMode === 'simple'
-  const names = macroNamesFor(character.name, settings)
+  const names = macroNamesFor(character, settings)
   let systemText = character.systemPrompt
   if (settings.memoryEnabled) systemText += buildMemoryBlock(characterId, simple)
   if (meta.summary) systemText += summaryBlock(meta.summary)

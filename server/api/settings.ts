@@ -6,16 +6,12 @@ import type { Response } from 'express'
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from '../config'
 import { revokeAllTokens } from '../lib/auth'
 import type { Settings } from '../../shared/types'
+import { normalizePersonas } from '../../shared/personas'
 
 export const settingsRouter = Router()
 
 // Sentinelle côté PUT : '' = secret inchangé, CLEAR_SECRET = secret effacé.
 const CLEAR_SECRET = '__clear__'
-
-// Persona : une présentation, pas un second prompt système — d'où des plafonds
-// posés à l'écriture (le bloc injecté vaut alors exactement ce qui est stocké).
-const PERSONA_NAME_MAX = 60
-const PERSONA_DESCRIPTION_MAX = 1000
 
 /** Vue publique des réglages : secrets masqués + indicateurs de présence. */
 function publicView(
@@ -47,12 +43,20 @@ settingsRouter.put('/api/settings', (req, res) => {
       ;(patch as Record<string, unknown>)[key] = value
     }
   }
-  // Persona : plafonnée ici, une fois pour toutes (le nom sert aussi de {{user}}).
-  if (typeof patch.personaName === 'string') {
-    patch.personaName = patch.personaName.trim().slice(0, PERSONA_NAME_MAX)
-  }
-  if (typeof patch.personaDescription === 'string') {
-    patch.personaDescription = patch.personaDescription.trim().slice(0, PERSONA_DESCRIPTION_MAX)
+  // Personas : le client envoie la collection + le défaut — s'il en touche un
+  // des deux, l'autre est repris des réglages courants pour que la paire soit
+  // cohérente après save. La normalisation (shared/personas.ts) fait le reste :
+  // bornes, ids dédoublonnés, max 20, défaut = un id EXISTANT de la collection
+  // (sinon la première, collection vide = '' — le même repli que la lecture).
+  if ('userPersonas' in patch || 'defaultPersona' in patch) {
+    const current = loadSettings()
+    const nextPersonas = normalizePersonas(patch.userPersonas ?? current.userPersonas)
+    const defaultRaw =
+      typeof patch.defaultPersona === 'string' ? patch.defaultPersona.trim() : current.defaultPersona
+    patch.userPersonas = nextPersonas
+    patch.defaultPersona = nextPersonas.some((p) => p.id === defaultRaw)
+      ? defaultRaw
+      : nextPersonas[0]?.id ?? ''
   }
   // Secrets : '' = inchangé (le client affiche les champs vides), sentinelle = effacé.
   for (const key of ['password', 'apiKey', 'tavilyApiKey'] as const) {

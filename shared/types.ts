@@ -32,13 +32,16 @@ export interface Settings {
   compactThreshold: number // seuil (tokens) de la jauge et de l'auto-compaction ; 0 = aucun (jauge sur tout le contexte)
   autoCompact: boolean // compacte automatiquement la conversation quand la jauge atteint 80 % de la fenêtre de travail
   timeAwareness: boolean // injecte date/heure + temps écoulé depuis le dernier message
-  // Persona de l'utilisateur : qui il est, pour TOUS ses personnages. Deux
-  // champs libres, tous deux optionnels ('' = rien d'injecté). Le nom alimente
-  // aussi la macro {{user}} des cards importées (shared/macros.ts).
-  // Volontairement UNE seule persona : pas de collection à gérer, pas de
-  // sélecteur de plus dans l'interface — c'est le même utilisateur qui parle.
-  personaName: string
-  personaDescription: string
+  // Personas de l'utilisateur : des « moi » nommés et décrits (médecin,
+  // serviteur, moucheron…), valables pour TOUS ses personnages — et dont un
+  // personnage peut épingler UN en particulier (CharacterMeta.userPersona),
+  // pour ne plus jamais ressaisir « qui je suis avec celui-là ». Le nom de la
+  // persona ACTIVE alimente aussi la macro {{user}} des cards importées
+  // (shared/macros.ts). `defaultPersona` désigne la persona active quand un
+  // personnage n'en a pas épinglé (id absent de la collection = la première,
+  // collection vide = aucune persona, comportement d'origine).
+  userPersonas: UserPersona[]
+  defaultPersona: string
   showThoughts: boolean // affiche le raisonnement du modèle dans le fil (bloc repliable)
   ttsEnabled: boolean // lit les réponses à voix haute via le serveur TTS
   ttsUrl: string // base OpenAI-compat du serveur TTS (POST {ttsUrl}/audio/speech)
@@ -81,6 +84,19 @@ export type AnimationFamily = 'overte' | 'rocketbox'
  * avant). Le backend (URL, clé API) ne se surcharge PAS ici : c'est le moteur
  * de la maison, pas une propriété du personnage.
  */
+/**
+ * Une persona utilisateur : un « moi » parmi d'autres. `name` est ce dont le
+ * personnage vous appelle (et ce que la macro {{user}} résout) ; `description`
+ * est ce qu'il sait de vous dans ce rôle. Les deux peuvent être vides — une
+ * persona sans nom ni description n'injecte rien, elle existe seulement pour
+ * être épinglée.
+ */
+export interface UserPersona {
+  id: string
+  name: string
+  description: string
+}
+
 export interface CharacterLlm {
   model?: string
   modelMode?: ModelMode
@@ -132,6 +148,11 @@ export interface CharacterMeta {
   // vide = tout retombe sur les réglages globaux — un personnage écrit avant ce
   // réglage se comporte exactement comme avant.
   llm?: CharacterLlm
+  // Persona utilisateur ÉPINGLÉE pour ce personnage : l'IDENTIFIANT d'une des
+  // personas des Réglages (Settings.userPersonas) — « quel moi-je parle avec
+  // celui-là ». Absente/retirée = la persona par défaut des Réglages s'applique
+  // (shared/personas.ts décide de la résolution).
+  userPersona?: string
   createdAt: string
 }
 

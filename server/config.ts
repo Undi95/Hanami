@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { CharacterMeta, Settings } from '../shared/types'
 import { normalizeLlm } from '../shared/llm'
+import { normalizePersonas } from '../shared/personas'
 import { DATA_DIR } from './lib/storage'
 
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json')
@@ -27,9 +28,11 @@ export const DEFAULT_SETTINGS: Settings = {
   compactThreshold: 65536,
   autoCompact: true,
   timeAwareness: true,
-  // Persona : vide = aucun bloc injecté, et {{user}} retombe sur « User ».
-  personaName: '',
-  personaDescription: '',
+  // Personas utilisateur : vide = aucun bloc injecté, et {{user}} retombe sur
+  // « User ». defaultPersona = la persona utilisée quand un personnage n'en a
+  // pas épinglé d'autre (shared/personas.ts décide, en 3 replis).
+  userPersonas: [],
+  defaultPersona: '',
   showThoughts: false,
   ttsEnabled: false,
   ttsUrl: '',
@@ -97,6 +100,32 @@ export function loadSettings(): Settings {
     // rester un couple d'heures réelles (sinon le moteur spontané ne s'ouvrirait jamais).
     merged.spontaneousStartHour = normalizeHour(merged.spontaneousStartHour, DEFAULT_SETTINGS.spontaneousStartHour)
     merged.spontaneousEndHour = normalizeHour(merged.spontaneousEndHour, DEFAULT_SETTINGS.spontaneousEndHour)
+    // Migration « collection de personas » : le config d'avant portait un seul
+    // couple personaName/personaDescription — il devient la persona {id:'default'}
+    // de la collection (l'utilisateur ne perd pas son « moi » au premier save).
+    // La liste, quand elle existe, passe par la même normalisation (le fichier
+    // est éditable à la main : bornes, dédoublonnage, max 20).
+    merged.userPersonas = normalizePersonas(raw.userPersonas ?? [])
+    const legacy = raw as Record<string, unknown>
+    if (!Array.isArray(raw.userPersonas)) {
+      const name = typeof legacy.personaName === 'string' ? legacy.personaName.trim().slice(0, 60) : ''
+      const description = typeof legacy.personaDescription === 'string' ? legacy.personaDescription.trim().slice(0, 1000) : ''
+      if (name || description) {
+        merged.userPersonas = [{ id: 'default', name, description }]
+        merged.defaultPersona = 'default'
+      }
+    }
+    // Les clés legacy, copiées dans merged par le spread, sont retirées : au
+    // prochain saveSettings, plus rien ne les recopierait dans le fichier.
+    delete legacy.personaName
+    delete legacy.personaDescription
+    delete (merged as Record<string, unknown>).personaName
+    delete (merged as Record<string, unknown>).personaDescription
+    // Cohérence du défaut : id absent de la collection → la première persona,
+    // collection vide → '' (le même repli que shared/personas.ts côté lecture).
+    if (!merged.userPersonas.some((p) => p.id === merged.defaultPersona)) {
+      merged.defaultPersona = merged.userPersonas[0]?.id ?? ''
+    }
     return merged
   } catch (e) {
     // ABSENT (premier lancement) : les défauts sont légitimes. ILLISIBLE (JSON

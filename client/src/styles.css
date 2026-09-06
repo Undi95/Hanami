@@ -2378,6 +2378,34 @@ select {
   }
 }
 
+/* Carte persona, section « Vous » (Réglages) : sur une ligne le choix du
+   défaut (pastille + libellé), le nom et le bouton de suppression — le
+   texte de description s'étend dessous. */
+.persona-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.persona-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.persona-default input {
+  margin: 0;
+}
+
 .row {
   display: flex;
   gap: 8px;

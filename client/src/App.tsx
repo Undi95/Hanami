@@ -10,6 +10,7 @@ import type {
 } from '../../shared/types'
 import type { EnvNotice, FrameMode, VrmStage } from './scene/types'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
+import { activePersona } from '../../shared/personas'
 import * as api from './api'
 import { useStableCallback } from './hooks'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
@@ -81,9 +82,13 @@ function excerpt(text: string, max: number): string {
   return flat.length > max ? flat.slice(0, max - 1).trimEnd() + '…' : flat
 }
 
-/** Noms des macros pour ce personnage — {{user}} suit la persona, sinon « User ». */
-function macroNamesOf(char: CharacterFull, personaName: string): MacroNames {
-  return { char: char.name, user: userName(personaName) }
+/**
+ * Noms des macros pour ce personnage — {{user}} suit la persona ACTIVE de ce
+ * personnage (épinglée sur sa carte, sinon la défaut des Réglages : le même
+ * shared/personas.ts que le serveur, les deux doivent s'accorder).
+ */
+function macroNamesOf(char: CharacterFull, settings: Settings | null): MacroNames {
+  return { char: char.name, user: userName(settings ? activePersona(settings, char)?.name : undefined) }
 }
 
 /**
@@ -92,9 +97,9 @@ function macroNamesOf(char: CharacterFull, personaName: string): MacroNames {
  * sur dix par « Hello {{user}}! ». La substitution est faite ICI, à l'affichage :
  * character.json garde ses macros (renommer le personnage suffit à les suivre).
  */
-function greetingPool(char: CharacterFull, personaName: string): string[] {
+function greetingPool(char: CharacterFull, settings: Settings | null): string[] {
   const variants = Array.isArray(char.greetings) ? char.greetings : []
-  const names = macroNamesOf(char, personaName)
+  const names = macroNamesOf(char, settings)
   return [char.greeting, ...variants]
     .filter((g) => typeof g === 'string' && g.trim().length > 0)
     .map((g) => substituteMacros(g, names))
@@ -274,10 +279,11 @@ function AppInner() {
   // Personnage courant pour le callback de cadrage (posé une fois à la création
   // de la scène, qui vit plus longtemps que chaque personnage).
   const characterIdRef = useRef<string | null>(null)
-  // Nom de la persona, en REF : les salutations sont posées par openChat, qui
-  // est aussi appelé depuis le boot — une fermeture figée au premier rendu, où
-  // l'état `settings` est encore null. La ref, elle, dit la vérité du moment.
-  const personaNameRef = useRef('')
+  // Réglages, en REF : les salutations sont posées par openChat, qui est aussi
+  // appelé depuis le boot — une fermeture figée au premier rendu, où l'état
+  // `settings` est encore null. La ref, elle, dit la vérité du moment (et la
+  // persona se résout de là, via activePersona — épinglée ou défaut).
+  const settingsRef = useRef<Settings | null>(null)
   // Idem pour le mode d'affichage : le callback du stage ne doit jamais lire un
   // vnMode capturé au rendu qui l'a posé — il choisirait la mauvaise clé de vue.
   const viewModeRef = useRef<ViewMode>(getPref('vnMode') === true ? 'vn' : 'desktop')
@@ -789,7 +795,7 @@ function AppInner() {
   function chooseWrittenGreeting(ask: { char: CharacterFull; chat: ChatMeta }) {
     setGreetingAsk(null)
     if (chatIdRef.current !== ask.chat.id || feed.length > 0) return
-    const pool = greetingPool(ask.char, personaNameRef.current)
+    const pool = greetingPool(ask.char, settingsRef.current)
     if (pool.length === 0) return
     const text = pickGreeting(pool)
     setFeed([{ kind: 'greeting', text }])
@@ -824,7 +830,7 @@ function AppInner() {
       // 'ask' pose la question. Sans aucun texte écrit, on génère dans tous les cas.
       const empty = messages.length === 0
       const mode = char.greetingMode ?? 'written'
-      const pool = empty ? greetingPool(char, personaNameRef.current) : []
+      const pool = empty ? greetingPool(char, settingsRef.current) : []
       const ask = empty && mode === 'ask' && pool.length > 0
       const opening = empty && !ask && mode !== 'generated' && pool.length > 0 ? pickGreeting(pool) : null
       if (opening) items.push({ kind: 'greeting', text: opening })
@@ -877,7 +883,7 @@ function AppInner() {
     try {
       const loaded = await api.getSettings()
       setSettings(loaded)
-      personaNameRef.current = loaded.personaName ?? ''
+      settingsRef.current = loaded
       // Auth acquise (getSettings est passé) : les préférences du serveur font
       // foi et remplacent le cache — l'abonnement ci-dessous applique langue,
       // thème et mode VN si elles diffèrent, la sélection est lue juste après.
@@ -978,7 +984,7 @@ function AppInner() {
           const items = feedFromMessages(messages)
           // Même accueil que partout ailleurs : macros résolues (cf. greetingPool).
           if (items.length === 0 && char.greeting) {
-            const names = macroNamesOf(char, personaNameRef.current)
+            const names = macroNamesOf(char, settingsRef.current)
             items.push({ kind: 'greeting', text: substituteMacros(char.greeting, names) })
           }
           setFeed(items)
@@ -1531,9 +1537,9 @@ function AppInner() {
 
   function handleSettingsSaved(next: Settings) {
     setSettings(next)
-    // La persona vient peut-être de changer de nom : les prochaines salutations
-    // doivent l'appeler ainsi (cf. personaNameRef).
-    personaNameRef.current = next.personaName ?? ''
+    // Les personas viennent peut-être de changer : les prochaines salutations
+    // doivent les résoudre ainsi (cf. settingsRef).
+    settingsRef.current = next
     // Contrat : le token EST le mot de passe. On le synchronise pour rester connecté.
     api.setToken(next.password || null)
     probeBackend()

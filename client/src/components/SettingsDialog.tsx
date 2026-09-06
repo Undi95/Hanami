@@ -10,9 +10,11 @@ import type {
   RestoreResult,
   RestoreWarning,
   Settings,
+  UserPersona,
   VisionMode,
   WebSearchEngine,
 } from '../../../shared/types'
+import { PERSONA_MAX } from '../../../shared/personas'
 import * as api from '../api'
 import { isPlural, localeOf, useI18n, type Key, type Lang } from '../i18n'
 import {
@@ -83,8 +85,12 @@ interface FormState {
   spontaneousEnabled: boolean
   spontaneousStartHour: string
   spontaneousEndHour: string
-  personaName: string
-  personaDescription: string
+  // Collection des personas « Vous » : copie LOCALE éditée ici, posée en bloc à
+  // l'enregistrement (le serveur reste la source de vérité, il normalise).
+  userPersonas: UserPersona[]
+  // Persona par défaut (id de la collection) : celle qui s'applique quand un
+  // personnage n'en a pas épinglé.
+  defaultPersona: string
   timeAwareness: boolean
   showThoughts: boolean
   notifySound: boolean
@@ -122,9 +128,10 @@ function toForm(s: Settings): FormState {
     spontaneousEnabled: s.spontaneousEnabled,
     spontaneousStartHour: String(s.spontaneousStartHour),
     spontaneousEndHour: String(s.spontaneousEndHour),
-    // Persona : champs optionnels, absents des config.json d'avant le réglage.
-    personaName: s.personaName ?? '',
-    personaDescription: s.personaDescription ?? '',
+    // Personas : copie locale (le formulaire réécrit des entrées, il ne doit
+    // pas muter l'objet des réglages en état).
+    userPersonas: (s.userPersonas ?? []).map((p) => ({ ...p })),
+    defaultPersona: s.defaultPersona ?? '',
     timeAwareness: s.timeAwareness,
     showThoughts: s.showThoughts,
     // Réglage optionnel (config.json d'avant le réglage) : absent = éteint.
@@ -171,8 +178,10 @@ function fromForm(
     spontaneousEnabled: f.spontaneousEnabled,
     spontaneousStartHour: Math.round(num(f.spontaneousStartHour, base.spontaneousStartHour)),
     spontaneousEndHour: Math.round(num(f.spontaneousEndHour, base.spontaneousEndHour)),
-    personaName: f.personaName.trim(),
-    personaDescription: f.personaDescription.trim(),
+    // Posées en bloc : le serveur normalise la paire (ids, bornes, max,
+    // cohérence du défaut) et ne fait rien d'autre que les conserver.
+    userPersonas: f.userPersonas,
+    defaultPersona: f.defaultPersona,
     timeAwareness: f.timeAwareness,
     showThoughts: f.showThoughts,
     notifySound: f.notifySound,
@@ -579,6 +588,36 @@ export default function SettingsDialog({
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  /** Édite un champ d'une persona de la collection (copie d'abord : les entrées sont immuables). */
+  function setPersonaField(i: number, field: 'name' | 'description', value: string) {
+    setForm((f) => ({
+      ...f,
+      userPersonas: f.userPersonas.map((p, j) => (j === i ? { ...p, [field]: value } : p)),
+    }))
+  }
+
+  /** Nouvelle persona vierge : id unique (positionnel + horodatage), vide à remplir. */
+  function addPersona() {
+    setForm((f) => {
+      if (f.userPersonas.length >= PERSONA_MAX) return f
+      let id = `persona-${Date.now().toString(36)}`
+      while (f.userPersonas.some((p) => p.id === id)) id += 'x'
+      return { ...f, userPersonas: [...f.userPersonas, { id, name: '', description: '' }] }
+    })
+  }
+
+  function removePersona(i: number) {
+    setForm((f) => {
+      const removed = f.userPersonas[i]
+      if (!removed) return f
+      const userPersonas = f.userPersonas.filter((_, j) => j !== i)
+      // Le défaut qui désignait la persona supprimée retombe sur la première
+      // restante (le serveur re-fait ce même travail à l'enregistrement).
+      const defaultPersona = f.defaultPersona === removed.id ? (userPersonas[0]?.id ?? '') : f.defaultPersona
+      return { ...f, userPersonas, defaultPersona }
+    })
   }
 
   const dirty =
@@ -993,32 +1032,60 @@ export default function SettingsDialog({
 
       {tab === 'features' && (
         <>
-          {/* PERSONA — qui parle, de l'autre côté. Deux champs, pas un système
-              de personas multiples : c'est le même utilisateur qui écrit à tous
-              ses personnages. Le nom alimente aussi la macro {{user}} des cards. */}
+          {/* PERSONAS — qui parle, de l'autre côté : la COLLECTION des « moi »
+              de l'utilisateur (médecin, serviteur, moucheron…). La persona par
+              défaut s'applique à tous les personnages ; un personnage peut en
+              épingler une autre sur SA carte (dialog Personnages). Le nom de la
+              persona ACTIVE alimente aussi la macro {{user}} des cards. */}
           <h3 className="section-title">{t('sectionPersona')}</h3>
-          <div className="field">
-            <label htmlFor="set-persona-name">{t('personaName')}</label>
-            <input
-              id="set-persona-name"
-              type="text"
-              value={form.personaName}
-              maxLength={PERSONA_NAME_MAX}
-              placeholder={t('personaNamePlaceholder')}
-              onChange={(e) => set('personaName', e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="set-persona-desc">{t('personaDescription')}</label>
-            <textarea
-              id="set-persona-desc"
-              rows={3}
-              value={form.personaDescription}
-              maxLength={PERSONA_DESCRIPTION_MAX}
-              placeholder={t('personaDescriptionPlaceholder')}
-              onChange={(e) => set('personaDescription', e.target.value)}
-            />
-            <span className="hint">{t('personaHint')}</span>
+          <span className="hint">{t('personaHint')}</span>
+          {form.userPersonas.length === 0 && <span className="hint">{t('personasEmpty')}</span>}
+          {form.userPersonas.map((p, i) => (
+            <div className="persona-card" key={p.id}>
+              <div className="pick-row">
+                <label className="persona-default" title={t('personaDefault')}>
+                  <input
+                    type="radio"
+                    name="default-persona"
+                    aria-label={t('personaDefault')}
+                    checked={form.defaultPersona === p.id}
+                    onChange={() => set('defaultPersona', p.id)}
+                  />
+                  {t('personaDefault')}
+                </label>
+                <input
+                  type="text"
+                  value={p.name}
+                  maxLength={PERSONA_NAME_MAX}
+                  placeholder={t('personaNamePlaceholder')}
+                  aria-label={t('personaName')}
+                  style={{ flex: 1, minWidth: 0 }}
+                  onChange={(e) => setPersonaField(i, 'name', e.target.value)}
+                />
+                <button
+                  className="btn small"
+                  type="button"
+                  title={t('personaDelete')}
+                  aria-label={t('personaDelete')}
+                  onClick={() => removePersona(i)}
+                >
+                  ✕
+                </button>
+              </div>
+              <textarea
+                rows={2}
+                value={p.description}
+                maxLength={PERSONA_DESCRIPTION_MAX}
+                placeholder={t('personaDescriptionPlaceholder')}
+                aria-label={t('personaDescription')}
+                onChange={(e) => setPersonaField(i, 'description', e.target.value)}
+              />
+            </div>
+          ))}
+          <div>
+            <button className="btn" type="button" disabled={form.userPersonas.length >= PERSONA_MAX} onClick={addPersona}>
+              + {t('personasAdd')}
+            </button>
           </div>
 
           <h3 className="section-title">{t('sectionConversation')}</h3>

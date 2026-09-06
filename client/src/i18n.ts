@@ -302,14 +302,23 @@ const FR = {
   tabFeatures: 'Fonctions',
   tabCredits: 'Crédits',
   sectionConversation: 'Conversation',
-  // Persona de l'utilisateur : deux champs, valables pour tous les personnages.
+  // Personas de l'utilisateur : une collection de « moi ». La persona par
+  // défaut s'applique à tous les personnages ; un personnage peut en épingler
+  // une autre sur sa carte (dialog Personnages).
   sectionPersona: 'Vous',
   personaName: 'Votre nom',
   personaNamePlaceholder: 'comment le personnage vous appelle',
   personaDescription: 'Qui vous êtes (en deux lignes)',
   personaDescriptionPlaceholder: 'Ce que le personnage sait de vous : métier, goûts, façon d’être…',
   personaHint:
-    'Optionnel, et injecté dans le prompt de tous vos personnages (visible dans l’Inspecteur). Le nom remplace aussi {{user}} dans les cartes importées.',
+    'Injecté dans le prompt (visible dans l’Inspecteur) : la persona par défaut s’applique à tous vos personnages, et un personnage peut en épingler une autre sur sa carte. Le nom de la persona active remplace aussi {{user}} dans les cartes importées.',
+  personasEmpty: 'Aucune persona : aucun bloc n’est injecté, et {{user}} reste « User ».',
+  personasAdd: 'Ajouter une persona',
+  personaDefault: 'Par défaut',
+  personaDelete: 'Supprimer cette persona',
+  charPersona: 'Persona (ce personnage)',
+  charPersonaDefault: 'Défaut des Réglages',
+  charPersonaHint: 'Qui vous êtes face à ce personnage. Vide = la persona par défaut des Réglages.',
   sectionBackend: 'Backend LLM',
   backendUrl: 'URL du backend (compatible OpenAI)',
   apiKey: 'Clé API',
@@ -852,7 +861,14 @@ const EN: Record<Key, string> = {
   personaDescription: 'Who you are (in two lines)',
   personaDescriptionPlaceholder: 'What the character knows about you: work, tastes, the way you are…',
   personaHint:
-    'Optional, and injected into every character’s prompt (visible in the Inspector). The name also replaces {{user}} in imported cards.',
+    'Injected into the prompt (visible in the Inspector): the default persona applies to every character, and a character can pin another one on its card. The active persona’s name also replaces {{user}} in imported cards.',
+  personasEmpty: 'No persona: no block is injected, and {{user}} stays “User”.',
+  personasAdd: 'Add a persona',
+  personaDefault: 'Default',
+  personaDelete: 'Delete this persona',
+  charPersona: 'Persona (this character)',
+  charPersonaDefault: 'Settings default',
+  charPersonaHint: 'Who you are in front of this character. Empty = the settings default persona.',
   sectionBackend: 'LLM backend',
   backendUrl: 'Backend URL (OpenAI-compatible)',
   apiKey: 'API key',

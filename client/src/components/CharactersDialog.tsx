@@ -55,6 +55,8 @@ interface FormState {
   systemPrompt: string
   ttsEnabled: boolean
   ttsVoice: string
+  // Persona utilisateur épinglée : '' = la persona par défaut des Réglages.
+  userPersona: string
   // Overrides de génération : chaînes de formulaire, '' = réglage global
   // (le filigrane du champ affiche la valeur d'origine).
   llmModel: string
@@ -80,6 +82,8 @@ const EMPTY_FORM: FormState = {
   // Voix : éteinte par défaut, comme pour tout personnage qui n'a rien demandé.
   ttsEnabled: false,
   ttsVoice: '',
+  // Persona : vide = la défaut des Réglages (le comportement d'origine).
+  userPersona: '',
   // Overrides : tout est vide = tout est global (le comportement d'origine).
   llmModel: '',
   llmModelMode: '',
@@ -318,6 +322,8 @@ export default function CharactersDialog({
         systemPrompt: c.systemPrompt,
         ttsEnabled: c.ttsEnabled === true,
         ttsVoice: c.ttsVoice ?? '',
+        // Persona épinglée : clé absente = la défaut des Réglages, donc formulaire vide.
+        userPersona: c.userPersona ?? '',
         // Overrides : champ absent = réglage global, donc formulaire vide.
         llmModel: c.llm?.model ?? '',
         llmModelMode: c.llm?.modelMode ?? '',
@@ -468,6 +474,8 @@ export default function CharactersDialog({
           greetingMode: form.greetingMode,
           ttsEnabled: form.ttsEnabled,
           ttsVoice: form.ttsVoice.trim(),
+          // Vide = la persona par défaut des Réglages : pas de clé dans le fichier.
+          ...(form.userPersona.trim() ? { userPersona: form.userPersona } : {}),
           // Vide = tout est global : la clé `llm` n'entre pas dans le fichier.
           ...(Object.keys(llm).length > 0 ? { llm } : {}),
           // Vide = le serveur écrit son prompt par défaut. Ce n'est PAS un repli
@@ -490,6 +498,9 @@ export default function CharactersDialog({
           ttsEnabled: form.ttsEnabled,
           ttsVoice: form.ttsVoice.trim(),
           systemPrompt: form.systemPrompt,
+          // '' = dé-épingle (le serveur retire la clé) : la persona par défaut
+          // des Réglages s'applique à nouveau.
+          userPersona: form.userPersona,
           // `null` explicite : le formulaire a tout vidé = retour au global
           // (la clé `llm` doit DISPARAÎTRE — un `undefined` ne ferait que
           // conserver l'ancien objet, cf. storage.updateCharacter).
@@ -904,6 +915,24 @@ export default function CharactersDialog({
                 />
               </div>
             </div>
+          </div>
+
+          {/* PERSONNA UTILISATEUR — qui est l'utilisateur FACE À CE PERSONNAGE :
+              l'épinglage surpasse la persona par défaut des Réglages. La
+              collection (ajout, suppression, choix du défaut) se gère dans
+              Réglages → « Vous » ; ici on ne fait que désigner. */}
+          <div className="field">
+            <label htmlFor="char-persona">{t('charPersona')}</label>
+            <SelectMenu
+              id="char-persona"
+              value={form.userPersona}
+              options={[
+                { value: '', label: t('charPersonaDefault') },
+                ...(settings?.userPersonas ?? []).map((p) => ({ value: p.id, label: p.name || p.id })),
+              ]}
+              onChange={(v) => set('userPersona', v)}
+            />
+            <span className="hint">{t('charPersonaHint')}</span>
           </div>
 
           <div className="field">

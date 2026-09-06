@@ -219,6 +219,8 @@ export function createCharacter(input: {
   ttsVoice?: string
   /** Overrides de génération : absent = réglages globaux (un champ vide retombe dessus). */
   llm?: CharacterLlm
+  /** Persona utilisateur épinglée (id de la collection des Réglages) : absent = la persona par défaut. */
+  userPersona?: string
   /** Absent = prompt par défaut écrit par le serveur (à partir du nom). */
   systemPrompt?: string
 }): Promise<CharacterFull> {

@@ -124,6 +124,15 @@ function normalizeMeta(raw: CharacterMeta, id: string): CharacterMeta {
     if (llm) meta.llm = llm
     else delete meta.llm
   }
+  // Persona épinglée : seule une chaîne non vide survit (trimmée, bornée) ;
+  // sinon la clé disparaît (la persona par défaut des Réglages s'applique).
+  // Pas de vérification d'existence ici : la collection vit dans config.json,
+  // et c'est shared/personas.ts qui traite l'id orphelin, à la résolution.
+  if (typeof raw.userPersona === 'string' && raw.userPersona.trim()) {
+    meta.userPersona = raw.userPersona.trim().slice(0, 60)
+  } else {
+    delete meta.userPersona
+  }
   return meta
 }
 
@@ -165,6 +174,7 @@ export interface CreateCharacterInput {
   ttsEnabled?: boolean
   ttsVoice?: string
   llm?: CharacterLlm
+  userPersona?: string
 }
 
 /** Thème par personnage : clé écrite seulement quand elle porte une valeur. */
@@ -222,6 +232,17 @@ function llmField(llm: unknown): Partial<CharacterMeta> {
 }
 
 /**
+ * Persona épinglée : seule une chaîne non vide s'écrit (clé absente de
+ * character.json = la persona par défaut des Réglages s'applique) ; un ''
+ * explicite la retire.
+ */
+function userPersonaField(userPersona: unknown): Partial<CharacterMeta> {
+  return typeof userPersona === 'string' && userPersona.trim()
+    ? { userPersona: userPersona.trim().slice(0, 60) }
+    : {}
+}
+
+/**
  * Champs d'accueil optionnels tels qu'ils sont écrits dans character.json :
  * variantes vides retirées, et mode omis quand il vaut le défaut ('written').
  * Un character.json sans ces clés reste donc parfaitement valide.
@@ -253,6 +274,7 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
     ...environmentField(input.environment),
     ...ttsFields(input.ttsEnabled, input.ttsVoice),
     ...llmField(input.llm),
+    ...userPersonaField(input.userPersona),
     createdAt: new Date().toISOString(),
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
@@ -299,6 +321,12 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     // l'ancien objet. Vérification d'`undefined` explicite : null = retirer la
     // clé, undefined = reconduire celle du disque, objet = normaliser.
     ...(patch.llm !== undefined ? llmField(patch.llm) : llmField(current.llm)),
+    // Persona épinglée : le MÊME piège de la `??` que llm — undefined =
+    // reconduire celle du disque, '' (ou null) = retirer la clé (la persona
+    // par défaut des Réglages s'applique à nouveau), chaîne = épingler.
+    ...(patch.userPersona !== undefined
+      ? userPersonaField(patch.userPersona)
+      : userPersonaField(current.userPersona)),
     createdAt: current.createdAt,
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
