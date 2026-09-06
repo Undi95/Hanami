@@ -177,9 +177,10 @@ function AppInner() {
   const [feed, setFeed] = useState<FeedItem[]>([])
   // Message visé par le prochain envoi : sa citation sera écrite dans le message.
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
-  // Texte poussé par Impersonate dans le composer — `token` change à chaque
-  // delta reçu, y compris si le texte lui-même se répète (fin de flux).
-  const [impersonatePrefill, setImpersonatePrefill] = useState<{ text: string; token: number } | null>(null)
+  // Texte poussé dans le composer : par Impersonate (au fil de son flux) ou
+  // rendu par un envoi qui a échoué AVANT d'atteindre le disque (à réenvoyer).
+  // `token` change à chaque poussée, y compris si le texte se répète (fin de flux).
+  const [composerPrefill, setComposerPrefill] = useState<{ text: string; token: number } | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   // Onglet d'ouverture de l'Inspecteur : 'system' par la barre du haut, 'scene'
@@ -995,13 +996,7 @@ function AppInner() {
         .then(({ meta, messages }) => {
           if (chatIdRef.current !== chat.id || meta.messageCount === chat.messageCount) return
           setChatMeta(meta)
-          const items = feedFromMessages(messages)
-          // Même accueil que partout ailleurs : macros résolues (cf. greetingPool).
-          if (items.length === 0 && char.greeting) {
-            const names = macroNamesOf(char, settingsRef.current)
-            items.push({ kind: 'greeting', text: substituteMacros(char.greeting, names) })
-          }
-          setFeed(items)
+          setFeed(feedFromDisk(char, messages))
           const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
           if (lastAssistant) {
             applyEmotion(lastAssistant.emotion ?? extractEmotion(lastAssistant.content) ?? 'neutral')
@@ -1041,21 +1036,102 @@ function AppInner() {
 
   // ── Envoi + streaming ────────────────────────────────────────────────────
 
-  function keepPartialDraft(extra?: FeedItem) {
-    setFeed((f) => {
-      const out: FeedItem[] = []
-      for (const it of f) {
-        if (it.kind === 'msg' && it.pending) {
-          if (it.msg.content) out.push({ kind: 'msg', msg: it.msg })
-        } else if (it.kind === 'tool' && it.pending) {
-          // Action interrompue avant son résultat : la puce pulse à jamais,
-          // on la retire (le rafraîchissement doux la rétablira si le serveur
-          // a fini et sauvegardé l'action).
-        } else out.push(it)
-      }
-      if (extra) out.push(extra)
-      return out
-    })
+  // Le fil reconstruit à partir du DISQUE : mêmes messages, mêmes puces
+  // d'outils, même accueil que l'ouverture d'un chat. Une seule grammaire,
+  // partagée entre le rafraîchissement doux et la re-synchronisation.
+  function feedFromDisk(char: CharacterFull, messages: ChatMessage[]): FeedItem[] {
+    const items = feedFromMessages(messages)
+    if (items.length === 0 && char.greeting) {
+      // Même accueil que partout ailleurs : macros résolues (cf. greetingPool).
+      const names = macroNamesOf(char, settingsRef.current)
+      items.push({ kind: 'greeting', text: substituteMacros(char.greeting, names) })
+    }
+    return items
+  }
+
+  // Une génération qui ne s'est PAS terminée par un `done` laisse le fil local
+  // incertain : le message optimiste de l'envoi peut être un ORPHELIN (POST
+  // rejeté avant enregistrement — il ne disparaît jamais du fil, et il décale
+  // TOUS les ordinaux de suppression/édition qui suivent), ou le partiel que
+  // le serveur a sauvegardé diffère de ce que le fil affiche. Le disque est la
+  // source de vérité : on relit le chat et on reconstruit.
+  // `ac` = le contrôleur de CETTE génération (null = appel hors flux, p. ex. le
+  // backstop d'un 404 de suppression) : un résultat qui arrive alors qu'UN
+  // AUTRE flux écrit le fil est jeté, comme dans les autres relectures.
+  // Renvoie true si `sent` (le message optimiste de l'envoi) a été retrouvée
+  // sur le disque ; false sinon — y compris si le serveur est injoignable,
+  // auquel cas les items optimistes/en attente sont retirés du fil.
+  async function resyncFeed(
+    char: CharacterFull,
+    chat: ChatMeta,
+    ac: AbortController | null,
+    chip?: FeedItem,
+    sent?: ChatMessage,
+  ): Promise<boolean> {
+    const stale = () =>
+      chatIdRef.current !== chat.id || (abortRef.current !== null && (ac === null || abortRef.current !== ac))
+    try {
+      const { meta, messages } = await api.getChat(char.id, chat.id)
+      if (stale()) return true
+      setChatMeta(meta)
+      setFeed(chip ? [...feedFromDisk(char, messages), chip] : feedFromDisk(char, messages))
+      const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+      if (lastAssistant) applyEmotion(lastAssistant.emotion ?? extractEmotion(lastAssistant.content) ?? 'neutral')
+      if (!sent) return true
+      // Retrouvée ? Même contenu, rôle user, horodatée au plus tard une minute
+      // après notre envoi (le serveur date l'enregistrement lui-même).
+      const t0 = Date.parse(sent.ts)
+      return messages.some(
+        (m) => m.role === 'user' && m.content === sent.content && Math.abs(Date.parse(m.ts) - t0) < 60_000,
+      )
+    } catch {
+      if (stale()) return true
+      // Serveur injoignable : impossible de vérifier le disque. On ne garde
+      // que ce qui était sur le fil AVANT l'envoi — tout le reste (optimiste,
+      // partiel, puces en attente) n'est pas vérifiable et resterait un
+      // orphelin indéletable s'il restait affiché.
+      setFeed((f) => {
+        const out: FeedItem[] = []
+        for (const it of f) {
+          if (it.kind === 'msg' && (it.pending || it.optimistic)) continue
+          if (it.kind === 'tool' && it.pending) continue
+          out.push(it)
+        }
+        if (chip) out.push(chip)
+        return out
+      })
+      return false
+    }
+  }
+
+  // Fin de génération SANS `done` : re-synchronisation + restitution. Si le
+  // message que l'envoi devait persister n'est PAS sur le disque, son texte
+  // retourne dans le composer (vidé dès l'envoi) — rien n'est perdu, et plus
+  // d'orphelin dans le fil.
+  async function restoreIfLost(
+    char: CharacterFull,
+    chat: ChatMeta,
+    ac: AbortController | null,
+    chip?: FeedItem,
+    sent?: ChatMessage,
+  ) {
+    const found = await resyncFeed(char, chat, ac, chip, sent)
+    if (!found && sent && sent.content) {
+      setComposerPrefill((p) => ({ text: sent.content, token: (p?.token ?? 0) + 1 }))
+    }
+  }
+
+  // 404 sur une suppression/édition/variante : l'ordinal ne correspond plus au
+  // disque — le fil local est périmé (un orphelin plus haut le décale, un
+  // message ajouté ailleurs…). Le disque fait foi : on resynchronise au lieu
+  // d'aboyer en silence (avant : un 404 dans la console, et un message qui « ne
+  // disparaissait pas »). Renvoie true si l'écart a été réparé.
+  async function backstop404(e: unknown, char: CharacterFull, chat: ChatMeta): Promise<boolean> {
+    if (e instanceof api.ApiError && e.status === 404) {
+      await resyncFeed(char, chat, null)
+      return true
+    }
+    return false
   }
 
   // Réponse à un message précis : la citation est écrite EN TÊTE du message
@@ -1105,13 +1181,18 @@ function AppInner() {
 
     // TTS d'une continuation : ne lire QUE la suite, pas tout le message fusionné.
     let ttsFromIndex = 0
+    // Message optimiste de l'envoi (envoi normal seulement) : porté par
+    // `optimistic` tant que le `done` ne l'a pas confirmé sur le disque —
+    // c'est lui que resyncFeed vérifie si la génération avorte.
+    let sentMsg: ChatMessage | undefined
 
     if (!mode) {
       const userMsg: ChatMessage = { role: 'user', content: opts.content ?? '', ts: new Date().toISOString() }
       // Vignettes visibles dans la bulle dès l'envoi (le serveur sauvegarde les mêmes).
       if (opts.images && opts.images.length > 0) userMsg.images = opts.images
       const draft: ChatMessage = { role: 'assistant', content: '', ts: new Date().toISOString() }
-      setFeed((f) => [...f, { kind: 'msg', msg: userMsg }, { kind: 'msg', msg: draft, pending: true }])
+      sentMsg = userMsg
+      setFeed((f) => [...f, { kind: 'msg', msg: userMsg, optimistic: true }, { kind: 'msg', msg: draft, pending: true }])
     } else {
       // Les chips d'erreur/info de fin de fil n'ont plus de sens : on rejoue.
       setFeed((f) => {
@@ -1260,7 +1341,16 @@ function AppInner() {
                 applyEmotion(detectEmotionFallback(ev.message.content), true)
               }
             }
-            setFeed((f) => f.map((it) => (it.kind === 'msg' && it.pending ? { kind: 'msg', msg: ev.message } : it)))
+            setFeed((f) =>
+              f.map((it) => {
+                if (it.kind === 'msg' && it.pending) return { kind: 'msg', msg: ev.message }
+                // Le `done` prouve que le serveur a ouvert le flux : le message
+                // optimiste est sur le disque (écrit AVANT l'ouverture du flux)
+                // — le drapeau n'a plus de raison d'être.
+                if (it.kind === 'msg' && it.optimistic) return { kind: 'msg', msg: it.msg }
+                return it
+              }),
+            )
             // Messages ajoutés au fichier : envoi normal = question + réponse,
             // open = la seule réponse, continue = fusion en place, regenerate =
             // remplacement (0) SAUF si rien n'avait été retiré (dernière bulle
@@ -1322,21 +1412,27 @@ function AppInner() {
             // Contrat codes/phrases : le CODE est traduit ici ; sinon le
             // message brut (erreur non codée, serveur plus ancien).
             const text = serverErrorText(ev.code, ev.params) || ev.message || ''
-            keepPartialDraft({ kind: 'error', text })
+            // Le flux s'arrête SANS `done` : le disque fait foi (le partiel
+            // éventuel a été sauvegardé par le serveur avant l'événement).
+            void restoreIfLost(char, chat, ac, { kind: 'error', text }, sentMsg)
           }
         },
       })
-      if (!finished) keepPartialDraft({ kind: 'error', text: t('responseInterrupted') })
+      if (!finished) void restoreIfLost(char, chat, ac, { kind: 'error', text: t('responseInterrupted') }, sentMsg)
     } catch (e) {
+      let chip: FeedItem | undefined
       if (e instanceof api.AuthRequiredError) {
-        keepPartialDraft()
+        // L'écran de login va couvrir le fil : pas de chip — mais la
+        // re-synchronisation nettoie l'orphelin éventuel pour le retour.
         setNeedLogin(true)
       } else if ((e as Error).name === 'AbortError') {
-        keepPartialDraft()
+        // Stop volontaire : pas de chip. Le partiel (ou son absence) est
+        // tranché par le disque, comme pour tout le reste.
       } else {
-        keepPartialDraft({ kind: 'error', text: api.errorMessage(e) })
+        chip = { kind: 'error', text: api.errorMessage(e) }
         if (e instanceof api.ApiError && (e.status === 502 || e.status === 0)) setBackendDown(true)
       }
+      void restoreIfLost(char, chat, ac, chip, sentMsg)
     } finally {
       setStreaming(false)
       // Fin NORMALE : la bouche finit de « prononcer » la dernière rafale (le
@@ -1379,9 +1475,9 @@ function AppInner() {
             // modèle peut les écrire quand même (cf. le fix sur les réponses du
             // personnage) — un tag qui fuirait ici finirait dans un message UTILISATEUR,
             // jamais passé par stripEmotionTags à l'affichage. Filet identique ici.
-            setImpersonatePrefill({ text: stripEmotionTags(acc, true), token: ++token })
+            setComposerPrefill({ text: stripEmotionTags(acc, true), token: ++token })
           } else if (ev.type === 'done') {
-            setImpersonatePrefill({ text: stripEmotionTags(ev.message.content), token: ++token })
+            setComposerPrefill({ text: stripEmotionTags(ev.message.content), token: ++token })
           } else if (ev.type === 'error') {
             // Même contrat que le flux principal : code traduit, sinon brut.
             const text = serverErrorText(ev.code, ev.params) || ev.message || ''
@@ -1407,7 +1503,13 @@ function AppInner() {
     const char = character
     const chat = chatMeta
     if (!char || !chat) return
-    const out = await api.editChatMessage(char.id, chat.id, ordinal, content)
+    const out = await api
+      .editChatMessage(char.id, chat.id, ordinal, content)
+      .catch(async (e: unknown) => {
+        if (await backstop404(e, char, chat)) return null
+        throw e
+      })
+    if (!out) return
     setFeed((f) => {
       let n = -1
       return f.map((it) => {
@@ -1426,7 +1528,13 @@ function AppInner() {
     const char = character
     const chat = chatMeta
     if (!char || !chat) return
-    const out = await api.deleteChatMessage(char.id, chat.id, ordinal)
+    const out = await api
+      .deleteChatMessage(char.id, chat.id, ordinal)
+      .catch(async (e: unknown) => {
+        if (await backstop404(e, char, chat)) return null
+        throw e
+      })
+    if (!out) return
     setFeed((f) => {
       let n = -1
       const next: FeedItem[] = []
@@ -1460,7 +1568,13 @@ function AppInner() {
     const char = character
     const chat = chatMeta
     if (!char || !chat) return
-    const out = await api.setChatMessageVariant(char.id, chat.id, ordinal, variant)
+    const out = await api
+      .setChatMessageVariant(char.id, chat.id, ordinal, variant)
+      .catch(async (e: unknown) => {
+        if (await backstop404(e, char, chat)) return null
+        throw e
+      })
+    if (!out) return
     setFeed((f) => {
       let n = -1
       const next: FeedItem[] = []
@@ -2069,7 +2183,7 @@ function AppInner() {
           onStop={stopStreaming}
           canImpersonate={canImpersonate}
           onImpersonate={runImpersonate}
-          prefill={impersonatePrefill}
+          prefill={composerPrefill}
         />
       </div>
 

@@ -12,7 +12,10 @@ import { renderMarkdown } from '../markdown'
 import { VnBoxGrip } from './ResizeGrips'
 
 export type FeedItem =
-  | { kind: 'msg'; msg: ChatMessage; pending?: boolean }
+  // `optimistic` = posé par le client AVANT d'être sûr que le serveur a
+  // enregistré (envoi optimiste) : effacé au `done`, vérifié par la
+  // re-synchronisation si la génération avorte.
+  | { kind: 'msg'; msg: ChatMessage; pending?: boolean; optimistic?: boolean }
   // `pending` = l'action est EN COURS (pas de résultat encore) : la puce
   // pulse, l'événement `tool` la fige en trace au même endroit.
   | { kind: 'tool'; name: string; args: string; result?: string; pending?: boolean }
