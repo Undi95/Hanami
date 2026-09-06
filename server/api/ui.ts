@@ -11,6 +11,8 @@ import type { UiPrefs } from '../../shared/types'
 // La validation vit dans shared/uiPrefs.ts, PARTAGÉE avec le client (prefs.ts) :
 // une seule table de règles, plus de divergence possible entre les deux bouts.
 import { UI_PREF_KEYS, UI_PREF_VALIDATORS, normalizeUiPrefs } from '../../shared/uiPrefs'
+import { httpError, sendJsonError } from '../lib/errors'
+import { ErrorCodes } from '../../shared/errorCodes'
 
 export const uiRouter = Router()
 
@@ -63,7 +65,7 @@ uiRouter.get('/api/ui', (_req, res) => {
 uiRouter.put('/api/ui', (req, res) => {
   const body = req.body as unknown
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    res.status(400).json({ error: 'Corps attendu : un objet de préférences' })
+    httpError(res, 400, ErrorCodes.uiBodyExpected)
     return
   }
   const patch = body as Record<string, unknown>
@@ -80,13 +82,13 @@ uiRouter.put('/api/ui', (req, res) => {
   }
   const json = JSON.stringify(next, null, 2)
   if (Buffer.byteLength(json, 'utf8') > MAX_BYTES) {
-    res.status(413).json({ error: `Préférences trop volumineuses (max ${MAX_BYTES / 1024} Ko)` })
+    httpError(res, 413, ErrorCodes.uiTooLarge, { maxKo: MAX_BYTES / 1024 })
     return
   }
   try {
     writeUi(json)
   } catch (e) {
-    res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
+    sendJsonError(res, 500, e)
     return
   }
   res.set('Cache-Control', 'no-store')

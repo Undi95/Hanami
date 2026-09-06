@@ -17,17 +17,14 @@
 // Le reste des crédits (animations, police, briques de code) ne se lit dans
 // aucun asset : il vit dans shared/credits.ts, écrit une seule fois.
 import path from 'node:path'
-import { Router, type Response } from 'express'
+import { Router } from 'express'
 import type { EnvironmentCredit } from '../../shared/credits'
 import { readGlbAsset } from '../lib/glb'
 import { listEnvironmentModels } from '../lib/envIndex'
 import { ENVIRONMENTS_DIR } from '../lib/storage'
+import { sendJsonError } from '../lib/errors'
 
 export const creditsRouter = Router()
-
-function sendError(res: Response, e: unknown): void {
-  res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
-}
 
 /** Champ `extras` en chaîne propre — tout le reste (nombre, objet, absent) vaut vide. */
 function asText(value: unknown): string {
@@ -88,6 +85,6 @@ creditsRouter.get('/api/credits/environments', (_req, res) => {
       .sort((a, b) => (a.title || a.file).localeCompare(b.title || b.file))
     res.json({ environments })
   } catch (e) {
-    sendError(res, e)
+    sendJsonError(res, 500, e)
   }
 })

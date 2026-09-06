@@ -40,7 +40,7 @@ import {
   type ViewMode,
 } from './prefs'
 import { chatPanelWidth, healLayoutPrefs, saveChatPanelWidth, saveVnBoxWidth, saveVnTextHeight } from './layout'
-import { I18nProvider, chatDisplayTitle, getLang, localeOf, useI18n } from './i18n'
+import { I18nProvider, chatDisplayTitle, getLang, localeOf, serverErrorText, useI18n } from './i18n'
 import TopBar, { AUTO_COMPACT_AT, CtxBadge, type DialogKind } from './components/TopBar'
 import { ChatPanelGrip, SheetHandle } from './components/ResizeGrips'
 import MessageList, { VnBox, messageVariants, type FeedItem } from './components/MessageList'
@@ -200,6 +200,9 @@ function AppInner() {
   const [compacting, setCompacting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [vnMode, setVnMode] = useState(() => getPref('vnMode') === true)
+  // Avatar visible : allumé par défaut (clé absente = visible, comportement
+  // d'origine) ; masqué, le chat prend toute la largeur et le moteur se pause.
+  const [avatarVisible, setAvatarVisible] = useState(() => getPref('avatarVisible') !== false)
   // Décor 3D : allumé par défaut (clé absente = allumé), éteint explicitement.
   const [env3d, setEnv3d] = useState(() => getPref('env3d') !== false)
   // Animations gestuelles (.vrma) : même grammaire que le décor.
@@ -458,9 +461,11 @@ function AppInner() {
    * la demande), et il se nettoie tout seul quand la lecture s'achève (ou
    * échoue). Sans clé, la voix parle mais aucune bulle ne s'annonce parlante.
    * `voice` = la voix du personnage qui parle ; vide, le serveur prend celle
-   * des Réglages (le serveur de synthèse, lui, est toujours celui des Réglages).
+   * des Réglages. `model` = le modèle TTS du personnage (même logique :
+   * vide, le serveur prend celui des Réglages). Le serveur de synthèse, lui,
+   * est toujours celui des Réglages.
    */
-  async function playTts(text: string, key?: string, voice = '') {
+  async function playTts(text: string, key?: string, voice = '', model = '') {
     // Le texte AFFICHÉ (bulle, historique) ne passe jamais par `cleanForSpeech` —
     // seule la copie envoyée au TTS perd ses tags d'émotion, ses didascalies
     // entre astérisques et ses symboles markdown (~ _ ` * émojis…).
@@ -487,7 +492,7 @@ function AppInner() {
     let lastSynthError: unknown = null
     const synth = async (segment: string): Promise<string | null> => {
       try {
-        const blob = await api.tts(segment, voice)
+        const blob = await api.tts(segment, voice, model)
         return isCurrent() ? URL.createObjectURL(blob) : null
       } catch (e) {
         console.warn('[tts] segment échoué, on continue avec le suivant', e)
@@ -616,6 +621,14 @@ function AppInner() {
   useEffect(() => {
     stageRef.current?.setAnimationsEnabled(vrmaEnabled)
   }, [vrmaEnabled, stageReady])
+
+  // Avatar masqué : la scène disparaît par CSS (la div reste montée — le stage
+  // y est attaché, un unmount conditionnel le tuerait) et le moteur est mis en
+  // pause VRAIE : plus aucune frame rendue à l'aveugle. Reprendre relance la
+  // boucle ; tout l'état (modèle, pose, décor) est intact.
+  useEffect(() => {
+    if (stageReady) stageRef.current?.setPaused(!avatarVisible)
+  }, [stageReady, avatarVisible])
 
   // Taille d'écran : la scène vivante s'éteint et se rallume au redimensionnement
   // DANS LES DEUX SENS, sans jamais toucher à la préférence — brancher un
@@ -947,6 +960,7 @@ function AppInner() {
         // Sans ces deux lignes, un navigateur dont le cache localStorage ne connaît
         // pas encore la clé téléchargeait la pièce et affichait l'interrupteur coché
         // en contradiction avec data/ui.json, pendant toute la première ouverture.
+        if (typeof prefs.avatarVisible === 'boolean') setAvatarVisible(prefs.avatarVisible)
         if (typeof prefs.env3d === 'boolean') setEnv3d(prefs.env3d)
         if (typeof prefs.vrmaEnabled === 'boolean') setVrmaEnabled(prefs.vrmaEnabled)
         if (typeof prefs.interactive === 'boolean') setInteractive(prefs.interactive)
@@ -1297,7 +1311,7 @@ function AppInner() {
               char.ttsEnabled === true &&
               cleanForSpeech(stripEmotionTags(toSpeak)).trim().length > 0
             if (ttsWillSpeak) {
-              playTts(toSpeak, ev.message.ts, char.ttsVoice ?? '').catch((e) => {
+              playTts(toSpeak, ev.message.ts, char.ttsVoice ?? '', char.ttsModel ?? '').catch((e) => {
                 setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }])
               })
             } else if (settings?.notifySound) {
@@ -1305,7 +1319,10 @@ function AppInner() {
             }
           } else if (ev.type === 'error') {
             finished = true
-            keepPartialDraft({ kind: 'error', text: ev.message })
+            // Contrat codes/phrases : le CODE est traduit ici ; sinon le
+            // message brut (erreur non codée, serveur plus ancien).
+            const text = serverErrorText(ev.code, ev.params) || ev.message || ''
+            keepPartialDraft({ kind: 'error', text })
           }
         },
       })
@@ -1366,7 +1383,9 @@ function AppInner() {
           } else if (ev.type === 'done') {
             setImpersonatePrefill({ text: stripEmotionTags(ev.message.content), token: ++token })
           } else if (ev.type === 'error') {
-            setFeed((f) => [...f, { kind: 'error', text: ev.message }])
+            // Même contrat que le flux principal : code traduit, sinon brut.
+            const text = serverErrorText(ev.code, ev.params) || ev.message || ''
+            setFeed((f) => [...f, { kind: 'error', text }])
           }
         },
       })
@@ -1517,7 +1536,7 @@ function AppInner() {
   })
   const stableReplay = useStableCallback((msg: ChatMessage) => {
     if (!character) return
-    playTts(msg.content, msg.ts, character.ttsVoice ?? '').catch((e) =>
+    playTts(msg.content, msg.ts, character.ttsVoice ?? '', character.ttsModel ?? '').catch((e) =>
       setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }]),
     )
   })
@@ -1630,7 +1649,10 @@ function AppInner() {
   // place de l'arbre principal.
 
   return (
-    <div className="app">
+    // L'avatar masqué se joue par CLASSE sur la racine (jamais d'unmount de
+    // .scene : le stage 3D y est attaché) — le CSS masque la scène et le
+    // moteur est mis en pause par l'effet setPaused.
+    <div className={avatarVisible ? 'app' : 'app no-avatar'}>
       <div
         ref={sceneRef}
         className="scene"
@@ -1670,7 +1692,7 @@ function AppInner() {
           aux panneaux (chat desktop, boîte VN — les double-clics des poignées
           restent en raccourcis). Il vit HORS du chat-panel (le mode VN y coupe
           les pointer-events). */}
-      {stageReady && !vrmError && !!character && (
+      {stageReady && !vrmError && !!character && avatarVisible && (
         <button
           className={`scene-reset${vnMode ? ' vn' : ''}`}
           onClick={() => {
@@ -1969,7 +1991,7 @@ function AppInner() {
                         stopTts()
                         return
                       }
-                      playTts(lastFeedMsg.msg.content, lastFeedMsg.msg.ts, character?.ttsVoice ?? '').catch((e) =>
+                      playTts(lastFeedMsg.msg.content, lastFeedMsg.msg.ts, character?.ttsVoice ?? '', character?.ttsModel ?? '').catch((e) =>
                         setFeed((f) => [
                           ...f,
                           { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) },
@@ -2059,6 +2081,11 @@ function AppInner() {
             setAppTheme(t)
             saveTheme(t)
           }}
+          avatarVisible={avatarVisible}
+          onToggleAvatar={(on) => {
+            setAvatarVisible(on)
+            setPref({ avatarVisible: on })
+          }}
           env3d={env3d}
           onToggleEnv3d={(on) => {
             setEnv3d(on)
@@ -2139,13 +2166,15 @@ function AppInner() {
             handleCharacterDeleted(id).catch((e) => console.error('[characters]', e))
           }}
           // Photo par capture : proposée seulement quand un avatar 3D est bien à
-          // l'écran (scène prête, sans erreur, personnage doté d'un VRM). Le
-          // dialog restreint en plus au personnage actif — le seul qui soit affiché.
-          // La voix du personnage se règle dans son formulaire ; le service, lui,
-          // s'allume dans les Réglages — le dialog le dit quand il est éteint.
+          // l'écran (scène prête, sans erreur, personnage doté d'un VRM, avatar
+          // VISIBLE — masqué, le moteur est en pause, le canvas n'est plus qu'une
+          // image figée : aucune photo digne de ce nom). Le dialog restreint en
+          // plus au personnage actif — le seul qui soit affiché. La voix du
+          // personnage se règle dans son formulaire ; le service, lui, s'allume
+          // dans les Réglages — le dialog le dit quand il est éteint.
           ttsAvailable={settings?.ttsEnabled === true && (settings?.ttsUrl ?? '').trim() !== ''}
           snapshotAvatar={
-            stageReady && !vrmError && !!character?.vrm
+            stageReady && !vrmError && !!character?.vrm && avatarVisible
               ? () => stageRef.current?.snapshot() ?? null
               : null
           }

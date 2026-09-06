@@ -25,7 +25,8 @@ import {
   writeSafetyNet,
   type BackupRoots,
 } from './backupArchive'
-import { DEFAULT_ZIP_LIMITS, ZipError, readZip, type ZipEntry, type ZipLimits } from './zip'
+import { DEFAULT_ZIP_LIMITS, readZip, type ZipEntry, type ZipLimits } from './zip'
+import { CodedError, ErrorCodes } from '../../shared/errorCodes'
 
 /** Plafond du corps de requête accepté par la route (doit rester ≥ maxTotalBytes utile). */
 export const MAX_ARCHIVE_BYTES = 128 * 1024 * 1024
@@ -34,14 +35,6 @@ const LIMITS: ZipLimits = {
   ...DEFAULT_ZIP_LIMITS,
   maxEntryBytes: 64 * 1024 * 1024,
   maxTotalBytes: 384 * 1024 * 1024,
-}
-
-/** Erreur de restauration — message destiné à être affiché tel quel dans l'UI. */
-export class RestoreError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'RestoreError'
-  }
 }
 
 // ── Sécurité des chemins (zip-slip) ────────────────────────────────────────
@@ -65,28 +58,28 @@ const FORBIDDEN_CHARS = /[<>:"|?*]/
  * manifeste) : pas une cible, pas une menace.
  */
 export function splitEntryName(name: string): { prefix: string; rel: string } | null {
-  if (!name || name.length > 1024) throw new RestoreError(`Nom d’entrée refusé : ${JSON.stringify(name.slice(0, 80))}`)
+  if (!name || name.length > 1024) throw new CodedError(ErrorCodes.restoreEntryRefused, { name: name.slice(0, 80) })
   // Octet nul et caractères de contrôle : jamais dans un nom légitime.
   for (let i = 0; i < name.length; i++) {
     if (name.charCodeAt(i) < 0x20 || name.charCodeAt(i) === 0x7f) {
-      throw new RestoreError(`Nom d’entrée refusé (caractère de contrôle) : ${JSON.stringify(name.slice(0, 80))}`)
+      throw new CodedError(ErrorCodes.restoreEntryControl, { name: name.slice(0, 80) })
     }
   }
   // Le zip ne connaît QUE '/'. Un '\' serait un séparateur sous Windows et un
   // simple caractère ailleurs : cette ambiguïté est exactement ce dont vit
   // zip-slip. Refus net.
-  if (name.includes('\\')) throw new RestoreError(`Nom d’entrée refusé (antislash) : ${name}`)
-  if (name.startsWith('/')) throw new RestoreError(`Nom d’entrée refusé (chemin absolu) : ${name}`)
+  if (name.includes('\\')) throw new CodedError(ErrorCodes.restoreEntryBackslash, { name })
+  if (name.startsWith('/')) throw new CodedError(ErrorCodes.restoreEntryAbsolute, { name })
   const segments = name.split('/')
   for (const seg of segments) {
     if (seg === '' || seg === '.' || seg === '..') {
-      throw new RestoreError(`Nom d’entrée refusé (traversée de dossier) : ${name}`)
+      throw new CodedError(ErrorCodes.restoreEntryTraversal, { name })
     }
-    if (FORBIDDEN_CHARS.test(seg)) throw new RestoreError(`Nom d’entrée refusé (caractère interdit) : ${name}`)
-    if (WINDOWS_DEVICE.test(seg)) throw new RestoreError(`Nom d’entrée refusé (nom réservé) : ${name}`)
+    if (FORBIDDEN_CHARS.test(seg)) throw new CodedError(ErrorCodes.restoreEntryForbidden, { name })
+    if (WINDOWS_DEVICE.test(seg)) throw new CodedError(ErrorCodes.restoreEntryReserved, { name })
     // Windows retire les points et espaces finaux : "evil. " et "evil" seraient
     // le même fichier, ce qui permet de viser un nom qu'on croyait épargné.
-    if (/[. ]$/.test(seg)) throw new RestoreError(`Nom d’entrée refusé (point ou espace final) : ${name}`)
+    if (/[. ]$/.test(seg)) throw new CodedError(ErrorCodes.restoreEntryTrailing, { name })
   }
   if (segments.length < 2) return null // fichier à la racine de l'archive
   return { prefix: segments[0], rel: segments.slice(1).join('/') }
@@ -101,7 +94,7 @@ export function resolveTarget(root: string, rel: string): string {
   const abs = path.resolve(root, rel)
   const back = path.relative(root, abs)
   if (back === '' || back.startsWith('..') || path.isAbsolute(back)) {
-    throw new RestoreError(`Nom d’entrée refusé (sortie du dossier cible) : ${rel}`)
+    throw new CodedError(ErrorCodes.restoreEntryOutside, { name: rel })
   }
   return abs
 }
@@ -130,16 +123,14 @@ function identify(entries: ZipEntry[]): Identity {
     try {
       parsed = JSON.parse(manifest.data.toString('utf8'))
     } catch {
-      throw new RestoreError(`${MANIFEST_NAME} illisible — archive Hanami abîmée`)
+      throw new CodedError(ErrorCodes.restoreManifestCorrupt)
     }
     const m = parsed as { format?: unknown; version?: unknown; createdAt?: unknown }
-    if (m.format !== 'hanami-backup') throw new RestoreError('Ce zip n’est pas une sauvegarde Hanami')
+    if (m.format !== 'hanami-backup') throw new CodedError(ErrorCodes.restoreNotHanami)
     const version = Number(m.version)
-    if (!Number.isInteger(version) || version < 1) throw new RestoreError('Version de sauvegarde illisible')
+    if (!Number.isInteger(version) || version < 1) throw new CodedError(ErrorCodes.restoreVersionUnreadable)
     if (version > BACKUP_FORMAT_VERSION) {
-      throw new RestoreError(
-        `Sauvegarde en version ${version} — cette installation d’Hanami ne lit que la version ${BACKUP_FORMAT_VERSION}. Mettez Hanami à jour.`,
-      )
+      throw new CodedError(ErrorCodes.restoreVersionTooNew, { version, max: BACKUP_FORMAT_VERSION })
     }
     return {
       version,
@@ -153,7 +144,7 @@ function identify(entries: ZipEntry[]): Identity {
     (readme && readme.data.toString('utf8', 0, 32).startsWith('HANAMI')) ||
     entries.some((e) => e.name === 'data/config.json' || CHARACTER_JSON.test(e.name))
   if (!looksHanami) {
-    throw new RestoreError('Ce zip n’est pas une sauvegarde Hanami (ni manifeste, ni dossier data/ reconnaissable)')
+    throw new CodedError(ErrorCodes.restoreUnrecognizable)
   }
   // Date lue dans le LISEZMOI ; à défaut, la plus récente des entrées.
   let createdAt: string | null = null
@@ -241,12 +232,8 @@ function passwordOf(json: Buffer | null): string {
  * avant d'écrire (on ne fait jamais confiance à un plan calculé plus tôt).
  */
 export function planRestore(zip: Buffer, roots: BackupRoots): RestorePlan {
-  let entries: ZipEntry[]
-  try {
-    entries = readZip(zip, LIMITS)
-  } catch (e) {
-    throw e instanceof ZipError ? new RestoreError(e.message) : e
-  }
+  // Les erreurs de zip sont déjà CODÉES (CodedError) : rien à convertir.
+  const entries = readZip(zip, LIMITS)
   const identity = identify(entries)
 
   const planned: PlannedEntry[] = []
@@ -317,7 +304,7 @@ export function planRestore(zip: Buffer, roots: BackupRoots): RestorePlan {
 
   counts.characters = charFiles.size
   if (planned.length === 0) {
-    throw new RestoreError('Archive sans données restaurables (ni data/, ni portraits/)')
+    throw new CodedError(ErrorCodes.restoreNoData)
   }
 
   const characters: RestoreCharacterEntry[] = [...charFiles.entries()]
@@ -435,9 +422,10 @@ export function applyRestore(zip: Buffer, roots: BackupRoots, now = new Date()):
       }
     }
   } catch (e) {
-    throw new RestoreError(
-      `Restauration interrompue (${e instanceof Error ? e.message : String(e)}). L’état d’avant est intact dans : ${net.file}`,
-    )
+    throw new CodedError(ErrorCodes.restoreInterrupted, {
+      detail: e instanceof Error ? e.message : String(e),
+      file: net.file,
+    })
   } finally {
     fs.rmSync(work, { recursive: true, force: true })
   }
@@ -463,7 +451,7 @@ const STAGED_ID = /^[0-9a-f]{24}$/
 const STAGE_TTL_MS = 2 * 60 * 60 * 1000
 
 function stagedFile(roots: BackupRoots, id: string): string {
-  if (!STAGED_ID.test(id)) throw new RestoreError('Jeton d’archive invalide')
+  if (!STAGED_ID.test(id)) throw new CodedError(ErrorCodes.restoreStagedIdInvalid)
   return path.join(roots.workDir, `staged-${id}.zip`)
 }
 
@@ -480,7 +468,7 @@ export function readStaged(roots: BackupRoots, id: string): Buffer {
   try {
     return fs.readFileSync(stagedFile(roots, id))
   } catch {
-    throw new RestoreError('Aperçu expiré — redéposez l’archive et vérifiez-la à nouveau')
+    throw new CodedError(ErrorCodes.restorePreviewExpired)
   }
 }
 

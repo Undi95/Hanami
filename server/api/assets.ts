@@ -6,17 +6,15 @@
 // jamais d'état de l'app.
 import fs from 'node:fs'
 import path from 'node:path'
-import express, { Router, type Response } from 'express'
+import express, { Router } from 'express'
 import { BACKGROUNDS_DIR, VRMA_DIR, VRM_DIR } from '../lib/storage'
 import { environmentEntries, refreshEnvironmentIndex } from '../lib/envIndex'
+import { httpError, sendJsonError } from '../lib/errors'
+import { CodedError, ErrorCodes } from '../../shared/errorCodes'
 
 export const assetsRouter = Router()
 
 const BG_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp']
-
-function sendError(res: Response, e: unknown): void {
-  res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
-}
 
 /** Fichiers d'un dossier filtrés par extensions, triés alpha. Dossier absent → []. */
 function listFiles(dir: string, extensions: string[]): string[] {
@@ -32,7 +30,7 @@ assetsRouter.get('/api/vrm-models', (_req, res) => {
     // encodeURIComponent : un nom contenant # ou % casserait l'URL côté client.
     res.json({ models: listFiles(VRM_DIR, ['.vrm']).map((f) => `/vrm/${encodeURIComponent(f)}`) })
   } catch (e) {
-    sendError(res, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -55,7 +53,7 @@ assetsRouter.get('/api/environments', (_req, res) => {
     const scenes = environmentEntries()
     res.json({ environments: scenes.map((s) => s.url), scenes })
   } catch (e) {
-    sendError(res, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -63,7 +61,7 @@ assetsRouter.get('/api/vrm-animations', (_req, res) => {
   try {
     res.json({ animations: listFiles(VRMA_DIR, ['.vrma']).map((f) => `/vrma/${encodeURIComponent(f)}`) })
   } catch (e) {
-    sendError(res, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -75,7 +73,7 @@ assetsRouter.get('/api/backgrounds', (_req, res) => {
       ),
     })
   } catch (e) {
-    sendError(res, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -155,11 +153,11 @@ function freeTarget(stem: string, ext: string): { file: string; name: string } {
     // Ceinture et bretelles : le nom est déjà nettoyé, on vérifie quand même
     // que la cible ne sort pas du dossier des fonds.
     if (path.dirname(path.resolve(file)) !== path.resolve(BACKGROUNDS_DIR)) {
-      throw new Error('Nom de fichier invalide')
+      throw new CodedError(ErrorCodes.invalidFileName)
     }
     if (!fs.existsSync(file)) return { file, name }
   }
-  throw new Error('Trop de fonds portent ce nom')
+  throw new CodedError(ErrorCodes.bgNameExhausted)
 }
 
 assetsRouter.post(
@@ -172,7 +170,7 @@ assetsRouter.post(
     try {
       const buf = req.body as unknown
       if (!Buffer.isBuffer(buf) || buf.length === 0) {
-        res.status(400).json({ error: 'Corps de requête image requis' })
+        httpError(res, 400, ErrorCodes.imageBodyRequired)
         return
       }
       const header = req.headers['x-filename']
@@ -184,14 +182,14 @@ assetsRouter.post(
       }
       const contentType = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase()
       if (!declaredExtension(rawName) && !EXT_BY_MIME[contentType]) {
-        res.status(400).json({ error: 'Format non pris en charge (png, jpg, webp)' })
+        httpError(res, 400, ErrorCodes.imageFormatUnsupported)
         return
       }
       // Les octets font foi sur l'extension finale : un .jpg qui est en réalité
       // un PNG est enregistré en .png plutôt que refusé.
       const family = sniffFamily(buf)
       if (!family) {
-        res.status(400).json({ error: 'Ce fichier n’est pas une image PNG, JPEG ou WebP' })
+        httpError(res, 400, ErrorCodes.notAnImage)
         return
       }
       fs.mkdirSync(BACKGROUNDS_DIR, { recursive: true })
@@ -199,7 +197,7 @@ assetsRouter.post(
       fs.writeFileSync(file, buf)
       res.json({ url: `/backgrounds/${encodeURIComponent(name)}` })
     } catch (e) {
-      sendError(res, e)
+      sendJsonError(res, 500, e)
     }
   },
 )

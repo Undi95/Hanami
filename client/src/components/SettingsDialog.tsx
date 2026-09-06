@@ -38,6 +38,11 @@ interface Props {
   settings: Settings
   theme: AppTheme
   onPickTheme: (theme: AppTheme) => void
+  // Avatar visible : préférence d'interface (data/ui.json), pas un réglage du
+  // backend — elle vit donc HORS du formulaire, comme le thème, et s'applique
+  // au clic.
+  avatarVisible: boolean
+  onToggleAvatar: (on: boolean) => void
   // Décor 3D : préférence d'interface (data/ui.json), pas un réglage du backend —
   // elle vit donc HORS du formulaire, comme le thème, et s'applique au clic.
   env3d: boolean
@@ -69,6 +74,8 @@ interface FormState {
   visionMode: VisionMode
   temperature: string
   maxTokens: string
+  // Budget de raisonnement : 0 = auto (aucun paramètre envoyé au backend).
+  thinkingBudget: string
   maxHistoryMessages: string
   memoryEnabled: boolean
   fileToolsEnabled: boolean
@@ -110,6 +117,7 @@ function toForm(s: Settings): FormState {
     visionMode: s.visionMode,
     temperature: String(s.temperature),
     maxTokens: String(s.maxTokens),
+    thinkingBudget: String(s.thinkingBudget),
     maxHistoryMessages: String(s.maxHistoryMessages),
     memoryEnabled: s.memoryEnabled,
     fileToolsEnabled: s.fileToolsEnabled,
@@ -162,6 +170,9 @@ function fromForm(
     visionMode: f.visionMode,
     temperature: num(f.temperature, base.temperature),
     maxTokens: Math.round(num(f.maxTokens, base.maxTokens)),
+    // 0 = auto ; la négative (champ mal saisi) retombe dessus — le serveur
+    // renormalise de toute façon (thinkingBudgetParam : 0 ou budget réel).
+    thinkingBudget: Math.max(0, Math.round(num(f.thinkingBudget, base.thinkingBudget))),
     maxHistoryMessages: Math.round(num(f.maxHistoryMessages, base.maxHistoryMessages)),
     memoryEnabled: f.memoryEnabled,
     fileToolsEnabled: f.fileToolsEnabled,
@@ -502,6 +513,8 @@ export default function SettingsDialog({
   settings,
   theme,
   onPickTheme,
+  avatarVisible,
+  onToggleAvatar,
   env3d,
   onToggleEnv3d,
   vrmaEnabled,
@@ -854,6 +867,12 @@ export default function SettingsDialog({
           {/* Hors formulaire, appliqué au clic comme le thème et la langue : c'est
               une préférence d'interface, pas un réglage du modèle. */}
           <Toggle
+            label={t('avatarVisible')}
+            sub={t('avatarVisibleSub')}
+            checked={avatarVisible}
+            onChange={onToggleAvatar}
+          />
+          <Toggle
             label={t('env3d')}
             sub={t('env3dSub')}
             checked={env3d}
@@ -991,6 +1010,11 @@ export default function SettingsDialog({
               <label htmlFor="set-max">{t('maxTokens')}</label>
               <input id="set-max" type="number" step="1" min="1" value={form.maxTokens} onChange={(e) => set('maxTokens', e.target.value)} />
             </div>
+          </div>
+          <div className="field">
+            <label htmlFor="set-think">{t('thinkingBudget')}</label>
+            <input id="set-think" type="number" step="256" min="0" value={form.thinkingBudget} onChange={(e) => set('thinkingBudget', e.target.value)} />
+            <span className="hint">{t('thinkingBudgetSub')}</span>
           </div>
           <div className="grid-2">
             <div className="field">

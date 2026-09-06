@@ -17,14 +17,12 @@ import {
   writeMemoryFile,
 } from '../lib/storage'
 import { streamChatCompletion } from '../llm/openai'
+import { CodedError, ErrorCodes } from '../../shared/errorCodes'
+import { httpError, sendJsonError } from '../lib/errors'
 import type { MemoryFile, Settings } from '../../shared/types'
 
 export const memoryRouter = Router()
 memoryRouter.use(express.json({ limit: '5mb' }))
-
-function sendError(res: Response, status: number, e: unknown): void {
-  res.status(status).json({ error: e instanceof Error ? e.message : String(e) })
-}
 
 function characterExists(id: string): boolean {
   try {
@@ -59,7 +57,7 @@ memoryRouter.get('/api/characters/:id/memory', (req, res) => {
   try {
     const character = getCharacter(req.params.id)
     if (!character) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     const files = listMemory(req.params.id)
@@ -68,26 +66,26 @@ memoryRouter.get('/api/characters/:id/memory', (req, res) => {
     // panneau annoncerait une injection que le payload ne ferait pas.
     res.json({ files, ...injectionState(files, effectiveSettings(character)) })
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
 
 memoryRouter.post('/api/characters/:id/memory', (req, res) => {
   try {
     if (!characterExists(req.params.id)) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     const body = (req.body ?? {}) as Record<string, unknown>
     if (typeof body.name !== 'string' || !body.name.trim()) {
-      res.status(400).json({ error: 'Le champ "name" est requis' })
+      httpError(res, 400, ErrorCodes.fieldNameRequired, { field: 'name' })
       return
     }
     const content = typeof body.content === 'string' ? body.content : ''
     writeMemoryFile(req.params.id, forceMdExtension(body.name.trim()), content)
     res.json({ ok: true })
   } catch (e) {
-    sendError(res, 400, e) // nom invalide (sanitizeFileName) → 400
+    sendJsonError(res, 400, e) // nom invalide (sanitizeFileName) → 400
   }
 })
 
@@ -96,13 +94,13 @@ memoryRouter.post('/api/characters/:id/memory', (req, res) => {
 memoryRouter.post('/api/characters/:id/memory/remember', (req, res) => {
   try {
     if (!characterExists(req.params.id)) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     const body = (req.body ?? {}) as Record<string, unknown>
     const text = typeof body.text === 'string' ? body.text.trim() : ''
     if (!text) {
-      res.status(400).json({ error: 'Le champ "text" est requis' })
+      httpError(res, 400, ErrorCodes.fieldNameRequired, { field: 'text' })
       return
     }
     const charId = req.params.id
@@ -126,7 +124,7 @@ memoryRouter.post('/api/characters/:id/memory/remember', (req, res) => {
     }
     res.json({ ok: true })
   } catch (e) {
-    sendError(res, 400, e)
+    sendJsonError(res, 400, e)
   }
 })
 
@@ -176,36 +174,36 @@ function extractTidyJson(raw: string): Record<string, unknown> {
   const start = s.indexOf('{')
   const end = s.lastIndexOf('}')
   if (start < 0 || end <= start) {
-    throw new Error("Le modèle n'a pas répondu en JSON — rien n'a été modifié")
+    throw new CodedError(ErrorCodes.tidyNoJson)
   }
   try {
     return JSON.parse(s.slice(start, end + 1)) as Record<string, unknown>
   } catch {
-    throw new Error("Le modèle a répondu un JSON illisible — rien n'a été modifié")
+    throw new CodedError(ErrorCodes.tidyBadJson)
   }
 }
 
 /** Validation en dur : c'est ICI qu'une réponse moche devient une erreur — jamais des écritures. */
 function validateTidyPlan(obj: Record<string, unknown>): TidyPlan {
   const index = typeof obj.index === 'string' ? obj.index.trim() : ''
-  if (!index) throw new Error("Réponse du modèle sans index MEMORY.md — rien n'a été modifié")
+  if (!index) throw new CodedError(ErrorCodes.tidyNoIndex)
   if (!Array.isArray(obj.files) || obj.files.length === 0) {
-    throw new Error("Réponse du modèle sans aucun fichier — rien n'a été modifié")
+    throw new CodedError(ErrorCodes.tidyNoFiles)
   }
   const seen = new Set<string>()
   const files = obj.files.map((entry, i) => {
     const rec = (typeof entry === 'object' && entry !== null ? entry : {}) as Record<string, unknown>
     const name0 = typeof rec.name === 'string' ? rec.name.trim() : ''
-    if (!name0) throw new Error(`Réponse du modèle : fichier n°${i + 1} sans nom — rien n'a été modifié`)
+    if (!name0) throw new CodedError(ErrorCodes.tidyFileNoName, { n: i + 1 })
     const name = name0.toLowerCase().endsWith('.md') ? name0 : `${name0}.md`
     const safe = sanitizeFileName(name)
     if (safe.toLowerCase() === 'memory.md') {
-      throw new Error('Réponse du modèle : MEMORY.md figure dans "files" — rien n\'a été modifié')
+      throw new CodedError(ErrorCodes.tidyIndexInFiles)
     }
-    if (seen.has(safe.toLowerCase())) throw new Error(`Réponse du modèle : doublon ${safe} — rien n'a été modifié`)
+    if (seen.has(safe.toLowerCase())) throw new CodedError(ErrorCodes.tidyDuplicateFile, { name: safe })
     seen.add(safe.toLowerCase())
     const content = typeof rec.content === 'string' ? rec.content : ''
-    if (!content.trim()) throw new Error(`Réponse du modèle : fichier vide ${safe} — rien n'a été modifié`)
+    if (!content.trim()) throw new CodedError(ErrorCodes.tidyEmptyFile, { name: safe })
     return { name: safe, content }
   })
   return { index, files }
@@ -215,7 +213,7 @@ async function tidyMemory(
   charId: string,
 ): Promise<{ ok: true; before: { files: number; chars: number }; after: { files: number; chars: number }; backup: string }> {
   const character = getCharacter(charId)
-  if (!character) throw new Error(`Personnage introuvable : ${charId}`)
+  if (!character) throw new CodedError(ErrorCodes.characterNotFound, { id: charId })
   // Le rangement écrit AVEC LE MODÈLE DE CE PERSONNAGE (réglages effectifs) :
   // sa fenêtre de travail et son budget de sortie, pas ceux du réglage global.
   const settings = effectiveSettings(character)
@@ -231,10 +229,7 @@ async function tidyMemory(
   const userMsg = buildTidyUserMessage(index, others)
   const inputTokens = Math.ceil((TIDY_SYSTEM.length + userMsg.length) / 4) + 512
   if (inputTokens + completionBudget > window) {
-    throw new Error(
-      `Mémoire trop volumineuse pour un rangement en une passe (≈${Math.round(inputTokens / 1000)} k tokens d'entrée ` +
-        `pour une fenêtre de ${window}) — élargissez la fenêtre ou rangez d'abord manuellement`,
-    )
+    throw new CodedError(ErrorCodes.tidyTooBig, { k: Math.round(inputTokens / 1000), window })
   }
 
   const abort = new AbortController()
@@ -255,7 +250,7 @@ async function tidyMemory(
   } finally {
     clearTimeout(timer)
   }
-  if (!raw.trim()) throw new Error("Le modèle n'a produit aucune réponse")
+  if (!raw.trim()) throw new CodedError(ErrorCodes.tidyNoAnswer)
 
   const plan = validateTidyPlan(extractTidyJson(raw))
 
@@ -277,15 +272,15 @@ async function tidyMemory(
 memoryRouter.post('/api/characters/:id/memory/tidy', async (req, res) => {
   const charId = req.params.id
   if (!characterExists(charId)) {
-    res.status(404).json({ error: `Personnage introuvable : ${charId}` })
+    httpError(res, 404, ErrorCodes.characterNotFound, { id: charId })
     return
   }
   if (listMemory(charId).filter((f) => f.name !== 'MEMORY.md').length < 2) {
-    res.status(400).json({ error: 'Rien à ranger — il faut au moins 2 fichiers mémoire (hors index)' })
+    httpError(res, 400, ErrorCodes.tidyNeedsTwoFiles)
     return
   }
   if (tidyingInFlight.has(charId)) {
-    res.status(409).json({ error: 'Un rangement est déjà en cours pour ce personnage' })
+    httpError(res, 409, ErrorCodes.tidyAlreadyRunning)
     return
   }
   tidyingInFlight.add(charId)
@@ -293,7 +288,7 @@ memoryRouter.post('/api/characters/:id/memory/tidy', async (req, res) => {
     res.json(await tidyMemory(charId))
   } catch (e) {
     // Fenêtre trop petite / backend down / JSON invalide → 500, RIEEN n'a été écrit.
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   } finally {
     tidyingInFlight.delete(charId)
   }
@@ -303,12 +298,12 @@ memoryRouter.post('/api/characters/:id/memory/tidy', async (req, res) => {
 memoryRouter.get('/api/characters/:id/memory/backups', (req, res) => {
   try {
     if (!characterExists(req.params.id)) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     res.json(listMemoryBackups(req.params.id))
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -317,31 +312,31 @@ memoryRouter.get('/api/characters/:id/memory/backups', (req, res) => {
 memoryRouter.post('/api/characters/:id/memory/backups/:name/restore', (req, res) => {
   try {
     if (!characterExists(req.params.id)) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     const safety = restoreMemoryBackup(req.params.id, req.params.name)
     res.json({ ok: true, restored: req.params.name, backup: safety })
   } catch (e) {
-    sendError(res, 400, e)
+    sendJsonError(res, 400, e)
   }
 })
 
 memoryRouter.put('/api/characters/:id/memory/:name', (req, res) => {
   try {
     if (!characterExists(req.params.id)) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     const body = (req.body ?? {}) as Record<string, unknown>
     if (typeof body.content !== 'string') {
-      res.status(400).json({ error: 'Le champ "content" est requis' })
+      httpError(res, 400, ErrorCodes.fieldNameRequired, { field: 'content' })
       return
     }
     writeMemoryFile(req.params.id, req.params.name, body.content)
     res.json({ ok: true })
   } catch (e) {
-    sendError(res, 400, e)
+    sendJsonError(res, 400, e)
   }
 })
 
@@ -351,6 +346,6 @@ memoryRouter.delete('/api/characters/:id/memory/:name', (req, res) => {
     res.json({ ok: true })
   } catch (e) {
     // storage refuse MEMORY.md (index) → 400 ; nom invalide → 400 aussi.
-    sendError(res, 400, e)
+    sendJsonError(res, 400, e)
   }
 })

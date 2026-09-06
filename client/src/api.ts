@@ -18,7 +18,8 @@ import type {
   UiPrefsPatch,
 } from '../../shared/types'
 import type { EnvironmentCredit } from '../../shared/credits'
-import { translate as t } from './i18n'
+import { serverErrorText, translate as t } from './i18n'
+import type { ErrorParams } from '../../shared/errorCodes'
 
 const TOKEN_KEY = 'hanami_token'
 
@@ -59,11 +60,15 @@ function authHeaders(): Record<string, string> {
 
 async function throwFromResponse(res: Response): Promise<never> {
   if (res.status === 401) throw new AuthRequiredError()
-  // Un message d'erreur renvoyé par le serveur est affiché tel quel (jamais traduit).
   let message = t('serverError', { status: res.status })
   try {
-    const data = (await res.json()) as { error?: string }
-    if (data.error) message = data.error
+    const data = (await res.json()) as { error?: string; params?: ErrorParams }
+    if (data.error) {
+      // Contrat codes/phrases : data.error est un CODE — traduit ici, dans la
+      // langue de l'UI. Code inconnu (serveur plus récent) : affiché tel quel ;
+      // erreur non codée (message brut) : affichée telle quelle, comme avant.
+      message = serverErrorText(data.error, data.params) || message
+    }
   } catch {
     /* corps non JSON */
   }
@@ -217,6 +222,8 @@ export function createCharacter(input: {
   /** Voix du personnage : absent = muet (opt-in strict), voix vide = celle des Réglages. */
   ttsEnabled?: boolean
   ttsVoice?: string
+  /** Modèle TTS du personnage : vide/absent = le modèle des Réglages (le serveur reste global). */
+  ttsModel?: string
   /** Overrides de génération : absent = réglages globaux (un champ vide retombe dessus). */
   llm?: CharacterLlm
   /** Persona utilisateur épinglée (id de la collection des Réglages) : absent = la persona par défaut. */
@@ -595,15 +602,19 @@ export async function uploadBackground(file: File): Promise<string> {
 /**
  * Renvoie l'audio de la réponse (le serveur proxifie le serveur TTS configuré).
  * `voice` = la voix du personnage qui parle ; vide/absente, le serveur prend
- * celle des Réglages.
+ * celle des Réglages. `model` = le modèle TTS du personnage (même logique :
+ * vide/absent = le modèle des Réglages). Le serveur, lui, est toujours celui
+ * de la configuration.
  */
-export async function tts(text: string, voice = ''): Promise<Blob> {
+export async function tts(text: string, voice = '', model = ''): Promise<Blob> {
   let res: Response
   try {
     res = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify(voice ? { text, voice } : { text }),
+      body: JSON.stringify(
+        { text, ...(voice ? { voice } : {}), ...(model ? { model } : {}) },
+      ),
     })
   } catch {
     throw new ApiError(t('serverUnreachable'), 0)

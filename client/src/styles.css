@@ -422,6 +422,41 @@ select {
   }
 }
 
+/* Avatar masqué par l'utilisateur (« Afficher l'avatar » désactivé) : la classe
+   vit sur .app, JAMAIS un unmount de .scene (le stage 3D y est attaché, cf.
+   App.tsx) — et le moteur est en pause VRAIE (VrmStage.setPaused), pas une
+   frame rendue à l'aveugle. Le chat récupère toute la place laissée par la
+   scène. L'astuce 3D est liée à la scène : elle disparaît avec. */
+.no-avatar .scene,
+.no-avatar .scene-portrait,
+.no-avatar .scene-hint {
+  display: none;
+}
+
+/* Mobile (<900 px) : la feuille basse devient une page entière — la scène
+   n'occupe plus le tiers du haut, la poignée verticale a plus d'objet à régler. */
+.no-avatar .chat-panel:not(.vn) {
+  height: 100dvh;
+  border-radius: 0;
+  border-top: none;
+}
+.no-avatar .sheet-handle {
+  display: none;
+}
+
+/* Desktop (≥900 px) : la colonne de chat prend toute la largeur, sa poignée
+   de redimensionnement n'a plus de scène à délimiter. */
+@media (min-width: 900px) {
+  .no-avatar .chat-panel:not(.vn) {
+    left: 0;
+    width: 100%;
+    border-left: none;
+  }
+  .no-avatar .panel-grip {
+    display: none;
+  }
+}
+
 /* ── Panneau de chat en verre ─────────────────────────────────────────── */
 
 .chat-panel {

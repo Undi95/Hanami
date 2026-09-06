@@ -55,6 +55,9 @@ interface FormState {
   systemPrompt: string
   ttsEnabled: boolean
   ttsVoice: string
+  // Modèle TTS du personnage : '' = le modèle des Réglages (même logique que la
+  // voix — le serveur reste global, c'est le moteur, pas la voix).
+  ttsModel: string
   // Persona utilisateur épinglée : '' = la persona par défaut des Réglages.
   userPersona: string
   // Overrides de génération : chaînes de formulaire, '' = réglage global
@@ -82,6 +85,7 @@ const EMPTY_FORM: FormState = {
   // Voix : éteinte par défaut, comme pour tout personnage qui n'a rien demandé.
   ttsEnabled: false,
   ttsVoice: '',
+  ttsModel: '',
   // Persona : vide = la défaut des Réglages (le comportement d'origine).
   userPersona: '',
   // Overrides : tout est vide = tout est global (le comportement d'origine).
@@ -265,7 +269,9 @@ export default function CharactersDialog({
 
   // Filigrane des overrides : « Global : X » — vide si les réglages n'ont pas
   // encore chargé (le champ reste utilisable, il retombe sur le global).
-  const globalPh = (v: number | undefined): string =>
+  // `undefined` = rien à afficher ; le vide EXPLICITE est converti avant appel
+  // (un modèle global '' n'a pas de filigrane digne de ce nom).
+  const globalPh = (v: number | string | undefined): string =>
     settings && v !== undefined ? t('llmGlobal', { value: String(v) }) : ''
 
   function backToList() {
@@ -322,6 +328,8 @@ export default function CharactersDialog({
         systemPrompt: c.systemPrompt,
         ttsEnabled: c.ttsEnabled === true,
         ttsVoice: c.ttsVoice ?? '',
+        // Modèle : clé absente = le global des Réglages, donc formulaire vide.
+        ttsModel: c.ttsModel ?? '',
         // Persona épinglée : clé absente = la défaut des Réglages, donc formulaire vide.
         userPersona: c.userPersona ?? '',
         // Overrides : champ absent = réglage global, donc formulaire vide.
@@ -474,6 +482,8 @@ export default function CharactersDialog({
           greetingMode: form.greetingMode,
           ttsEnabled: form.ttsEnabled,
           ttsVoice: form.ttsVoice.trim(),
+          // Vide = le modèle des Réglages (le serveur jette la clé vide).
+          ttsModel: form.ttsModel.trim(),
           // Vide = la persona par défaut des Réglages : pas de clé dans le fichier.
           ...(form.userPersona.trim() ? { userPersona: form.userPersona } : {}),
           // Vide = tout est global : la clé `llm` n'entre pas dans le fichier.
@@ -497,6 +507,8 @@ export default function CharactersDialog({
           greetingMode: form.greetingMode,
           ttsEnabled: form.ttsEnabled,
           ttsVoice: form.ttsVoice.trim(),
+          // '' = retour au modèle global (le serveur retire la clé).
+          ttsModel: form.ttsModel.trim(),
           systemPrompt: form.systemPrompt,
           // '' = dé-épingle (le serveur retire la clé) : la persona par défaut
           // des Réglages s'applique à nouveau.
@@ -807,6 +819,23 @@ export default function CharactersDialog({
                 />
               </VoicePicker>
               <span className="hint">{t('characterVoiceHint')}</span>
+            </div>
+          )}
+          {form.ttsEnabled && (
+            <div className="field">
+              <label htmlFor="char-tts-model">{t('characterTtsModel')}</label>
+              {/* Pas de VoicePicker ici : le nom du modèle n'est pas une liste à
+                  cliquer, c'est un identifiant — et la sonde vit dans les
+                  Réglages, où le serveur global se règle. Filigrane : le global
+                  sur lequel le vide retombe (même grammaire que les overrides). */}
+              <input
+                id="char-tts-model"
+                type="text"
+                value={form.ttsModel}
+                placeholder={globalPh(settings?.ttsModel || undefined) || t('characterTtsModelPlaceholder')}
+                onChange={(e) => set('ttsModel', e.target.value)}
+              />
+              <span className="hint">{t('characterTtsModelHint')}</span>
             </div>
           )}
 

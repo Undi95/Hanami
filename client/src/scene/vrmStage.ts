@@ -2575,6 +2575,11 @@ export function createVrmStage(container: HTMLElement): VrmStage {
   // ── Boucle : mixer → idle → vrm.update (expressions + springbones) → controls → render ──
   const clock = new Clock()
   let rafId = 0
+  // Avatar masqué par l'utilisateur (réglage « Afficher l'avatar ») : la boucle
+  // s'arrête ICI, pas seulement dans le CSS — plus aucune frame rendue à
+  // l'aveugle. Distinct de `animationsEnabled` (un état des animations) : c'est
+  // le moteur entier qui est en pause, et l'onglet caché en plus (visibilitychange).
+  let paused = false
 
   function tick(): void {
     rafId = requestAnimationFrame(tick)
@@ -2673,7 +2678,9 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // Un anneau figé en plein estompage reprendrait sa course au retour, une
       // heure plus tard, sans le clic qui l'explique. Il s'efface avec l'image.
       clickMarks.clear()
-    } else if (!disposed && rafId === 0) {
+    } else if (!disposed && !paused && rafId === 0) {
+      // !paused : l'avatar est masqué — l'onglet redevient visible, la boucle
+      // reste à l'arrêt ; c'est setPaused(false) qui la relancera.
       clock.getDelta() // purge le delta accumulé pendant la pause
       tick()
     }
@@ -2744,6 +2751,24 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // On reconstruit — le socle en place ne bouge pas d'un millimètre tant que
       // les nouveaux .vrma ne sont pas là (même règle que setInteractive).
       if (currentVrm) void buildAnimations(currentVrm)
+    },
+
+    setPaused(on: boolean): void {
+      if (on === paused) return
+      paused = on
+      if (on) {
+        cancelAnimationFrame(rafId)
+        rafId = 0
+        // Même règle que l'onglet caché : un anneau d'estompage figé pendant une
+        // longue pause (l'avatar masqué des heures) reprendrait sa course au
+        // retour, sans le clic qui l'explique. Il s'efface avec l'image.
+        clickMarks.clear()
+      } else if (!disposed && !document.hidden && rafId === 0) {
+        // document.hidden : on ne relance pas une boucle que l'onglet caché a
+        // déjà arrêtée — visibilitychange s'en chargera au retour.
+        clock.getDelta() // purge le delta accumulé pendant la pause
+        tick()
+      }
     },
 
     setAnimationsEnabled(on: boolean): void {

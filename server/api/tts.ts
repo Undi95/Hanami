@@ -4,6 +4,8 @@
 // configuration reste côté serveur.
 import { Router } from 'express'
 import { loadSettings } from '../config'
+import { httpError } from '../lib/errors'
+import { ErrorCodes } from '../../shared/errorCodes'
 
 export const ttsRouter = Router()
 
@@ -21,23 +23,27 @@ function ttsTimeoutMs(textLength: number): number {
 ttsRouter.post('/api/tts', async (req, res) => {
   const settings = loadSettings()
   if (!settings.ttsEnabled || !settings.ttsUrl) {
-    res.status(400).json({ error: 'Synthèse vocale désactivée (voir Réglages)' })
+    httpError(res, 400, ErrorCodes.ttsDisabled)
     return
   }
-  const body = (req.body ?? {}) as { text?: unknown; voice?: unknown }
+  const body = (req.body ?? {}) as { text?: unknown; voice?: unknown; model?: unknown }
   const text = typeof body.text === 'string' ? body.text.trim() : ''
   if (!text) {
-    res.status(400).json({ error: 'text est requis' })
+    httpError(res, 400, ErrorCodes.ttsTextRequired)
     return
   }
   // Voix DEMANDÉE pour cette réplique-là : celle du personnage qui parle. Le
-  // serveur et le modèle, eux, restent ceux des Réglages — c'est le moteur, pas
-  // la voix. Champ absent ou vide : la voix par défaut des Réglages.
+  // serveur, lui, reste celui des Réglages — c'est le moteur, pas la voix.
+  // Champ absent ou vide : la voix par défaut des Réglages.
   const voice = typeof body.voice === 'string' ? body.voice.trim() : ''
+  // MODÈLE demandé par le personnage (même logique que la voix : il peut
+  // surcharger le modèle global sans toucher au serveur). Vide/absent = global.
+  const model = typeof body.model === 'string' ? body.model.trim() : ''
 
   const url = settings.ttsUrl.replace(/\/+$/, '') + '/audio/speech'
   const payload: Record<string, unknown> = { input: text }
-  if (settings.ttsModel) payload.model = settings.ttsModel
+  const effectiveModel = model || settings.ttsModel
+  if (effectiveModel) payload.model = effectiveModel
   if (voice || settings.ttsVoice) payload.voice = voice || settings.ttsVoice
 
   const ctrl = new AbortController()
@@ -61,13 +67,14 @@ ttsRouter.post('/api/tts', async (req, res) => {
     })
     if (!r.ok) {
       const detail = await r.text().catch(() => '')
-      res.status(502).json({ error: `Serveur TTS : HTTP ${r.status} — ${detail.slice(0, 300) || '(corps vide)'}` })
+      httpError(res, 502, ErrorCodes.ttsHttpError, { status: r.status, detail: detail.slice(0, 300) })
       return
     }
     res.setHeader('Content-Type', r.headers.get('content-type') ?? 'audio/mpeg')
     res.send(Buffer.from(await r.arrayBuffer()))
   } catch (e) {
-    res.status(502).json({ error: `Serveur TTS injoignable (${url}) : ${e instanceof Error ? e.message : String(e)}` })
+    const detail = e instanceof Error ? (e as { cause?: unknown }).cause instanceof Error ? String((e as { cause?: unknown }).cause) : e.message : String(e)
+    httpError(res, 502, ErrorCodes.ttsUnreachable, { url, detail: detail.slice(0, 200) })
   } finally {
     clearTimeout(timer)
   }
@@ -93,9 +100,13 @@ interface ProbeVoice {
 
 type Probe = { ok: true; status: number; text: string } | { ok: false; error: string }
 
-/** Message d'erreur réseau court et lisible (undici cache le vrai motif dans `cause`). */
+/**
+ * Message d'erreur réseau court et lisible (undici cache le vrai motif dans
+ * `cause`). Chaîne TECHNIQUE : elle part dans `info` de la sonde, telle quelle
+ * dans les deux langues (comme les messages undici, déjà en anglais).
+ */
 function shortError(e: unknown): string {
-  if (e instanceof Error && e.name === 'AbortError') return 'délai dépassé (5 s)'
+  if (e instanceof Error && e.name === 'AbortError') return 'timeout (5 s)'
   const message = e instanceof Error ? e.message : String(e)
   const cause = e instanceof Error ? (e as { cause?: unknown }).cause : undefined
   const detail = cause instanceof Error ? cause.message : ''
@@ -230,7 +241,7 @@ ttsRouter.get('/api/tts/probe', async (req, res) => {
   const base = (asked || settings.ttsUrl).replace(/\/+$/, '')
   res.set('Cache-Control', 'no-store')
   if (!base) {
-    res.status(400).json({ error: 'Aucune URL de serveur TTS — renseignez-la d’abord.' })
+    httpError(res, 400, ErrorCodes.ttsNoUrl)
     return
   }
 
@@ -239,7 +250,7 @@ ttsRouter.get('/api/tts/probe', async (req, res) => {
   let reachable = false
   let info: string | undefined
   let model: string | undefined
-  let lastError = 'URL invalide'
+  let lastError = 'invalid URL'
 
   const origin = originOf(base)
   if (origin) {

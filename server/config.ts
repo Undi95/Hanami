@@ -2,8 +2,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { CharacterMeta, Settings } from '../shared/types'
-import { normalizeLlm } from '../shared/llm'
+import { normalizeLlm, thinkingBudgetParam } from '../shared/llm'
 import { normalizePersonas } from '../shared/personas'
+import { CodedError, ErrorCodes } from '../shared/errorCodes'
 import { DATA_DIR } from './lib/storage'
 
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json')
@@ -15,6 +16,9 @@ export const DEFAULT_SETTINGS: Settings = {
   modelMode: 'full',
   temperature: 0.8,
   maxTokens: 1024,
+  // 0 = auto : aucun paramètre de thinking envoyé, le modèle décide comme
+  // avant ce réglage (un config d'avant la clé reste inchangé).
+  thinkingBudget: 0,
   maxHistoryMessages: 40,
   memoryEnabled: true,
   fileToolsEnabled: false,
@@ -100,6 +104,10 @@ export function loadSettings(): Settings {
     // rester un couple d'heures réelles (sinon le moteur spontané ne s'ouvrirait jamais).
     merged.spontaneousStartHour = normalizeHour(merged.spontaneousStartHour, DEFAULT_SETTINGS.spontaneousStartHour)
     merged.spontaneousEndHour = normalizeHour(merged.spontaneousEndHour, DEFAULT_SETTINGS.spontaneousEndHour)
+    // Même raison pour le budget de raisonnement : un nombre non interprétable
+    // (config édité à la main, PUT) retombe sur l'auto — on n'envoie au backend
+    // qu'un budget bien formé ou rien du tout.
+    merged.thinkingBudget = thinkingBudgetParam(merged.thinkingBudget)?.budget ?? 0
     // Migration « collection de personas » : le config d'avant portait un seul
     // couple personaName/personaDescription — il devient la persona {id:'default'}
     // de la collection (l'utilisateur ne perd pas son « moi » au premier save).
@@ -149,7 +157,7 @@ export function saveSettings(patch: Partial<Settings>): Settings {
     // Écrire maintenant persisterait les DÉFAUTS par-dessus le fichier abîmé :
     // la perte deviendrait irréversible. L'utilisateur répare (ou supprime) le
     // fichier d'abord — le message remonte tel quel dans les Réglages.
-    throw new Error('config.json est illisible : réparez ou supprimez le fichier avant de modifier les réglages')
+    throw new CodedError(ErrorCodes.configUnreadableSave)
   }
   fs.mkdirSync(DATA_DIR, { recursive: true })
   // Écriture ATOMIQUE (tmp + fsync + rename), même protocole que data/ui.json et

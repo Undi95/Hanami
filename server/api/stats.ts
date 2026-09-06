@@ -1,7 +1,9 @@
 // Router statistiques : « notre histoire » — quelques chiffres tendres sur les
 // conversations d'un personnage. Lecture seule, aucun appel LLM.
-import { Router, type Response } from 'express'
+import { Router } from 'express'
 import { chatMtimeMs, getCharacter, listChats, readChat } from '../lib/storage'
+import { httpError, sendJsonError } from '../lib/errors'
+import { ErrorCodes } from '../../shared/errorCodes'
 
 /** Chiffres renvoyés par GET /api/characters/:id/stats. */
 export interface CharacterStats {
@@ -13,10 +15,6 @@ export interface CharacterStats {
 }
 
 export const statsRouter = Router()
-
-function sendError(res: Response, status: number, e: unknown): void {
-  res.status(status).json({ error: e instanceof Error ? e.message : String(e) })
-}
 
 /** Clé de jour local (YYYY-MM-DD) — le fuseau du serveur fait foi. */
 function dayKey(d: Date): string {
@@ -99,11 +97,11 @@ statsRouter.get('/api/characters/:id/stats', (req, res) => {
     }
     if (!exists) {
       statsCache.delete(req.params.id) // personnage supprimé : rien à garder
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     res.json(computeStats(req.params.id))
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })

@@ -1,5 +1,15 @@
 // Client streaming pour backends OpenAI-compatibles (POST {backendUrl}/chat/completions, SSE).
+import { thinkingBudgetParam } from '../../shared/llm'
+import { CodedError, ErrorCodes } from '../../shared/errorCodes'
 import type { Settings } from '../../shared/types'
+
+/** Erreur réseau courte et lisible (undici cache le vrai motif dans `cause`). */
+function netDetail(e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e)
+  const cause = e instanceof Error ? (e as { cause?: unknown }).cause : undefined
+  const detail = cause instanceof Error ? cause.message : ''
+  return (detail ? `${message} (${detail})` : message).slice(0, 200)
+}
 
 export interface StreamedToolCall {
   id: string
@@ -108,19 +118,30 @@ export async function streamChatCompletion(opts: {
     stream_options: { include_usage: true },
   }
   if (settings.model) body.model = settings.model
+  // Budget de raisonnement (Qwen3 et consorts via Ollama) : posé seulement quand
+  // il est réel — 0 = auto, AUCUN paramètre envoyé, comportement d'origine.
+  const think = thinkingBudgetParam(settings.thinkingBudget)
+  if (think) body.think = think
   if (tools && tools.length > 0) body.tools = tools
 
-  let res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal })
-  if (res.status === 400 && body.stream_options) {
-    // Vieux backend qui rejette le champ inconnu : on retente une fois sans.
-    delete body.stream_options
+  let res: Response
+  try {
     res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal })
+    if (res.status === 400 && body.stream_options) {
+      // Vieux backend qui rejette le champ inconnu : on retente une fois sans.
+      delete body.stream_options
+      res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal })
+    }
+  } catch (e) {
+    // Réseau : Ollama arrêté, URL morte, connexion refusée. (L'AbortError de
+    // l'utilisateur est géré plus haut, sur le signal.)
+    throw new CodedError(ErrorCodes.llmUnreachable, { detail: netDetail(e) })
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`Backend LLM : HTTP ${res.status} — ${text.slice(0, 500) || '(corps vide)'}`)
+    throw new CodedError(ErrorCodes.llmHttpError, { status: res.status, detail: text.slice(0, 500) })
   }
-  if (!res.body) throw new Error('Backend LLM : réponse sans corps')
+  if (!res.body) throw new CodedError(ErrorCodes.llmNoBody)
 
   let content = ''
   let thinking = ''
@@ -230,7 +251,7 @@ export async function streamChatCompletion(opts: {
 
   // Du flux brut reçu mais pas un seul chunk SSE exploitable : réponse non-SSE ou corrompue.
   if (sawRaw && !parsedChunk) {
-    throw new Error('Backend LLM : flux reçu mais aucun chunk SSE exploitable')
+    throw new CodedError(ErrorCodes.llmNoSseChunk)
   }
   // Fin sans [DONE] ni finish_reason : troncature probable, signalée à l'appelant (pas de throw,
   // certains backends compat terminent légitimement sans [DONE] mais avec un finish_reason).

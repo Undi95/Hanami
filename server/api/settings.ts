@@ -7,6 +7,8 @@ import { DEFAULT_SETTINGS, loadSettings, saveSettings } from '../config'
 import { revokeAllTokens } from '../lib/auth'
 import type { Settings } from '../../shared/types'
 import { normalizePersonas } from '../../shared/personas'
+import { httpError, sendJsonError } from '../lib/errors'
+import { ErrorCodes } from '../../shared/errorCodes'
 
 export const settingsRouter = Router()
 
@@ -64,7 +66,14 @@ settingsRouter.put('/api/settings', (req, res) => {
     else if (patch[key] === CLEAR_SECRET) patch[key] = ''
   }
   const before = loadSettings()
-  const next = saveSettings(patch)
+  let next: Settings
+  try {
+    next = saveSettings(patch)
+  } catch (e) {
+    // config.json illisible → CodedError (configUnreadableSave), traduite côté client.
+    sendJsonError(res, 500, e)
+    return
+  }
   // Mot de passe modifié (ou retiré) → toutes les sessions existantes tombent.
   if (next.password !== before.password) revokeAllTokens()
   res.set('Cache-Control', 'no-store')
@@ -90,7 +99,7 @@ async function probeModels(backendUrl: string, apiKey: string, res: Response): P
     res.json({ models })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    res.status(502).json({ error: `Backend injoignable (${url}) : ${msg}` })
+    httpError(res, 502, ErrorCodes.backendProbeFailed, { url, detail: msg.slice(0, 200) })
   } finally {
     clearTimeout(timer)
   }

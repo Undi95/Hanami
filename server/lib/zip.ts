@@ -9,6 +9,7 @@
 // readZip rend des octets en mémoire, la décision d'écrire appartient à
 // backupRestore.ts.
 import zlib from 'node:zlib'
+import { CodedError, ErrorCodes } from '../../shared/errorCodes'
 
 /** Un fichier de l'archive : chemin DANS le zip (séparateurs /) + octets. */
 export interface ZipEntry {
@@ -163,14 +164,6 @@ export const DEFAULT_ZIP_LIMITS: ZipLimits = {
   maxTotalBytes: 512 * 1024 * 1024,
 }
 
-/** Erreur de lecture d'archive — message destiné à être affiché tel quel. */
-export class ZipError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'ZipError'
-  }
-}
-
 /** Recherche de l'EOCD depuis la FIN (un commentaire d'archive fait au plus 65535 octets). */
 function findEocd(buf: Buffer): number {
   const min = Math.max(0, buf.length - (22 + 0xffff))
@@ -190,26 +183,28 @@ function findEocd(buf: Buffer): number {
  * fichiers suffisent à recréer l'arborescence.
  */
 export function readZip(buf: Buffer, limits: ZipLimits = DEFAULT_ZIP_LIMITS): ZipEntry[] {
-  if (buf.length < 22) throw new ZipError('Fichier trop court pour être un .zip')
+  if (buf.length < 22) throw new CodedError(ErrorCodes.zipTooShort)
   const eocd = findEocd(buf)
-  if (eocd < 0) throw new ZipError('Ce fichier n’est pas un .zip (fin d’archive introuvable)')
+  if (eocd < 0) throw new CodedError(ErrorCodes.zipNotZip)
 
   const count = buf.readUInt16LE(eocd + 10)
   const cdSize = buf.readUInt32LE(eocd + 12)
   const cdOffset = buf.readUInt32LE(eocd + 16)
   if (cdOffset === ZIP64_MARK || cdSize === ZIP64_MARK || count === 0xffff) {
-    throw new ZipError('Archive zip64 — non gérée par Hanami')
+    throw new CodedError(ErrorCodes.zipZip64)
   }
-  if (cdOffset + cdSize > buf.length) throw new ZipError('Archive tronquée (index hors du fichier)')
-  if (count > limits.maxEntries) throw new ZipError(`Archive refusée : ${count} entrées (maximum ${limits.maxEntries})`)
+  if (cdOffset + cdSize > buf.length) throw new CodedError(ErrorCodes.zipTruncatedIndex)
+  if (count > limits.maxEntries) {
+    throw new CodedError(ErrorCodes.zipTooManyEntries, { count, max: limits.maxEntries })
+  }
 
   const out: ZipEntry[] = []
   let total = 0
   let p = cdOffset
 
   for (let i = 0; i < count; i++) {
-    if (p + 46 > buf.length) throw new ZipError('Archive tronquée (index incomplet)')
-    if (buf.readUInt32LE(p) !== SIG_CENTRAL) throw new ZipError('Archive corrompue (entrée d’index invalide)')
+    if (p + 46 > buf.length) throw new CodedError(ErrorCodes.zipTruncatedCd)
+    if (buf.readUInt32LE(p) !== SIG_CENTRAL) throw new CodedError(ErrorCodes.zipCorruptIndex)
     const flags = buf.readUInt16LE(p + 8)
     const method = buf.readUInt16LE(p + 10)
     const dosTime = buf.readUInt16LE(p + 12)
@@ -225,31 +220,31 @@ export function readZip(buf: Buffer, limits: ZipLimits = DEFAULT_ZIP_LIMITS): Zi
     p += 46 + nameLen + extraLen + commentLen
 
     if (compSize === ZIP64_MARK || rawSize === ZIP64_MARK || localOffset === ZIP64_MARK) {
-      throw new ZipError(`Archive zip64 — non gérée par Hanami (${name})`)
+      throw new CodedError(ErrorCodes.zipZip64Entry, { name })
     }
     // Chiffrement : bit 0. Rien à tenter, et surtout pas à écrire.
-    if (flags & 0x0001) throw new ZipError(`Entrée chiffrée — non gérée (${name})`)
+    if (flags & 0x0001) throw new CodedError(ErrorCodes.zipEncrypted, { name })
     if (name.endsWith('/')) continue // entrée de dossier : sans intérêt ici
     if (rawSize > limits.maxEntryBytes) {
-      throw new ZipError(`Entrée trop volumineuse : ${name} (${rawSize} octets)`)
+      throw new CodedError(ErrorCodes.zipEntryTooLarge, { name, size: rawSize })
     }
     total += rawSize
-    if (total > limits.maxTotalBytes) throw new ZipError('Archive refusée : contenu décompressé trop volumineux')
+    if (total > limits.maxTotalBytes) throw new CodedError(ErrorCodes.zipContentTooLarge)
 
     // En-tête local : seules ses longueurs de nom/extra comptent (elles peuvent
     // différer de celles de l'index), le reste vient du Central Directory.
-    if (localOffset + 30 > buf.length) throw new ZipError(`Archive tronquée (${name})`)
-    if (buf.readUInt32LE(localOffset) !== SIG_LOCAL) throw new ZipError(`Archive corrompue (en-tête de ${name})`)
+    if (localOffset + 30 > buf.length) throw new CodedError(ErrorCodes.zipTruncatedEntry, { name })
+    if (buf.readUInt32LE(localOffset) !== SIG_LOCAL) throw new CodedError(ErrorCodes.zipCorruptHeader, { name })
     const localNameLen = buf.readUInt16LE(localOffset + 26)
     const localExtraLen = buf.readUInt16LE(localOffset + 28)
     const start = localOffset + 30 + localNameLen + localExtraLen
-    if (start + compSize > buf.length) throw new ZipError(`Archive tronquée (${name})`)
+    if (start + compSize > buf.length) throw new CodedError(ErrorCodes.zipTruncatedEntry, { name })
     const payload = buf.subarray(start, start + compSize)
 
     let data: Buffer
     if (method === METHOD_STORE) {
       if (compSize !== rawSize && !(flags & FLAG_DATA_DESCRIPTOR)) {
-        throw new ZipError(`Archive corrompue (tailles incohérentes : ${name})`)
+        throw new CodedError(ErrorCodes.zipCorruptSizes, { name })
       }
       data = Buffer.from(payload)
     } else if (method === METHOD_DEFLATE) {
@@ -258,14 +253,17 @@ export function readZip(buf: Buffer, limits: ZipLimits = DEFAULT_ZIP_LIMITS): Zi
         // pendant la décompression, pas après avoir rempli la mémoire.
         data = zlib.inflateRawSync(payload, { maxOutputLength: limits.maxEntryBytes })
       } catch (e) {
-        throw new ZipError(`Entrée illisible : ${name} (${e instanceof Error ? e.message : String(e)})`)
+        throw new CodedError(ErrorCodes.zipEntryUnreadable, {
+          name,
+          detail: e instanceof Error ? e.message : String(e),
+        })
       }
     } else {
-      throw new ZipError(`Compression non gérée (méthode ${method}) : ${name}`)
+      throw new CodedError(ErrorCodes.zipMethodUnsupported, { name, method })
     }
 
-    if (data.length !== rawSize) throw new ZipError(`Archive corrompue (taille inattendue : ${name})`)
-    if (crc32(data) !== crc) throw new ZipError(`Archive corrompue (CRC invalide : ${name})`)
+    if (data.length !== rawSize) throw new CodedError(ErrorCodes.zipCorruptSize, { name })
+    if (crc32(data) !== crc) throw new CodedError(ErrorCodes.zipCorruptCrc, { name })
 
     out.push({ name, data, mtime: dosToDate(dosTime, dosDate) })
   }

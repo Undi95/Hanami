@@ -28,3 +28,15 @@ export function normalizeLlm(value: unknown): CharacterLlm | undefined {
   }
   return Object.keys(out).length > 0 ? out : undefined
 }
+
+/**
+ * Le paramètre de budget de raisonnement envoyé au backend, partagé par le
+ * client streaming (server/llm/openai.ts) et l'aperçu du prompt (chat.ts) pour
+ * que l'Inspecteur montre EXACTEMENT ce qui part : `think: {type:'enabled',
+ * budget}` — le format Ollama, vérifié en conditions réelles (0.33.3, Qwen3.8).
+ * 0 (auto) = AUCUN paramètre : le modèle décide, comportement d'origine.
+ */
+export function thinkingBudgetParam(budget: number): { type: 'enabled'; budget: number } | undefined {
+  const n = Math.round(Number(budget))
+  return Number.isFinite(n) && n > 0 ? { type: 'enabled', budget: Math.min(n, 1_000_000) } : undefined
+}

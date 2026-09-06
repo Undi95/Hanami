@@ -6,6 +6,7 @@ import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { emotionTagList } from '../../shared/emotions'
 import { normalizeLlm } from '../../shared/llm'
+import { CodedError, ErrorCodes } from '../../shared/errorCodes'
 import type {
   AnimationFamily,
   CharacterFull,
@@ -57,7 +58,7 @@ export function ensureDataDirs(): void {
 export function sanitizeFileName(name: string): string {
   const clean = name.replace(/[\\/:*?"<>|]/g, '').replace(/\.\./g, '').trim()
   // Vide ou composé uniquement de points ("...", ".") → résoudrait vers le dossier parent.
-  if (!clean || /^\.+$/.test(clean)) throw new Error('Nom de fichier invalide')
+  if (!clean || /^\.+$/.test(clean)) throw new CodedError(ErrorCodes.invalidFileName)
   return clean
 }
 
@@ -133,6 +134,10 @@ function normalizeMeta(raw: CharacterMeta, id: string): CharacterMeta {
   } else {
     delete meta.userPersona
   }
+  // Modèle TTS du personnage : même règle — seule une chaîne non vide survit ;
+  // la clé vide ou mal typée disparaît (le modèle global des Réglages s'applique).
+  if (typeof raw.ttsModel === 'string' && raw.ttsModel.trim()) meta.ttsModel = raw.ttsModel.trim()
+  else delete meta.ttsModel
   return meta
 }
 
@@ -173,6 +178,7 @@ export interface CreateCharacterInput {
   systemPrompt?: string
   ttsEnabled?: boolean
   ttsVoice?: string
+  ttsModel?: string
   llm?: CharacterLlm
   userPersona?: string
 }
@@ -207,12 +213,14 @@ function portraitField(portrait: unknown): Partial<CharacterMeta> {
  * Voix du personnage : mêmes règles d'écriture que le thème — la clé n'existe
  * que si elle porte une valeur. `ttsEnabled` n'est écrit que VRAI : un
  * personnage muet n'a rien à dire dans son fichier, et tous ceux d'avant ce
- * réglage restent muets sans être touchés.
+ * réglage restent muets sans être touchés. Le modèle suit la voix : un ''
+ * explicite le retire (retour au modèle global des Réglages).
  */
-function ttsFields(ttsEnabled: unknown, ttsVoice: unknown): Partial<CharacterMeta> {
+function ttsFields(ttsEnabled: unknown, ttsVoice: unknown, ttsModel: unknown): Partial<CharacterMeta> {
   return {
     ...(ttsEnabled === true ? { ttsEnabled: true } : {}),
     ...(typeof ttsVoice === 'string' && ttsVoice.trim() ? { ttsVoice: ttsVoice.trim() } : {}),
+    ...(typeof ttsModel === 'string' && ttsModel.trim() ? { ttsModel: ttsModel.trim() } : {}),
   }
 }
 
@@ -272,7 +280,7 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
     ...themeField(input.theme),
     ...animationsField(input.animations),
     ...environmentField(input.environment),
-    ...ttsFields(input.ttsEnabled, input.ttsVoice),
+    ...ttsFields(input.ttsEnabled, input.ttsVoice, input.ttsModel),
     ...llmField(input.llm),
     ...userPersonaField(input.userPersona),
     createdAt: new Date().toISOString(),
@@ -285,7 +293,7 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
 
 export function updateCharacter(id: string, patch: Partial<CharacterFull>): CharacterFull {
   const current = getCharacter(id)
-  if (!current) throw new Error(`Personnage introuvable : ${id}`)
+  if (!current) throw new CodedError(ErrorCodes.characterNotFound, { id })
   const dir = charDir(id)
   const meta: CharacterMeta = {
     id,
@@ -315,7 +323,11 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     // Voix : à reconduire comme le reste — meta est reconstruit clé par clé, un
     // oubli rendrait le personnage muet à la première édition. `false` explicite
     // l'éteint (false ?? current vaut false), `undefined` conserve.
-    ...ttsFields(patch.ttsEnabled ?? current.ttsEnabled, patch.ttsVoice ?? current.ttsVoice),
+    ...ttsFields(
+      patch.ttsEnabled ?? current.ttsEnabled,
+      patch.ttsVoice ?? current.ttsVoice,
+      patch.ttsModel ?? current.ttsModel,
+    ),
     // Overrides de génération : piège de la `??` — un `null` explicite (le
     // formulaire a tout vidé = retour au global) passerait `??` et CONSERVERAIT
     // l'ancien objet. Vérification d'`undefined` explicite : null = retirer la
@@ -339,7 +351,7 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
 export function deleteCharacter(id: string): void {
   const dir = charDir(id)
   // Ceinture : ne jamais supprimer le dossier characters/ lui-même.
-  if (path.resolve(dir) === path.resolve(CHARACTERS_DIR)) throw new Error(`Identifiant invalide : ${id}`)
+  if (path.resolve(dir) === path.resolve(CHARACTERS_DIR)) throw new CodedError(ErrorCodes.invalidId, { id })
   fs.rmSync(dir, { recursive: true, force: true })
   // Le portrait vit hors du dossier du personnage : il part avec lui, sinon un
   // homonyme créé plus tard hériterait de l'image de son prédécesseur.
@@ -626,7 +638,10 @@ export function createChat(charId: string, title?: string): ChatMeta {
   const id = newChatId(charId)
   const header: ChatHeader = {
     id,
-    title: title || `Chat du ${new Date().toLocaleDateString('fr-FR')}`,
+    // Fallback uniquement (le client envoie son titre localisé). Il suit le
+    // motif canonique « Conversation du <date> » que le client reconnaît pour
+    // le RE-rendre dans sa propre langue — date ISO, lisible dans les deux.
+    title: title || `Conversation du ${new Date().toISOString().slice(0, 10)}`,
     createdAt: new Date().toISOString(),
   }
   fs.mkdirSync(path.join(charDir(charId), 'chats'), { recursive: true })
@@ -671,7 +686,7 @@ export function deleteChat(charId: string, chatId: string): void {
  */
 export function forkChat(charId: string, chatId: string, title?: string): ChatMeta {
   const lines = fs.readFileSync(chatFile(charId, chatId), 'utf8').split('\n').filter(Boolean)
-  if (lines.length === 0) throw new Error(`Chat corrompu : ${chatId}`)
+  if (lines.length === 0) throw new CodedError(ErrorCodes.chatCorrupt, { id: chatId })
   const header = normalizeHeader(JSON.parse(lines[0]) as ChatHeader)
   const id = newChatId(charId)
   const clone: ChatHeader = {
@@ -723,7 +738,7 @@ export function updateChatHeader(
   const file = chatFile(charId, chatId)
   const lines = fs.readFileSync(file, 'utf8').split('\n')
   const firstIdx = lines.findIndex((l) => l.trim().length > 0)
-  if (firstIdx === -1) throw new Error(`Chat corrompu : ${chatId}`)
+  if (firstIdx === -1) throw new CodedError(ErrorCodes.chatCorrupt, { id: chatId })
   const header = JSON.parse(lines[firstIdx]) as ChatHeader
   lines[firstIdx] = JSON.stringify({ ...header, ...patch })
   const tmp = file + '.tmp'
@@ -809,7 +824,7 @@ export function writeMemoryFile(charId: string, name: string, content: string): 
 
 export function deleteMemoryFile(charId: string, name: string): void {
   // Comparaison insensible à la casse : le FS Windows l'est aussi ("memory.MD" = même fichier).
-  if (sanitizeFileName(name).toLowerCase() === 'memory.md') throw new Error("MEMORY.md est l'index — non supprimable")
+  if (sanitizeFileName(name).toLowerCase() === 'memory.md') throw new CodedError(ErrorCodes.memoryIndexProtected)
   // unlinkSync et non rmSync : sous Node 25/Windows, rmSync ne supprime PAS un
   // chemin contenant un caractère non-ASCII (« passé.md ») et ne lève rien —
   // le fichier restait dans la liste après un « ok ». Le try avale ENOENT pour
@@ -893,10 +908,10 @@ export function listMemoryBackups(charId: string): MemoryBackupInfo[] {
  * Renvoie le nom du snapshot de sécurité (ou '' si la mémoire était vide).
  */
 export function restoreMemoryBackup(charId: string, name: string): string {
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(name)) throw new Error('Nom de sauvegarde invalide')
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(name)) throw new CodedError(ErrorCodes.invalidBackupName)
   const src = path.join(backupsDir(charId), name)
   if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) {
-    throw new Error(`Sauvegarde introuvable : ${name}`)
+    throw new CodedError(ErrorCodes.backupNotFound, { name })
   }
   const safety = snapshotMemory(charId)
   for (const f of currentMemoryFiles(charId)) {

@@ -1,4 +1,5 @@
 // Types partagés client/serveur — LE contrat de l'app.
+import type { ErrorCode, ErrorParams } from './errorCodes'
 
 // Mode du modèle : 'full' = les outils sont exposés (tool-calling) ; 'simple' =
 // AUCUN outil, l'intelligence migre côté serveur — pensé pour les petits modèles,
@@ -22,6 +23,12 @@ export interface Settings {
   modelMode: ModelMode // 'simple' : pas d'outils, mémoire et émotions gérées sans le modèle
   temperature: number
   maxTokens: number // max_tokens de la réponse
+  // Budget de raisonnement du modèle, en tokens (Qwen3 et consorts via Ollama :
+  // `think: {type:'enabled', budget}`). 0 = AUTO : aucun paramètre n'est envoyé,
+  // le modèle décide comme avant ce réglage (un modèle qui réfléchit brûle la
+  // réponse en thinking si on ne le borne pas — issue #4c). Posé, il plafonne le
+  // think ; au-delà de maxTokens, c'est Ollama qui recadre.
+  thinkingBudget: number
   maxHistoryMessages: number // nb max de messages d'historique envoyés
   memoryEnabled: boolean // injecte le bloc mémoire + expose les outils mémoire
   fileToolsEnabled: boolean // expose les outils fichiers au modèle
@@ -143,6 +150,11 @@ export interface CharacterMeta {
   // Identifiant EXACT de la voix chez le serveur TTS (ex. « clone:Sakurav1 »).
   // Absent/vide = la voix par défaut des Réglages.
   ttsVoice?: string
+  // MODÈLE TTS du personnage : le nom EXACT chez le serveur de synthèse. Même
+  // logique que ttsVoice — la voix et le modèle qui la produit appartiennent au
+  // personnage ; le serveur (URL) reste celui des Réglages, c'est le moteur.
+  // Absent/vide = le modèle par défaut des Réglages (ttsModel global).
+  ttsModel?: string
   greeting: string // premier message affiché dans un nouveau chat
   greetings?: string[] // variantes supplémentaires (tirage au hasard avec greeting)
   greetingMode?: GreetingMode // absent = 'written'
@@ -250,14 +262,24 @@ export interface MemoryFile {
   content: string
 }
 
-// Événements SSE émis par POST /api/chat
+// Événements SSE émis par POST /api/chat.
+// La variante error suit le contrat codes/phrases (shared/errorCodes.ts) :
+// `code` (+ `params`) quand l'erreur est codée — le client choisit la phrase
+// dans SA langue ; `message` (brut) seulement pour une erreur interne
+// imprévue, et `code` inconnu du client s'affiche tel quel (repli d'origine).
 export type ChatEvent =
   | { type: 'delta'; text: string }
   | { type: 'thinking'; text: string }
   | { type: 'tool_start'; name: string; args: string } // l'action DÉMARRE (la puce s'anime) — `tool` apporte le résultat
   | { type: 'tool'; name: string; args: string; result: string }
   | { type: 'done'; message: ChatMessage; context?: ContextInfo }
-  | { type: 'error'; message: string; partial?: ChatMessage } // partial = message sauvegardé malgré l'erreur
+  | {
+      type: 'error'
+      code?: ErrorCode
+      params?: ErrorParams
+      message?: string // message brut d'une erreur non codée (interne)
+      partial?: ChatMessage // message sauvegardé malgré l'erreur
+    }
 
 export const EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'surprised', 'relaxed'] as const
 export type Emotion = (typeof EMOTIONS)[number]
@@ -347,6 +369,14 @@ export interface UiPrefs {
   theme?: string // identifiant de thème préfait, ou 'custom'
   customTheme?: UiCustomTheme
   vnMode?: boolean // mode visual novel
+  // L'avatar est-il visible dans la scène ? Clé ABSENTE = visible (le
+  // comportement d'origine) : un ui.json d'avant ce réglage ne change rien.
+  // Éteint, toute la scène (avatar 3D, portrait 2D, fond, décor) disparaît et
+  // le chat prend toute la largeur (desktop) — et le moteur 3D est mis en
+  // PAUSE, pas seulement masqué (pas de frame rendue à l'aveugle). Même famille
+  // qu'env3d et vrmaEnabled : un réglage de confort d'affichage, pas une
+  // propriété du personnage — il suit l'utilisateur d'un appareil à l'autre.
+  avatarVisible?: boolean
   // Décor 3D allumé/éteint (défaut : allumé). Éteint = fond 2D ou dégradé, comme
   // avant les décors. Vit ici et non dans le personnage : c'est un réglage
   // d'APPAREIL au sens du confort (une pièce en 3D coûte cher sur un téléphone),

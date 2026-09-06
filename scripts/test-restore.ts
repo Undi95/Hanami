@@ -13,7 +13,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { buildZip, readZip, type ZipEntry } from '../server/lib/zip'
 import { MANIFEST_NAME, README_NAME, type BackupRoots } from '../server/lib/backupArchive'
-import { RestoreError, applyRestore, planRestore, splitEntryName } from '../server/lib/backupRestore'
+import { applyRestore, planRestore, splitEntryName } from '../server/lib/backupRestore'
 
 // ── Micro-harnais ──────────────────────────────────────────────────────────
 
@@ -39,7 +39,11 @@ function equal<T>(actual: T, expected: T, what: string): void {
   if (actual !== expected) throw new Error(`${what} : attendu ${String(expected)}, obtenu ${String(actual)}`)
 }
 
-/** Vérifie qu'un appel lève, et que le message contient l'un des extraits attendus. */
+/**
+ * Vérifie qu'un appel lève, et que le message contient l'un des extraits
+ * attendus. Depuis le contrat codes/phrases, le message d'une CodedError EST
+ * le code : c'est donc le code qu'on attend ici.
+ */
 function throwsAny(fn: () => unknown, contains: string[], what: string): void {
   try {
     fn()
@@ -164,16 +168,16 @@ check('accents et UTF-8 dans les noms', () => {
 })
 
 check('un fichier qui n’est pas un zip est refusé', () => {
-  throws(() => readZip(Buffer.from('ceci est un texte, pas une archive')), 'pas un .zip', 'texte brut')
+  throws(() => readZip(Buffer.from('ceci est un texte, pas une archive')), 'zipNotZip', 'texte brut')
 })
 
 check('archive tronquée : refusée', () => {
   const zip = buildZip([entry('data/x.txt', 'x'.repeat(500))])
-  throws(() => readZip(zip.subarray(0, zip.length - 30)), 'pas un .zip', 'fin coupée')
+  throws(() => readZip(zip.subarray(0, zip.length - 30)), 'zipNotZip', 'fin coupée')
 })
 
 check('CRC faux : refusé (transfert abîmé)', () => {
-  throws(() => readZip(breakCrc(buildZip([entry('data/x.txt', 'contenu original')]), 'data/x.txt')), 'CRC', 'CRC faussé')
+  throws(() => readZip(breakCrc(buildZip([entry('data/x.txt', 'contenu original')]), 'data/x.txt')), 'zipCorruptCrc', 'CRC faussé')
 })
 
 check('flux compressé abîmé : refusé', () => {
@@ -182,7 +186,7 @@ check('flux compressé abîmé : refusé', () => {
   // décompresser ou rend des octets faux — les deux mènent au refus.
   const payload = zip.indexOf(Buffer.from('data/x.txt', 'utf8')) + 'data/x.txt'.length
   zip[payload + 6] = zip[payload + 6] ^ 0xff
-  throwsAny(() => readZip(zip), ['CRC', 'illisible', 'taille inattendue'], 'octet retourné')
+  throwsAny(() => readZip(zip), ['zipCorruptCrc', 'zipEntryUnreadable', 'zipCorruptSize'], 'octet retourné')
 })
 
 check('taille annoncée mensongère : refusée', () => {
@@ -192,14 +196,14 @@ check('taille annoncée mensongère : refusée', () => {
   zip.writeUInt32LE(10, 22)
   const cd = zip.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]))
   zip.writeUInt32LE(10, cd + 24)
-  throws(() => readZip(zip), 'taille inattendue', 'taille mentie')
+  throws(() => readZip(zip), 'zipCorruptSize', 'taille mentie')
 })
 
 check('bombe : une entrée au-delà du plafond est refusée avant décompression', () => {
   const zip = buildZip([entry('data/x.txt', 'z'.repeat(50_000))])
   throws(
     () => readZip(zip, { maxEntries: 10, maxEntryBytes: 1000, maxTotalBytes: 10_000 }),
-    'trop volumineuse',
+    'zipEntryTooLarge',
     'plafond par entrée',
   )
 })
@@ -208,43 +212,45 @@ check('bombe : total décompressé au-delà du plafond', () => {
   const zip = buildZip([entry('data/a.txt', 'a'.repeat(4000)), entry('data/b.txt', 'b'.repeat(4000))])
   throws(
     () => readZip(zip, { maxEntries: 10, maxEntryBytes: 100_000, maxTotalBytes: 5000 }),
-    'trop volumineux',
+    'zipContentTooLarge',
     'plafond total',
   )
 })
 
 check('trop d’entrées : refusé', () => {
   const many = Array.from({ length: 12 }, (_, i) => entry(`data/f${i}.txt`, 'x'))
-  throws(() => readZip(buildZip(many), { maxEntries: 5, maxEntryBytes: 1e6, maxTotalBytes: 1e7 }), 'entrées', 'plafond')
+  throws(() => readZip(buildZip(many), { maxEntries: 5, maxEntryBytes: 1e6, maxTotalBytes: 1e7 }), 'zipTooManyEntries', 'plafond')
 })
 
 // ── 2. Zip-slip — les noms d'entrée ────────────────────────────────────────
 
 console.log('\nZip-slip (noms d’entrée)')
 
-const TRAPS = [
-  '../../evil.txt',
-  'data/../../evil.txt',
-  'data/characters/../../../evil.txt',
-  '/etc/passwd',
-  'C:/Windows/evil.txt',
-  'data\\..\\..\\evil.txt',
-  'data/..\\evil.txt',
-  'data/C:evil.txt',
-  './../evil.txt',
-  'data//evil.txt',
-  'data/./evil.txt',
-  'data/CON',
-  'data/characters/NUL/character.json',
-  'data/evil.txt ',
-  'data/evil.',
-  'data/co:m.txt',
-  'data/a?b.txt',
+// [nom piégé, code attendu] : chaque cas doit tomber sur LA bonne raison, pas
+// juste sur « refusé » — le code est ce que l'utilisateur verra, traduit.
+const TRAPS: [string, string][] = [
+  ['../../evil.txt', 'restoreEntryTraversal'],
+  ['data/../../evil.txt', 'restoreEntryTraversal'],
+  ['data/characters/../../../evil.txt', 'restoreEntryTraversal'],
+  ['/etc/passwd', 'restoreEntryAbsolute'],
+  ['C:/Windows/evil.txt', 'restoreEntryForbidden'],
+  ['data\\..\\..\\evil.txt', 'restoreEntryBackslash'],
+  ['data/..\\evil.txt', 'restoreEntryBackslash'],
+  ['data/C:evil.txt', 'restoreEntryForbidden'],
+  ['./../evil.txt', 'restoreEntryTraversal'],
+  ['data//evil.txt', 'restoreEntryTraversal'],
+  ['data/./evil.txt', 'restoreEntryTraversal'],
+  ['data/CON', 'restoreEntryReserved'],
+  ['data/characters/NUL/character.json', 'restoreEntryReserved'],
+  ['data/evil.txt ', 'restoreEntryTrailing'],
+  ['data/evil.', 'restoreEntryTrailing'],
+  ['data/co:m.txt', 'restoreEntryForbidden'],
+  ['data/a?b.txt', 'restoreEntryForbidden'],
 ]
 
-for (const trap of TRAPS) {
+for (const [trap, code] of TRAPS) {
   check(`refusé : ${JSON.stringify(trap)}`, () => {
-    throws(() => splitEntryName(trap), 'refusé', 'nom piégé')
+    throws(() => splitEntryName(trap), code, 'nom piégé')
   })
 }
 
@@ -262,8 +268,8 @@ check('archive piégée « ../../evil » : refusée en bloc, rien écrit', () =>
   put(roots.dataDir, 'config.json', '{"model":"local"}')
   const before = snapshot(path.dirname(roots.dataDir))
   const zip = hanamiZip([entry('data/config.json', '{"model":"pirate"}'), entry('../../evil.txt', 'boum')])
-  throws(() => planRestore(zip, roots), 'refusé', 'archive piégée')
-  throws(() => applyRestore(zip, roots), 'refusé', 'application de l’archive piégée')
+  throws(() => planRestore(zip, roots), 'restoreEntryTraversal', 'archive piégée')
+  throws(() => applyRestore(zip, roots), 'restoreEntryTraversal', 'application de l’archive piégée')
   equal(JSON.stringify(snapshot(path.dirname(roots.dataDir))), JSON.stringify(before), 'arborescence intacte')
   equal(read(roots.dataDir, 'config.json'), '{"model":"local"}', 'config non touchée')
   equal(fs.existsSync(roots.netDir), false, 'aucun filet posé (le refus précède tout)')
@@ -272,7 +278,7 @@ check('archive piégée « ../../evil » : refusée en bloc, rien écrit', () =>
 check('archive piégée avec antislash Windows : refusée', () => {
   const roots = freshRoots('slip-win')
   const zip = hanamiZip([entry('data\\..\\..\\evil.txt', 'boum')])
-  throws(() => planRestore(zip, roots), 'antislash', 'antislash')
+  throws(() => planRestore(zip, roots), 'restoreEntryBackslash', 'antislash')
 })
 
 // ── 3. Identification de l'archive ─────────────────────────────────────────
@@ -282,19 +288,19 @@ console.log('\nIdentification')
 check('un zip quelconque n’est pas une sauvegarde Hanami', () => {
   const roots = freshRoots('ident-foreign')
   const zip = buildZip([entry('photos/chat.jpg', 'JPEG'), entry('notes.txt', 'bonjour')])
-  throws(() => planRestore(zip, roots), 'pas une sauvegarde Hanami', 'zip étranger')
+  throws(() => planRestore(zip, roots), 'restoreUnrecognizable', 'zip étranger')
 })
 
 check('manifeste d’une version future : refusé, avec le motif', () => {
   const roots = freshRoots('ident-future')
   const zip = hanamiZip([entry('data/config.json', '{}')], 99)
-  throws(() => planRestore(zip, roots), 'version 99', 'format futur')
+  throws(() => planRestore(zip, roots), 'restoreVersionTooNew', 'format futur')
 })
 
 check('manifeste illisible : refusé', () => {
   const roots = freshRoots('ident-broken')
   const zip = buildZip([entry(MANIFEST_NAME, '{oops'), entry('data/config.json', '{}')])
-  throws(() => planRestore(zip, roots), 'illisible', 'manifeste cassé')
+  throws(() => planRestore(zip, roots), 'restoreManifestCorrupt', 'manifeste cassé')
 })
 
 check('archive d’AVANT le manifeste : reconnue à sa structure, et signalée', () => {
@@ -314,7 +320,7 @@ check('archive d’AVANT le manifeste : reconnue à sa structure, et signalée',
 check('archive sans rien de restaurable : refusée', () => {
   const roots = freshRoots('ident-empty')
   const zip = buildZip([entry(README_NAME, 'HANAMI — SAUVEGARDE'), entry('vrm/modele.vrm', 'GLB')])
-  throws(() => planRestore(zip, roots), 'sans données restaurables', 'archive vide')
+  throws(() => planRestore(zip, roots), 'restoreNoData', 'archive vide')
 })
 
 // ── 4. L'aperçu dit vrai ───────────────────────────────────────────────────
@@ -474,7 +480,7 @@ check('archive abîmée : aucune écriture, aucun filet, l’état reste entier'
   put(roots.dataDir, 'config.json', '{"intact":true}')
   const before = snapshot(path.dirname(roots.dataDir))
   const zip = breakCrc(hanamiZip([entry('data/config.json', '{"intact":false}')]), 'data/config.json')
-  throws(() => applyRestore(zip, roots), 'CRC', 'archive abîmée')
+  throws(() => applyRestore(zip, roots), 'zipCorruptCrc', 'archive abîmée')
   equal(JSON.stringify(snapshot(path.dirname(roots.dataDir))), JSON.stringify(before), 'arborescence intacte')
   equal(fs.existsSync(roots.netDir), false, 'aucun filet (la lecture échoue avant tout)')
 })

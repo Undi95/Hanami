@@ -154,7 +154,7 @@ async function fetchDdg(query: string, count: number, signal: AbortSignal): Prom
     signal,
     headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8' },
   })
-  if (!res.ok) throw new Error(`Recherche DuckDuckGo : HTTP ${res.status}`)
+  if (!res.ok) throw new Error(`DuckDuckGo search failed: HTTP ${res.status}`)
   return parseDdgHtml(await res.text()).slice(0, count)
 }
 
@@ -167,7 +167,7 @@ interface SearxngResult {
 async function fetchSearxng(baseUrl: string, query: string, count: number, signal: AbortSignal): Promise<SearchResult[]> {
   const url = `${baseUrl.replace(/\/+$/, '')}/search?q=${encodeURIComponent(query)}&format=json`
   const res = await fetch(url, { signal, headers: { Accept: 'application/json' } })
-  if (!res.ok) throw new Error(`Recherche SearXNG : HTTP ${res.status}`)
+  if (!res.ok) throw new Error(`SearXNG search failed: HTTP ${res.status}`)
   const data = (await res.json()) as { results?: SearxngResult[] }
   const results = Array.isArray(data.results) ? data.results : []
   return results.slice(0, count).map((r) => ({
@@ -190,7 +190,7 @@ async function fetchTavily(apiKey: string, query: string, count: number, signal:
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ api_key: apiKey, query, max_results: count }),
   })
-  if (!res.ok) throw new Error(`Recherche Tavily : HTTP ${res.status}`)
+  if (!res.ok) throw new Error(`Tavily search failed: HTTP ${res.status}`)
   const data = (await res.json()) as { results?: TavilyResult[] }
   const results = Array.isArray(data.results) ? data.results : []
   return results.slice(0, count).map((r) => ({

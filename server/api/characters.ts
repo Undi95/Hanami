@@ -20,16 +20,14 @@ import {
 import { buildCardV2, cardDisposition, embedCardInPng, safeCardFileName } from '../lib/cardExport'
 // Même reconnaissance d'image que le dépôt d'un fond : un seul sniff dans l'app.
 import { sniffFamily } from './assets'
+import { httpError, sendJsonError } from '../lib/errors'
+import { ErrorCodes } from '../../shared/errorCodes'
 
 export const charactersRouter = Router()
 charactersRouter.use(express.json({ limit: '5mb' }))
 
 // Garde-fou du renommage : un titre est une ligne d'interface, pas un roman.
 const CHAT_TITLE_MAX_CHARS = 200
-
-function sendError(res: Response, status: number, e: unknown): void {
-  res.status(status).json({ error: e instanceof Error ? e.message : String(e) })
-}
 
 /** Variantes d'accueil d'un corps JSON (les entrées non textuelles sont ignorées). */
 function greetingsOf(value: unknown): string[] | undefined {
@@ -57,7 +55,7 @@ charactersRouter.get('/api/characters', (_req, res) => {
   try {
     res.json(listCharacters())
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -65,7 +63,7 @@ charactersRouter.post('/api/characters', (req, res) => {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>
     if (typeof body.name !== 'string' || !body.name.trim()) {
-      res.status(400).json({ error: 'Le champ "name" est requis' })
+      httpError(res, 400, ErrorCodes.fieldNameRequired, { field: 'name' })
       return
     }
     const character = createCharacter({
@@ -80,9 +78,11 @@ charactersRouter.post('/api/characters', (req, res) => {
       // Famille d'animations : valeur reconnue seulement (storage n'écrit la clé
       // que pour 'rocketbox' ; tout le reste, défaut compris, la laisse absente).
       animations: body.animations === 'rocketbox' ? 'rocketbox' : undefined,
-      // Voix : `true` explicite seulement (storage n'écrit la clé qu'allumée).
+      // Voix : `true` explicite seulement (storage n'écrit la clé qu'allumée),
+      // et le modèle suit la voix (vide/absent = le modèle global des Réglages).
       ttsEnabled: body.ttsEnabled === true,
       ttsVoice: typeof body.ttsVoice === 'string' ? body.ttsVoice : undefined,
+      ttsModel: typeof body.ttsModel === 'string' ? body.ttsModel : undefined,
       // Overrides de génération : tout objet passe tel quel — storage le
       // normalise (normalizeLlm) et n'écrit la clé que si elle porte un champ
       // valide. `null`/absent = aucun override.
@@ -101,7 +101,7 @@ charactersRouter.post('/api/characters', (req, res) => {
     })
     res.json(character)
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -109,19 +109,19 @@ charactersRouter.get('/api/characters/:id', (req, res) => {
   try {
     const character = findCharacter(req.params.id)
     if (!character) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     res.json(character)
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
 
 charactersRouter.put('/api/characters/:id', (req, res) => {
   try {
     if (!findCharacter(req.params.id)) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     const body = (req.body ?? {}) as Partial<CharacterFull>
@@ -137,20 +137,20 @@ charactersRouter.put('/api/characters/:id', (req, res) => {
     }
     res.json(updateCharacter(req.params.id, patch))
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
 
 charactersRouter.delete('/api/characters/:id', (req, res) => {
   try {
     if (!findCharacter(req.params.id)) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     deleteCharacter(req.params.id)
     res.json({ ok: true })
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -165,7 +165,7 @@ charactersRouter.get('/api/characters/:id/card', (req, res) => {
   try {
     const character = findCharacter(req.params.id)
     if (!character) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     const json = JSON.stringify(buildCardV2(character), null, 2)
@@ -184,7 +184,7 @@ charactersRouter.get('/api/characters/:id/card', (req, res) => {
     res.setHeader('Content-Disposition', cardDisposition(base, 'json'))
     res.send(json)
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -201,24 +201,24 @@ charactersRouter.post(
   (req, res) => {
     try {
       if (!findCharacter(req.params.id)) {
-        res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+        httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
         return
       }
       const buf = req.body as unknown
       if (!Buffer.isBuffer(buf) || buf.length === 0) {
-        res.status(400).json({ error: 'Corps de requête image requis' })
+        httpError(res, 400, ErrorCodes.imageBodyRequired)
         return
       }
       // Les octets font foi : un Content-Type complaisant ne prouve rien.
       if (!sniffFamily(buf)) {
-        res.status(400).json({ error: 'Ce fichier n’est pas une image PNG, JPEG ou WebP' })
+        httpError(res, 400, ErrorCodes.notAnImage)
         return
       }
       const photo = savePhoto(req.params.id, buf)
       updateCharacter(req.params.id, { photo })
       res.json({ photo })
     } catch (e) {
-      sendError(res, 500, e)
+      sendJsonError(res, 500, e)
     }
   },
 )
@@ -226,7 +226,7 @@ charactersRouter.post(
 charactersRouter.delete('/api/characters/:id/photo', (req, res) => {
   try {
     if (!findCharacter(req.params.id)) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     // La clé d'abord : si l'effacement du fichier échouait après coup, il ne
@@ -236,7 +236,7 @@ charactersRouter.delete('/api/characters/:id/photo', (req, res) => {
     deletePhoto(req.params.id)
     res.json({ ok: true })
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -245,26 +245,26 @@ charactersRouter.delete('/api/characters/:id/photo', (req, res) => {
 charactersRouter.get('/api/characters/:id/chats', (req, res) => {
   try {
     if (!findCharacter(req.params.id)) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     res.json(listChats(req.params.id))
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
 
 charactersRouter.post('/api/characters/:id/chats', (req, res) => {
   try {
     if (!findCharacter(req.params.id)) {
-      res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+      httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
       return
     }
     const body = (req.body ?? {}) as Record<string, unknown>
     const title = typeof body.title === 'string' ? body.title : undefined
     res.json(createChat(req.params.id, title))
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -273,7 +273,7 @@ charactersRouter.get('/api/characters/:id/chats/:chatId', (req, res) => {
     res.json(readChat(req.params.id, req.params.chatId))
   } catch {
     // Fichier absent ou id invalide → 404.
-    res.status(404).json({ error: `Chat introuvable : ${req.params.chatId}` })
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: req.params.chatId })
   }
 })
 
@@ -284,14 +284,14 @@ charactersRouter.put('/api/characters/:id/chats/:chatId', (req, res) => {
   const body = (req.body ?? {}) as { title?: unknown }
   const title = (typeof body.title === 'string' ? body.title.trim() : '').slice(0, CHAT_TITLE_MAX_CHARS).trim()
   if (!title) {
-    res.status(400).json({ error: 'Le champ "title" est requis' })
+    httpError(res, 400, ErrorCodes.fieldNameRequired, { field: 'title' })
     return
   }
   try {
     updateChatHeader(req.params.id, req.params.chatId, { title, titleCustom: true })
   } catch {
     // Fichier absent, id invalide ou en-tête illisible → 404.
-    res.status(404).json({ error: `Chat introuvable : ${req.params.chatId}` })
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: req.params.chatId })
     return
   }
   res.json({ id: req.params.chatId, title, titleCustom: true })
@@ -300,7 +300,7 @@ charactersRouter.put('/api/characters/:id/chats/:chatId', (req, res) => {
 // Fork : la branche part du même passé que l'original, qui reste intact.
 charactersRouter.post('/api/characters/:id/chats/:chatId/fork', (req, res) => {
   if (!findCharacter(req.params.id)) {
-    res.status(404).json({ error: `Personnage introuvable : ${req.params.id}` })
+    httpError(res, 404, ErrorCodes.characterNotFound, { id: req.params.id })
     return
   }
   // Titre localisé fourni par le client (le serveur ne connaît pas la langue de l'UI).
@@ -310,7 +310,7 @@ charactersRouter.post('/api/characters/:id/chats/:chatId/fork', (req, res) => {
     res.json(forkChat(req.params.id, req.params.chatId, title))
   } catch {
     // Fichier absent, id invalide ou en-tête illisible → 404.
-    res.status(404).json({ error: `Chat introuvable : ${req.params.chatId}` })
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: req.params.chatId })
   }
 })
 
@@ -319,6 +319,6 @@ charactersRouter.delete('/api/characters/:id/chats/:chatId', (req, res) => {
     deleteChat(req.params.id, req.params.chatId)
     res.json({ ok: true })
   } catch (e) {
-    sendError(res, 500, e)
+    sendJsonError(res, 500, e)
   }
 })
