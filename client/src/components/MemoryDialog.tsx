@@ -120,6 +120,12 @@ export default function MemoryDialog({ characterId, onClose }: Props) {
       setTidyArmed(true)
       return
     }
+    // Édition non enregistrée : le rangement réécrit le fichier ouvert et le
+    // rechargement effacerait ce qui était en train d'être écrit — la garde de
+    // fermeture ne couvre pas les opérations à l'intérieur du dialog. Annuler
+    // garde le bouton armé (un clic reprend, sans repasser par l'avertissement
+    // de suppression).
+    if (dirty && !window.confirm(t('unsavedConfirm'))) return
     setTidyArmed(false)
     setTidying(true)
     setNote(null)
@@ -144,6 +150,9 @@ export default function MemoryDialog({ characterId, onClose }: Props) {
       setRestoreArmed(b.name)
       return
     }
+    // Même garde que « Ranger » : la restauration réécrit les fichiers et
+    // rechargement = l'édition non enregistrée est perdue.
+    if (dirty && !window.confirm(t('unsavedConfirm'))) return
     setRestoreArmed(null)
     setNote(null)
     try {
