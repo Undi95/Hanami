@@ -1617,9 +1617,12 @@ function AppInner() {
       ? { title: chatTitle, percent: ctxPercent, tooltip: ctxTooltip }
       : null
 
-  // Portrait 2D : un personnage SANS modèle 3D montre l'image de sa card (posée à
-  // l'import). Avec un VRM, l'avatar 3D reprend toute la place. '' = rien à montrer.
-  const portrait = character && !character.vrm ? (character.portrait ?? '') : ''
+  // Avatar 2D : un personnage SANS modèle 3D montre une image — d'abord le
+  // portrait de sa card (posé à l'import), et à défaut sa PHOTO (capture ou
+  // image envoyée) : un personnage créé de zéro avec une photo n'est plus
+  // invisible dans la conversation. Avec un VRM, l'avatar 3D reprend toute la
+  // place. '' = rien à montrer (le fond du décor reste seul à l'écran).
+  const portrait = character && !character.vrm ? (character.portrait || character.photo || '') : ''
 
   // ── Rendu ────────────────────────────────────────────────────────────────
   // NB : la div .scene reste montée en permanence (le stage 3D y est attaché via
@@ -1635,8 +1638,8 @@ function AppInner() {
         style={character?.background ? { backgroundImage: `url("${character.background}")` } : undefined}
       />
 
-      {/* Avatar 2D : l'image de la card tient lieu d'avatar quand le personnage
-          n'a pas de modèle 3D. Rendu FRÈRE de .scene et non dedans — le canvas du
+      {/* Avatar 2D : le portrait de la card — à défaut, la photo du personnage —
+          tient lieu d'avatar quand le personnage n'a pas de modèle 3D. Rendu FRÈRE de .scene et non dedans — le canvas du
           stage y est ajouté impérativement, React ne doit pas partager cet enfant.
           Placement en CSS pur (classe `vn`), et rien à brancher : une image ne
           bouge ni les lèvres ni les émotions. */}

@@ -243,7 +243,8 @@ const FR = {
   portrait: 'Portrait',
   portraitHint: 'Image de la carte importée — tient lieu d’avatar tant qu’aucun modèle 3D n’est choisi.',
   photo: 'Photo',
-  photoHint: 'Vignette du personnage dans la liste — à défaut, le portrait de sa carte, puis son initiale.',
+  photoHint:
+    'Vignette du personnage dans la liste — et son avatar en scène quand il n’a ni modèle 3D ni portrait de carte. À défaut : le portrait de sa carte, puis son initiale.',
   photoCapture: 'Capturer le modèle 3D',
   photoCaptureHint: 'Cadrez l’avatar à l’écran, puis capturez : la photo est ce que vous voyez.',
   photoUpload: 'Envoyer une image',
@@ -798,7 +799,8 @@ const EN: Record<Key, string> = {
   portrait: 'Portrait',
   portraitHint: 'Image from the imported card — stands in as the avatar until a 3D model is chosen.',
   photo: 'Photo',
-  photoHint: 'The character’s thumbnail in the list — otherwise the portrait from its card, then its initial.',
+  photoHint:
+    'The character’s thumbnail in the list — and its avatar in the scene when it has no 3D model and no card portrait. Otherwise: the card portrait, then its initial.',
   photoCapture: 'Capture the 3D model',
   photoCaptureHint: 'Frame the avatar on screen, then capture: the photo is what you see.',
   photoUpload: 'Upload an image',

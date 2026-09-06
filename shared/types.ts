@@ -117,9 +117,11 @@ export interface CharacterMeta {
   // la card EST l'image). Champ absent = aucune représentation visuelle.
   portrait?: string // ex: /portraits/sakura.png
   // Photo du personnage servie par /portraits — VIGNETTE d'identité (liste des
-  // personnages), sans rôle dans la scène : capture du modèle 3D tel qu'il est
-  // cadré à l'écran, ou image envoyée par l'utilisateur. Toujours un carré.
-  // Champ absent = repli sur `portrait`, puis sur l'initiale teintée.
+  // personnages : repli sur `portrait`, puis sur l'initiale teintée) ET, dans
+  // la scène, DERNIER REPLI d'avatar : sans `vrm` ni `portrait`, c'est elle qui
+  // représente le personnage en conversation (sinon il serait invisible — issue
+  // #4b). Capture du modèle 3D tel qu'il est cadré à l'écran, ou image envoyée
+  // par l'utilisateur. Toujours un carré.
   photo?: string // ex: /portraits/sakura-photo.png?v=1753900000000
   background: string // ex: /backgrounds/room.png ('' = dégradé par défaut)
   // Famille d'animations de face à face (cf. AnimationFamily). Clé ABSENTE =
