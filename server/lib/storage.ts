@@ -22,7 +22,9 @@ import type {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ROOT = path.resolve(__dirname, '..', '..')
-export const DATA_DIR = path.join(ROOT, 'data')
+// `HANAMI_DATA` déplace l'ENTIER de l'état (config, personnages, chats) :
+// instance de test isolée sur un autre port, sans jamais toucher data/ réel.
+export const DATA_DIR = process.env.HANAMI_DATA ? path.resolve(process.env.HANAMI_DATA) : path.join(ROOT, 'data')
 export const PRESETS_DIR = path.join(ROOT, 'presets')
 export const VRM_DIR = path.join(ROOT, 'vrm')
 export const BACKGROUNDS_DIR = path.join(ROOT, 'backgrounds')
