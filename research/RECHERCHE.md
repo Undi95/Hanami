@@ -30,9 +30,14 @@ seul le résultat mesuré compte.
   ET **moins de tokens de sortie** que la prose (70 vs 79).
 - **Strictement meilleur que PLAIN sur tous les axes.** C'EST le baseline.
 
+**Encodeur DÉTERMINISTE `denseEncode()` (research/codec.ts)** : −7 % entrée
+(405 → 377), **6/6, 0 fait perdu** — mais c'est le PLANCHER des règles sûres seules.
+Mesure : `scripts/dense-encode.ts`.
+
 Mesures : `scripts/compress-measure.ts` (`--tokens` par défaut / `--recall` complet),
-`scripts/compress-probe.ts` (frontière). Contenu de test : 3 fichiers mémoire (famille /
-travail / santé), 6 questions (3 faciles + 3 dures : compte, localisation, causalité).
+`scripts/compress-probe.ts` (frontière), `scripts/dense-encode.ts` (encodeur auto).
+Contenu de test : 3 fichiers mémoire (famille / travail / santé), 6 questions (3 faciles
++ 3 dures : compte, localisation, causalité).
 
 ## La règle de sécurité (trouvée — à ne jamais violer)
 **Ne JAMAIS comprimer un fait en forme purement IMPLICITE.** Garder le fait « titre »
@@ -48,21 +53,26 @@ compresse déjà (tokens courts, chiffres). Le vrai gain est dans la **redondanc
 prose** (mots-vide, reformulations, verbes être/avoir), **pas** dans les chiffres/dates.
 
 ## Hypothèses à tester (par ordre de priorité)
-1. **Codec par TYPE de contenu** : faits / comportement-perso / persona-user = des
-   stratégies de densification DIFFÉRENTES. Le prompt système (comportement) est le plus
-   risqué → batterie de **fidélité** séparée (règles strictes, voix, emoji), pas de rappel
-   de fait. Mesurer : la compression du sysprompt change-t-elle le perso ? À quel seuil ?
-2. **Encodeur automatique CONSERVATEUR** (pas à la main) : règles sûres (mots-vide FR/EN,
-   normalisation dates/chiffres, détection clé→valeur, **forçage fait-titre explicite**).
-   Cible : battre/égaler v1 SANS effort humain et SANS le trou de l'implicite.
-   → c'est le livrable « reprennable » (open source).
-3. **Densification agressive + GARDE** : viser > 29 % tokens en monitant
-   `finish_reason=length` + vide ; si un fait devient implicite → le ré-expliciter
-   (détection + correction à la sortie). Trouver le vrai plafond AVEC fiabilité.
+1. **LLM propose + VÉRIFICATEUR DÉTERMINISTE (LA piste leader)** : un modèle LLM
+   densifie AGRESSIVEMENT (viser les −29 %+ de v1), PUIS un vérifieur DÉTERMINISTE
+   (zéro LLM) contrôle que TOUT fait du texte original (entités, nombres, dates,
+   relations — via une extraction de « faits » normalisables) est ENCORE PRÉSENT dans
+   la forme compressée. Un fait manquant → on rejette ce passage et on retombe sur
+   l'encodeur déterministe simple (ou le texte original). → On prend la FORCE du LLM
+   (la compression sémantique, le gap de 22 pts) en en neutralisant le RISQUE (Size-
+   Fidelity Paradox / knowledge overwriting) par un filet DÉTERMINISTE. C'est le design
+   le plus prometteur pour le livrable open source. **À valider : le vérifieur doit être
+   fiable — pas de faux-vert qui laisserait passer une perte de fait silencieuse.**
+2. **Codec par TYPE de contenu** : faits / comportement-perso / persona-user = stratégies
+   DIFFÉRENTES. Le sysprompt (comportement) = le plus risqué → batterie de **FIDÉLITÉ**
+   (règles strictes, voix, emoji), PAS rappel de fait. Mesurer : la compression du
+   sysprompt change-t-elle le perso ? À quel seuil ? (axe n°1 demandé par Lucas)
+3. **Encodeur automatique CONSERVATEUR** — ✅ FAIT (research/codec.ts) : −7 %, 0 fait
+   perdu. C'est le plancher + le repli sûr. Le gap vers v1 (22 pts) = la compression
+   sémantique = ce que l'hyp. 1 doit capturer.
 4. **Intégration app (B)** : opt-in, densifier la mémoire injectée, **original conservé**
    (réversible), repli honnête si aucun gain mesuré. Ne jamais impacter l'output par défaut.
-5. **Prior art** : que font LLMLingua / LongLLMLingua / Gisting / ICAE ? Y a-t-il une
-   méthode 2025/2026 qui bat mon v1 à coût comparable ? Noter URLs + leçons + pièges.
+5. **Prior art** — ✅ FAIT (section ci-dessous).
 
 ## Prior art — état de l'art (recherché 18/09 nuit)
 Sources :
@@ -109,6 +119,12 @@ Sources :
    par COMPORTEMENT, pas contenu.
 
 ## Journal
+- **2026-09-18 (nuit, tour 1b)** : encodeur déterministe `denseEncode()` codé
+  (research/codec.ts) + mesuré (scripts/dense-encode.ts). **−7 % / 6/6 / 0 fait perdu.**
+  Bug attrapé + fixé : « mâle » → « mâ » (JS \b non-Unicode sur « â ») → bornes \p{L}.
+  Constat : les règles sûres seules plafonnent à ~7 % ; le gap vers v1 (29 %) = la
+  compression sémantique = le risque. → piste leader = LLM propose + vérifieur
+  déterministe des faits (hyp. 1).
 - **2026-09-18 (nuit, tour 1)** : recherche prior art faite (7 sources, URLs en
   RECHERCHE.md). Décisions qui en découlent : (a) SEULES méthodes HARD faisables (soft =
   white-box/entraînement, inadapté Ollama) ; (b) encodeur DÉRMINISTE (pas LLM) à cause du
