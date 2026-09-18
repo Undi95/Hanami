@@ -64,15 +64,64 @@ prose** (mots-vide, reformulations, verbes être/avoir), **pas** dans les chiffr
 5. **Prior art** : que font LLMLingua / LongLLMLingua / Gisting / ICAE ? Y a-t-il une
    méthode 2025/2026 qui bat mon v1 à coût comparable ? Noter URLs + leçons + pièges.
 
-## Prior art à chasser (recherche web — noter URLs + leçons)
-- **LLMLingua / LongLLMLingua** (Microsoft) — compression de prompt, budget-aware.
-- **Gisting**, **ICAE** — « compressed prompts » / representation compression.
-- Papiers 2025/2026 : « prompt/context compression for LLM », « token efficiency »,
-  « dense vs sparse context recall ». Leurs pièges (perte de faits, dégradation modèle-dépendante).
+## Prior art — état de l'art (recherché 18/09 nuit)
+Sources :
+- [NAACL 2025 survey](https://aclanthology.org/2025.naacl-long.368.pdf)
+  ([GitHub](https://github.com/ZongqianLi/Prompt-Compression-Survey)) — taxo complète.
+- [Empirical study (arXiv 2505.00019)](https://arxiv.org/pdf/2505.00019) — 6 méthodes, 13 datasets.
+- [EMNLP 2025 Findings (Amazon) info-preservation](https://aclanthology.org/2025.findings-emnlp.949.pdf) — cible Mistral-7B LOCALE.
+- [LLMLingua](https://aclanthology.org/2023.emnlp-main.825.pdf) + [LongLLMLingua](https://aclanthology.org/2024.acl-long.91.pdf) + [LLMLingua-2](https://github.com/microsoft/LLMLingua/).
+- [ProCut (LinkedIn, EMNLP 2025 Industry)](https://aclanthology.org/2025.emnlp-industry.20.pdf) — attribution, 78-84 % réduction.
+- [Behavior-Equivalent Token (arXiv 2511.23271)](https://arxiv.org/pdf/2511.23271) — sysprompt → 1 token, ~98 % comportement.
+- [When Less is More (arXiv 2602.09789)](https://arxiv.org/html/2602.09789) — Size-Fidelity Paradox.
+- [Rate-Distortion limits (NeurIPS 2024, arXiv 2407.15504)](https://arxiv.org/html/2407.15504v1) — borne théorique.
+
+**CE QUE ÇA CHANGE POUR HANAMI :**
+1. **Deux familles : HARD vs SOFT.** HARD (LLMLingua, LongLLMLingua, ProCut, EHPC,
+   SelectiveContext) = filtrage de tokens, SANS entraînement, interprétable,
+   modèle-agnostique. SOFT (GIST, xRAG, PISCO, [BE] token) = compression d'embeddings,
+   ratios extrêmes (100-3000×) mais **spécifique au modèle, non interprétable, nécessite
+   entraînement/distillation + accès white-box** aux états cachés. → **Pour Hanami
+   (local, Ollama black-box, zéro npm, zéro entraînement) : SEULES les méthodes HARD sont
+   faisables.** L'idée de Lucas (format lisible que le LLM décode) EST une méthode HARD.
+2. **La FIDÉLITÉ est la faiblesse n°1, masquée par les scores de tâche.** Les faits les
+   plus perdus : **dates, nombres/cardinaux, entités nommées, relations fines (rôles,
+   modifieurs)**. → C'EST EXACTEMENT mon trou v2 (le cardinal « 2 enfants »). Ma règle
+   « fait-titre explicite » = la technique publiée « subsequence recovery » de
+   LongLLMLingua (restaurer entités/nombres). **Je suis aligné avec l'état de l'art.**
+3. **Size-Fidelity Paradox** : un compresseur LLM PLUS GRAND (0.6B→90B) peut RÉDUIRE la
+   fidélité ; les ~3-4B gagnent. Deux modes d'échec : **knowledge overwriting** (le
+   modèle remplace le fait source par SON apriori paramétrique) et **semantic drift**
+   (swap de rôles/relations). → **AVERTISSEMENT pour l'encodeur auto : un densifieur
+   À BASE DE LLM peut « corriger » mes faits.** → **Argument fort pour un encodeur
+   DÉRMINISTE (règles), PAS LLM** : reproductible, zéro coût LLM, zéro overwrite.
+4. **Taux VARIABLE = la bonne direction** (scheduler LongLLMLingua, LLMLingua-2 Dynamic,
+   rate-distortion) : compresser MOINS sur les parties importantes = ma règle
+   « compresser le détail, protéger le fait-titre ».
+5. **Compression MODÉRÉE peut AMÉLIORER** la perf sur long contexte (effet dé-bruitage,
+   arXiv 2505.00019) — mon v1 strictement meilleur que PLAIN est cohérent avec ça.
+6. **Plafond : ~4× « sûr »** pour les méthodes HARD. Mon v1 = ~1.4× (−29 %). → **Marge
+   jusqu'à ~4× à trouver**, sous réserve de tenir la fidélité. C'est LA cible.
+7. **Le prompt système (comportement) est le plus dur** : [BE] montre que reconstruire le
+   contenu ne SUFFIT PAS — c'est l'ALIGNEMENT COMPORTEMENTAL qui compte (sinon le modèle
+   recite ou refuse). ProCut : le framing de roleplay générique est souvent DROPPABLE
+   (le LLM l'a internalisé), mais les contraintes spécifiques non. → batterie de fidélité
+   par COMPORTEMENT, pas contenu.
 
 ## Journal
-- **2026-09-18** : v1 vs v2 mesurés (`compress-measure`). v1 = **−26 % net / 6/6 / moins
-  de sortie** → baseline. v2 = −36 % net / 5/6 / plus de sortie. Frontière isolée
+- **2026-09-18 (nuit, tour 1)** : recherche prior art faite (7 sources, URLs en
+  RECHERCHE.md). Décisions qui en découlent : (a) SEULES méthodes HARD faisables (soft =
+  white-box/entraînement, inadapté Ollama) ; (b) encodeur DÉRMINISTE (pas LLM) à cause du
+  Size-Fidelity Paradox ; (c) cible ~4× (v1 = 1.4×) ; (d) la fidélité se mesure par
+  COMPORTEMENT pour le sysprompt (pas contenu). Baseline v1 inchangée.
+- **2026-09-18 (jour)** : v1 vs v2 mesurés (`compress-measure`). v1 = **−26 % net / 6/6 /
+  moins de sortie** → baseline. v2 = −36 % net / 5/6 / plus de sortie. Frontière isolée
   (`compress-probe`) : **implicite → silence** (`finish_reason=length`). Règle de sécurité
-  posée (fait-titre explicite). Baseline figée. **Suite (nuit)** : coder l'encodeur
-  conservateur (hyp. 2) + batterie de fidélité sysprompt (hyp. 1) + recherche prior art.
+  posée (fait-titre explicite). Baseline figée.
+
+## ⚠️ Note signature (à trancher par Lucas au réveil)
+La prompt du loop disait « signé Qwen 3.8 27B », mais CLAUDE.md impose
+`Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` (règle signée du projet, tous
+les commits passés). **J'ai gardé la signature CLAUDE.md (Fable 5)** car c'est la
+convention du repo ET Qwen3.8 est le modèle TESTÉ, pas l'auteur du code. Si tu veux que
+je signe autrement sur cette branche, dis-le et je le change.
