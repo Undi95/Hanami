@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import type {
   CompactBasis,
+  MemoryInjection,
   ModelMode,
   RestorePreview,
   RestoreResult,
@@ -82,6 +83,7 @@ interface FormState {
   maxHistoryMessages: string
   historyLimit: boolean
   memoryEnabled: boolean
+  memoryInjection: MemoryInjection
   fileToolsEnabled: boolean
   allowDelete: boolean
   toolsRoot: string
@@ -127,6 +129,8 @@ function toForm(s: Settings): FormState {
     // Réglage optionnel (config.json d'avant le toggle) : absent = on.
     historyLimit: s.historyLimit !== false,
     memoryEnabled: s.memoryEnabled,
+    // Réglage optionnel (config.json d'avant la clé) : absent = 'auto'.
+    memoryInjection: s.memoryInjection ?? 'auto',
     fileToolsEnabled: s.fileToolsEnabled,
     allowDelete: s.allowDelete,
     toolsRoot: s.toolsRoot,
@@ -185,6 +189,7 @@ function fromForm(
     maxHistoryMessages: Math.round(num(f.maxHistoryMessages, base.maxHistoryMessages)),
     historyLimit: f.historyLimit,
     memoryEnabled: f.memoryEnabled,
+    memoryInjection: f.memoryInjection,
     fileToolsEnabled: f.fileToolsEnabled,
     allowDelete: f.allowDelete,
     toolsRoot: f.toolsRoot.trim(),
@@ -494,6 +499,7 @@ function SearxngGuide({ onClose }: { onClose: () => void }) {
 const LANG_OPTIONS: readonly Lang[] = ['fr', 'en']
 const MODEL_MODE_OPTIONS: readonly ModelMode[] = ['full', 'simple']
 const COMPACT_BASIS_OPTIONS: readonly CompactBasis[] = ['threshold', 'context']
+const MEMORY_INJECTION_OPTIONS: readonly MemoryInjection[] = ['auto', 'selective']
 const VISION_MODE_OPTIONS: readonly VisionMode[] = ['auto', 'on', 'off']
 const THINKING_LEVEL_OPTIONS: readonly ThinkingLevel[] = ['auto', 'low', 'medium', 'high', 'max', 'none']
 const WEB_SEARCH_ENGINE_OPTIONS: readonly WebSearchEngine[] = ['duckduckgo', 'searxng', 'tavily']
@@ -1271,6 +1277,22 @@ export default function SettingsDialog({
             checked={form.memoryEnabled}
             onChange={(v) => set('memoryEnabled', v)}
           />
+          {form.memoryEnabled && (
+            <div className="field">
+              <label>{t('memoryInjection')}</label>
+              {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+              <div>
+                <Seg
+                  value={form.memoryInjection}
+                  options={MEMORY_INJECTION_OPTIONS}
+                  labels={{ auto: t('memoryInjectionAuto'), selective: t('memoryInjectionSelective') }}
+                  onPick={(v) => set('memoryInjection', v)}
+                  ariaLabel={t('memoryInjection')}
+                />
+              </div>
+              <span className="hint">{t('memoryInjectionSub')}</span>
+            </div>
+          )}
           <Toggle
             label={t('fileTools')}
             sub={t('fileToolsSub')}

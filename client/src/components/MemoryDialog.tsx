@@ -171,9 +171,11 @@ export default function MemoryDialog({ characterId, onClose }: Props) {
         ? t('memoryInjectNone')
         : listing.injection === 'full'
           ? t('memoryInjectFull', { chars: listing.totalChars })
-          : listing.injection === 'index-only'
-            ? t('memoryInjectIndex', { chars: listing.totalChars })
-            : t('memoryInjectCapped', { chars: listing.totalChars })
+          : listing.injection === 'selective'
+            ? t('memoryInjectSelective', { chars: listing.totalChars })
+            : listing.injection === 'index-only'
+              ? t('memoryInjectIndex', { chars: listing.totalChars })
+              : t('memoryInjectCapped', { chars: listing.totalChars })
 
   return (
     <Dialog title={t('memory')} onClose={onClose} guardClose={() => !dirty || window.confirm(t('unsavedConfirm'))} wide>

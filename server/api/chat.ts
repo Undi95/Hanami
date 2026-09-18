@@ -87,6 +87,16 @@ export function multimodalContent(text: string, images: string[]): ContentPart[]
   return parts
 }
 
+/** Le TEXTE d'un content (string ou multimodal) — les images n'apportent pas de mots. */
+function textContent(content: string | ContentPart[] | undefined): string {
+  if (content == null) return ''
+  if (typeof content === 'string') return content
+  return content
+    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+    .map((p) => p.text)
+    .join(' ')
+}
+
 // ── Macros des cards ───────────────────────────────────────────────────────
 // {{char}} / {{user}} (et <BOT> / <USER>) sont substitués ICI, à la
 // construction du payload : les fichiers du disque gardent leurs macros, seul
@@ -255,7 +265,14 @@ export function buildPayload(
   if (persona && (persona.name.trim() || persona.description.trim())) {
     injected += personaBlock(persona.name.trim(), persona.description.trim())
   }
-  if (settings.memoryEnabled) injected += buildMemoryBlock(characterId, settings.modelMode === 'simple')
+  if (settings.memoryEnabled) {
+    // Mode sélectif : la requête courante sert à classer la mémoire (repli 'auto'
+    // si elle est vide — ex. salutation 'open', ou mode 'auto' de base).
+    injected += buildMemoryBlock(characterId, settings.modelMode === 'simple', {
+      mode: settings.memoryInjection,
+      query: textContent(pendingUserContent),
+    })
+  }
 
   const { meta, messages: all } = readChat(characterId, chatId)
   const history = omitLastMessage ? all.slice(0, -1) : all

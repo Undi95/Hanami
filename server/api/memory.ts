@@ -44,11 +44,16 @@ function forceMdExtension(name: string): string {
 function injectionState(
   files: MemoryFile[],
   settings: Settings,
-): { injection: 'none' | 'full' | 'index-only' | 'capped'; totalChars: number } {
+): { injection: 'none' | 'full' | 'selective' | 'index-only' | 'capped'; totalChars: number } {
   const totalChars = files.filter((f) => f.name !== 'MEMORY.md').reduce((n, f) => n + f.content.length, 0)
   if (!settings.memoryEnabled || totalChars === 0) return { injection: 'none', totalChars }
   if (settings.modelMode === 'simple') {
     return { injection: totalChars <= MEMORY_TOOLLESS_CAP ? 'full' : 'capped', totalChars }
+  }
+  // Sélectif : le panneau n'a pas la requête courante, il ne peut donc que
+  // déclarer le MODE (pertinence + budget), pas les fichiers exacts.
+  if (settings.memoryInjection === 'selective') {
+    return { injection: 'selective', totalChars }
   }
   return { injection: totalChars <= MEMORY_FULL_INJECT_LIMIT ? 'full' : 'index-only', totalChars }
 }

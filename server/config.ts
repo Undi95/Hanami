@@ -25,6 +25,9 @@ export const DEFAULT_SETTINGS: Settings = {
   // nombre seul ne pouvait pas exprimer (0 veut dire « zéro », pas « illimité »).
   historyLimit: true,
   memoryEnabled: true,
+  // Opt-in : 'auto' = comportement actuel (tout-ou-rien), 'selective' =
+  // pertinence + budget. Défaut 'auto' = aucune régression pour qui n'y touche.
+  memoryInjection: 'auto',
   fileToolsEnabled: false,
   allowDelete: false,
   toolsRoot: path.join(DATA_DIR, 'workspace'),

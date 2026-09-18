@@ -397,7 +397,7 @@ export function getStats(charId: string): Promise<CharacterStats> {
 // ── Mémoire ────────────────────────────────────────────────────────────────
 
 /** Ce que le serveur injectera réellement dans le system prompt (buildMemoryBlock). */
-export type MemoryInjection = 'none' | 'full' | 'index-only' | 'capped'
+export type MemoryInjection = 'none' | 'full' | 'selective' | 'index-only' | 'capped'
 
 export interface MemoryListing {
   files: MemoryFile[]

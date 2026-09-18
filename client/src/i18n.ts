@@ -435,6 +435,11 @@ const FR = {
   sectionMemoryTools: 'Mémoire & outils',
   memoryToggle: 'Mémoire',
   memoryToggleSub: 'Injecte le bloc mémoire dans le contexte et expose les outils mémoire.',
+  memoryInjection: 'Injection mémoire',
+  memoryInjectionAuto: 'Auto',
+  memoryInjectionSelective: 'Pertinence',
+  memoryInjectionSub:
+    "Auto : tout ou rien (≤ 8000 caractères = tout, au-delà = index seul). Pertinence : classe les fichiers par rapport à la question courante et n'injecte que les plus utiles, le reste reste lisible à la demande.",
   fileTools: 'Outils fichiers',
   fileToolsSub: 'Le modèle peut lire/écrire dans le dossier sandbox.',
   allowDelete: 'Autoriser la suppression de fichiers',
@@ -605,6 +610,8 @@ const FR = {
   memoryBackupRestoreArmed: 'Confirmer ?',
   memoryBackupRestored: 'Sauvegarde {name} restaurée (l’état actuel a d’abord été sauvegardé).',
   memoryInjectFull: 'Injecté dans le prompt : toute la mémoire ({chars} car.)',
+  memoryInjectSelective:
+    'Injecté dans le prompt : les fichiers les plus pertinents (classement par la requête, dans un budget) — le reste reste lisible via memory_read ({chars} car. au total)',
   memoryInjectIndex:
     'Injecté dans le prompt : seul l’index — le modèle lit les fichiers via l’outil memory_read ({chars} car. au total)',
   memoryInjectCapped:
@@ -1136,6 +1143,11 @@ const EN: Record<Key, string> = {
   sectionMemoryTools: 'Memory & tools',
   memoryToggle: 'Memory',
   memoryToggleSub: 'Injects the memory block into the context and exposes the memory tools.',
+  memoryInjection: 'Memory injection',
+  memoryInjectionAuto: 'Auto',
+  memoryInjectionSelective: 'Relevance',
+  memoryInjectionSub:
+    "Auto: all or nothing (≤ 8000 chars = all, beyond = index only). Relevance: ranks files against the current question and injects only the most useful ones, the rest staying readable on demand.",
   fileTools: 'File tools',
   fileToolsSub: 'The model can read and write inside the sandbox folder.',
   allowDelete: 'Allow file deletion',
@@ -1295,6 +1307,8 @@ const EN: Record<Key, string> = {
   memoryBackupRestoreArmed: 'Confirm?',
   memoryBackupRestored: 'Backup {name} restored (the current state was backed up first).',
   memoryInjectFull: 'Injected into the prompt: full memory ({chars} chars)',
+  memoryInjectSelective:
+    'Injected into the prompt: the most relevant files (ranked by the query, within a budget) — the rest stays readable via memory_read ({chars} chars total)',
   memoryInjectIndex:
     'Injected into the prompt: index only — the model reads files via the memory_read tool ({chars} chars total)',
   memoryInjectCapped: 'Injected into the prompt: memory capped by the simple-mode limit ({chars} chars)',

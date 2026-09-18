@@ -12,6 +12,13 @@ export type ModelMode = 'full' | 'simple'
 // choisit : la limite suit UNE des deux valeurs, plus le plus petit des deux.
 export type CompactBasis = 'threshold' | 'context'
 
+// Mode d'injection mémoire : 'auto' = comportement actuel (tout-ou-rien :
+// ≤ 8000 chars = tout, au-delà = index seul) ; 'selective' = classement des
+// fichiers par pertinence à la requête courante, injection du top dans un
+// budget, le reste restant lisible via memory_read (cf. server/lib/memoryRank).
+// Opt-in : le défaut est 'auto', le comportement existant est inchangé.
+export type MemoryInjection = 'auto' | 'selective'
+
 // Envoi d'images au modèle : 'auto' = détecté auprès du backend (Ollama expose
 // les capacités du modèle), 'on' = forcé, 'off' = jamais. En 'off' (ou détection
 // négative) le trombone du composer n'existe même pas.
@@ -42,6 +49,7 @@ export interface Settings {
   maxHistoryMessages: number // quand historyLimit est ON : nb max de messages d'historique envoyés (0 = aucun)
   historyLimit: boolean // ON : l'historique envoyé est capé à maxHistoryMessages (0 = aucun) ; OFF : pas de cap, tout l'historique part
   memoryEnabled: boolean // injecte le bloc mémoire + expose les outils mémoire
+  memoryInjection: MemoryInjection // mode d'injection mémoire (cf. type ci-dessus)
   fileToolsEnabled: boolean // expose les outils fichiers au modèle
   allowDelete: boolean // autorise delete_file (toggle ON/OFF)
   toolsRoot: string // dossier sandbox des outils fichiers

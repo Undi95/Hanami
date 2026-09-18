@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { emotionTagList } from '../../shared/emotions'
 import { normalizeLlm } from '../../shared/llm'
 import { CodedError, ErrorCodes } from '../../shared/errorCodes'
+import { rankMemoryForInjection, selectWithinBudget } from './memoryRank'
 import type {
   AnimationFamily,
   CharacterFull,
@@ -946,15 +947,31 @@ const MEMORY_POLICY =
 
 // Seuils d'injection mémoire — exportés pour que le panneau mémoire puisse
 // afficher CE QUI sera réellement injecté (même logique que le bloc ci-dessous).
-export const MEMORY_FULL_INJECT_LIMIT = 8000 // mode outils : ≤ → tout, > → index seul
+export const MEMORY_FULL_INJECT_LIMIT = 8000 // mode outils 'auto' : ≤ → tout, > → index seul
 export const MEMORY_TOOLLESS_CAP = 24000 // mode simple : plafond de l'injection intégrale
+// Budget d'injection du mode sélectif (chars) : combien de mémoire PERTINENTE
+// on injecte au modèle. Le reste (hors budget) reste lisible via memory_read —
+// d'où le fait que le sélectif n'existe qu'en mode Outils.
+export const MEMORY_SELECTIVE_BUDGET = 8000
 
 /**
  * Bloc mémoire injecté dans le system prompt (transparent : visible dans l'inspecteur).
  * toolless (mode modèle « simple ») : AUCUN outil n'existe côté modèle — tout est
  * injecté, plafonné, et on ne mentionne jamais memory_read.
+ *
+ * opts.mode 'selective' (+ opts.query = la requête courante) : en mode Outils,
+ * on range les fichiers par pertinence à la requête et on injecte les plus
+ * pertinents dans MEMORY_SELECTIVE_BUDGET, le reste restant lisible via
+ * memory_read. C'est le correctif à la chute brutale du tout-ou-rien (≤ 8000 =
+ * tout, > = index seul) : la mémoire utile part toujours, quelle que soit la
+ * taille de la collection. Aucun signal de pertinence (requête vide, ou rien ne
+ * colle) → repli sur le comportement 'auto' (jamais d'injection arbitraire).
  */
-export function buildMemoryBlock(charId: string, toolless = false): string {
+export function buildMemoryBlock(
+  charId: string,
+  toolless = false,
+  opts: { mode?: 'auto' | 'selective'; query?: string } = {},
+): string {
   const files = listMemory(charId)
   if (files.length === 0) return ''
   const index = files.find((f) => f.name === 'MEMORY.md')
@@ -963,7 +980,23 @@ export function buildMemoryBlock(charId: string, toolless = false): string {
   let block = `\n\n## Memory (auto-injected by Hanami — edit in the Memory panel)\n`
   if (!toolless) block += MEMORY_POLICY
   if (index) block += index.content + '\n'
-  if (toolless) {
+
+  // Sélectif : mode Outils + mode demandé + une requête non vide + AU MOINS un
+  // fichier pertinent (score > 0) — sinon on retombe sur 'auto' (ci-dessous).
+  const query = (opts.query ?? '').trim()
+  const ranked =
+    !toolless && opts.mode === 'selective' && query !== '' && others.length > 0
+      ? rankMemoryForInjection(query, others, index?.content ?? '')
+      : []
+  const selective = ranked.length > 0 && ranked[0].score > 0
+
+  if (selective) {
+    const { selected, omitted } = selectWithinBudget(ranked, MEMORY_SELECTIVE_BUDGET)
+    for (const r of selected) block += `\n### ${r.file.name}\n${r.file.content}\n`
+    if (omitted.length > 0) {
+      block += `\n(${omitted.length} more memory file(s) — use the memory_read(name) tool to read one.)\n`
+    }
+  } else if (toolless) {
     // Injection intégrale plafonnée : au-delà, les fichiers suivants sont coupés
     // (les plus gros en dernier pour sacrifier le moins de fichiers possible).
     const CAP = MEMORY_TOOLLESS_CAP
