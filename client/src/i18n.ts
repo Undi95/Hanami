@@ -311,23 +311,23 @@ const FR = {
   tabFeatures: 'Fonctions',
   tabCredits: 'Crédits',
   sectionConversation: 'Conversation',
-  // Personas de l'utilisateur : une collection de « moi ». La persona par
+  // Personas de l'utilisateur : une collection de « moi ». Le persona par
   // défaut s'applique à tous les personnages ; un personnage peut en épingler
-  // une autre sur sa carte (dialog Personnages).
+  // un autre sur sa carte (dialog Personnages).
   sectionPersona: 'Vous',
   personaName: 'Votre nom',
   personaNamePlaceholder: 'comment le personnage vous appelle',
   personaDescription: 'Qui vous êtes (en deux lignes)',
   personaDescriptionPlaceholder: 'Ce que le personnage sait de vous : métier, goûts, façon d’être…',
   personaHint:
-    'Injecté dans le prompt (visible dans l’Inspecteur) : la persona par défaut s’applique à tous vos personnages, et un personnage peut en épingler une autre sur sa carte. Le nom de la persona active remplace aussi {{user}} dans les cartes importées.',
-  personasEmpty: 'Aucune persona : aucun bloc n’est injecté, et {{user}} reste « User ».',
-  personasAdd: 'Ajouter une persona',
+    'Injecté dans le prompt (visible dans l’Inspecteur) : le persona par défaut s’applique à tous vos personnages, et un personnage peut en épingler un autre sur sa carte. Le nom du persona actif remplace aussi {{user}} dans les cartes importées.',
+  personasEmpty: 'Aucun persona : aucun bloc n’est injecté, et {{user}} reste « User ».',
+  personasAdd: 'Ajouter un persona',
   personaDefault: 'Par défaut',
-  personaDelete: 'Supprimer cette persona',
+  personaDelete: 'Supprimer ce persona',
   charPersona: 'Persona (ce personnage)',
   charPersonaDefault: 'Défaut des Réglages',
-  charPersonaHint: 'Qui vous êtes face à ce personnage. Vide = la persona par défaut des Réglages.',
+  charPersonaHint: 'Qui vous êtes face à ce personnage. Vide = le persona par défaut des Réglages.',
   sectionBackend: 'Backend LLM',
   backendUrl: 'URL du backend (compatible OpenAI)',
   apiKey: 'Clé API',
