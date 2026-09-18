@@ -12,6 +12,7 @@ import type { EnvNotice, FrameMode, VrmStage } from './scene/types'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
 import { activePersona } from '../../shared/personas'
 import * as api from './api'
+import { MAX_AUTO_COMPACT_FAILS, type AutoCompactOutcome, autoCompactFailUpdate } from './autoCompact'
 import { useStableCallback } from './hooks'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
 import { disposeNotify, playNotify } from './sound'
@@ -61,6 +62,10 @@ import PromptInspector from './components/PromptInspector'
 // Citation d'un message : longueur de l'aperçu (bandeau) et de l'extrait envoyé.
 const QUOTE_PREVIEW_MAX = 80
 const QUOTE_MAX = 200
+// Auto-compaction : le nombre d'échecs tolérés (MAX_AUTO_COMPACT_FAILS) et la
+// transition du compteur vivent dans ./autoCompact (logique pure, testée par
+// scripts/test-auto-compact.ts). Un échec transitoire ne doit plus tuer
+// l'auto-compact pour la session ; 409 et `nothingToCompact` ne comptent pas.
 // Chargement du modèle VRM : délais avant nouvelle tentative. Un serveur qui
 // redémarre coupe la requête sans que rien ne soit cassé — inutile d'annoncer
 // une erreur au premier échec.
@@ -288,9 +293,12 @@ function AppInner() {
   // appel par activation de chat (jamais de polling, même si l'app re-rend).
   // Remis à null par openChat, en même temps que la jauge.
   const ctxEstimatedRef = useRef<string | null>(null)
-  // Chats dont l'auto-compaction a échoué : pas de nouvel essai automatique
-  // (sinon un backend strict serait re-sollicité à chaque message).
-  const autoCompactFailedRef = useRef<Set<string>>(new Set())
+  // Échecs consécutifs de l'auto-compaction, par chat. Tant que le compteur
+  // reste sous MAX_AUTO_COMPACT_FAILS, la réponse suivante relance l'essai
+  // (échec transitoire ≠ mort de l'auto-compact pour la session). Au-delà, on
+  // arrête de re-solliciter le backend (l'intention d'origine) — mais l'arrêt
+  // est AFFICHÉ dans le fil, plus seulement en console.warn. 409 n'y figure pas.
+  const autoCompactFailCountRef = useRef<Map<string, number>>(new Map())
   // Personnage courant pour le callback de cadrage (posé une fois à la création
   // de la scène, qui vit plus longtemps que chaque personnage).
   const characterIdRef = useRef<string | null>(null)
@@ -430,7 +438,7 @@ function AppInner() {
     setCompacting(true)
     try {
       const out = await api.compactChat(charId, chatId, instruction)
-      autoCompactFailedRef.current.delete(chatId)
+      autoCompactFailCountRef.current.delete(chatId)
       setChatMeta((m) =>
         m && m.id === chatId ? { ...m, summary: out.summary, summaryUpto: out.summaryUpto } : m,
       )
@@ -455,11 +463,30 @@ function AppInner() {
         return
       }
       if (silent) {
-        // 409 = « déjà en cours » (autre appareil, double déclenchement) :
-        // occupé n'est pas cassé — marquer le chat couperait l'auto-compaction
-        // pour toute la session sur une simple collision.
-        if (!(e instanceof api.ApiError && e.status === 409)) {
-          autoCompactFailedRef.current.add(chatId)
+        // `noise` = cas qui ne sont PAS des échecs (logique dans ./autoCompact) :
+        // 409 « déjà en cours » (autre appareil, double déclenchement — occupé
+        // n'est pas cassé) et `nothingToCompact` (< 6 messages, « pas encore
+        // assez » — un état transitoire qui se résout tout seul, pas une panne).
+        const isApi = e instanceof api.ApiError
+        const outcome: AutoCompactOutcome =
+          isApi && (e.status === 409 || e.code === 'nothingToCompact')
+            ? 'noise'
+            : 'failure'
+        const { count, signal } = autoCompactFailUpdate(
+          autoCompactFailCountRef.current.get(chatId),
+          outcome,
+        )
+        if (count === undefined) autoCompactFailCountRef.current.delete(chatId)
+        else autoCompactFailCountRef.current.set(chatId, count)
+        // L'échec n'est plus invisible : on annonce le 1ᵉʳ (un essai restant) et
+        // l'arrêt définitif ; les essais intermédiaires sont silencieux (bornés).
+        // Pas de ligne si le chat n'est plus actif.
+        if (signal && chatIdRef.current === chatId) {
+          const msg =
+            signal === 'retry'
+              ? t('autoCompactRetry')
+              : t('autoCompactStopped', { n: MAX_AUTO_COMPACT_FAILS })
+          setFeed((f) => [...f, { kind: 'info', text: msg }])
         }
         console.warn('[compact]', e)
         return
@@ -1393,15 +1420,18 @@ function AppInner() {
             )
             if (ev.context) {
               setContext(ev.context)
-              // Auto-compaction au seuil — silencieuse (le serveur refuse s'il
-              // n'y a pas assez de nouveaux messages, on l'ignore sans bruit).
-              // Un chat dont l'auto-compaction a échoué n'est plus retenté
-              // automatiquement (le bouton manuel de l'inspecteur reste là).
+              // Auto-compaction au seuil. Le serveur refuse (silencieusement)
+              // s'il n'y a pas assez de nouveaux messages — on ignore sans bruit.
+              // Après un échec réel, on retente tant que le compteur reste sous
+              // MAX_AUTO_COMPACT_FAILS (l'échec est affiché dans le fil) ; au-
+              // delà, on n'en redemande plus ce chat pour la session (le bouton
+              // manuel de l'inspecteur reste là).
+              const fails = autoCompactFailCountRef.current.get(chat.id) ?? 0
               if (
                 settings?.autoCompact &&
                 ev.context.limit > 0 &&
                 ev.context.percent >= AUTO_COMPACT_AT &&
-                !autoCompactFailedRef.current.has(chat.id)
+                fails < MAX_AUTO_COMPACT_FAILS
               ) {
                 compact(char.id, chat.id, '', true).catch((err) => console.warn('[compact]', err))
               }

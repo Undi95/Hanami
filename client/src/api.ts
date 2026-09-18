@@ -42,10 +42,13 @@ export class AuthRequiredError extends Error {
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  /** Code serveur (ErrorCodes) quand la réponse est codée — ex. `nothingToCompact`. */
+  code?: string
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -61,18 +64,22 @@ function authHeaders(): Record<string, string> {
 async function throwFromResponse(res: Response): Promise<never> {
   if (res.status === 401) throw new AuthRequiredError()
   let message = t('serverError', { status: res.status })
+  let code: string | undefined
   try {
     const data = (await res.json()) as { error?: string; params?: ErrorParams }
     if (data.error) {
       // Contrat codes/phrases : data.error est un CODE — traduit ici, dans la
       // langue de l'UI. Code inconnu (serveur plus récent) : affiché tel quel ;
       // erreur non codée (message brut) : affichée telle quelle, comme avant.
+      // Le code est aussi porté par l'ApiError (code) pour les rares logiques
+      // qui doivent réagir à un cas précis — ex. « rien à compacter encore ».
+      code = data.error
       message = serverErrorText(data.error, data.params) || message
     }
   } catch {
     /* corps non JSON */
   }
-  throw new ApiError(message, res.status)
+  throw new ApiError(message, res.status, code)
 }
 
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {

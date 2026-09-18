@@ -405,6 +405,11 @@ const FR = {
   // Pastille persistante au point de coupure (dérivée de summaryUpto) — à ne
   // pas confondre avec compactDone, la ligne éphémère « terminé » en bas du fil.
   compactDivider: 'Conversation résumée · {n} messages antérieurs condensés',
+  // Échec de l'auto-compaction — plus jamais invisible : le 1ᵉʳ échec annonce
+  // la relance, l'arrêt (après MAX) pointe vers le bouton manuel.
+  autoCompactRetry: 'Auto-compaction : erreur — nouvel essai à la prochaine réponse.',
+  autoCompactStopped:
+    'Auto-compaction : {n} échecs d’affilée, plus tentée cette session (le bouton Compact de l’inspecteur reste là).',
   sectionTts: 'Synthèse vocale (TTS)',
   ttsEnabled: 'Lire les réponses à voix haute',
   ttsEnabledSub:
@@ -1101,6 +1106,11 @@ const EN: Record<Key, string> = {
   // Persistent marker at the cut point (derived from summaryUpto) — distinct
   // from compactDone, the ephemeral "done" line at the bottom of the feed.
   compactDivider: 'Conversation summarized · {n} earlier messages condensed',
+  // Auto-compaction failure — never silent again: the first failure announces
+  // the retry, the stop (after MAX) points to the manual button.
+  autoCompactRetry: 'Auto-compaction: error — will retry on the next reply.',
+  autoCompactStopped:
+    'Auto-compaction: {n} failures in a row, no more attempts this session (the Inspector’s Compact button still works).',
   sectionTts: 'Text-to-speech (TTS)',
   ttsEnabled: 'Read replies out loud',
   ttsEnabledSub:
