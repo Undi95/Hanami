@@ -115,10 +115,18 @@ function pickGreeting(pool: string[]): string {
  * (m.tools) réapparaissent en puces, juste AVANT le message qui les a portées
  * — la même place que pendant le stream. Champ optionnel : les vieux chats
  * n'en ont pas, rien à réinsérer.
+ *
+ * `summaryUpto` (en-tête du .jsonl) : nombre de messages de tête remplacés par
+ * le résumé dans le contexte envoyé. On y plante la pastille persistante de
+ * compaction juste AVANT le premier message non résumé — un fait de fichier,
+ * pas d'état UI, donc elle survit au rechargement.
  */
-function feedFromMessages(messages: ChatMessage[]): FeedItem[] {
+function feedFromMessages(messages: ChatMessage[], summaryUpto = 0): FeedItem[] {
   const items: FeedItem[] = []
-  for (const m of messages) {
+  const upto = Math.min(Math.max(0, summaryUpto | 0), messages.length)
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]
+    if (i === upto && upto > 0) items.push({ kind: 'compact', count: upto })
     if (Array.isArray(m.tools)) {
       for (const tr of m.tools) {
         items.push({ kind: 'tool', name: tr.name, args: tr.args, result: tr.result })
@@ -126,6 +134,9 @@ function feedFromMessages(messages: ChatMessage[]): FeedItem[] {
     }
     items.push({ kind: 'msg', msg: m })
   }
+  // Tout le fil résumé (messages supprimés après la compaction) : la pastille
+  // bascule en fin de fil plutôt que de disparaître.
+  if (upto > 0 && upto >= messages.length) items.push({ kind: 'compact', count: upto })
   return items
 }
 
@@ -423,8 +434,16 @@ function AppInner() {
       setChatMeta((m) =>
         m && m.id === chatId ? { ...m, summary: out.summary, summaryUpto: out.summaryUpto } : m,
       )
-      if (chatIdRef.current === chatId) {
-        setFeed((f) => [...f, { kind: 'info', text: t('compactDone', { n: out.compacted }) }])
+      // Pastille PERSISTANTE au point de coupure : reconstruite depuis le disque
+      // (une lecture, pas de LLM) pour qu'elle apparaisse ICI et maintenant — et
+      // survive au rechargement. La bulle assistant vient d'être persistée
+      // (persistAssistant précède l'événement `done`), elle est donc dans la
+      // relecture. Elle remplace l'ancienne ligne d'info éphémère en bas de fil.
+      if (chatIdRef.current === chatId && character && character.id === charId) {
+        const { messages } = await api.getChat(charId, chatId)
+        if (chatIdRef.current === chatId && character.id === charId) {
+          setFeed(feedFromDisk(character, messages, out.summaryUpto))
+        }
       }
       // Rafraîchit la jauge — sinon le badge resterait au rouge (≥ 80 %)
       // jusqu'au prochain message alors que le contexte vient d'être libéré.
@@ -838,7 +857,7 @@ function AppInner() {
       setContext(null)
       ctxEstimatedRef.current = null
       setActiveChat(char.id, meta.id)
-      const items = feedFromMessages(messages)
+      const items = feedFromMessages(messages, meta.summaryUpto ?? 0)
       // Premier message d'un chat VIDE (jamais sur un chat importé — il n'est pas
       // vide), selon le mode du personnage : 'written' (défaut) affiche une
       // salutation écrite tirée au hasard, 'generated' laisse le modèle ouvrir,
@@ -997,7 +1016,7 @@ function AppInner() {
         .then(({ meta, messages }) => {
           if (chatIdRef.current !== chat.id || meta.messageCount === chat.messageCount) return
           setChatMeta(meta)
-          setFeed(feedFromDisk(char, messages))
+          setFeed(feedFromDisk(char, messages, meta.summaryUpto ?? 0))
           const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
           if (lastAssistant) {
             applyEmotion(lastAssistant.emotion ?? extractEmotion(lastAssistant.content) ?? 'neutral')
@@ -1040,8 +1059,12 @@ function AppInner() {
   // Le fil reconstruit à partir du DISQUE : mêmes messages, mêmes puces
   // d'outils, même accueil que l'ouverture d'un chat. Une seule grammaire,
   // partagée entre le rafraîchissement doux et la re-synchronisation.
-  function feedFromDisk(char: CharacterFull, messages: ChatMessage[]): FeedItem[] {
-    const items = feedFromMessages(messages)
+  function feedFromDisk(
+    char: CharacterFull,
+    messages: ChatMessage[],
+    summaryUpto = 0,
+  ): FeedItem[] {
+    const items = feedFromMessages(messages, summaryUpto)
     if (items.length === 0 && char.greeting) {
       // Même accueil que partout ailleurs : macros résolues (cf. greetingPool).
       const names = macroNamesOf(char, settingsRef.current)
@@ -1075,7 +1098,8 @@ function AppInner() {
       const { meta, messages } = await api.getChat(char.id, chat.id)
       if (stale()) return true
       setChatMeta(meta)
-      setFeed(chip ? [...feedFromDisk(char, messages), chip] : feedFromDisk(char, messages))
+      const feed = feedFromDisk(char, messages, meta.summaryUpto ?? 0)
+      setFeed(chip ? [...feed, chip] : feed)
       const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
       if (lastAssistant) applyEmotion(lastAssistant.emotion ?? extractEmotion(lastAssistant.content) ?? 'neutral')
       if (!sent) return true

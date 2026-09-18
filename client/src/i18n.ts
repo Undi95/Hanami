@@ -402,6 +402,9 @@ const FR = {
   compactInstruction: 'Instruction optionnelle (ex. « garde tous les détails du voyage »)',
   compactInstructionPlaceholder: 'Instruction…',
   compactDone: 'Conversation compactée ({n} messages résumés).',
+  // Pastille persistante au point de coupure (dérivée de summaryUpto) — à ne
+  // pas confondre avec compactDone, la ligne éphémère « terminé » en bas du fil.
+  compactDivider: 'Conversation résumée · {n} messages antérieurs condensés',
   sectionTts: 'Synthèse vocale (TTS)',
   ttsEnabled: 'Lire les réponses à voix haute',
   ttsEnabledSub:
@@ -1095,6 +1098,9 @@ const EN: Record<Key, string> = {
   compactInstruction: 'Optional instruction (e.g. “keep every detail of the trip”)',
   compactInstructionPlaceholder: 'Instruction…',
   compactDone: 'Conversation compacted ({n} messages summarized).',
+  // Persistent marker at the cut point (derived from summaryUpto) — distinct
+  // from compactDone, the ephemeral "done" line at the bottom of the feed.
+  compactDivider: 'Conversation summarized · {n} earlier messages condensed',
   sectionTts: 'Text-to-speech (TTS)',
   ttsEnabled: 'Read replies out loud',
   ttsEnabledSub:

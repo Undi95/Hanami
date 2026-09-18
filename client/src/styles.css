@@ -1348,6 +1348,24 @@ select {
   }
 }
 
+/* Pastille PERSISTANTE du point de compaction — même famille visuelle que
+    .compact-pill mais sans pulsation : elle marque un fait accompli, pas une
+    action en cours. Elle survit au rechargement (dérivée de summaryUpto). */
+.compact-divider {
+  align-self: center;
+  margin: 12px auto;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-style: italic;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 14px;
+  width: fit-content;
+  max-width: 92%;
+  text-align: center;
+}
+
 /* Badge de jauge de contexte (accolé au titre du chat, jamais tronqué) */
 .ctx-badge {
   flex: none;

@@ -21,6 +21,10 @@ export type FeedItem =
   | { kind: 'tool'; name: string; args: string; result?: string; pending?: boolean }
   | { kind: 'error'; text: string }
   | { kind: 'info'; text: string } // ligne discrète (compaction…) — jamais sauvegardée
+  // Marqueur PERSISTANT du point de compaction — dérivé de summaryUpto (en-tête
+  // du .jsonl) : il survit au rechargement et marque là où le résumé remplace
+  // les messages antérieurs dans le contexte. Sans ordinal (comme 'info').
+  | { kind: 'compact'; count: number }
   | { kind: 'greeting'; text: string }
 
 interface Props {
@@ -1072,6 +1076,13 @@ export default function MessageList({
         return <div className="error-bubble">{item.text}</div>
       case 'info':
         return <div className="info-line">{item.text}</div>
+      case 'compact':
+        // Pastille persistante au point de coupure — le résumé remplace les
+        // `count` messages antérieurs dans le contexte envoyé, même s'ils
+        // restent lisibles dans le fil.
+        return (
+          <div className="compact-divider">{t('compactDivider', { n: item.count })}</div>
+        )
     }
   }
 
