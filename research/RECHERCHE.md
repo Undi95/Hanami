@@ -53,6 +53,17 @@ reste CONSERVATEUR (garde « stérilisé depuis l'année dernière », « contac
 étaient courtes, finish=stop ; le net suit l'entrée). v1 main (−29 %) reste le roi des
 tokens ; l'auto passe de −7 % (plancher) à −19 %.
 
+**HYP. 1b — pousser le LLM plus fort SOUS le filet (FAIT, `scripts/llm-verify-v2.ts`)** :
+l'instruction AGRESSIVE — périmètre « fait dur » resserré + suppression par CATEGORIES
+de nuances + format clé:valeur + exemples 100 % hors jeu de test → **−28 % ENTRÉE
+(405 → 292) / 6-6 / 3-3 vérifiés / 0 fait perdu = AUTO à la hauteur de v1 main (288/−29 %),
+dans le noir, SANS tuning sur les données.** ⚠️ Leçon d'hygiène de mesure : une 1ère
+version CITANT les phrases exactes du jeu de test (« depuis l'année dernière »…) a donné
+−32 % (276) — MAIS c'est de l'OVERFIT (on livre la liste des coupes), ce n'est PAS un
+codec général ; chiffre NON publishable. Le codec shippable = **−28 % (général)**. Gap
+résiduel 292 vs 288 (v1) = 4 tokens : des hedges borderline que le LLM garde encore
+(« actuel », « de confiance », « toujours »).
+
 Mesures : `scripts/compress-measure.ts` (`--tokens` / `--recall`), `scripts/compress-probe.ts`
 (frontière), `scripts/dense-encode.ts` (encodeur auto), `scripts/fidelity-battery.ts`
 (fidélité sysprompt), `scripts/llm-verify.ts` (LLM+vérifieur), `scripts/llm-compress-probe.ts`
@@ -92,10 +103,11 @@ prose** (mots-vide, reformulations, verbes être/avoir), **pas** dans les chiffr
    (`research/verifier.ts` + `scripts/llm-verify.ts`) : **−19 % entrée / 6-6 / 0 fait
    perdu, 3-3 vérifiés** (batait le plancher auto −7 %). Le vérifieur (chiffres + entités,
    zéro LLM) est **prouvé fiable** (test adversarial : zéro faux-vert) et a **attrapé un
-   troncage RÉEL** du LLM-compresseur (→ repli denseEncode). RESTE : le gap −19 % → −29 %
-   (v1) = le LLM trop CONSERVATEUR ; le pousser plus fort sous le filet. Le vérifieur ne
-   couvre PAS les cardinaux en LETTRES (« deux ») ni les SWAP de relation → le rappel
-   (6 questions) les attrape. Voir aussi la 3ᵉ signature (côté encodeur).
+   troncage RÉEL** du LLM-compresseur (→ repli denseEncode). **Gap −19 % → −29 % FERMÉ
+   par l'instruction AGRESSIVE GÉNÉRALE (hyp. 1b, tour 4) → −28 % / 6-6 / 0 perte = AUTO
+   à la hauteur de v1 main.** Le vérifieur ne couvre PAS les cardinaux en LETTRES
+   (« deux ») ni les SWAP de relation → le rappel (6 questions) les attrape. Voir aussi
+   la 3ᵉ signature.
 2. **Codec par TYPE de contenu** — ✅ 1er essai (`scripts/fidelity-battery.ts`) : le
    sysprompt EST compressible (**8/8 à ~3×** sur les règles explicites, PLAIN = DENSE =
    AGRESSIF). Mesure par COMPORTEMENT (pas contenu), comme demandé par Lucas. RESTE :
@@ -154,6 +166,16 @@ Sources :
    par COMPORTEMENT, pas contenu.
 
 ## Journal
+- **2026-09-19 (tour 4)** : **hyp. 1b — pousser le LLM plus fort sous le filet.**
+  Instruction AGRESSIVE : 1ère version CITANT les phrases du jeu de test → −32 % (276),
+  MAIS OVERFIT (liste des coupes à la main, exemple sur famille.md) → **non publishable**.
+  Version PROPRE (catégories générales, exemples hors jeu de test) → **−28 % (292) / 6-6 /
+  3-3 vérifiés / 0 perte** = AUTO à la hauteur de v1 main (288/−29 %), SANS tuning. Le LLM
+  jette de lui-même les marqueurs de temps/fréquence/conditions quand on le dit par
+  CATÉGORIE, et garde « 2 enfants : Léa 8, Hugo 5 » EXPLICITE (règle de sécurité tenue).
+  Leçon d'hygiène : ne JAMAIS citer le jeu de test dans l'instruction d'un codec.
+  22 appels LLM dosés. RESTE : 2e tirage (stabilité −28 %), NET propre (entry×6+sortie),
+  intégration app (B).
 - **2026-09-19 (tour 3)** : **hyp. 1 construite** — vérifieur DÉTERMINISTE de faits
   (`research/verifier.ts`, zéro LLM : chiffres + entités, bornes Unicode, accents
   neutralisés) + pipeline LLM-propose (`scripts/llm-verify.ts`). 1er run à max_tokens=500 :
