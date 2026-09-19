@@ -955,38 +955,33 @@ export const MEMORY_TOOLLESS_CAP = 24000 // mode simple : plafond de l'injection
 export const MEMORY_SELECTIVE_BUDGET = 8000
 
 // ── Cache de compression de mémoire (chantier B) ─────────────────────────────
-// La compression AGRESSIVE (LLM) de la mémoire coûte un appel : son résultat
-// est mis en cache par personnage. Le cache est FRAIS tant que le contenu des
-// fichiers de faits (sauf MEMORY.md, l'index structurel) n'a pas bougé
-// (sourceHash). Les fichiers mémoire ne sont JAMAIS modifiés : le cache est une
-// VUE, l'original reste éditable dans le panneau.
-export interface CompressionCache {
+// La compression AGRESSIVE (LLM) de la mémoire coûte un appel PAR FICHIER : le
+// résultat est mis en cache par personnage, une entrée par fichier. Chaque
+// entrée porte le hash de l'ORIGINAL au moment de la compression (sourceHash) :
+// l'entrée est FRAISE tant que ce fichier n'a pas bougé — un fichier modifié
+// retombe seul sur denseEncode (les autres gardent leur compression) jusqu'à la
+// prochaine compression. Les fichiers mémoire ne sont JAMAIS modifiés : le cache
+// est une VUE, l'original reste éditable dans le panneau.
+export interface CompressionCacheEntry {
+  content: string
   sourceHash: string
-  compressed: Record<string, string>
+}
+export interface CompressionCache {
+  files: Record<string, CompressionCacheEntry>
 }
 
 const COMPRESSION_CACHE_FILE = 'compression-cache.json'
 
-/** Hash du contenu des fichiers de FAITS (sauf MEMORY.md) — marque la fraîcheur. */
-export function memoryFactsSourceHash(files: MemoryFile[]): string {
-  const h = crypto.createHash('sha256')
-  for (const f of files) {
-    if (f.name === 'MEMORY.md') continue
-    h.update(f.name)
-    h.update('\0')
-    h.update(f.content)
-    h.update('\0')
-  }
-  return h.digest('hex')
+/** Hash du contenu d'un fichier mémoire — marque la fraîcheur de son entrée de cache. */
+export function hashMemoryContent(content: string): string {
+  return crypto.createHash('sha256').update(content).digest('hex')
 }
 
 export function readCompressionCache(charId: string): CompressionCache | undefined {
   const file = path.join(charDir(charId), COMPRESSION_CACHE_FILE)
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as CompressionCache
-    if (typeof raw?.sourceHash !== 'string' || typeof raw?.compressed !== 'object' || raw.compressed === null) {
-      return undefined
-    }
+    if (typeof raw?.files !== 'object' || raw.files === null) return undefined
     return raw
   } catch {
     return undefined

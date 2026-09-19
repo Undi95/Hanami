@@ -8,17 +8,21 @@ import {
   MEMORY_TOOLLESS_CAP,
   deleteMemoryFile,
   getCharacter,
+  hashMemoryContent,
   listMemory,
   listMemoryBackups,
   readMemoryFile,
   restoreMemoryBackup,
   sanitizeFileName,
   snapshotMemory,
+  writeCompressionCache,
   writeMemoryFile,
+  type CompressionCacheEntry,
 } from '../lib/storage'
 import { streamChatCompletion } from '../llm/openai'
 import { CodedError, ErrorCodes } from '../../shared/errorCodes'
 import { httpError, sendJsonError } from '../lib/errors'
+import { denseEncode, verifyFacts } from '../../shared/compression'
 import type { MemoryFile, Settings } from '../../shared/types'
 
 export const memoryRouter = Router()
@@ -304,6 +308,137 @@ memoryRouter.post('/api/characters/:id/memory/tidy', async (req, res) => {
     sendJsonError(res, 500, e)
   } finally {
     tidyingInFlight.delete(charId)
+  }
+})
+
+// ── Compression de mémoire (chantier B) ──────────────────────────────────────
+// POST /memory/compress — UN appel LLM PAR FICHIER : le LLM densifie AGRESSIVEMENT
+// chaque fichier de faits, le vérifieur déterministe (zéro LLM) rejette toute
+// perte de fait dur → repli denseEncode pour CE fichier. Le résultat est mis en
+// cache (compression-cache.json) : c'est buildPayload qui l'utilise ensuite.
+// Les fichiers mémoire SONT INTACTS — la compression est une vue, jamais une
+// écriture sur les .md. Le LLM est posé (sleep entre fichiers) : c'est le même
+// modèle local que le chat.
+const COMPRESS_TIMEOUT_MS = 10 * 60 * 1000 // même ordre que la compaction
+const compressingInFlight = new Set<string>()
+
+// Instruction AGRESSIVE GÉNÉRALE — la version PROPRE de la recherche (−28 %
+// STABLE, HYP. 1c ; scripts/llm-verify-v2-stable.ts). SANS tuning sur les données
+// de test (les exemples sont sur D'AUTRES données) : c'est le plafond d'un codec
+// général, pas un overfit.
+const COMPRESS_MEMORY_SYSTEM =
+  "Tu es un compresseur de mémoire pour LLM. Rends un format TÉLÉGRAPHIQUE clé : valeur, " +
+  "UNE LIGNE par fait, le plus COURT possible sans perdre un seul fait DUR.\n\n" +
+  "FAITS DURS (garder EXACT, jamais abréger) : chiffres, dates, noms propres (majuscules), " +
+  "villes, adresses, qui-est-qui.\n\n" +
+  "À SUPPRIMER :\n" +
+  "- la prose (verbes être/avoir, articles, « s'appelle », « qui a », connecteurs, répétitions) ;\n" +
+  "- toute nuance ou précision qui n'ajoute PAS un fait dur : marqueurs de temps relatifs " +
+  "ou approximatifs, degrés d'intensité, conditions, circonstances de fréquence.\n\n" +
+  "RÈGLE DE SÉCURITÉ : garde le fait-titre EXPLICITE (ne rends JAMAIS un fait implicite). " +
+  "« 2 enfants : Jules 7, Emma 4 » est OK — « J7+E4 » est INTERDIT.\n\n" +
+  "STYLE (exemples sur D'AUTRES données, à imiter) :\n" +
+  "- chien : Rex, femelle, 4 ans, vaccinée\n" +
+  "- oncle : Paul, Lille ; 3 enfants : Max 6, Iris 9\n" +
+  "- café : torréfaction artisanale, pas de sucre\n\n" +
+  "Réponds UNIQUEMENT avec le texte densifié — aucun commentaire, aucune introduction, " +
+  "pas de guillemets."
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Densifie UN fichier de mémoire : LLM agressif + vérifieur → repli denseEncode. */
+async function compressMemoryFile(
+  settings: Settings,
+  content: string,
+): Promise<{ content: string; usedLLM: boolean }> {
+  const window = settings.contextSize > 0 ? settings.contextSize : 32768
+  // max_tokens 2000 AMORTI (compression 1×, réutilisée N× — le coût n'est payé
+  // qu'une fois), borné à la moitié de la fenêtre pour tenir prompt + sortie.
+  const completionBudget = Math.min(2000, Math.max(512, Math.floor(window / 2)))
+  const abort = new AbortController()
+  const timer = setTimeout(() => abort.abort(), COMPRESS_TIMEOUT_MS)
+  timer.unref()
+  let raw: string
+  try {
+    const result = await streamChatCompletion({
+      settings: { ...settings, maxTokens: completionBudget },
+      messages: [
+        { role: 'system', content: COMPRESS_MEMORY_SYSTEM },
+        { role: 'user', content },
+      ],
+      signal: abort.signal,
+      onDelta: () => {},
+    })
+    raw = result.content.trim()
+  } catch (e) {
+    // Timeout → AbortError transformé en llmUnreachable. LLM injoignable : on ne
+    // tente PAS les fichiers suivants (il est down) → l'action échoue, l'utilisateur
+    // relance. buildPayload retombe sur denseEncode (−7 %) en attendant.
+    if (abort.signal.aborted) {
+      throw new CodedError(ErrorCodes.llmUnreachable, {
+        detail: `no response after ${Math.round(COMPRESS_TIMEOUT_MS / 60000)} min`,
+      })
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
+  // Sortie VIDE = la signature du silence (finish=length, le modèle a « pensé »
+  // sans rien produire) : repli honnête, on ne bloque pas l'action.
+  if (!raw) return { content: denseEncode(content), usedLLM: false }
+  // Le filet de sûreté : un fait dur manquant → le LLM est REJETÉ pour ce fichier,
+  // repli denseEncode (déterministe, zéro LLM). Asymétrique : préfère le faux-rouge.
+  const verdict = verifyFacts(content, raw)
+  return verdict.ok ? { content: raw, usedLLM: true } : { content: denseEncode(content), usedLLM: false }
+}
+
+async function compressMemory(
+  charId: string,
+): Promise<{ ok: true; files: number; llmFiles: number; rejected: number; beforeChars: number; afterChars: number }> {
+  const character = getCharacter(charId)
+  if (!character) throw new CodedError(ErrorCodes.characterNotFound, { id: charId })
+  const settings = effectiveSettings(character)
+  // L'index (MEMORY.md) est structurel (liste des fichiers), pas des faits : il
+  // n'est PAS compressé. Seulement les fichiers de faits.
+  const factFiles = listMemory(charId).filter((f) => f.name !== 'MEMORY.md')
+  const beforeChars = factFiles.reduce((n, f) => n + f.content.length, 0)
+  const cache: Record<string, CompressionCacheEntry> = {}
+  let llmFiles = 0
+  for (const f of factFiles) {
+    const r = await compressMemoryFile(settings, f.content)
+    if (r.usedLLM) llmFiles++
+    cache[f.name] = { content: r.content, sourceHash: hashMemoryContent(f.content) }
+    await sleep(400) // doser le LLM (même modèle local que le chat)
+  }
+  writeCompressionCache(charId, { files: cache })
+  const afterChars = Object.values(cache).reduce((n, e) => n + e.content.length, 0)
+  return { ok: true, files: factFiles.length, llmFiles, rejected: factFiles.length - llmFiles, beforeChars, afterChars }
+}
+
+memoryRouter.post('/api/characters/:id/memory/compress', async (req, res) => {
+  const charId = req.params.id
+  if (!characterExists(charId)) {
+    httpError(res, 404, ErrorCodes.characterNotFound, { id: charId })
+    return
+  }
+  if (listMemory(charId).filter((f) => f.name !== 'MEMORY.md').length === 0) {
+    // Rien à compresser (pas de fichier de faits) : pas d'erreur, on signale 0.
+    res.json({ ok: true, files: 0, llmFiles: 0, rejected: 0, beforeChars: 0, afterChars: 0 })
+    return
+  }
+  if (compressingInFlight.has(charId)) {
+    httpError(res, 409, ErrorCodes.compressAlreadyRunning)
+    return
+  }
+  compressingInFlight.add(charId)
+  try {
+    res.json(await compressMemory(charId))
+  } catch (e) {
+    // LLM injoignable / timeout → 500, AUCUN cache écrit (buildPayload retombe sur
+    // denseEncode). L'utilisateur relance quand le modèle est de retour.
+    sendJsonError(res, 500, e)
+  } finally {
+    compressingInFlight.delete(charId)
   }
 })
 

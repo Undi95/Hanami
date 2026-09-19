@@ -106,6 +106,10 @@ export const ErrorCodes = {
   tidyTooBig: 'tidyTooBig', // { k, window }
   tidyNoAnswer: 'tidyNoAnswer',
 
+  // ── Compression de mémoire (chantier B) ──────────────────────────────────
+  compressAlreadyRunning: 'compressAlreadyRunning',
+  compressNoAnswer: 'compressNoAnswer',
+
   // ── Sauvegarde / restauration ────────────────────────────────────────────
   restoreZipExpected: 'restoreZipExpected',
   restoreEntryRefused: 'restoreEntryRefused', // { name }

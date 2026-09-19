@@ -9,8 +9,7 @@ import {
   appendChatMessage,
   buildMemoryBlock,
   getCharacter,
-  listMemory,
-  memoryFactsSourceHash,
+  hashMemoryContent,
   readChat,
   readCompressionCache,
   readMemoryFile,
@@ -275,11 +274,13 @@ export function buildPayload(
   let getCompressed: ((name: string, content: string) => string) | undefined
   if (compressionOn) {
     const cache = readCompressionCache(characterId)
-    const sourceHash = memoryFactsSourceHash(listMemory(characterId))
-    getCompressed = (name, content) =>
-      cache && cache.sourceHash === sourceHash && cache.compressed[name] !== undefined
-        ? cache.compressed[name]
-        : denseEncode(content)
+    // Entrée FRAÎCHE = le fichier n'a pas bougé depuis sa compression (sourceHash).
+    // Un fichier modifié (ou jamais compressé) retombe sur denseEncode — repli
+    // honnête, jamais une perte silencieuse de fait.
+    getCompressed = (name, content) => {
+      const entry = cache?.files[name]
+      return entry && entry.sourceHash === hashMemoryContent(content) ? entry.content : denseEncode(content)
+    }
   }
   let injected = ''
   // La persona vient EN TÊTE des blocs ajoutés : savoir à qui l'on parle
