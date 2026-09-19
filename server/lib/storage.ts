@@ -954,6 +954,59 @@ export const MEMORY_TOOLLESS_CAP = 24000 // mode simple : plafond de l'injection
 // d'où le fait que le sélectif n'existe qu'en mode Outils.
 export const MEMORY_SELECTIVE_BUDGET = 8000
 
+// ── Cache de compression de mémoire (chantier B) ─────────────────────────────
+// La compression AGRESSIVE (LLM) de la mémoire coûte un appel : son résultat
+// est mis en cache par personnage. Le cache est FRAIS tant que le contenu des
+// fichiers de faits (sauf MEMORY.md, l'index structurel) n'a pas bougé
+// (sourceHash). Les fichiers mémoire ne sont JAMAIS modifiés : le cache est une
+// VUE, l'original reste éditable dans le panneau.
+export interface CompressionCache {
+  sourceHash: string
+  compressed: Record<string, string>
+}
+
+const COMPRESSION_CACHE_FILE = 'compression-cache.json'
+
+/** Hash du contenu des fichiers de FAITS (sauf MEMORY.md) — marque la fraîcheur. */
+export function memoryFactsSourceHash(files: MemoryFile[]): string {
+  const h = crypto.createHash('sha256')
+  for (const f of files) {
+    if (f.name === 'MEMORY.md') continue
+    h.update(f.name)
+    h.update('\0')
+    h.update(f.content)
+    h.update('\0')
+  }
+  return h.digest('hex')
+}
+
+export function readCompressionCache(charId: string): CompressionCache | undefined {
+  const file = path.join(charDir(charId), COMPRESSION_CACHE_FILE)
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as CompressionCache
+    if (typeof raw?.sourceHash !== 'string' || typeof raw?.compressed !== 'object' || raw.compressed === null) {
+      return undefined
+    }
+    return raw
+  } catch {
+    return undefined
+  }
+}
+
+/** Écriture ATOMIQUE (tmp + fsync + rename) — même protocole que config.json. */
+export function writeCompressionCache(charId: string, cache: CompressionCache): void {
+  const file = path.join(charDir(charId), COMPRESSION_CACHE_FILE)
+  const tmp = file + '.tmp'
+  const fd = fs.openSync(tmp, 'w')
+  try {
+    fs.writeSync(fd, JSON.stringify(cache, null, 2))
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  fs.renameSync(tmp, file)
+}
+
 /**
  * Bloc mémoire injecté dans le system prompt (transparent : visible dans l'inspecteur).
  * toolless (mode modèle « simple ») : AUCUN outil n'existe côté modèle — tout est
@@ -970,13 +1023,23 @@ export const MEMORY_SELECTIVE_BUDGET = 8000
 export function buildMemoryBlock(
   charId: string,
   toolless = false,
-  opts: { mode?: 'auto' | 'selective'; query?: string } = {},
+  opts: {
+    mode?: 'auto' | 'selective'
+    query?: string
+    // Chantier B : si fourni, remplace le CONTENU de chaque fichier injecté par
+    // getCompressed(name, content). Les décisions d'injection (full / index-seul /
+    // plafond / ranking) restent calculées sur l'ORIGINAL — la compression ne
+    // change QUE le texte envoyé, jamais ce qui est choisi.
+    getCompressed?: (name: string, content: string) => string
+  } = {},
 ): string {
   const files = listMemory(charId)
   if (files.length === 0) return ''
   const index = files.find((f) => f.name === 'MEMORY.md')
   const others = files.filter((f) => f.name !== 'MEMORY.md')
   const totalLen = others.reduce((n, f) => n + f.content.length, 0)
+  const contentOf = (name: string, content: string) =>
+    opts.getCompressed ? opts.getCompressed(name, content) : content
   let block = `\n\n## Memory (auto-injected by Hanami — edit in the Memory panel)\n`
   if (!toolless) block += MEMORY_POLICY
   if (index) block += index.content + '\n'
@@ -992,7 +1055,7 @@ export function buildMemoryBlock(
 
   if (selective) {
     const { selected, omitted } = selectWithinBudget(ranked, MEMORY_SELECTIVE_BUDGET)
-    for (const r of selected) block += `\n### ${r.file.name}\n${r.file.content}\n`
+    for (const r of selected) block += `\n### ${r.file.name}\n${contentOf(r.file.name, r.file.content)}\n`
     if (omitted.length > 0) {
       block += `\n(${omitted.length} more memory file(s) — use the memory_read(name) tool to read one.)\n`
     }
@@ -1007,11 +1070,11 @@ export function buildMemoryBlock(
         continue
       }
       used += f.content.length
-      block += `\n### ${f.name}\n${f.content}\n`
+      block += `\n### ${f.name}\n${contentOf(f.name, f.content)}\n`
     }
   } else if (totalLen <= MEMORY_FULL_INJECT_LIMIT) {
     // Petits volumes : tout injecter.
-    for (const f of others) block += `\n### ${f.name}\n${f.content}\n`
+    for (const f of others) block += `\n### ${f.name}\n${contentOf(f.name, f.content)}\n`
   } else if (others.length > 0) {
     // Gros volumes : index seul, le modèle lira via l'outil memory_read.
     block += `\n(${others.length} memory files — use the memory_read(name) tool to read one.)\n`

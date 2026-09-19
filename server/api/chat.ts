@@ -9,7 +9,10 @@ import {
   appendChatMessage,
   buildMemoryBlock,
   getCharacter,
+  listMemory,
+  memoryFactsSourceHash,
   readChat,
+  readCompressionCache,
   readMemoryFile,
   rewriteChatMessages,
   updateChatHeader,
@@ -37,6 +40,7 @@ import { httpError, sendJsonError } from '../lib/errors'
 import { reasoningEffortParam } from '../../shared/llm'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
 import { activePersona } from '../../shared/personas'
+import { denseEncode } from '../../shared/compression'
 import type {
   CharacterFull,
   CharacterMeta,
@@ -256,14 +260,34 @@ export function buildPayload(
 ): { systemText: string; characterPrompt: string; injected: string; payload: BackendPayload } {
   const character = getCharacter(characterId)
   if (!character) throw new CodedError(ErrorCodes.characterNotFound, { id: characterId })
-  const characterPrompt = character.systemPrompt
+  // Chantier B — compression de contexte, opt-in par personnage (absent = éteint).
+  // sysprompt + persona → denseEncode (sûr, ne casse JAMAIS — l'agressif fait
+  // boucler vide les prompts complexes, HYP. 2) ; mémoire → version compressée en
+  // cache (agressif −28 %), repli denseEncode si le cache est absent ou périmé.
+  // L'ORIGINAL n'est JAMAIS modifié sur disque : seule la forme ENVOYÉE change, et
+  // l'inspecteur la montre telle quelle (ce qui part = ce qui est affiché).
+  const compressionOn = character.llm?.compression === true
+  const compressText = (s: string) => (compressionOn ? denseEncode(s) : s)
+  const characterPrompt = compressText(character.systemPrompt)
+  // Mémoire : le cache agressif (sourceHash du contenu des faits) est lu UNE fois ;
+  // chaque fichier injecté repart compressé s'il est dans le cache, sinon repli
+  // denseEncode (repli honnête — jamais une perte silencieuse de fait).
+  let getCompressed: ((name: string, content: string) => string) | undefined
+  if (compressionOn) {
+    const cache = readCompressionCache(characterId)
+    const sourceHash = memoryFactsSourceHash(listMemory(characterId))
+    getCompressed = (name, content) =>
+      cache && cache.sourceHash === sourceHash && cache.compressed[name] !== undefined
+        ? cache.compressed[name]
+        : denseEncode(content)
+  }
   let injected = ''
   // La persona vient EN TÊTE des blocs ajoutés : savoir à qui l'on parle
   // précède ce dont on se souvient de lui. Résolue pour CE personnage :
   // épinglée sur sa carte, sinon la défaut des Réglages (shared/personas.ts).
   const persona = activePersona(settings, character)
   if (persona && (persona.name.trim() || persona.description.trim())) {
-    injected += personaBlock(persona.name.trim(), persona.description.trim())
+    injected += compressText(personaBlock(persona.name.trim(), persona.description.trim()))
   }
   if (settings.memoryEnabled) {
     // Mode sélectif : la requête courante sert à classer la mémoire (repli 'auto'
@@ -271,6 +295,7 @@ export function buildPayload(
     injected += buildMemoryBlock(characterId, settings.modelMode === 'simple', {
       mode: settings.memoryInjection,
       query: textContent(pendingUserContent),
+      getCompressed,
     })
   }
 
