@@ -67,7 +67,7 @@ for (const mt of [500, 2000]) {
   const r = await compress(FAMILLE, mt)
   const v = verifyFacts(FAMILLE, r.text)
   console.log(`\n══ max_tokens=${mt} ══  [finish=${r.finish}, sortie=${r.out} tok]`)
-  console.log(r.text.split('\n').map((l) => `  | ${l}`).join('\n'))
+  console.log(r.text.split('\n').map((l: string) => `  | ${l}`).join('\n'))
   const missing = [...v.missingNumbers, ...v.missingEntities]
   console.log(`  vérifieur : ok=${v.ok}${v.ok ? '' : `  (manque : ${JSON.stringify(missing)})`}`)
   await sleep(500)
