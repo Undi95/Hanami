@@ -43,10 +43,21 @@ les comportements explicites tiennent à ~3× de compression du prompt système.
 Caveat honnête : 1 perso, 1 tirage, règles littérales (les plus robustes) ; la
 **voix subtile sur prompt « énorme »** reste à tester (hyp. 2).
 
-Mesures : `scripts/compress-measure.ts` (`--tokens` par défaut / `--recall` complet),
-`scripts/compress-probe.ts` (frontière), `scripts/dense-encode.ts` (encodeur auto).
-Contenu de test : 3 fichiers mémoire (famille / travail / santé), 6 questions (3 faciles
-+ 3 dures : compte, localisation, causalité).
+**HYP. 1 — LLM propose + VÉRIFICATEUR DÉTERMINISTE** (`research/verifier.ts`,
+`scripts/llm-verify.ts`) : le MEILLEUR résultat **AUTO** (batait le plancher denseEncode).
+Le LLM densifie (budget 2000, coût amorti), un vérifieur **ZÉRO-LLM** (chiffres + entités)
+REJETTE tout fait perdu → repli denseEncode. → **−19 % ENTRÉE (405 → 329) / 6-6 rappel /
+3-3 fichiers vérifiés / 0 fait perdu**. Le gap vers v1 (−29 %) reste : c'est le LLM qui
+reste CONSERVATEUR (garde « stérilisé depuis l'année dernière », « contact surtout étés »)
+; la levier = le pousser plus fort SOUS le filet. NET non re-mesuré ce tour (les 6 sorties
+étaient courtes, finish=stop ; le net suit l'entrée). v1 main (−29 %) reste le roi des
+tokens ; l'auto passe de −7 % (plancher) à −19 %.
+
+Mesures : `scripts/compress-measure.ts` (`--tokens` / `--recall`), `scripts/compress-probe.ts`
+(frontière), `scripts/dense-encode.ts` (encodeur auto), `scripts/fidelity-battery.ts`
+(fidélité sysprompt), `scripts/llm-verify.ts` (LLM+vérifieur), `scripts/llm-compress-probe.ts`
+(troncage = budget). Contenu de test : 3 fichiers mémoire (famille / travail / santé),
+6 questions (3 faciles + 3 dures : compte, localisation, causalité).
 
 ## La règle de sécurité (trouvée — à ne jamais violer)
 **Ne JAMAIS comprimer un fait en forme purement IMPLICITE.** Garder le fait « titre »
@@ -63,22 +74,28 @@ médicaux ») la déclenche **MÊME en prompt intégral**. → Deux signatures d
 à surveiller à la sortie : (1) fait rendu implicite, (2) question ouverte en conflit
 avec une policy. (C'était l'artefact qui a pollué le 1er tirage de la batterie.)
 
+**3ᵉ signature — le CÔTÉ ENCODEUR (hyp. 1, 19/09)** : le problème de budget de réflexion
+frappe AUSSI le LLM-compresseur. Sur un fichier dense (famille.md, 700 car), à
+`max_tokens=500` le modèle consomme TOUT en réflexion → sortie **tronquée en plein mot**
+(`finish=length`, « …stéril »), fait perdu en masse. Fix : budget ↑ (2000, coût **AMORTI**
+— la compression est faite 1× et réutilisée N×) → `finish=stop`, complet. **Le vérifieur
+est le filet qui garantit qu'un troncage ne part JAMAIS** (il rejette → repli denseEncode)
+— validé sur un échec **RÉEL** ce tour, pas seulement en test.
+
 ## Plafond connu
 Réduction en **caractères** (v2 = 47 %) > réduction en **tokens** (29 %) : le tokenizer
 compresse déjà (tokens courts, chiffres). Le vrai gain est dans la **redondance de
 prose** (mots-vide, reformulations, verbes être/avoir), **pas** dans les chiffres/dates.
 
 ## Hypothèses à tester (par ordre de priorité)
-1. **LLM propose + VÉRIFICATEUR DÉTERMINISTE (LA piste leader)** : un modèle LLM
-   densifie AGRESSIVEMENT (viser les −29 %+ de v1), PUIS un vérifieur DÉTERMINISTE
-   (zéro LLM) contrôle que TOUT fait du texte original (entités, nombres, dates,
-   relations — via une extraction de « faits » normalisables) est ENCORE PRÉSENT dans
-   la forme compressée. Un fait manquant → on rejette ce passage et on retombe sur
-   l'encodeur déterministe simple (ou le texte original). → On prend la FORCE du LLM
-   (la compression sémantique, le gap de 22 pts) en en neutralisant le RISQUE (Size-
-   Fidelity Paradox / knowledge overwriting) par un filet DÉTERMINISTE. C'est le design
-   le plus prometteur pour le livrable open source. **À valider : le vérifieur doit être
-   fiable — pas de faux-vert qui laisserait passer une perte de fait silencieuse.**
+1. **LLM propose + VÉRIFICATEUR DÉTERMINISTE (LA piste leader)** — ✅ FAIT
+   (`research/verifier.ts` + `scripts/llm-verify.ts`) : **−19 % entrée / 6-6 / 0 fait
+   perdu, 3-3 vérifiés** (batait le plancher auto −7 %). Le vérifieur (chiffres + entités,
+   zéro LLM) est **prouvé fiable** (test adversarial : zéro faux-vert) et a **attrapé un
+   troncage RÉEL** du LLM-compresseur (→ repli denseEncode). RESTE : le gap −19 % → −29 %
+   (v1) = le LLM trop CONSERVATEUR ; le pousser plus fort sous le filet. Le vérifieur ne
+   couvre PAS les cardinaux en LETTRES (« deux ») ni les SWAP de relation → le rappel
+   (6 questions) les attrape. Voir aussi la 3ᵉ signature (côté encodeur).
 2. **Codec par TYPE de contenu** — ✅ 1er essai (`scripts/fidelity-battery.ts`) : le
    sysprompt EST compressible (**8/8 à ~3×** sur les règles explicites, PLAIN = DENSE =
    AGRESSIF). Mesure par COMPORTEMENT (pas contenu), comme demandé par Lucas. RESTE :
@@ -137,6 +154,16 @@ Sources :
    par COMPORTEMENT, pas contenu.
 
 ## Journal
+- **2026-09-19 (tour 3)** : **hyp. 1 construite** — vérifieur DÉTERMINISTE de faits
+  (`research/verifier.ts`, zéro LLM : chiffres + entités, bornes Unicode, accents
+  neutralisés) + pipeline LLM-propose (`scripts/llm-verify.ts`). 1er run à max_tokens=500 :
+  le LLM TRONQUE famille.md (le plus dense) en plein mot (budget réflexion épuisé) →
+  vérifieur REJETTE → repli denseEncode → −10 %. Sonde (`scripts/llm-compress-probe.ts`) :
+  le troncage est un BUDGET — à 2000, `finish=stop`, complet, vérifié. Re-run : **−19 %
+  entrée (405→329) / 6-6 / 3-3 vérifiés / 0 fait perdu**. Test adversarial (zéro LLM) :
+  vérifieur = zéro faux-vert. Constat : l'auto passe de −7 % (plancher) à −19 % ; v1 main
+  (−29 %) reste le roi des tokens, gap = LLM conservateur. Nouvelle signature d'échec :
+  le budget de réflexion frappe le CÔTÉ ENCODEUR aussi. 24 appels LLM dosés.
 - **2026-09-19 (tour 2)** : batterie de fidélité sysprompt + persona construite
   (`scripts/fidelity-battery.ts`), perso jetable Pico (jamais data/ réel). Calibrage en
   2 passes : on écarte (i) une sonde OUVERTE créative qui déclenche la boucle length+vide
