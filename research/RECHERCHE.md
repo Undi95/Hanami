@@ -34,6 +34,15 @@ seul le résultat mesuré compte.
 (405 → 377), **6/6, 0 fait perdu** — mais c'est le PLANCHER des règles sûres seules.
 Mesure : `scripts/dense-encode.ts`.
 
+**FIDÉLITÉ du prompt SYSTÈME (axe n°1 — batterie `scripts/fidelity-battery.ts`)** :
+perso jetable « Pico », 5 règles explicites (identité « ami virtuel Pico »,
+adressation « mon cœur », emoji 🍑, refus médical « Je ne peux pas », persona
+« déteste le thé »). 3 variantes du même prompt : PLAIN (424 car.) / DENSE (394) /
+**AGRESSIF télégraphique (155 car., ~3×)**. → **PLAIN = DENSE = AGRESSIF = 8/8** :
+les comportements explicites tiennent à ~3× de compression du prompt système.
+Caveat honnête : 1 perso, 1 tirage, règles littérales (les plus robustes) ; la
+**voix subtile sur prompt « énorme »** reste à tester (hyp. 2).
+
 Mesures : `scripts/compress-measure.ts` (`--tokens` par défaut / `--recall` complet),
 `scripts/compress-probe.ts` (frontière), `scripts/dense-encode.ts` (encodeur auto).
 Contenu de test : 3 fichiers mémoire (famille / travail / santé), 6 questions (3 faciles
@@ -46,6 +55,13 @@ Preuve : « Tom 2 enfants (Léa 8, Hugo 5) » → `L8+H5` = le modèle **épuise
 réflexion** (`finish_reason=length`, contenu **VIDE** → un SILENCE, pas une erreur).
 → `2enfants L8+H5` = « 2 enfants » en 76 tok. **La signature d'échec (length + vide)
 est détectable à la sortie** → on peut la surveiller / auto-corriger.
+
+**Généralisation (batterie fidélité, 19/09)** : la boucle length+vide n'est PAS que
+« fait implicite » — une sonde **OUVERTE** qui entre en conflit avec une policy du
+perso (conseiller un dessert à un diabétique, sous la règle « refuse les conseils
+médicaux ») la déclenche **MÊME en prompt intégral**. → Deux signatures de SILENCE
+à surveiller à la sortie : (1) fait rendu implicite, (2) question ouverte en conflit
+avec une policy. (C'était l'artefact qui a pollué le 1er tirage de la batterie.)
 
 ## Plafond connu
 Réduction en **caractères** (v2 = 47 %) > réduction en **tokens** (29 %) : le tokenizer
@@ -63,10 +79,12 @@ prose** (mots-vide, reformulations, verbes être/avoir), **pas** dans les chiffr
    Fidelity Paradox / knowledge overwriting) par un filet DÉTERMINISTE. C'est le design
    le plus prometteur pour le livrable open source. **À valider : le vérifieur doit être
    fiable — pas de faux-vert qui laisserait passer une perte de fait silencieuse.**
-2. **Codec par TYPE de contenu** : faits / comportement-perso / persona-user = stratégies
-   DIFFÉRENTES. Le sysprompt (comportement) = le plus risqué → batterie de **FIDÉLITÉ**
-   (règles strictes, voix, emoji), PAS rappel de fait. Mesurer : la compression du
-   sysprompt change-t-elle le perso ? À quel seuil ? (axe n°1 demandé par Lucas)
+2. **Codec par TYPE de contenu** — ✅ 1er essai (`scripts/fidelity-battery.ts`) : le
+   sysprompt EST compressible (**8/8 à ~3×** sur les règles explicites, PLAIN = DENSE =
+   AGRESSIF). Mesure par COMPORTEMENT (pas contenu), comme demandé par Lucas. RESTE :
+   (a) la **VOIX subtile / prompt « énorme »** (le cas dur), (b) 2e tirage = stabilité,
+   (c) le **seuil exact** où ça commence à casser. Fait (mémoire) vs comportement
+   (sysprompt) = stratégies de compression DIFFÉRENTES à confirmer.
 3. **Encodeur automatique CONSERVATEUR** — ✅ FAIT (research/codec.ts) : −7 %, 0 fait
    perdu. C'est le plancher + le repli sûr. Le gap vers v1 (22 pts) = la compression
    sémantique = ce que l'hyp. 1 doit capturer.
@@ -119,6 +137,15 @@ Sources :
    par COMPORTEMENT, pas contenu.
 
 ## Journal
+- **2026-09-19 (tour 2)** : batterie de fidélité sysprompt + persona construite
+  (`scripts/fidelity-battery.ts`), perso jetable Pico (jamais data/ réel). Calibrage en
+  2 passes : on écarte (i) une sonde OUVERTE créative qui déclenche la boucle length+vide
+  **même en PLAIN** (= artefact de sonde, pas de compression) et (ii) une règle de
+  bannissement auto-contradictoire (le modèle dit le mot pour se nier). **Résultat :
+  PLAIN = DENSE = AGRESSIF (télégraphique ~3×) = 8/8** — les comportements explicites
+  tiennent à ~3× de compression du prompt système. C'est l'axe n°1 de Lucas (fidélité
+  perso, mesurée par COMPORTEMENT). Ouvert : voix subtile sur prompt « énorme », 2e
+  tirage (stabilité), seuil exact. 24 appels LLM dosés.
 - **2026-09-18 (nuit, tour 1b)** : encodeur déterministe `denseEncode()` codé
   (research/codec.ts) + mesuré (scripts/dense-encode.ts). **−7 % / 6/6 / 0 fait perdu.**
   Bug attrapé + fixé : « mâle » → « mâ » (JS \b non-Unicode sur « â ») → bornes \p{L}.
