@@ -64,11 +64,23 @@ codec général ; chiffre NON publishable. Le codec shippable = **−28 % (gén�
 résiduel 292 vs 288 (v1) = 4 tokens : des hedges borderline que le LLM garde encore
 (« actuel », « de confiance », « toujours »).
 
+**HYP. 1c — STABILITÉ + NET (FAIT, `scripts/llm-verify-v2-stable.ts`)** : le codec
+AGRESSIF est **STABLE** — 2e tirage temp=0 = **292 tok IDENTIQUE (0 écart) / 6-6 / 3-3
+vérifiés**, la compression est déterministe à temp=0. Son **NET canonique** (formule
+compress-measure : entrée×6 + sortie) = **−25 %** (AGGR 2174 tok vs PLAIN 2905). Et le
+bloc AGRESSIF **RÉFLÉCHIT MOINS** que le PLAIN (sortie moy. 70 vs 79 tok/rép.) → **pas
+d'effet « thinking confound »** (le format dense n'augmente PAS la réflexion). → **Verdict :
+le codec auto AGRESSIF GÉNÉRAL ≈ v1 main sur TOUS les axes (−28 % entrée vs −29 % ; −25 %
+net vs −26 % ; 6/6 ; 0 perte), SANS main, SANS tuning. C'est le PLAFOND d'un codec
+GÉNÉRAL : pour battre v1 de plus il faudrait CITER le jeu de test (= overfit, non
+shippable).**
+
 Mesures : `scripts/compress-measure.ts` (`--tokens` / `--recall`), `scripts/compress-probe.ts`
 (frontière), `scripts/dense-encode.ts` (encodeur auto), `scripts/fidelity-battery.ts`
 (fidélité sysprompt), `scripts/llm-verify.ts` (LLM+vérifieur), `scripts/llm-compress-probe.ts`
-(troncage = budget). Contenu de test : 3 fichiers mémoire (famille / travail / santé),
-6 questions (3 faciles + 3 dures : compte, localisation, causalité).
+(troncage = budget), `scripts/llm-verify-v2.ts` (instruction AGRESSIVE), `scripts/llm-verify-v2-stable.ts`
+(2e tirage + NET canonique). Contenu de test : 3 fichiers mémoire (famille / travail /
+santé), 6 questions (3 faciles + 3 dures : compte, localisation, causalité).
 
 ## La règle de sécurité (trouvée — à ne jamais violer)
 **Ne JAMAIS comprimer un fait en forme purement IMPLICITE.** Garder le fait « titre »
@@ -104,8 +116,9 @@ prose** (mots-vide, reformulations, verbes être/avoir), **pas** dans les chiffr
    perdu, 3-3 vérifiés** (batait le plancher auto −7 %). Le vérifieur (chiffres + entités,
    zéro LLM) est **prouvé fiable** (test adversarial : zéro faux-vert) et a **attrapé un
    troncage RÉEL** du LLM-compresseur (→ repli denseEncode). **Gap −19 % → −29 % FERMÉ
-   par l'instruction AGRESSIVE GÉNÉRALE (hyp. 1b, tour 4) → −28 % / 6-6 / 0 perte = AUTO
-   à la hauteur de v1 main.** Le vérifieur ne couvre PAS les cardinaux en LETTRES
+   par l'instruction AGRESSIVE GÉNÉRALE (hyp. 1b) → −28 % / 6-6 / 0 perte = AUTO à la
+   hauteur de v1 main, STABLE (2e tirage identique, tour 5) + NET −25 % (≈ v1 −26 %).**
+   Le vérifieur ne couvre PAS les cardinaux en LETTRES
    (« deux ») ni les SWAP de relation → le rappel (6 questions) les attrape. Voir aussi
    la 3ᵉ signature.
 2. **Codec par TYPE de contenu** — ✅ 1er essai (`scripts/fidelity-battery.ts`) : le
@@ -166,6 +179,15 @@ Sources :
    par COMPORTEMENT, pas contenu.
 
 ## Journal
+- **2026-09-19 (tour 5)** : **hyp. 1c — STABILITÉ + NET.** 2e tirage temp=0 du codec
+  AGRESSIF = **292 tok IDENTIQUE (0 écart) / 6-6 / 3-3** → la compression est déterministe
+  à temp=0, résultat STABLE. NET canonique (entrée×6 + sortie, formule compress-measure)
+  = **−25 %** (AGGR 2174 vs PLAIN 2905) ; le bloc AGGR **pense MOINS** que PLAIN (sortie
+  moy. 70 vs 79 tok/rép.) → pas d'effet thinking-confound. **Verdict : codec auto GÉNÉRAL
+  ≈ v1 main sur tous les axes (−28 % / −25 % net, 6/6, 0 perte), SANS main ni tuning =
+  PLAFOND d'un codec général** (battre v1 davantage = citer le jeu de test = overfit).
+  17 appels LLM dosés. RESTE : (hyp.2) la **VOIX subtile / prompt « ÉNORME »** (cas dur,
+  axe n°1 de Lucas), (B) intégration app.
 - **2026-09-19 (tour 4)** : **hyp. 1b — pousser le LLM plus fort sous le filet.**
   Instruction AGRESSIVE : 1ère version CITANT les phrases du jeu de test → −32 % (276),
   MAIS OVERFIT (liste des coupes à la main, exemple sur famille.md) → **non publishable**.
