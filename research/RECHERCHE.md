@@ -75,9 +75,24 @@ net vs −26 % ; 6/6 ; 0 perte), SANS main, SANS tuning. C'est le PLAFOND d'un c
 GÉNÉRAL : pour battre v1 de plus il faudrait CITER le jeu de test (= overfit, non
 shippable).**
 
+**HYP. 2 — FIDÉLITÉ prompt « ÉNORME » + VOIX SUBTILE (FAIT, tour 6)** : le cas dur de
+l'axe n°1. Perso jetable « Mira » (jamais data/), prompt SYSTÈME « énorme » (2129 car. /
+608 tok) DOMINÉ par une voix diffuse (caractère + voix + exemples) + 5 règles strictes +
+persona. 3 variantes mesurées par checks DÉTERMINISTES (11/perso) : **PLAIN = 11/11
+(100 %)**, **DENSE (denseEncode) = 10/11 (91 %)** (perd que la concision — réponse à 300
+car. pile), **AGGRESSIF (3,3× télégraphique) = 3/11 → BOUCLE VIDE sur 3/4 sondes**
+(`finish=length` + sortie **VIDE**). **Reproductible** : 2e tirage temp=0 = **3/4 IDENTIQUE
+(mêmes sondes)** (`scripts/fidelity-enorme.ts` + `-2e.ts`). → **Le format télégraphique
+agressif, qui MARCHE pour la mémoire (faits, −28 %), CASSE le prompt système d'un perso
+COMPLEXE** : le modèle sur-décrypte la forme dense → épuise son budget de réflexion →
+SILENCE sur toute sonde qui demande du traitement (seule la sonde de rappel pur tient).
+**Stratégie par TYPE** : mémoire → agressif OK ; **prompt perso → denseEncode (−7 %)
+seulement, JAMAIS télégraphique.** Le juge LLM holistique était NON sur les 3 (faux-
+négatif sur la baseline) → non discriminant, mis de côté.
+
 Mesures : `scripts/compress-measure.ts` (`--tokens` / `--recall`), `scripts/compress-probe.ts`
 (frontière), `scripts/dense-encode.ts` (encodeur auto), `scripts/fidelity-battery.ts`
-(fidélité sysprompt), `scripts/llm-verify.ts` (LLM+vérifieur), `scripts/llm-compress-probe.ts`
+(fidélité sysprompt), `scripts/fidelity-enorme.ts` (fidélité prompt ÉNORME + voix subtile), `scripts/fidelity-enorme-2e.ts` (2e tirage AGGRESSIF = reproductibilité de la boucle vide), `scripts/llm-verify.ts` (LLM+vérifieur), `scripts/llm-compress-probe.ts`
 (troncage = budget), `scripts/llm-verify-v2.ts` (instruction AGRESSIVE), `scripts/llm-verify-v2-stable.ts`
 (2e tirage + NET canonique). Contenu de test : 3 fichiers mémoire (famille / travail /
 santé), 6 questions (3 faciles + 3 dures : compte, localisation, causalité).
@@ -105,6 +120,14 @@ frappe AUSSI le LLM-compresseur. Sur un fichier dense (famille.md, 700 car), à
 est le filet qui garantit qu'un troncage ne part JAMAIS** (il rejette → repli denseEncode)
 — validé sur un échec **RÉEL** ce tour, pas seulement en test.
 
+**4ᵉ signature — prompt SYSTÈME compressé AGRESSIVEMENT (hyp. 2, 19/09)** : la sur-densité
+du prompt système d'un perso COMPLEXE (voix diffuse) épuise le budget de réflexion du MÊME
+modèle au moment de RÉPONDRE → `finish=length` + sortie **VIDE** sur toute sonde qui demande
+du traitement (pas le rappel pur — seule la sonde « Qui es-tu ? » survit). **Reproductible**
+(3/4, 2 tirages, temp=0). Contrairement à la mémoire (où l'agressif tient, −28 %), le **prompt
+perso doit rester au denseEncode (−7 %)**. C'est la même physique que la 3ᵉ (sur-densité →
+budget épuisé), mais du côté RÉPONSE, pas encodage.
+
 ## Plafond connu
 Réduction en **caractères** (v2 = 47 %) > réduction en **tokens** (29 %) : le tokenizer
 compresse déjà (tokens courts, chiffres). Le vrai gain est dans la **redondance de
@@ -121,12 +144,16 @@ prose** (mots-vide, reformulations, verbes être/avoir), **pas** dans les chiffr
    Le vérifieur ne couvre PAS les cardinaux en LETTRES
    (« deux ») ni les SWAP de relation → le rappel (6 questions) les attrape. Voir aussi
    la 3ᵉ signature.
-2. **Codec par TYPE de contenu** — ✅ 1er essai (`scripts/fidelity-battery.ts`) : le
-   sysprompt EST compressible (**8/8 à ~3×** sur les règles explicites, PLAIN = DENSE =
-   AGRESSIF). Mesure par COMPORTEMENT (pas contenu), comme demandé par Lucas. RESTE :
-   (a) la **VOIX subtile / prompt « énorme »** (le cas dur), (b) 2e tirage = stabilité,
-   (c) le **seuil exact** où ça commence à casser. Fait (mémoire) vs comportement
-   (sysprompt) = stratégies de compression DIFFÉRENTES à confirmer.
+2. **Codec par TYPE de contenu** — ✅ FAIT (2 essais, tour 2 + tour 6). (1) petit prompt
+   explicite (`scripts/fidelity-battery.ts`) : le sysprompt EST compressible (**8/8 à ~3×**,
+   PLAIN = DENSE = AGRESSIF). (2) **prompt ÉNORME + voix subtile** (`scripts/fidelity-enorme.ts`
+   + `-2e.ts`) : **PLAIN 11/11, DENSE 10/11, AGGRESSIF 3/11 (BOUCLE VIDE 3/4, repro 2 tirages)**
+   → l'agressif qui MARCHE sur la mémoire **CASSE** le perso complexe. Mesure par COMPORTEMENT
+   (pas contenu), comme demandé par Lucas. **CONFIRME : fait (mémoire) vs comportement
+   (sysprompt) = stratégies de compression DIFFÉRENTES** — mémoire → agressif auto OK
+   (−28 %), sysprompt → denseEncode (−7 %) seulement, **JAMAIS télégraphique**. RESTE : le
+   **seuil exact** (variante intermédiaire entre DENSE 560 tok et AGGR 182 tok), et la
+   frontière TAILLE (petit Pico 8/8 tient à 3× ; complexe Mira casse) = où bascule-t-il.
 3. **Encodeur automatique CONSERVATEUR** — ✅ FAIT (research/codec.ts) : −7 %, 0 fait
    perdu. C'est le plancher + le repli sûr. Le gap vers v1 (22 pts) = la compression
    sémantique = ce que l'hyp. 1 doit capturer.
@@ -179,6 +206,21 @@ Sources :
    par COMPORTEMENT, pas contenu.
 
 ## Journal
+- **2026-09-19 (tour 6)** : **hyp. 2 — FIDÉLITÉ prompt « ÉNORME » + VOIX SUBTILE** (le cas
+  dur de l'axe n°1, exigé « petit OU énorme »). Perso jetable « Mira » (jamais data/), prompt
+  SYSTÈME 2129 car. / 608 tok DOMINÉ par une voix diffuse (caractère + voix + exemples) + 5
+  règles strictes + persona. 3 variantes, checks déterministes (11/perso) : **PLAIN = 11/11
+  (100 %)**, **DENSE (denseEncode) = 10/11 (91 %)** (perd que la concision — réponse à 300 car.
+  pile), **AGGRESSIF (3,3× télégraphique) = 3/11 → BOUCLE VIDE sur 3/4** (`finish=length` +
+  sortie VIDE). **2e tirage = 3/4 IDENTIQUE (mêmes sondes)** → reproductible, pas un one-shot.
+  → **Le format télégraphique agressif, qui MARCHE pour la mémoire (faits, −28 %), CASSE le
+  prompt d'un perso COMPLEXE** (sur-décrypte la forme dense → budget épuisé → SILENCE sur toute
+  sonde à traiter ; seule la sonde de rappel pur survit, et elle est bien dans la voix).
+  **Stratégie par TYPE confirmée** : mémoire → agressif OK ; prompt perso → denseEncode (−7 %)
+  seulement, JAMAIS télégraphique. Le juge LLM holistique = NON sur les 3 (faux-négatif sur la
+  baseline) → non discriminant, mis de côté (les checks restent la base). `scripts/fidelity-enorme.ts`
+  + `-2e.ts`. 22 appels LLM dosés. RESTE : seuil exact (intermédiaire DENSE 560 ↔ AGGR 182),
+  frontière TAILLE (petit Pico 8/8 ↔ complexe Mira casse), (B) intégration = DECISION LUCAS.
 - **2026-09-19 (tour 5)** : **hyp. 1c — STABILITÉ + NET.** 2e tirage temp=0 du codec
   AGRESSIF = **292 tok IDENTIQUE (0 écart) / 6-6 / 3-3** → la compression est déterministe
   à temp=0, résultat STABLE. NET canonique (entrée×6 + sortie, formule compress-measure)
