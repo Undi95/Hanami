@@ -431,6 +431,27 @@ export function tidyMemory(charId: string): Promise<TidyReport> {
   return req('POST', `/api/characters/${encodeURIComponent(charId)}/memory/tidy`, {})
 }
 
+/** Rapport de la compression de mémoire (chantier B) : vue compressée, en cache. */
+export interface CompressReport {
+  ok: true
+  files: number
+  llmFiles: number // fichiers réellement compressés par le LLM (vérifiés)
+  rejected: number // tombés sur le repli sûr (denseEncode) — vérif ou sortie vide
+  beforeChars: number // caractères des fichiers de faits (originals)
+  afterChars: number // caractères de la vue compressée (cache)
+}
+
+/**
+ * Compression AGRESSIVE de la mémoire (un appel LLM par fichier de faits +
+ * vérifieur déterministe : toute perte de fait dur → repli denseEncode pour ce
+ * fichier). Le résultat part en cache : c'est le message SUIVANT qui l'exploite.
+ * Les fichiers .md restent INTACTS — la compression est une vue, jamais une
+ * écriture ; l'original reste éditable dans le panneau.
+ */
+export function compressMemory(charId: string): Promise<CompressReport> {
+  return req('POST', `/api/characters/${encodeURIComponent(charId)}/memory/compress`, {})
+}
+
 export function listMemoryBackups(charId: string): Promise<MemoryBackup[]> {
   return req('GET', `/api/characters/${encodeURIComponent(charId)}/memory/backups`)
 }

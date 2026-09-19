@@ -304,6 +304,18 @@ const FR = {
   llmModeGlobal: 'Global',
   llmGlobal: 'Global : {value}',
 
+  // ── Compression de contexte (chantier B) ─────────────────────────────────
+  // Opt-in par personnage : le contexte part COMPRESSÉ au LLM (moins de
+  // tokens, rappel et fidélité intacts). L'original n'est JAMAIS modifié.
+  compressToggle: 'Compression de contexte',
+  compressToggleSub:
+    'Réduit les tokens envoyés au LLM pour ce personnage : prompt et persona densifiés, mémoire compressée (bouton ci-dessous). L’original n’est jamais modifié — désactiver reprend le contexte tel quel.',
+  compressBtn: 'Compresser la mémoire',
+  compressBtnHint:
+    'Un appel au modèle densifie chaque fichier de faits ; un vérifieur rejette toute perte de fait (repli sûr). Le résultat est mis en cache et exploité au prochain message.',
+  compressBusy: 'Compression en cours…',
+  compressResult: 'Mémoire : ≈ {before} → {after} tokens{gain} · {llm} par le LLM, {rejected} repli sûr',
+
   // ── Réglages ─────────────────────────────────────────────────────────────
   // Onglets du dialog : trois groupes, un seul formulaire.
   tabAppearance: 'Apparence',
@@ -1023,6 +1035,18 @@ const EN: Record<Key, string> = {
   llmUseGlobal: 'Global model (settings)',
   llmModeGlobal: 'Global',
   llmGlobal: 'Global: {value}',
+
+  // ── Context compression (workstream B) ───────────────────────────────────
+  // Per-character opt-in: the context goes COMPRESSED to the LLM (fewer
+  // tokens, recall and fidelity intact). The original is NEVER modified.
+  compressToggle: 'Context compression',
+  compressToggleSub:
+    'Cuts the tokens sent to this character’s LLM: system prompt and persona are densified, memory is compressed (button below). The original is never modified — turning this off restores the context as-is.',
+  compressBtn: 'Compress memory',
+  compressBtnHint:
+    'One model call densifies each fact file; a verifier rejects any lost fact (safe fallback). The result is cached and used on the next message.',
+  compressBusy: 'Compressing…',
+  compressResult: 'Memory: ≈ {before} → {after} tokens{gain} · {llm} by LLM, {rejected} safe fallback',
 
   // ── Settings ─────────────────────────────────────────────────────────────
   tabAppearance: 'Appearance',

@@ -69,6 +69,10 @@ interface FormState {
   llmMaxHistory: string
   llmContextSize: string
   llmCompactThreshold: string
+  // Opt-in de compression de contexte (absent/éteint = comportement d'origine).
+  // Le prompt et la persona partent densifiés ; la mémoire est compressée par le
+  // bouton dédié (un appel LLM par fichier + vérifieur). Original jamais modifié.
+  llmCompression: boolean
 }
 
 const EMPTY_FORM: FormState = {
@@ -96,6 +100,9 @@ const EMPTY_FORM: FormState = {
   llmMaxHistory: '',
   llmContextSize: '',
   llmCompactThreshold: '',
+  // Éteint par défaut : un personnage existant ne change jamais de contexte
+  // tant qu'on n'a pas allumé l'option explicitement.
+  llmCompression: false,
 }
 
 const GREETING_MODES: readonly GreetingMode[] = ['written', 'generated', 'ask']
@@ -252,6 +259,12 @@ export default function CharactersDialog({
   // Idem pour les actions photo : elles ne bloquent pas le bouton Enregistrer.
   const photoFileRef = useRef<HTMLInputElement>(null)
   const [photoBusy, setPhotoBusy] = useState(false)
+  // Compression de la mémoire (chantier B) : action à part de `busy` (qui
+  // affiche « Enregistrement… ») — elle ne bloque pas le bouton Enregistrer.
+  const [compressBusy, setCompressBusy] = useState(false)
+  // Résultat du dernier « Compresser » (affiché sous le bouton) : le gain et
+  // l'état du vérifieur. null = pas encore compressé dans cette session.
+  const [compressResult, setCompressResult] = useState<string | null>(null)
 
   useEffect(() => {
     if (view.kind === 'list') return
@@ -282,6 +295,7 @@ export default function CharactersDialog({
     setPhoto('')
     setError(null)
     setArmed(false)
+    setCompressResult(null)
   }
 
   /**
@@ -311,6 +325,7 @@ export default function CharactersDialog({
   async function openEdit(id: string) {
     setError(null)
     setArmed(false)
+    setCompressResult(null) // le gain affiché appartient au personnage ouvert, pas au précédent
     try {
       const c = await api.getCharacter(id)
       const f: FormState = {
@@ -340,6 +355,8 @@ export default function CharactersDialog({
         llmMaxHistory: c.llm?.maxHistoryMessages !== undefined ? String(c.llm.maxHistoryMessages) : '',
         llmContextSize: c.llm?.contextSize !== undefined ? String(c.llm.contextSize) : '',
         llmCompactThreshold: c.llm?.compactThreshold !== undefined ? String(c.llm.compactThreshold) : '',
+        // Absente = éteinte (tous les personnages écrits avant ce réglage).
+        llmCompression: c.llm?.compression === true,
       }
       setForm(f)
       setInitialForm(f)
@@ -417,6 +434,42 @@ export default function CharactersDialog({
     })
   }
 
+  // ── Compression de mémoire (chantier B) ───────────────────────────────────
+
+  /**
+   * Lance la compression AGRESSIVE de la mémoire : un appel LLM par fichier de
+   * faits, vérifieur de faits déterministe, résultat mis en cache. Les .md ne
+   * bougent pas — le gain s'applique au prochain message. On affiche le gain en
+   * tokens (estimation caractère/4, comme ailleurs dans l'app) et l'état du
+   * vérifieur. L'action ne PASSE PAS par `busy` : elle ne bloque pas Enregistrer.
+   */
+  async function runCompress() {
+    if (view.kind !== 'edit') return
+    const id = view.id
+    setCompressBusy(true)
+    setCompressResult(null)
+    setError(null)
+    try {
+      const r = await api.compressMemory(id)
+      const before = Math.round(r.beforeChars / 4)
+      const after = Math.round(r.afterChars / 4)
+      // Gain en % (signe porté par la chaîne) ; vide si rien à réduire.
+      const gain =
+        r.beforeChars > 0
+          ? ` (${r.afterChars <= r.beforeChars ? '−' : '+'}${Math.round(
+              (Math.abs(r.beforeChars - r.afterChars) / r.beforeChars) * 100,
+            )} %)`
+          : ''
+      setCompressResult(
+        t('compressResult', { before, after, gain, llm: r.llmFiles, rejected: r.rejected }),
+      )
+    } catch (e) {
+      setError(api.errorMessage(e))
+    } finally {
+      setCompressBusy(false)
+    }
+  }
+
   // ── Variantes du message d'accueil ─────────────────────────────────────────
 
   function setVariant(i: number, value: string) {
@@ -453,6 +506,9 @@ export default function CharactersDialog({
       const n = Number(v)
       if (v !== '' && Number.isFinite(n) && n >= 0) out[key] = Math.round(n)
     }
+    // Opt-in : seul l'état ALLUMÉ entre dans le fichier. Éteint = clé absente
+    // (le serveur, et le comportement, retombent sur le contexte original).
+    if (form.llmCompression) out.compression = true
     return out
   }
 
@@ -944,6 +1000,34 @@ export default function CharactersDialog({
                 />
               </div>
             </div>
+            {/* Compression de contexte (chantier B) : opt-in par personnage.
+                Allumé → prompt + persona partent densifiés (denseEncode, sûrs) ;
+                la mémoire se compresse par le bouton dédié (un appel LLM par
+                fichier + vérifieur de faits). L'original n'est JAMAIS modifié :
+                éteindre le toggle reprend le contexte tel quel. */}
+            <Toggle
+              label={t('compressToggle')}
+              sub={t('compressToggleSub')}
+              checked={form.llmCompression}
+              onChange={(v) => set('llmCompression', v)}
+            />
+            {form.llmCompression && view.kind === 'edit' && (
+              <div className="field">
+                <div>
+                  <button
+                    className="btn small"
+                    type="button"
+                    disabled={compressBusy}
+                    onClick={() => runCompress().catch((e) => console.error('[characters]', e))}
+                  >
+                    {compressBusy ? t('compressBusy') : t('compressBtn')}
+                  </button>
+                </div>
+                {/* Résultat du dernier « Compresser » (gain + vérifieur) ; le
+                    filigrane d'usage tant qu'on n'a pas encore lancé. */}
+                <span className="hint">{compressResult ?? t('compressBtnHint')}</span>
+              </div>
+            )}
           </div>
 
           {/* PERSONNA UTILISATEUR — qui est l'utilisateur FACE À CE PERSONNAGE :
