@@ -12,8 +12,9 @@ seul le résultat mesuré compte.
 
 **Où on en est : le codec est FAIT et STABLE, et la fidélité est maintenant caractérisée
 sur le cas dur (prompt « énorme » + voix subtile) ET sur ses 2 axes de frontière (seuil par
-ratio = tour 7, frontière taille/voix = tour 8). Il reste UNE DÉCISION à toi (intégrer dans
-l'app ou pas) — c'est elle qui bloque la suite, rien d'autre.**
+ratio = tour 7, frontière taille/voix = tour 8). la dernière brique restait **à toi : l'intégrer dans l'app** → **FAITE (GO Lucas)** —
+section « (B) Intégré + vérifié » ci-dessous : le codec est dans l'app et la suite de
+tests complète passe.**
 
 ### Le résultat (le meilleur — commité, reproductible)
 - **Mémoire (faits)** : codec auto AGRESSIF GÉNÉRAL (LLM densifie + vérifieur déterministe)
@@ -65,7 +66,64 @@ l'app ou pas) — c'est elle qui bloque la suite, rien d'autre.**
 `research/codec.ts` (denseEncode, zéro LLM) · `research/verifier.ts` (vérifieur déterministe) ·
 `scripts/llm-verify-v2.ts` (codec auto agressif) · `scripts/fidelity-enorme.ts` (+ `-2e.ts`)
 (batterie prompt énorme) · `scripts/fidelity-battery.ts` (batterie petit prompt) ·
-`scripts/compress-measure.ts` (harnais canonique, formule NET).
+`scripts/compress-measure.ts` (harnais canonique, formule NET) · `scripts/verify-compression/`
+(batterie end-to-end de l'intégration (B) : régression + LLM + cache par-fichier).
+
+## ✅ (B) Intégré + vérifié end-to-end (2026-09-19)
+
+**Lucas a donné le GO (B) → le codec est DANS L'APP, et la suite de tests complète
+(ce qui marchait AVANT + la nouvelle compression) passe. Perso jetable, instance isolée
+(port 7790, `HANAMI_DATA` scratch) — jamais `data/` réel, jamais Sakura.**
+
+### Ce qui est intégré (6 commits FR)
+- **Réglage opt-in par personnage** : `CharacterLlm.compression?: boolean` (absent = off,
+  zéro régression), `normalizeLlm` + `shared/compression.ts` (`denseEncode`, `extractFacts`,
+  `verifyFacts` portés de `research/` — zéro LLM, zéro npm).
+- **`buildPayload`** (`server/api/chat.ts`) : compression de **chaque bloc** AVANT la
+  combinaison — sysprompt + persona → **`denseEncode`** (TOUJOURS, jamais télégraphique,
+  = la leçon HYP.2), mémoire → **cache agressif** (frais) sinon **denseEncode**. Le
+  scaffolding mémoire (en-têtes, policy, résumé) reste intact : on ne comprime que le
+  **contenu** (les faits).
+- **Route `POST /api/characters/:id/memory/compress`** (`server/api/memory.ts`) : UN appel
+  LLM par fichier, instruction AGRESSIVE GÉNÉRALE (celle de −28 %), **vérifieur
+  déterministe** (rejette toute perte de fait → repli denseEncode), **cache par-fichier**
+  (`compression-cache.json`, `sourceHash` = hash du fichier ORIGINAL → un fichier modifié
+  périt seulement SA propre entrée, les autres gardent l'agressif), in-flight guard (409).
+- **Client** (`CharactersDialog.tsx`) : toggle « Compression de contexte » + bouton
+  « Compresser la mémoire » + i18n FR/EN.
+- **Réversible** : la compression est une **vue** (cache), jamais une écriture — les `.md`
+  mémoire + le sysprompt ne sont JAMAIS modifiés sur disque. Toggle off → contexte original.
+
+### Résultat mesuré (instance isolée, qwen3.8 dosé — `scripts/verify-compression/`)
+**~100 assertions, toutes vertes** + typecheck 0 + build ok :
+
+| Batterie | LLM | Résultat |
+|---|---|---|
+| Régression + structure + réversibilité | non | **31/31** |
+| Vérifieur (unit, adversarial) | non | **8/8** |
+| Compression agressive + rappel + fidélité | oui | **28/28** |
+| Opérations de conversation (édition/épingle/fork/…) | 1 appel | **21/21** |
+| Invalidation du cache par-fichier | 1 appel | **12/12** |
+
+- **Mémoire** : codec agressif **−41 %** en caractères (349 → 205), 3/3 fichiers vérifiés,
+  **0 fait rejeté**, fichiers **INTACTS** sur disque (hashes avant = après).
+- **Gain tokens (prompt-preview)** : OFF ≈ 1395 → DENSE ≈ 1381 → **AGRESSIF ≈ 1353**
+  (−**3 %** du contexte TOTAL). **Honnêteté** : le gain TOTAL est modeste car le contexte
+  est dominé par le scaffolding mémoire (en-têtes, policy, résumé) qui n'est **jamais**
+  compressé ; la **mémoire seule** (les faits) gagne **−41 %**. C'est là que la valeur est.
+- **Rappel 6/6** sur la mémoire compressée (chiffres + lieux + noms + raisons, explicites
+  ET implicites) — la règle de sécurité (fait-titre explicite) tient dans l'app.
+- **Fidélité 4/4, ZÉRO boucle vide** sur le contexte compressé : « mon ange », refus
+  médical, auto-id « Je suis Yuki », zéro invention. Le perso reste RESPECTÉ (règle (a)).
+- **Réversibilité** : toggle off → sysprompt + mémoire reviennent **verbatim** ; `.md`
+  jamais modifiés (hashes stables de bout en bout).
+- **Repli honnête + invalidation par-fichier** : un fichier modifié retombe en
+  denseEncode, les autres gardent leur compression agressive (test-cache 12/12).
+
+**Verdict** : l'intégration est **sûre** (opt-in, réversible, repli honnête, zéro impact
+par défaut) et **fonctionnelle** (rappel + fidélité tenus sur le contexte compressé). Le
+gain de tokens est réel mais modeste sur le contexte total — conforme à l'attendu (plafond
+d'un codec général sur des mémoires déjà courtes). À activer par personnage via le toggle.
 
 ## Contraintes dures
 - **FIDÉLITÉ (axe n°1)** : le prompt système du personnage doit rester RESPECTÉ — voix,
@@ -322,6 +380,22 @@ Sources :
    par COMPORTEMENT, pas contenu.
 
 ## Journal
+- **2026-09-19 (intégration B + tests complets)** : **GO Lucas → codec DANS L'APP.** 6
+  commits FR : réglage `CharacterLlm.compression` (opt-in, absent = off) + `shared/compression.ts`
+  (denseEncode/extractFacts/verifyFacts portés de `research/`, zéro npm) ; `buildPayload`
+  compresse CHAQUE bloc (sysprompt + persona → **denseEncode TOUJOURS** = leçon HYP.2,
+  mémoire → cache agressif sinon denseEncode), scaffolding mémoire intact ; route
+  `POST /memory/compress` (1 LLM/fichier, instruction AGRESSIVE GÉNÉRALE −28 %, vérifieur
+  déterministe → repli denseEncode, cache **par-fichier** `sourceHash`, in-flight guard) ;
+  client toggle + bouton « Compresser la mémoire » + i18n. **Vérification end-to-end
+  (instance isolée 7790, perso jetable, `scripts/verify-compression/`) : ~100 assertions
+  vertes + typecheck 0 + build ok** — régression 31/31, vérifieur 8/8, LLM 28/28 (mémoire
+  **−41 %** car. 349→205, 3/3 vérifiés 0 rejeté, fichiers INTACTS ; tokens 1395 OFF →
+  1353 AGGR = **−3 % contexte total**, gain mémoire seule **−41 %**), opérations convo.
+  21/21, invalidation cache par-fichier 12/12. **Rappel 6/6 + fidélité 4/4 + zéro boucle
+  vide** sur le contexte compressé (règles « mon ange »/médical/auto-id/anti-invention
+  tenues) ; réversibilité totale (toggle off → verbatim, `.md` jamais modifiés). Verdict :
+  sûr (opt-in, réversible, repli honnête, 0 impact par défaut) + fonctionnel.
 - **2026-09-19 (tour 8)** : **hyp. 2c — FRONTIÈRE TAILLE / VOIX.** Rampe de 4 paliers, TOUS
   en compression AGRESSIVE (télégraphique, marqueurs jetés), MÊMES 5 règles + persona
   (identiques), seule la voix diffuse varie : R0 = règles seules (0 voix, 110 tok) · R1 = +1
