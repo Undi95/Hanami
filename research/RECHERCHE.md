@@ -8,6 +8,52 @@ tokens, sans perdre ni le rappel ni la fidélité du perso / de l'user. Objectif
 (open source). A (codec), B (intégrer dans l'app), C (max compression) tous valables ;
 seul le résultat mesuré compte.
 
+## 🌙 RAPPORT DE NUIT — 2026-09-19 (tours 1-6)
+
+**Où on en est : le codec est FAIT et STABLE, et la fidélité est maintenant caractérisée
+sur le cas dur (prompt « énorme » + voix subtile). Il reste UNE DÉCISION à toi (intégrer
+dans l'app ou pas) + 2 raffinements de frontière (optionnels).**
+
+### Le résultat (le meilleur — commité, reproductible)
+- **Mémoire (faits)** : codec auto AGRESSIF GÉNÉRAL (LLM densifie + vérifieur déterministe)
+  = **−28 % entrée / −25 % NET / 6-6 rappel / 0 fait perdu, STABLE** (2e tirage temp=0
+  identique). Atteint le niveau du télégraphique écrit à la main (v1, −29 %) **SANS main ni
+  tuning** = le PLAFOND d'un codec général (le battre davantage = citer le jeu de test =
+  overfit). Le vérifieur (zéro LLM) attrape tout fait perdu → repli denseEncode (−7 %, plancher).
+- **FIDÉLITÉ du perso (axe n°1)** : mesurée par COMPORTEMENT (batterie de checks), pas par
+  rappel de fait. Deux cas :
+  - petit prompt, règles explicites (Pico) : **8/8 à ~3×** (PLAIN = DENSE = AGRESSIF).
+  - **prompt « ÉNORME » + voix subtile (Mira, 2129 car. / 608 tok)** : **PLAIN 11/11,
+    DENSE (denseEncode) 10/11, AGRESSIF (3,3× télégraphique) 3/11 → BOUCLE VIDE 3/4**
+    (le perso SE TAIT — `finish=length` + sortie vide, **reproductible** sur 2 tirages).
+
+### La leçon qui compte (nouveauté de cette nuit)
+**La stratégie de compression doit DIFFÉRER par TYPE de contenu :**
+- **mémoire (faits)** → l'agressif télégraphique MARCHE (−28 %).
+- **prompt système du perso (comportement/voix)** → **denseEncode (−7 %) seulement, JAMAIS
+  télégraphique** : sur un perso COMPLEXE, la sur-densité fait sur-décrypter le modèle → il
+  épuise son budget de réflexion → SILENCE (nouvelle **4ᵉ signature d'échec**). C'est
+  précisément ce que ton axe n°1 demandait : le prompt perso reste RESPECTÉ (petit OU énorme),
+  mais il faut le comprimer à la CONSERVATIVE.
+
+### Ce que je n'ai PAS fait (et pourquoi)
+- **(B) Intégrer le codec dans l'app** = TA DÉCISION : c'est un changement d'app (opt-in,
+  original conservé, repli honnête, jamais l'output par défaut). Je ne le fais pas seul
+  (règle (h) : rien vers l'app/irréversible sans toi). **À toi : GO / NO-GO.**
+- **Seuil exact + frontière TAILLE** : où bascule le prompt perso entre « tient » (denseEncode)
+  et « casse » (agressif), et entre petit perso (tient à 3×) et complexe (casse). Ce sont des
+  RAFFINEMENTS de frontière — le résultat opérationnel est déjà clair (perso → denseEncode).
+  Je le fais en tour suivant si tu veux.
+- **Signature des commits** : j'ai signé `Claude Fable 5` (convention CLAUDE.md, tous les
+  commits passés), PAS « Qwen 3.8 27B » (le modèle TESTÉ, pas l'auteur). Dis-moi si tu veux
+  autre chose.
+
+### Fichiers clés (open source, zéro npm, commités + poussés à `77773da`)
+`research/codec.ts` (denseEncode, zéro LLM) · `research/verifier.ts` (vérifieur déterministe) ·
+`scripts/llm-verify-v2.ts` (codec auto agressif) · `scripts/fidelity-enorme.ts` (+ `-2e.ts`)
+(batterie prompt énorme) · `scripts/fidelity-battery.ts` (batterie petit prompt) ·
+`scripts/compress-measure.ts` (harnais canonique, formule NET).
+
 ## Contraintes dures
 - **FIDÉLITÉ (axe n°1)** : le prompt système du personnage doit rester RESPECTÉ — voix,
   règles strictes, policy emoji — qu'il soit **petit ou énorme** ; de même pour la
