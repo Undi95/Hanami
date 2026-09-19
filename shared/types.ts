@@ -132,6 +132,10 @@ export interface CharacterLlm {
   maxHistoryMessages?: number
   contextSize?: number
   compactThreshold?: number
+  // Opt-in (absent = éteint) : compresser le contexte envoyé au LLM pour ce
+  // personnage. sysprompt + persona → denseEncode (sûr) ; mémoire → codec
+  // agressif (repli denseEncode). L'original n'est JAMAIS modifié sur disque.
+  compression?: boolean
 }
 
 export interface CharacterMeta {

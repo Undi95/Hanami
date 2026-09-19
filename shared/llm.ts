@@ -26,6 +26,9 @@ export function normalizeLlm(value: unknown): CharacterLlm | undefined {
     const v = raw[k]
     if (typeof v === 'number' && Number.isFinite(v) && v >= 0) out[k] = Math.round(v)
   }
+  // Opt-in de compression de contexte (absent = éteint) : seul un boolean est
+  // accepté — une valeur de type étrange ne doit pas activer la compression.
+  if (typeof raw.compression === 'boolean') out.compression = raw.compression
   return Object.keys(out).length > 0 ? out : undefined
 }
 
