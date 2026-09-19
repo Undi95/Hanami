@@ -57,9 +57,9 @@ l'app ou pas) — c'est elle qui bloque la suite, rien d'autre.**
   les fermées cassent (2/3 vides). La sonde OUVERTE dans-la-voix vide à TOUS les paliers (même
   0 voix) = artefact de sonde, pas un gate. **Les 2 raffinements de frontière sont maintenant
   FAITS** — plus rien d'autre n'attend que mon coup de main, sauf ta décision (B).
-- **Signature des commits** : j'ai signé `Claude Fable 5` (convention CLAUDE.md, tous les
-  commits passés), PAS « Qwen 3.8 27B » (le modèle TESTÉ, pas l'auteur). Dis-moi si tu veux
-  autre chose.
+- **Signature des commits** → ✅ **tranché par Lucas (19/09) : signé `Qwen 3.8 27B`** (le
+  modèle local qui a fait ce travail). Les 20 commits passés sont signés `Claude Fable 5`
+  (convention CLAUDE.md de l'époque) ; la signature Qwen s'applique aux commits à venir.
 
 ### Fichiers clés (open source, zéro npm, commités + poussés à `77773da`)
 `research/codec.ts` (denseEncode, zéro LLM) · `research/verifier.ts` (vérifieur déterministe) ·
@@ -80,7 +80,7 @@ l'app ou pas) — c'est elle qui bloque la suite, rien d'autre.**
 - **SÉQUENTIEL** : zéro agent parallèle (PC lent, GPU). **Doser le LLM** (c'est le MÊME
   modèle local sur lequel je tourne) : tester fort, sans saturer le GPU. `max_tokens ≥ 500`
   (Qwen pense avant de répondre, sinon réponse vide/coupée).
-- **Commits** FR, un par étape, signature `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
+- **Commits** FR, un par étape, signature `Co-Authored-By: Qwen 3.8 27B <qwen3.8-27b@local>` (tranchée par Lucas 19/09).
 - **Push** OK sur cette branche seulement ; ne toucher ni `main` ni `Qwen`/`Qwen2`.
 
 ## État — meilleur résultat actuel (baseline à battre)
@@ -418,9 +418,10 @@ Sources :
   (`compress-probe`) : **implicite → silence** (`finish_reason=length`). Règle de sécurité
   posée (fait-titre explicite). Baseline figée.
 
-## ⚠️ Note signature (à trancher par Lucas au réveil)
-La prompt du loop disait « signé Qwen 3.8 27B », mais CLAUDE.md impose
-`Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` (règle signée du projet, tous
-les commits passés). **J'ai gardé la signature CLAUDE.md (Fable 5)** car c'est la
-convention du repo ET Qwen3.8 est le modèle TESTÉ, pas l'auteur du code. Si tu veux que
-je signe autrement sur cette branche, dis-le et je le change.
+## ✅ Note signature (tranchée par Lucas, 19/09)
+La prompt du loop disait « signé Qwen 3.8 27B », CLAUDE.md imposait
+`Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` (d'où les 20 commits passés
+signés Fable 5). **Lucas a tranché : signer `Qwen 3.8 27B`** (le modèle local qui a fait ce
+travail de recherche). **Appliqué aux commits À VENIR** :
+`Co-Authored-By: Qwen 3.8 27B <qwen3.8-27b@local>`. Je ne réécris PAS l'historique passés
+(Fable 5) — une réécriture = irréversible + inutile (règle h).
