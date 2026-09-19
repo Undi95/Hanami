@@ -8,11 +8,12 @@ tokens, sans perdre ni le rappel ni la fidélité du perso / de l'user. Objectif
 (open source). A (codec), B (intégrer dans l'app), C (max compression) tous valables ;
 seul le résultat mesuré compte.
 
-## 🌙 RAPPORT DE NUIT — 2026-09-19 (tours 1-6)
+## 🌙 RAPPORT DE NUIT — 2026-09-19 (tours 1-8, consolidé)
 
 **Où on en est : le codec est FAIT et STABLE, et la fidélité est maintenant caractérisée
-sur le cas dur (prompt « énorme » + voix subtile). Il reste UNE DÉCISION à toi (intégrer
-dans l'app ou pas) + 2 raffinements de frontière (optionnels).**
+sur le cas dur (prompt « énorme » + voix subtile) ET sur ses 2 axes de frontière (seuil par
+ratio = tour 7, frontière taille/voix = tour 8). Il reste UNE DÉCISION à toi (intégrer dans
+l'app ou pas) — c'est elle qui bloque la suite, rien d'autre.**
 
 ### Le résultat (le meilleur — commité, reproductible)
 - **Mémoire (faits)** : codec auto AGRESSIF GÉNÉRAL (LLM densifie + vérifieur déterministe)
@@ -35,6 +36,12 @@ dans l'app ou pas) + 2 raffinements de frontière (optionnels).**
   épuise son budget de réflexion → SILENCE (nouvelle **4ᵉ signature d'échec**). C'est
   précisément ce que ton axe n°1 demandait : le prompt perso reste RESPECTÉ (petit OU énorme),
   mais il faut le comprimer à la CONSERVATIVE.
+- **Raffinement tour 8 (frontière taille/voix)** : dans le prompt perso, c'est le **VOLUME de
+  voix diffuse** qui porte la casse, pas la taille brute des tokens. Un perso **surtout à
+  RÈGLES** (peu ou pas de voix — type Pico) se compresse **agressivement SANS casser les
+  règles** ; seul un perso à **voix INTÉGRALE** (type Mira, caractère+voix+exemples) casse.
+  → règle pratique : **mesurer la densité de voix du perso avant de choisir le codec** (règles
+  → agressif OK ; voix intégrale → denseEncode).
 
 ### Ce que je n'ai PAS fait (et pourquoi)
 - **(B) Intégrer le codec dans l'app** = TA DÉCISION : c'est un changement d'app (opt-in,
@@ -44,9 +51,12 @@ dans l'app ou pas) + 2 raffinements de frontière (optionnels).**
   compression télégraphique du prompt COMPLEXE casse dès ~2,7× (marqueurs gardés ou non), la sonde
   VOIX vide sur les 3 télégraphiques ; **denseEncode (−7 %) EST le plafond fiable du prompt perso**,
   pas une borne basse. Pas de « milieu safe ». Voir journal tour 7 + `scripts/fidelity-seuil.ts`.
-- **Frontière TAILLE** (reste, optionnel) : où bascule entre petit perso (Pico, tient à 3×) et
-  complexe (Mira, casse) selon la TAILLE/complexité du perso. Le résultat opérationnel est déjà
-  clair (perso complexe → denseEncode) ; c'est un raffinement de frontière si tu veux.
+- **Frontière TAILLE** → ✅ **FAIT en tour 8** (`scripts/fidelity-frontiere.ts`) : la frontière
+  = le **VOLUME de voix diffuse**, pas la taille brute. Perso surtout à RÈGLES (peu de voix) →
+  les règles tiennent l'agressif (0/3 fermées vides, ≈ Pico) ; perso à voix INTÉGRALE (Mira) →
+  les fermées cassent (2/3 vides). La sonde OUVERTE dans-la-voix vide à TOUS les paliers (même
+  0 voix) = artefact de sonde, pas un gate. **Les 2 raffinements de frontière sont maintenant
+  FAITS** — plus rien d'autre n'attend que mon coup de main, sauf ta décision (B).
 - **Signature des commits** : j'ai signé `Claude Fable 5` (convention CLAUDE.md, tous les
   commits passés), PAS « Qwen 3.8 27B » (le modèle TESTÉ, pas l'auteur). Dis-moi si tu veux
   autre chose.
@@ -156,9 +166,35 @@ plafond fiable du prompt perso**, pas juste une borne basse. (Compte par variant
 bruité — modèle qui pense à la frontière, temp=0 ~déterministe pas 100 % ; le signal ROBUSTE =
 télégraphique → des vides apparaissent, denseEncode → zéro.)
 
+**HYP. 2c — FRONTIÈRE TAILLE / VOIX (FAIT, tour 8, `scripts/fidelity-frontiere.ts`)** :
+c'est la TAILLE (tokens bruts) ou la VOIX DIFFUSE qui fait casser ? Rampe de 4 paliers,
+TOUS en compression AGRESSIVE (télégraphique, marqueurs jetés), MÊMES 5 règles + persona
+(identiques), on n'augmente QUE la voix diffuse : R0 = règles seules (0 voix, 110 tok) ·
+R1 = +1 ligne de voix (132 tok) · R2 = +2 lignes (155 tok) · R3 = voix INTÉGRALE = AGGR
+(contrôle tour 6/7, 182 tok). Batterie : 4 checks de règle (3 FERMÉES : id / médical /
+persona) + la sonde VOIX (OUVERTE, dans-la-voix) + emoji. Mesuré (le signal Fiable = les
+3 fermées) :
+- **R0 (0 voix, 110 tok)** : fermées **0/3 vide** (tiennent, finish=stop) · VOIX vide → 6/8.
+- **R1 (1 ligne, 132 tok)** : fermées **0/3 vide** · VOIX vide → 6/8.
+- **R2 (2 lignes, 155 tok)** : fermées **0/3 vide** mais 2 TRONQUÉES (finish=length, non
+  vides — le gradient AVANT le vide total) · VOIX vide → 4/8.
+- **R3 (intégrale, 182 tok)** : fermées **2/3 vide** (médical, persona) · VOIX vide → 2/8
+  (= le 3/4 de tour 6/7, reproductible).
+→ **Le signal Fiable = les sondes FERMÉES. La sonde VOIX (ouverte, « génère dans la voix »)
+vide à TOUS les paliers — même SANS voix (R0) — c'est le cas le plus exigeant en thinking,
+un artefact de sonde connu (tour 2 : il viderait même en prompt intégral). Elle ne mesure
+PAS la casse à la compression ; les fermées, oui.** **La frontière = le VOLUME de voix
+diffuse, pas la taille brute** : voix LÉGÈRE (0-2 lignes) → les règles tiennent l'agressif
+(0/3 fermées vides, ≈ Pico tour 2) ; voix INTÉGRALE (R3, niveau Mira) → les fermées cassent
+(2/3 vides). **RAFFINE tour 7** : ce n'est PAS « tout télégraphique casse un perso » — un
+perso à voix LÉGÈRE (surtout des règles) se compresse agressivement SANS casser les règles ;
+seul le VOLUME de voix diffuse (voix intégrale) porte la casse. (R2 = état intermédiaire :
+tronquée avant de vider. Compte bruité à la frontière — modèle qui pense temp=0 ; le signal
+robuste = 0 voix/légère → fermées tiennent, intégrale → cassent.)
+
 Mesures : `scripts/compress-measure.ts` (`--tokens` / `--recall`), `scripts/compress-probe.ts`
 (frontière), `scripts/dense-encode.ts` (encodeur auto), `scripts/fidelity-battery.ts`
-(fidélité sysprompt), `scripts/fidelity-enorme.ts` (fidélité prompt ÉNORME + voix subtile), `scripts/fidelity-enorme-2e.ts` (2e tirage AGGRESSIF = reproductibilité de la boucle vide), `scripts/fidelity-seuil.ts` (sweep SEUIL du prompt perso : 3 télégraphiques, marqueurs gardés), `scripts/llm-verify.ts` (LLM+vérifieur), `scripts/llm-compress-probe.ts`
+(fidélité sysprompt), `scripts/fidelity-enorme.ts` (fidélité prompt ÉNORME + voix subtile), `scripts/fidelity-enorme-2e.ts` (2e tirage AGGRESSIF = reproductibilité de la boucle vide), `scripts/fidelity-seuil.ts` (sweep SEUIL du prompt perso : 3 télégraphiques, marqueurs gardés), `scripts/fidelity-frontiere.ts` (sweep FRONTIÈRE taille/voix : 4 paliers, MÊMES règles, seule la voix diffuse varie), `scripts/llm-verify.ts` (LLM+vérifieur), `scripts/llm-compress-probe.ts`
 (troncage = budget), `scripts/llm-verify-v2.ts` (instruction AGRESSIVE), `scripts/llm-verify-v2-stable.ts`
 (2e tirage + NET canonique). Contenu de test : 3 fichiers mémoire (famille / travail /
 santé), 6 questions (3 faciles + 3 dures : compte, localisation, causalité).
@@ -192,7 +228,12 @@ modèle au moment de RÉPONDRE → `finish=length` + sortie **VIDE** sur toute s
 du traitement (pas le rappel pur — seule la sonde « Qui es-tu ? » survit). **Reproductible**
 (3/4, 2 tirages, temp=0). Contrairement à la mémoire (où l'agressif tient, −28 %), le **prompt
 perso doit rester au denseEncode (−7 %)**. C'est la même physique que la 3ᵉ (sur-densité →
-budget épuisé), mais du côté RÉPONSE, pas encodage.
+budget épuisé), mais du côté RÉPONSE, pas encodage. **Nuance tour 8** : la sonde **OUVERTE
+dans-la-voix** est le maillon faible par excellence — elle vide à TOUS les paliers de
+compression, même SANS voix diffuse, et viderait même en prompt intégral (cf. signature 2,
+tour 2) ; c'est elle qui fait « bruit » dans les compteurs de boucles. Les sondes **FERMÉES**
+(rappel de règle, refus, persona) sont le gate fiable : elles tiennent tant que la voix est
+légère et cassent seulement à voix intégrale.
 
 ## Plafond connu
 Réduction en **caractères** (v2 = 47 %) > réduction en **tokens** (29 %) : le tokenizer
@@ -221,8 +262,14 @@ prose** (mots-vide, reformulations, verbes être/avoir), **pas** dans les chiffr
    FAIT (tour 7, `scripts/fidelity-seuil.ts`) : le seuil est BAS — toute compression télégraphique
    du prompt complexe casse dès ~2,7× (marqueurs gardés ou non), la sonde VOIX vide sur les 3
    télégraphiques ; denseEncode (−7 %) EST le plafond fiable du prompt perso, pas une borne basse.**
-   RESTE : la frontière TAILLE (petit Pico 8/8 tient à 3× ; complexe Mira casse) = où bascule-t-il
-   selon la TAILLE/complexité du perso.
+   **FRONTIÈRE TAILLE/VOIX FAIT (tour 8, `scripts/fidelity-frontiere.ts`) : la frontière = le
+   VOLUME de voix diffuse, pas la taille brute — voix légère (0-2 lignes) → les règles tiennent
+   l'agressif (0/3 fermées vides, ≈ Pico) ; voix intégrale (niveau Mira) → les fermées cassent
+   (2/3 vides). La sonde OUVERTE dans-la-voix vide à TOUS les paliers (même 0 voix) = artefact
+   de sonde (cf. tour 2), pas un gate. RAFFINE tour 7 : un perso surtout à RÈGLES (peu de voix)
+   se compresse agressivement ; seul le VOLUME de voix diffuse porte la casse.** → **HYP. 2
+   TERMINE (tours 6+7+8) : les 2 axes de fidélité (seuil par ratio + frontière par complexité)
+   sont caractérisés.**
 3. **Encodeur automatique CONSERVATEUR** — ✅ FAIT (research/codec.ts) : −7 %, 0 fait
    perdu. C'est le plancher + le repli sûr. Le gap vers v1 (22 pts) = la compression
    sémantique = ce que l'hyp. 1 doit capturer.
@@ -275,6 +322,21 @@ Sources :
    par COMPORTEMENT, pas contenu.
 
 ## Journal
+- **2026-09-19 (tour 8)** : **hyp. 2c — FRONTIÈRE TAILLE / VOIX.** Rampe de 4 paliers, TOUS
+  en compression AGRESSIVE (télégraphique, marqueurs jetés), MÊMES 5 règles + persona
+  (identiques), seule la voix diffuse varie : R0 = règles seules (0 voix, 110 tok) · R1 = +1
+  ligne (132 tok) · R2 = +2 lignes (155 tok) · R3 = voix INTÉGRALE = AGGR (contrôle tour 6/7,
+  182 tok). Mesuré (le signal Fiable = les 3 sondes FERMÉES : id/médical/persona) : R0
+  fermées **0/3 vide** (tiennent) · R1 **0/3** · R2 **0/3** (mais 2 TRONQUÉES, finish=length
+  non vides = le gradient avant le vide total) · R3 **2/3 vide** (médical, persona = le 3/4 de
+  tour 6/7). **La sonde VOIX (ouverte, dans-la-voix) vide à TOUS les paliers — même 0 voix (R0)
+  — c'est le cas le plus exigeant en thinking, un artefact de sonde connu (tour 2 : il viderait
+  même en intégral) ; elle ne mesure PAS la casse.** → **La frontière = le VOLUME de voix
+  diffuse, pas la taille brute : voix légère (0-2 lignes) → les règles tiennent l'agressif (≈
+  Pico tour 2) ; voix intégrale (niveau Mira) → les fermées cassent.** RAFFINE tour 7 (ce n'est
+  PAS « tout télégraphique casse un perso »). HYP. 2 (fidélité) maintenant TERMINE sur ses 2
+  axes (seuil par ratio + frontière par complexité). `scripts/fidelity-frontiere.ts`. 20 appels
+  LLM dosés. RESTE : (B) intégration app = DECISION LUCAS.
 - **2026-09-19 (tour 7)** : **hyp. 2b — SEUIL EXACT du prompt SYSTÈME.** Sweep de 3 variantes
   télégraphiques du prompt « Mira » (608 tok), MÊME batterie 11 checks que tour 6, en isolant la
   variable (garder les marqueurs « … »/« ben » vs les supprimer) : DENSE (560 tok, ~1×) = 10/11
