@@ -40,10 +40,13 @@ dans l'app ou pas) + 2 raffinements de frontière (optionnels).**
 - **(B) Intégrer le codec dans l'app** = TA DÉCISION : c'est un changement d'app (opt-in,
   original conservé, repli honnête, jamais l'output par défaut). Je ne le fais pas seul
   (règle (h) : rien vers l'app/irréversible sans toi). **À toi : GO / NO-GO.**
-- **Seuil exact + frontière TAILLE** : où bascule le prompt perso entre « tient » (denseEncode)
-  et « casse » (agressif), et entre petit perso (tient à 3×) et complexe (casse). Ce sont des
-  RAFFINEMENTS de frontière — le résultat opérationnel est déjà clair (perso → denseEncode).
-  Je le fais en tour suivant si tu veux.
+- **Seuil exact** → ✅ **FAIT en tour 7** (tu as relancé le loop) : le seuil est BAS — toute
+  compression télégraphique du prompt COMPLEXE casse dès ~2,7× (marqueurs gardés ou non), la sonde
+  VOIX vide sur les 3 télégraphiques ; **denseEncode (−7 %) EST le plafond fiable du prompt perso**,
+  pas une borne basse. Pas de « milieu safe ». Voir journal tour 7 + `scripts/fidelity-seuil.ts`.
+- **Frontière TAILLE** (reste, optionnel) : où bascule entre petit perso (Pico, tient à 3×) et
+  complexe (Mira, casse) selon la TAILLE/complexité du perso. Le résultat opérationnel est déjà
+  clair (perso complexe → denseEncode) ; c'est un raffinement de frontière si tu veux.
 - **Signature des commits** : j'ai signé `Claude Fable 5` (convention CLAUDE.md, tous les
   commits passés), PAS « Qwen 3.8 27B » (le modèle TESTÉ, pas l'auteur). Dis-moi si tu veux
   autre chose.
@@ -136,9 +139,26 @@ SILENCE sur toute sonde qui demande du traitement (seule la sonde de rappel pur 
 seulement, JAMAIS télégraphique.** Le juge LLM holistique était NON sur les 3 (faux-
 négatif sur la baseline) → non discriminant, mis de côté.
 
+**HYP. 2b — SEUIL EXACT du prompt SYSTÈME (FAIT, tour 7, `scripts/fidelity-seuil.ts`)** :
+où bascule « Mira » (608 tok) entre « tient » et « boucle VIDE » ? Sweep de 3 variantes
+télégraphiques (MÊME batterie 11 checks que tour 6) en **isolant la variable** : garder les
+marqueurs de voix LITTÉRAUX (« … », « ben ») vs les supprimer (l'agressif de tour 6 les
+supprimait). Résultats mesurés :
+- **DENSE** (denseEncode, 560 tok, ~1×) = 10/11, **0 boucle** → TIENT (ancre tour 6, pas re-tirée).
+- **MILD** (223 tok, **2,7×**, marqueurs + 2 exemples) = 5/11, **2/4 vide**.
+- **MODER** (163 tok, **3,7×**, marqueurs, sans exemples) = 7/11, **1/4 vide**.
+- **AGGR** (182 tok, 3,3×, SANS marqueurs) = 3/11, **3/4 vide** (contrôle = tour 6).
+→ **Le seuil est BAS : TOUTE compression télégraphique du prompt d'un perso COMPLEXE déclenche
+des boucles vides, dès ~2,7×.** Garder les marqueurs aide un peu (MODER 1/4 < AGGR 3/4) mais ne
+sauve PAS — même la meilleure variante télégraphique casse la **sonde VOIX** (open, dans-la-voix,
+la plus exigeante), qui **vide sur les 3**. **Pas de « milieu safe » : denseEncode (−7 %) EST le
+plafond fiable du prompt perso**, pas juste une borne basse. (Compte par variante un peu
+bruité — modèle qui pense à la frontière, temp=0 ~déterministe pas 100 % ; le signal ROBUSTE =
+télégraphique → des vides apparaissent, denseEncode → zéro.)
+
 Mesures : `scripts/compress-measure.ts` (`--tokens` / `--recall`), `scripts/compress-probe.ts`
 (frontière), `scripts/dense-encode.ts` (encodeur auto), `scripts/fidelity-battery.ts`
-(fidélité sysprompt), `scripts/fidelity-enorme.ts` (fidélité prompt ÉNORME + voix subtile), `scripts/fidelity-enorme-2e.ts` (2e tirage AGGRESSIF = reproductibilité de la boucle vide), `scripts/llm-verify.ts` (LLM+vérifieur), `scripts/llm-compress-probe.ts`
+(fidélité sysprompt), `scripts/fidelity-enorme.ts` (fidélité prompt ÉNORME + voix subtile), `scripts/fidelity-enorme-2e.ts` (2e tirage AGGRESSIF = reproductibilité de la boucle vide), `scripts/fidelity-seuil.ts` (sweep SEUIL du prompt perso : 3 télégraphiques, marqueurs gardés), `scripts/llm-verify.ts` (LLM+vérifieur), `scripts/llm-compress-probe.ts`
 (troncage = budget), `scripts/llm-verify-v2.ts` (instruction AGRESSIVE), `scripts/llm-verify-v2-stable.ts`
 (2e tirage + NET canonique). Contenu de test : 3 fichiers mémoire (famille / travail /
 santé), 6 questions (3 faciles + 3 dures : compte, localisation, causalité).
@@ -197,9 +217,12 @@ prose** (mots-vide, reformulations, verbes être/avoir), **pas** dans les chiffr
    → l'agressif qui MARCHE sur la mémoire **CASSE** le perso complexe. Mesure par COMPORTEMENT
    (pas contenu), comme demandé par Lucas. **CONFIRME : fait (mémoire) vs comportement
    (sysprompt) = stratégies de compression DIFFÉRENTES** — mémoire → agressif auto OK
-   (−28 %), sysprompt → denseEncode (−7 %) seulement, **JAMAIS télégraphique**. RESTE : le
-   **seuil exact** (variante intermédiaire entre DENSE 560 tok et AGGR 182 tok), et la
-   frontière TAILLE (petit Pico 8/8 tient à 3× ; complexe Mira casse) = où bascule-t-il.
+   (−28 %), sysprompt → denseEncode (−7 %) seulement, **JAMAIS télégraphique**. **SEUIL EXACT
+   FAIT (tour 7, `scripts/fidelity-seuil.ts`) : le seuil est BAS — toute compression télégraphique
+   du prompt complexe casse dès ~2,7× (marqueurs gardés ou non), la sonde VOIX vide sur les 3
+   télégraphiques ; denseEncode (−7 %) EST le plafond fiable du prompt perso, pas une borne basse.**
+   RESTE : la frontière TAILLE (petit Pico 8/8 tient à 3× ; complexe Mira casse) = où bascule-t-il
+   selon la TAILLE/complexité du perso.
 3. **Encodeur automatique CONSERVATEUR** — ✅ FAIT (research/codec.ts) : −7 %, 0 fait
    perdu. C'est le plancher + le repli sûr. Le gap vers v1 (22 pts) = la compression
    sémantique = ce que l'hyp. 1 doit capturer.
@@ -252,6 +275,18 @@ Sources :
    par COMPORTEMENT, pas contenu.
 
 ## Journal
+- **2026-09-19 (tour 7)** : **hyp. 2b — SEUIL EXACT du prompt SYSTÈME.** Sweep de 3 variantes
+  télégraphiques du prompt « Mira » (608 tok), MÊME batterie 11 checks que tour 6, en isolant la
+  variable (garder les marqueurs « … »/« ben » vs les supprimer) : DENSE (560 tok, ~1×) = 10/11
+  **0 boucle** (ancre tour 6) · MILD (223 tok, 2,7×, marqueurs + 2 ex.) = 5/11 **2/4 vide** · MODER
+  (163 tok, 3,7×, marqueurs) = 7/11 **1/4 vide** · AGGR (182 tok, 3,3×, −marqueurs) = 3/11 **3/4
+  vide** (contrôle = tour 6). → **Le seuil est BAS : toute compression télégraphique d'un prompt
+  COMPLEXE casse dès ~2,7×** ; garder les marqueurs aide un peu (MODER 1/4 < AGGR 3/4) mais ne sauve
+  pas — la sonde VOIX (open, dans-la-voix) vide sur les 3 télégraphiques. **Pas de milieu safe :
+  denseEncode (−7 %) EST le plafond fiable du prompt perso**, pas une borne basse. Confirme + affûte
+  la stratégie par type de tour 6. (Compte par variante bruité = frontière, modèle qui pense temp=0 ;
+  signal robuste : télégraphique → vides, denseEncode → zéro.) `scripts/fidelity-seuil.ts`. 15 appels
+  LLM dosés. RESTE : frontière TAILLE, (B) intégration = DECISION LUCAS.
 - **2026-09-19 (tour 6)** : **hyp. 2 — FIDÉLITÉ prompt « ÉNORME » + VOIX SUBTILE** (le cas
   dur de l'axe n°1, exigé « petit OU énorme »). Perso jetable « Mira » (jamais data/), prompt
   SYSTÈME 2129 car. / 608 tok DOMINÉ par une voix diffuse (caractère + voix + exemples) + 5
