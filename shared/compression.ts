@@ -36,6 +36,12 @@ export function denseEncode(text: string): string {
   ]
   // Majuscule (y compris accentuées) = probable nom propre.
   const isCap = (c: string) => /[A-ZÀ-ÖØ-Þ]/.test(c)
+  // Quantifiants / indéfinis qui SUIVENT « un/une » sans en être un article :
+  // retirer l'article retourne le sens (« un peu » → « peu » = « pas du tout »).
+  const PROTECTED = new Set([
+    'peu', 'fois', 'certain', 'certaine', 'instant', 'moment', 'rien',
+    'brin', 'nuage', 'souffle', 'chouya', 'trait',
+  ])
 
   return text
     .split('\n')
@@ -51,20 +57,29 @@ export function denseEncode(text: string): string {
       for (const [re, dig] of COUNTS) s = s.replace(re, dig)
       // 3) Possessif de début de ligne : « Mon chat » → « chat »
       s = s.replace(/^\s*(?:mon|ma|mes|son|sa|ses|ton|ta|tes|notre|votre)\s+/i, '')
-      // 4) « s'appelle » → « : » (clé : valeur)
-      s = s.replace(/\s+s'appelle\s+/gi, ': ')
+      // 4) « s'appelle » → « : » (clé : valeur) — apostrophes droites ET typographiques.
+      s = s.replace(/\s+s[’']appelle\s+/gi, ': ')
       // 5) Copules : « c'est (un/une/des) » puis « c'est » / « est » / « sont » → retirés.
       //    Bornes Unicode (?<!\p{L}) — sinon un « est »/« sont » collé à un accent
-      //    ou à « l' » serait arraché.
-      s = s.replace(/\bc'est (?:un|une|des)\s*/gi, ' ')
-      s = s.replace(/(?<![\p{L}\p{N}])c'est(?![\p{L}\p{N}])/giu, ' ')
+      //    ou à « l' » serait arraché. Apostrophes droites ET typographiques (’).
+      //    « une » AVANT « un » : sinon « C'est une » → « e » (l'alternance prend « un »).
+      s = s.replace(/\bc[’']est (?:une|un|des)\s*/gi, ' ')
+      s = s.replace(/(?<![\p{L}\p{N}])c[’']est(?![\p{L}\p{N}])/giu, ' ')
       s = s.replace(/(?<![\p{L}\p{N}])(?:est|sont)(?![\p{L}\p{N}])/giu, ' ')
-      // 6) Articles : retirés SANS toucher à ceux qui précèdent un nom propre.
+      // 6) Articles : retirés SANS toucher à ceux qui précèdent un nom propre ou un
+      //    chiffre (« Les 52 »), ni après un trait d'union (« enregistre-le »), ni devant
+      //    un quantifiant (« un peu », « une fois » — retirer l'article retourne le sens).
       //    Bornes Unicode (\p{L}) — C'EST LE FIX CRITIQUE : sans ça, JS voit « â »
       //    comme NON-lettre et arrache le « le » final de « mâle » → « mâ ».
       s = s.replace(
-        /(?<![\p{L}\p{N}])(le|la|les|un|une|des)(?![\p{L}\p{N}])\s+/giu,
-        (m, _art, off, str) => (isCap(str[off + m.length] ?? '') ? m : ' '),
+        /(?<![\p{L}\p{N}-])(le|la|les|un|une|des)(?![\p{L}\p{N}])\s+/giu,
+        (m, _art, off, str) => {
+          const nxt = str[off + m.length] ?? ''
+          if (isCap(nxt) || /\d/.test(nxt)) return m // nom propre (« rue des Lilas ») ou chiffre
+          const w = (str.slice(off + m.length).match(/^\p{L}+/u) || [''])[0].toLowerCase()
+          if (w && PROTECTED.has(w)) return m // « un peu », « une fois » … (quantifiants)
+          return ' '
+        },
       )
       // 7) « et » → « , » (listes)
       s = s.replace(/\s+et\s+/gi, ', ')
