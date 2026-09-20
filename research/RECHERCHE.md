@@ -125,6 +125,78 @@ par défaut) et **fonctionnelle** (rappel + fidélité tenus sur le contexte com
 gain de tokens est réel mais modeste sur le contexte total — conforme à l'attendu (plafond
 d'un codec général sur des mémoires déjà courtes). À activer par personnage via le toggle.
 
+## 🔧 Retour de production + correction (2026-09-20)
+
+**Lucas a testé l'intégration (B) sur ses persos complexes réels : (1) les émotags ne
+fonctionnent plus, (2) le thinking est bien plus long, (3) le perso n'est plus respecté.
+Diagnostic + correction. Le contrat de compression est REVU — c'est la vraie leçon de la
+branche, plus utile que tous les tours de recherche.**
+
+### Le diagnostic (cause racine — prouvé à zéro LLM sur le vrai sysprompt)
+Le (B) appliquait `denseEncode` au **sysprompt + persona** (« leçon HYP.2 »). Mais HYP.2
+n'avait mesuré que la **FIDÉLITÉ** sur des règles (Pico/Mira) — **pas les émotags, pas la
+longueur du thinking**. `denseEncode` « densifie » mais **CASSE la prose narrative du
+prompt** (mesuré, zéro LLM, sur le vrai sysprompt) :
+- « un peu timide » → « peu timide » (**inversion du trait**),
+- « C'est une … » → orphelin (l'alternance `un`/`une` arrache le mot),
+- « note-le » → « note- » (hyphen pronominal),
+- « Les 52 » → « 52 », « C'est » → « C' » (chiffre, apostrophe courbe).
+Sur un perso COMPLEXE (voix intégrale), le prompt cassé fait : **émotags perdus** (la
+policy émotag vit dans la prose), **fidélité en berne**, et **thinking PLUS LONG** (le
+modèle réconcilie des contradictions). → les 3 symptômes de Lucas = la corruption du prompt.
+
+### La correction (contrat REVU)
+**Sysprompt + persona → JAMAIS compressés, ils partent VERBATIM.** Le prompt est
+l'identité du personnage : il part tel quel, point. La compression ne s'applique PLUS
+qu'à la **mémoire (faits)** : cache agressif (vérifieur) sinon repli `denseEncode` —
+maintenant **durci** (5 corrections de corruption dans `shared/compression.ts`).
+- `server/api/chat.ts` : `characterPrompt = character.systemPrompt` (verbatim), persona verbatim.
+- `shared/compression.ts` : 5 corrections `denseEncode` (quantifiants « un peu », copule
+  « une » avant « un », hyphen pronominal, chiffre « Les 52 », apostrophe courbe) — revalidées
+  7/8 à zéro LLM (`probe-patch` ; le 8e cas « une à quatre » est une règle du sysprompt,
+  désormais verbatim, donc inoffensif).
+
+### Le résultat — cas dur Mira, A/B OFF verbatim vs ON compressé (`test-complex.mjs`)
+| | fidélité | vides | émotag | commence-p-émotag | thinking | tokens (preview) |
+|---|---|---|---|---|---|---|
+| **OFF** (verbatim) | 6/6 | 0 | 6/6 | 6/6 | 366 car | 1682 |
+| **ON** (compressé) | 6/6 | 0 | 6/6 | 6/6 | 387 car | **1659** |
+
+**Verdict (5/5)** : FIDÉLITÉ ON ≥ OFF · ZÉRO vide · ÉMOTAGS ON (6/6) · THINKING ON
+(387 ≤ 1,6×366+100) · ÉCONOMIE ON < OFF (1659 < 1682). **Les 3 symptômes de Lucas sont
+corrigés** : les émotags reviennent (6/6, tous en tête de réponse), le thinking n'est PAS
+anormalement plus long (+21 car ≈ 6 % = variance normale, pas le « bien plus long »), le
+perso est respecté (6/6 = 6/6). La mémoire agressive a compressé 512→414 car (−19 %) ; le
+**vérifieur a attrapé 1 fichier** où le LLM perdait un fait → repli denseEncode (le filet de
+sûreté fonctionne — c'est pour ça que le rappel reste **6/6**, y compris « dix-huit heures »
+pour le fait 18h00).
+
+### L'économie de tokens HONNÊTE (découpage du contexte — `probe-economy`, zéro LLM)
+| Bloc | part | compressible ? |
+|---|---|---|
+| sysprompt (perso) | ~41 % | **non** (l'identité — c'est ce qu'on a corrigé) |
+| persona (user) | ~5 % | non (verbatim, petite) |
+| scaffolding mémoire (policy, en-têtes) | ~12 % | non (statique) |
+| **faits mémoire** | **~28 %** | **oui — agressif −19 à −41 %** |
+| temps (horloge) | ~14 % | non (statique) |
+
+→ la part COMPRESSIBLE du contexte total ≈ **28 %** (les faits mémoire). Mémoire agressive
+: −19 à −41 % sur les faits → **gain total ≈ −1 à −3 %** du contexte. **Honnêteté** : c'est
+modeste, et c'est **le prix de la fidélité** — le sysprompt (41 %, l'identité) ne se comprime
+PAS sans casser le perso (c'est précisément ce que Lucas a vu). On ne peut pas à la fois
+compresser l'identité ET la respecter. **Le vrai levier pour le préfixe statique** (sysprompt
+41 % + scaffolding 12 % + horloge 14 % ≈ 67 %, byte-identique d'un message à l'autre sauf
+l'horloge de fin) est le **prefix-caching d'Ollama** (réutilisation de la KV → moins de
+PROCESSUS, pas moins de tokens) — à activer/vérifier côté backend.
+
+### Ce que ça change par rapport au (B)
+- Le (B) disait « sysprompt + persona → denseEncode TOUJOURS ». **REVU → verbatim**.
+- Le gain TOTAL reste modeste (−1 à −3 %) car l'identité du perso (sysprompt) ne se touche
+  pas — c'est le prix de la règle (a) (« le prompt perso reste RESPECTÉ, petit ou énorme »).
+- La **mémoire** (le seul bloc vraiment compressible) reste le cœur de l'économie (−19 à −41 %).
+- Batterie `scripts/verify-compression/` étendue au **cas dur** (`test-complex.mjs`) — c'était
+  précisément le trou de la batterie d'avant (un seul perso court/télégraphique, Yuki).
+
 ## Contraintes dures
 - **FIDÉLITÉ (axe n°1)** : le prompt système du personnage doit rester RESPECTÉ — voix,
   règles strictes, policy emoji — qu'il soit **petit ou énorme** ; de même pour la
