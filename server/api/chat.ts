@@ -260,14 +260,19 @@ export function buildPayload(
   const character = getCharacter(characterId)
   if (!character) throw new CodedError(ErrorCodes.characterNotFound, { id: characterId })
   // Chantier B — compression de contexte, opt-in par personnage (absent = éteint).
-  // sysprompt + persona → denseEncode (sûr, ne casse JAMAIS — l'agressif fait
-  // boucler vide les prompts complexes, HYP. 2) ; mémoire → version compressée en
-  // cache (agressif −28 %), repli denseEncode si le cache est absent ou périmé.
+  // STRATÉGIE PAR TYPE (mesurée, cas COMPLEXE inclus — voir test-complex.mjs) :
+  //   - sysprompt du perso + persona → JAMAIS compressés, ils partent VERBATIM.
+  //     denseEncode « densifie » mais CASSE la prose narrative du prompt : mesuré,
+  //     « un peu timide » → « peu timide » (inversion du trait), « C’est une » →
+  //     orphelin, « note-le » → « note- ». Sur un perso complexe, le prompt cassé
+  //     fait flotter la fidélité, allonger le thinking et perdre les émotags. Le
+  //     prompt est l'identité du personnage : il part tel quel, point.
+  //   - mémoire (faits) → version compressée en cache (agressif −41 %, vérifieur),
+  //     repli denseEncode si le cache est absent ou périmé.
   // L'ORIGINAL n'est JAMAIS modifié sur disque : seule la forme ENVOYÉE change, et
   // l'inspecteur la montre telle quelle (ce qui part = ce qui est affiché).
   const compressionOn = character.llm?.compression === true
-  const compressText = (s: string) => (compressionOn ? denseEncode(s) : s)
-  const characterPrompt = compressText(character.systemPrompt)
+  const characterPrompt = character.systemPrompt
   // Mémoire : le cache agressif (sourceHash du contenu des faits) est lu UNE fois ;
   // chaque fichier injecté repart compressé s'il est dans le cache, sinon repli
   // denseEncode (repli honnête — jamais une perte silencieuse de fait).
@@ -288,7 +293,7 @@ export function buildPayload(
   // épinglée sur sa carte, sinon la défaut des Réglages (shared/personas.ts).
   const persona = activePersona(settings, character)
   if (persona && (persona.name.trim() || persona.description.trim())) {
-    injected += compressText(personaBlock(persona.name.trim(), persona.description.trim()))
+    injected += personaBlock(persona.name.trim(), persona.description.trim())
   }
   if (settings.memoryEnabled) {
     // Mode sélectif : la requête courante sert à classer la mémoire (repli 'auto'
