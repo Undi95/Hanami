@@ -3,7 +3,7 @@
 // fichier de faits BOUGE, SON entrée seule devient périmée → repli denseEncode
 // pour ce fichier, TANDIS QUE les autres gardent leur compression agressive.
 // Une seule compression (1 appel LLM), le reste est sans LLM (PUT + preview).
-import { get, post, put, del, check, section, summary, sleep } from './lib.mjs'
+import { get, post, put, del, postLong, check, section, summary, sleep } from './lib.mjs'
 import { MEMORY_FILES } from './fixture.mjs'
 
 const CHAR = 'CacheTest'
@@ -18,7 +18,7 @@ for (const [name, content] of Object.entries(MEMORY_FILES)) {
 const chat = (await post(`/api/characters/${charId}/chats`, {})).data.id
 
 section('Compression (1 appel LLM) → cache peuplé')
-const comp = await post(`/api/characters/${charId}/memory/compress`)
+const comp = await postLong(`/api/characters/${charId}/memory/compress`)
 check('compress ok', comp.status < 300 && comp.data?.ok === true, `status=${comp.status}`)
 check('3 fichiers compressés', (comp.data?.llmFiles ?? 0) === 3, `llm=${comp.data?.llmFiles}`)
 // La version agressive de travail.md est en cache : on la récupère.

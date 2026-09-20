@@ -2,8 +2,11 @@
 
 Batterie de tests **end-to-end** de la compression de contexte intégrée dans l'app :
 mémoire → codec **agressif** (LLM + vérifieur déterministe, repli `denseEncode`, cache
-par-fichier), sysprompt + persona → **`denseEncode`** (déterministe, zéro LLM).
-Elle tourne sur une **instance ISOLOÉE** de Hanami — jamais `data/` réel, jamais Sakura.
+par-fichier), sysprompt + persona → **VERBATIM** (jamais compressés — le prompt est
+l'identité du perso ; mesuré : `denseEncode` corrompait la prose narrative → émotags
+perdus, thinking allongé, fidélité en berne sur le cas dur. Voir `research/RECHERCHE.md`
+« Retour de production + correction »). Elle tourne sur une **instance ISOLOÉE** de
+Hanami — jamais `data/` réel, jamais Sakura.
 
 ## Prérequis
 - Node 18+ (fetch global, zéro npm).
@@ -26,10 +29,11 @@ Elle tourne sur une **instance ISOLOÉE** de Hanami — jamais `data/` réel, ja
 
    | Script | LLM | Vérifie | Résultat attendu |
    |---|---|---|---|
-   | `test-regression.mjs` | non | CRUD perso/chat/mémoire, réglages, structure du contexte compressé (`denseEncode`), réversibilité | **31 OK** |
+   | `test-regression.mjs` | non | CRUD perso/chat/mémoire, réglages, structure du contexte (**mémoire densifiée, sysprompt verbatim**), réversibilité | **30 OK** |
    | `test-llm.mjs` | oui | compression agressive (réduction de caractères), cache, fichiers intacts, **rappel 6/6**, **fidélité 4/4**, zéro boucle vide | **28 OK** |
    | `test-regression2.mjs` | 1 appel | édition / épingle / notes de scène / résumé / variante / fork / compaction / suppression (garde-fous) | **21 OK** |
    | `test-cache.mjs` | 1 appel | **invalidation du cache par-fichier** : un fichier modifié retombe en dense, les autres gardent l'agressif | **12 OK** |
+   | `test-complex.mjs` | 13 appels | **cas dur (Mira, voix intégrale + policy émotags)** : A/B OFF verbatim vs ON compressé — **fidélité, émotags, thinking, économie** (le trou de la batterie d'avant) | **10 OK** |
 
    ```bash
    export HDATA="C:/chemin/vers/scratch"        # = HANAMI_DATA de l'instance
@@ -37,6 +41,7 @@ Elle tourne sur une **instance ISOLOÉE** de Hanami — jamais `data/` réel, ja
    node test-llm.mjs
    node test-regression2.mjs
    node test-cache.mjs
+   node test-complex.mjs
    ```
    (précéder de `HANAMI_TEST_URL=http://localhost:7790` si le port diffère)
 
@@ -45,6 +50,11 @@ Elle tourne sur une **instance ISOLOÉE** de Hanami — jamais `data/` réel, ja
   sont récupérés **6/6** sur la mémoire compressée.
 - **Fidélité** — le personnage obéit à ses règles strictes (« mon ange », refus médical,
   auto-identification, zéro invention) **sur le contexte compressé** → **4/4**, zéro boucle vide.
+- **Cas dur (Mira)** — un perso COMPLEXE (voix intégrale + policy émotags + règles +
+  quantifiants « un peu ») reste RESPECTÉ sur le contexte compressé : **fidélité ON = OFF
+  (6/6)**, **émotags 6/6** (tous en tête de réponse), **thinking pas anormalement plus long**
+  (+21 car ≈ 6 %), **zéro vide**. C'est le cas que Lucas a heurté en réel et que la batterie
+  d'avant ne couvrait pas (elle n'avait qu'un perso court/télégraphique, Yuki).
 - **Réversibilité** — toggle off → contexte original ; les `.md` mémoire ne sont **jamais**
   modifiés sur disque (la compression est une *vue*, pas une écriture).
 - **Repli honnête** — le vérifieur rejette toute perte de fait → repli `denseEncode`

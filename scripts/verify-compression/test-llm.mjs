@@ -6,7 +6,7 @@
 // JAMAIS data/ réel : personnage jetable « Yuki », HANAMI_DATA scratch.
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { get, post, put, del, chatMessage, sleep, check, section, summary } from './lib.mjs'
+import { get, post, put, del, postLong, chatMessage, sleep, check, section, summary } from './lib.mjs'
 import { SYSTEM_PROMPT, MEMORY_FILES, PERSONA, RECALL, FIDELITY } from './fixture.mjs'
 
 const HDATA = process.env.HDATA
@@ -61,7 +61,7 @@ console.log(`  tokens ON·dense ≈ ${tokensDense}  (gain vs OFF ${Math.round((1
 // ── COMPRESSION AGRESSIVE (vrai LLM) ────────────────────────────────────────
 section('Compression AGRESSIVE — POST /memory/compress (vrai LLM, posé)')
 const hashesBefore = factHashes(charId)
-const comp = await post(`/api/characters/${charId}/memory/compress`)
+const comp = await postLong(`/api/characters/${charId}/memory/compress`)
 check('compress répond ok', comp.status < 300 && comp.data?.ok === true, `status=${comp.status} body=${JSON.stringify(comp.data)?.slice(0, 200)}`)
 const cd = comp.data
 if (cd) {

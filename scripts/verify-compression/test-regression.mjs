@@ -110,12 +110,14 @@ console.log(`  tokens OFF ≈ ${tokensOff}`)
 // Dump court pour observation (denseEncode est déterministe)
 console.log(`  [off] injected (extrait) : ${pOff.injected.slice(0, 160).replace(/\n/g, '⏎')}`)
 
-section('Compression ON (denseEncode — prompt + persona + mémoire)')
+// Chantier B, contrat RÉVISÉ (mesuré sur le cas dur — voir test-complex.mjs) :
+//   sysprompt + persona partent VERBATIM (denseEncode corrompait la prose narrative
+//   → traits inversés, mots cassés, émotags perdus) ; SEULE la mémoire est densifiée.
+section('Compression ON (mémoire densifiée — sysprompt + persona VERBATIM)')
 await put(`/api/characters/${charId}`, { llm: { compression: true } })
 const previewOn = await get(`/api/prompt-preview?characterId=${charId}&chatId=${chatId}`)
 const pOn = previewOn.data
-check('characterPrompt COMPRESSÉ (≠ original)', pOn.characterPrompt !== SYSTEM_PROMPT)
-check('characterPrompt plus COURT', pOn.characterPrompt.length < SYSTEM_PROMPT.length, `${pOn.characterPrompt.length} vs ${SYSTEM_PROMPT.length}`)
+check('characterPrompt VERBATIM (= original — le prompt n’est JAMAIS compressé)', pOn.characterPrompt === SYSTEM_PROMPT)
 // Mémoire : l'original verbatim n'est PLUS là (densifié), mais les faits durs restent.
 check('mémoire DENSIFIÉE (famille originale ABSENTE en verbatim)', !pOn.injected.includes(MEMORY_FILES['famille.md']))
 check('  … mais le nom « Claire » reste', pOn.injected.includes('Claire'))

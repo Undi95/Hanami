@@ -54,18 +54,54 @@ export const post = (p, b) => req('POST', p, b ?? {})
 export const put = (p, b) => req('PUT', p, b ?? {})
 export const del = (p) => req('DELETE', p)
 
+// POST long (hors fetch/undici) : le codec agressif batche 3 appels LLM dans UNE
+// requête non-streaming ; sur un PC lent + 27B ça dépasse le headersTimeout 5 min
+// par défaut d'undici (non importable — zéro npm). Ici on passe par http.request
+// avec un timeout long (12 min par défaut, aligné sur le budget serveur de 10 min).
+import http from 'node:http'
+export function postLong(path, body, { timeoutMs = 720000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(BASE + path)
+    const data = JSON.stringify(body ?? {})
+    const req = http.request(
+      {
+        hostname: url.hostname, port: url.port, path: url.pathname,
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) },
+      },
+      (res) => {
+        let buf = ''
+        res.on('data', (c) => (buf += c))
+        res.on('end', () => {
+          let d = null
+          try { d = buf ? JSON.parse(buf) : null } catch { d = buf }
+          resolve({ status: res.statusCode, data: d, headers: res.headers })
+        })
+      },
+    )
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`postLong timeout ${timeoutMs}ms`)))
+    req.on('error', reject)
+    req.write(data)
+    req.end()
+  })
+}
+
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // ── Chat SSE : envoie un message, renvoie { text, tokens, events } ──────────
 // Contrat du serveur : { characterId, chatId, content }. Collecte le flux
 // « data: {...} », garde le texte (message du « done », repli somme des deltas)
 // et le tokens du « done » (usage réel du backend si fourni, sinon estimation).
-export async function chatMessage(characterId, chatId, text, { timeoutMs = 180000 } = {}) {
+// Timeout PAR MESSAGE : le modèle 27B PENSE (thinking) — sur ce PC lent, une
+// réponse peut prendre > 3 min. 180 s faisait aborter la 2e fidélité (mesuré).
+// 480 s (8 min) : plafond haut, le test finit quand même (typique 1-2 min/msg).
+export async function chatMessage(characterId, chatId, text, { timeoutMs = 480000 } = {}) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   let events = []
   let doneMsg = null
   let doneTokens = 0
+  let doneThinking = ''
   try {
     const res = await fetch(`${BASE}/api/chat`, {
       method: 'POST',
@@ -92,6 +128,7 @@ export async function chatMessage(characterId, chatId, text, { timeoutMs = 18000
             events.push(ev)
             if (ev.type === 'done') {
               doneMsg = ev.message
+              doneThinking = ev.message?.thinking ?? ''
               doneTokens = ev.context?.tokens ?? 0
             }
           } catch {
@@ -109,5 +146,5 @@ export async function chatMessage(characterId, chatId, text, { timeoutMs = 18000
     text2 = events.filter((e) => e.type === 'delta').map((e) => e.text).join('')
   }
   const errEv = events.find((e) => e.type === 'error')
-  return { text: text2, tokens: doneTokens, events, error: errEv ?? null }
+  return { text: text2, tokens: doneTokens, thinking: doneThinking, events, error: errEv ?? null }
 }
