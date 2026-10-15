@@ -65,13 +65,29 @@ export function sanitizeFileName(name: string): string {
   return clean
 }
 
+/**
+ * Noms de périphérique réservés par Windows : un dossier `con` se crée, mais une
+ * archive qui le contient est REFUSÉE à la restauration (restoreEntryReserved) —
+ * un seul personnage nommé « Con » rendait toute la sauvegarde irrestaurable.
+ */
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/
+/**
+ * Longueur maximale d'un id. Sans plafond, un nom de 300 caractères dépassait
+ * MAX_PATH une fois le chemin du dossier de données ajouté : mkdir échouait en
+ * 500, et le message d'erreur exposait le chemin complet de la machine.
+ */
+const ID_MAX = 48
+
 export function slugify(name: string): string {
-  const base = name
+  let base = name
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+    .slice(0, ID_MAX)
+    .replace(/-+$/, '')
+  if (WINDOWS_RESERVED.test(base)) base += '-perso'
   return base || 'perso'
 }
 
