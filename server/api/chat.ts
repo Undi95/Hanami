@@ -163,7 +163,9 @@ function gestureBlock(): string {
     '\n\n## Gestures (3D avatar, added by Hanami)\n' +
     `Optionally, place a gesture tag right where the gesture happens in your reply: ${gestureTagList()}. ` +
     'Use them sparingly (0-2 per reply), only when the gesture fits; they are never shown or spoken. ' +
-    'Keep the tags in English whatever language you reply in.\n' +
+    'Keep the tags in English whatever language you reply in. ' +
+    'Square brackets are reserved for these tags and the emotion tag: never put any other word in brackets ' +
+    '(use **bold** for headings).\n' +
     'Example: `[happy] Of course! [nod] Leave it to me.`\n'
   )
 }
