@@ -649,10 +649,12 @@ function AppInner() {
    * choisie DANS CE MODE, ou à défaut le cadrage par défaut du mode (resetView).
    * Sans effet visible si aucun modèle n'est chargé (resetView se tait).
    */
+  // Décor affiché en ce moment ('' = aucun) : les vues sont mémorisées par décor.
+  const envUrlRef = useRef('')
   const applyViewFor = useCallback((stage: VrmStage, charId: string) => {
     const mode = viewModeRef.current
     stage.setFrameMode(frameModeOf(mode))
-    const view = getSavedView(charId, mode)
+    const view = getSavedView(charId, mode, envUrlRef.current)
     if (view) stage.setView(view)
     else stage.resetView()
   }, [])
@@ -669,7 +671,7 @@ function AppInner() {
       stageRef.current.onViewChange((view) => {
         const id = characterIdRef.current
         if (!id) return
-        setSavedView(id, viewModeRef.current, view)
+        setSavedView(id, viewModeRef.current, view, envUrlRef.current)
       })
       setStageReady(true)
     })().catch((e) => {
@@ -821,6 +823,10 @@ function AppInner() {
     const stage = stageRef.current
     if (!stage || !stageReady) return
     const url = env3d && character?.vrm ? (character.environment ?? '') : ''
+    // Le décor change : la vue mémorisée de CE décor (ou le cadrage par défaut)
+    // remplace celle de l'ancienne pièce — appliquée une fois le décor posé.
+    const envChanged = envUrlRef.current !== url
+    envUrlRef.current = url
     setEnvError(null)
     setEnvNotice(null)
     setEnvLoading(url !== '')
@@ -834,6 +840,9 @@ function AppInner() {
         // normal. Voir la bannière plus bas — elle dit quoi écrire dans le
         // sidecar, ce qu'aucun écran noir ne dira jamais.
         setEnvNotice(notice)
+        // Nouvelle pièce : son propre cadrage (ou celui par défaut), jamais celui
+        // de la pièce d'avant.
+        if (envChanged && character) applyViewFor(stage, character.id)
       })
       .catch((e) => {
         // Personnage changé (ou effet rejoué) entre-temps : ce chargement ne

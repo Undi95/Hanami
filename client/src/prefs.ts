@@ -294,19 +294,37 @@ export function setActiveChat(charId: string, chatId: string): void {
 // panneau de chat, en visual novel il occupe tout l'écran — la même position ne
 // convient pas aux deux. Une vue est donc mémorisée PAR personnage ET PAR mode,
 // sous une clé composée « <charId>::<mode> ».
+// Et PAR DÉCOR (« <charId>::<mode>::<décor> ») : une vue cadrée dans le café,
+// réappliquée telle quelle dans la classe après un changement de décor, pouvait
+// poser la caméra dans un mur (trouvé au test complet). Sans décor, la clé reste
+// celle d'avant : rien ne change pour un personnage sur fond 2D.
 export type ViewMode = 'desktop' | 'vn'
 
-const VIEW_MODES = ['desktop', 'vn'] as const satisfies readonly ViewMode[]
 
-function viewKey(charId: string, mode: ViewMode): string {
-  return `${charId}::${mode}`
+/** Nom court et sûr d'un décor pour la clé (KEY_RE de shared/uiPrefs.ts, 80 car. max). */
+function envSlug(envUrl: string): string {
+  let file = envUrl.split(/[?#]/)[0].split('/').pop() ?? ''
+  try {
+    file = decodeURIComponent(file)
+  } catch {
+    /* séquence % malformée : le nom brut fait l'affaire */
+  }
+  const base = file.replace(/\.[a-z0-9]+$/i, '')
+  return base.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'decor'
 }
 
-export function getSavedView(charId: string, mode: ViewMode): StageView | undefined {
+function viewKey(charId: string, mode: ViewMode, env = ''): string {
+  return env ? `${charId}::${mode}::${envSlug(env)}` : `${charId}::${mode}`
+}
+
+export function getSavedView(charId: string, mode: ViewMode, env = ''): StageView | undefined {
   const views = cache.views
   if (!views) return undefined
-  const saved = views[viewKey(charId, mode)]
+  const saved = views[viewKey(charId, mode, env)]
   if (saved) return saved
+  // Dans un décor, AUCUN repli : une vue d'avant la clé par décor a été cadrée on
+  // ne sait dans quelle pièce — mieux vaut le cadrage par défaut, une fois.
+  if (env) return undefined
   // Repli : avant la séparation par mode, un seul cadrage était enregistré sous
   // l'id nu du personnage. Il tenait lieu de placement « à côté du chat », donc
   // il ne sert de repli qu'au mode desktop.
@@ -314,9 +332,9 @@ export function getSavedView(charId: string, mode: ViewMode): StageView | undefi
 }
 
 /** Cadrage caméra d'un personnage dans un mode — `null` l'oublie (reset de la scène). */
-export function setSavedView(charId: string, mode: ViewMode, view: StageView | null): void {
+export function setSavedView(charId: string, mode: ViewMode, view: StageView | null, env = ''): void {
   const views = { ...cache.views }
-  const key = viewKey(charId, mode)
+  const key = viewKey(charId, mode, env)
   if (view) views[key] = view
   else delete views[key]
   // L'ancienne clé nue est remplacée par celle du mode desktop : sans ça, oublier
@@ -331,7 +349,8 @@ export function forgetCharacter(charId: string): void {
   delete activeChat[charId]
   const views = { ...cache.views }
   delete views[charId] // clé héritée (avant la séparation par mode)
-  for (const mode of VIEW_MODES) delete views[viewKey(charId, mode)]
+  // Toutes ses vues, décors compris : « <charId>::… ».
+  for (const key of Object.keys(views)) if (key.startsWith(`${charId}::`)) delete views[key]
   setPref({
     activeChat: Object.keys(activeChat).length > 0 ? activeChat : null,
     views: Object.keys(views).length > 0 ? views : null,
