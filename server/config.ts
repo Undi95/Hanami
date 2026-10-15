@@ -74,6 +74,27 @@ function normalizeHour(value: unknown, fallback: number): number {
   return Number.isFinite(n) && n >= 0 && n <= 23 ? n : fallback
 }
 
+/** Nombre fini dans [min, max], sinon le repli (aucun bornage silencieux : hors plage = défaut). */
+function inRange(value: unknown, min: number, max: number, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max ? value : fallback
+}
+
+/** Entier dans [min, max], sinon le repli. */
+function intInRange(value: unknown, min: number, max: number, fallback: number): number {
+  return Number.isInteger(value) ? inRange(value, min, max, fallback) : fallback
+}
+
+/** URL http(s) bien formée — le seul schéma par lequel un backend se joint. */
+function isHttpUrl(value: unknown): boolean {
+  if (typeof value !== 'string') return false
+  try {
+    const u = new URL(value)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 // Vrai quand config.json EXISTE mais n'a pas pu être lu (JSON invalide, EACCES,
 // disque) : les réglages servis sont alors les DÉFAUTS — mot de passe compris.
 // L'authentification consulte ce drapeau pour FERMER au lieu d'ouvrir, et
@@ -120,6 +141,18 @@ export function loadSettings(): Settings {
     // rester un couple d'heures réelles (sinon le moteur spontané ne s'ouvrirait jamais).
     merged.spontaneousStartHour = normalizeHour(merged.spontaneousStartHour, DEFAULT_SETTINGS.spontaneousStartHour)
     merged.spontaneousEndHour = normalizeHour(merged.spontaneousEndHour, DEFAULT_SETTINGS.spontaneousEndHour)
+    // Les réglages du MODÈLE, même règle (trouvé au test complet : température
+    // −5, maxTokens −1, contexte de 10¹² et backendUrl « javascript: » étaient
+    // tous enregistrés tels quels). Hors bornes → la valeur par défaut : on
+    // n'envoie au backend que ce qu'un backend peut comprendre.
+    merged.temperature = inRange(merged.temperature, 0, 5, DEFAULT_SETTINGS.temperature)
+    merged.maxTokens = intInRange(merged.maxTokens, 1, 1_000_000, DEFAULT_SETTINGS.maxTokens)
+    merged.contextSize = intInRange(merged.contextSize, 0, 10_000_000, DEFAULT_SETTINGS.contextSize)
+    merged.maxHistoryMessages = intInRange(merged.maxHistoryMessages, 0, 100_000, DEFAULT_SETTINGS.maxHistoryMessages)
+    merged.compactThreshold = intInRange(merged.compactThreshold, 0, 10_000_000, DEFAULT_SETTINGS.compactThreshold)
+    // Un backend se joint en http(s) — rien d'autre (javascript:, file:, data:…).
+    if (!isHttpUrl(merged.backendUrl)) merged.backendUrl = DEFAULT_SETTINGS.backendUrl
+    if (merged.ttsUrl && !isHttpUrl(merged.ttsUrl)) merged.ttsUrl = DEFAULT_SETTINGS.ttsUrl
     // Même raison pour le niveau de raisonnement : une valeur inconnue (config
     // édité à la main, PUT) retombe sur l'auto — on n'envoie au backend qu'un
     // niveau documenté ou rien du tout.

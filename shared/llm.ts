@@ -21,10 +21,13 @@ export function normalizeLlm(value: unknown): CharacterLlm | undefined {
   if (typeof raw.model === 'string' && raw.model.trim() !== '') out.model = raw.model.trim()
   if (raw.modelMode === 'full' || raw.modelMode === 'simple') out.modelMode = raw.modelMode
   const t = raw.temperature
-  if (typeof t === 'number' && Number.isFinite(t) && t >= 0) out.temperature = t
+  // Mêmes bornes que les réglages globaux (server/config.ts) : 0 à 5.
+  if (typeof t === 'number' && Number.isFinite(t) && t >= 0 && t <= 5) out.temperature = t
   for (const k of ['maxTokens', 'maxHistoryMessages', 'contextSize', 'compactThreshold'] as const) {
     const v = raw[k]
-    if (typeof v === 'number' && Number.isFinite(v) && v >= 0) out[k] = Math.round(v)
+    // Plafond large (10 millions) : au-delà, aucune valeur n'a de sens et un
+    // contexte de 10¹² faussait le calcul du seuil de compaction.
+    if (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 10_000_000) out[k] = Math.round(v)
   }
   // Opt-in de compression de contexte (absent = éteint) : seul un boolean est
   // accepté — une valeur de type étrange ne doit pas activer la compression.
