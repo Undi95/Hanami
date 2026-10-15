@@ -14,6 +14,10 @@ declare module 'three' {
     constructor(x?: number, y?: number, z?: number)
     set(x: number, y: number, z: number): this
     setScalar(scalar: number): this
+    /** Monde → coordonnées normalisées de l'écran de la caméra (NDC, −1..1). */
+    project(camera: Camera): this
+    /** Colonne `index` d'une matrice (0 = axe X local, 1 = Y, 2 = Z). */
+    setFromMatrixColumn(m: Matrix4, index: number): this
     multiplyScalar(scalar: number): this
     copy(v: Vector3): this
     clone(): Vector3

@@ -2760,8 +2760,73 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     // paie littéralement pas un appel de plus qu'avant. Allumée mais sans
     // anneau en vie, update() sort sur un test entier.
     if (interactive) clickMarks.update(delta)
+    // Le personnage ne se déplace qu'en scène vivante : c'est là seulement qu'il
+    // peut sortir du champ ou passer sous le panneau.
+    if (interactive && wander) keepInView(delta)
     controls.update()
     renderer.render(scene, camera)
+  }
+
+  // ── Garde de visibilité (scène vivante) ───────────────────────────────────
+  // Trouvé au test complet : envoyé sur une chaise proche du bord, le personnage
+  // s'y asseyait DERRIÈRE la colonne de chat — on ne voyait plus que son dos à
+  // travers le panneau, et rien ne le ramenait. Si sa tête reste plus d'une
+  // seconde sous le panneau (ou hors de l'écran), la caméra GLISSE de côté pour
+  // le remettre au milieu de la zone libre : translation pure, l'angle et la
+  // distance choisis par l'utilisateur sont gardés. Jamais sous sa main (même
+  // grâce que le comportement), et rien n'est persisté — c'est une correction
+  // d'instant, pas un cadrage voulu.
+  const KEEP_HIDDEN_S = 1
+  const KEEP_EDGE_PX = 24
+  let hiddenFor = 0
+  let followShift: Vector3 | null = null
+  const kvHead = new Vector3()
+  const kvProj = new Vector3()
+  const kvAxis = new Vector3()
+  const kvStep = new Vector3()
+
+  function keepInView(delta: number): void {
+    if (!currentVrm || camGrabbed || performance.now() - camReleasedAt < USER_CAMERA_GRACE_MS) {
+      hiddenFor = 0
+      followShift = null
+      return
+    }
+    if (followShift) {
+      // Glissement en cours : exponentiel, ~1 s pour l'essentiel du trajet.
+      kvStep.copy(followShift).multiplyScalar(1 - Math.exp(-delta * 3))
+      camera.position.add(kvStep)
+      controls.target.add(kvStep)
+      followShift.sub(kvStep)
+      if (followShift.lengthSq() < 1e-6) followShift = null
+      return
+    }
+    const head = currentVrm.humanoid.getNormalizedBoneNode('head')
+    const W = renderer.domElement.clientWidth
+    const H = renderer.domElement.clientHeight
+    if (!head || W === 0 || H === 0) return
+    head.getWorldPosition(kvHead)
+    kvProj.copy(kvHead).project(camera)
+    // Derrière la caméra : aucune translation ne le ramène proprement — on laisse.
+    if (kvProj.z > 1) {
+      hiddenFor = 0
+      return
+    }
+    const free = frameMode === 'left' ? Math.max(KEEP_EDGE_PX * 4, W - panelWidth) : W
+    const sx = ((kvProj.x + 1) / 2) * W
+    const sy = ((1 - kvProj.y) / 2) * H
+    const hidden = sx > free - KEEP_EDGE_PX || sx < KEEP_EDGE_PX || sy < 0 || sy > H
+    hiddenFor = hidden ? hiddenFor + delta : 0
+    if (hiddenFor < KEEP_HIDDEN_S) return
+    hiddenFor = 0
+    // Pixels → mètres au plan de la tête, puis le long des axes ÉCRAN de la caméra.
+    const unitsPerPx = (2 * camera.position.distanceTo(kvHead) * Math.tan((camera.fov * Math.PI) / 360)) / H
+    followShift = new Vector3()
+    kvAxis.setFromMatrixColumn(camera.matrixWorld, 0).normalize()
+    followShift.addScaledVector(kvAxis, (sx - free / 2) * unitsPerPx)
+    if (sy < 0 || sy > H) {
+      kvAxis.setFromMatrixColumn(camera.matrixWorld, 1).normalize()
+      followShift.addScaledVector(kvAxis, -(sy - H * 0.4) * unitsPerPx)
+    }
   }
 
   // Économie batterie : pause complète du rendu quand l'onglet est caché.
