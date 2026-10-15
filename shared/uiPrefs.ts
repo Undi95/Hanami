@@ -76,6 +76,7 @@ export const UI_PREF_VALIDATORS: { [K in keyof Required<UiPrefs>]: (value: unkno
   theme: (v) => asString(v, 32),
   customTheme: asCustomTheme,
   vnMode: (v) => (typeof v === 'boolean' ? v : undefined),
+  avatarVisible: (v) => (typeof v === 'boolean' ? v : undefined),
   env3d: (v) => (typeof v === 'boolean' ? v : undefined),
   vrmaEnabled: (v) => (typeof v === 'boolean' ? v : undefined),
   interactive: (v) => (typeof v === 'boolean' ? v : undefined),

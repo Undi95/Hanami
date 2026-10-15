@@ -9,12 +9,11 @@
 //
 // Le format zip est écrit et lu à la main (lib/zip.ts), la convention Hanami vit
 // dans lib/backupArchive.ts et toute la prudence dans lib/backupRestore.ts.
-import express, { Router, type Response } from 'express'
+import express, { Router } from 'express'
 import { loadSettings } from '../config'
 import { buildBackup, defaultRoots } from '../lib/backupArchive'
 import {
   MAX_ARCHIVE_BYTES,
-  RestoreError,
   applyRestore,
   dropStaged,
   planRestore,
@@ -23,22 +22,14 @@ import {
   stageArchive,
 } from '../lib/backupRestore'
 import { revokeAllTokens } from '../lib/auth'
+import { httpError, sendJsonError } from '../lib/errors'
+import { CodedError, ErrorCodes } from '../../shared/errorCodes'
 
 export const backupRouter = Router()
 
-function sendError(res: Response, e: unknown): void {
-  // Une erreur de restauration est un DIAGNOSTIC (nom de l'entrée piégée, motif
-  // du refus) : elle part telle quelle, en 400 — la faute est dans le fichier.
-  if (e instanceof RestoreError) {
-    res.status(400).json({ error: e.message })
-    return
-  }
-  res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
-}
-
 // ── Téléchargement ─────────────────────────────────────────────────────────
 
-backupRouter.get('/api/backup', (_req, res: Response) => {
+backupRouter.get('/api/backup', (_req, res) => {
   try {
     const { zip, filename } = buildBackup(defaultRoots())
     res.set('Content-Type', 'application/zip')
@@ -47,7 +38,7 @@ backupRouter.get('/api/backup', (_req, res: Response) => {
     res.set('Cache-Control', 'no-store')
     res.end(zip)
   } catch (e) {
-    sendError(res, e)
+    sendJsonError(res, 500, e)
   }
 })
 
@@ -61,7 +52,7 @@ const zipBody = express.raw({ type: 'application/zip', limit: MAX_ARCHIVE_BYTES 
 
 function archiveBody(body: unknown): Buffer {
   if (!Buffer.isBuffer(body) || body.length === 0) {
-    throw new RestoreError('Archive .zip attendue dans le corps de la requête')
+    throw new CodedError(ErrorCodes.restoreZipExpected)
   }
   return body
 }
@@ -81,7 +72,9 @@ backupRouter.post('/api/backup/restore/preview', zipBody, (req, res) => {
     res.set('Cache-Control', 'no-store')
     res.json({ stagedId, ...plan.preview })
   } catch (e) {
-    sendError(res, e)
+    // Une erreur CODÉE ici est une faute du FICHIER (archive refusée, entrée
+    // piégée, manifeste invalide) : 400 comme avant ; sinon erreur interne.
+    sendJsonError(res, e instanceof CodedError ? 400 : 500, e)
   }
 })
 
@@ -96,7 +89,7 @@ backupRouter.post('/api/backup/restore', (req, res) => {
     const roots = defaultRoots()
     const body = (req.body ?? {}) as { stagedId?: unknown }
     if (typeof body.stagedId !== 'string' || !body.stagedId) {
-      res.status(400).json({ error: 'Jeton d’aperçu requis (stagedId)' })
+      httpError(res, 400, ErrorCodes.backupPreviewToken)
       return
     }
     const zip = readStaged(roots, body.stagedId)
@@ -112,6 +105,7 @@ backupRouter.post('/api/backup/restore', (req, res) => {
     res.set('Cache-Control', 'no-store')
     res.json({ ...result, passwordChanged })
   } catch (e) {
-    sendError(res, e)
+    // Même règle que l'aperçu : faute du fichier en 400, le reste en 500.
+    sendJsonError(res, e instanceof CodedError ? 400 : 500, e)
   }
 })

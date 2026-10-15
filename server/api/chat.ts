@@ -4,19 +4,27 @@
 // buildPayload est LA source unique, partagée avec /api/prompt-preview.
 import { Router } from 'express'
 import type { Request, Response } from 'express'
-import { loadSettings } from '../config'
+import { effectiveSettings, historyWindow, workingWindow } from '../config'
 import {
   appendChatMessage,
   buildMemoryBlock,
   getCharacter,
+  hashMemoryContent,
   readChat,
+  readCompressionCache,
   readMemoryFile,
   rewriteChatMessages,
   updateChatHeader,
   writeMemoryFile,
 } from '../lib/storage'
 import { streamChatCompletion, type StreamedToolCall } from '../llm/openai'
-import { MEMORY_TOOL_NAMES, executeMemoryTool, memoryToolDefs } from '../tools/memoryTools'
+import {
+  createMemorySession,
+  MEMORY_TOOL_NAMES,
+  executeMemoryTool,
+  memoryToolDefs,
+  type MemorySession,
+} from '../tools/memoryTools'
 import { FILE_TOOL_NAMES, executeFileTool, fileToolDefs } from '../tools/fileTools'
 import { CHAT_TOOL_NAMES, chatToolDefs, executeChatTool } from '../tools/chatTools'
 import {
@@ -26,12 +34,29 @@ import {
   webSearchToolDefs,
 } from '../tools/webSearchTools'
 import { firstEmotionTag } from '../../shared/emotions'
+import { CodedError, ErrorCodes, type ErrorCode, type ErrorParams } from '../../shared/errorCodes'
+import { httpError, sendJsonError } from '../lib/errors'
+import { reasoningEffortParam } from '../../shared/llm'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
-import type { ChatEvent, ChatMessage, ContextInfo, MessageVariant, Settings } from '../../shared/types'
+import { activePersona } from '../../shared/personas'
+import { denseEncode } from '../../shared/compression'
+import type {
+  CharacterFull,
+  CharacterMeta,
+  ChatEvent,
+  ChatMessage,
+  ContextInfo,
+  MessageVariant,
+  Settings,
+  ToolTrace,
+} from '../../shared/types'
 
 export const chatRouter = Router()
 
-const MAX_TOOL_ITERATIONS = 6
+// Budget de la boucle d'outils d'un chat. Huit et non six : le garde-fou
+// « lire avant d'écrire » des outils mémoire ajoute un aller-retour
+// (memory_read puis memory_update) à chaque fait déposé sur une mémoire existante.
+const MAX_TOOL_ITERATIONS = 8
 
 interface BackendPayload {
   messages: unknown[]
@@ -39,6 +64,10 @@ interface BackendPayload {
   model: string
   temperature: number
   max_tokens: number
+  // Niveau de raisonnement (cf. reasoningEffortParam) — présent seulement
+  // quand le réglage le porte ('auto' = clé absente) : l'aperçu doit montrer
+  // EXACTEMENT ce qui part.
+  reasoning_effort?: string
 }
 
 // ── Images (modèles à vision) ──────────────────────────────────────────────
@@ -61,25 +90,40 @@ export function multimodalContent(text: string, images: string[]): ContentPart[]
   return parts
 }
 
+/** Le TEXTE d'un content (string ou multimodal) — les images n'apportent pas de mots. */
+function textContent(content: string | ContentPart[] | undefined): string {
+  if (content == null) return ''
+  if (typeof content === 'string') return content
+  return content
+    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+    .map((p) => p.text)
+    .join(' ')
+}
+
 // ── Macros des cards ───────────────────────────────────────────────────────
 // {{char}} / {{user}} (et <BOT> / <USER>) sont substitués ICI, à la
 // construction du payload : les fichiers du disque gardent leurs macros, seul
 // ce qui PART vers le modèle est résolu. Le prompt du personnage renvoyé à
 // l'inspecteur reste donc la source, éditable telle quelle.
 
-/** Noms substitués : le personnage, et l'utilisateur tel que sa persona le nomme. */
-function macroNamesFor(characterName: string, settings: Settings): MacroNames {
-  return { char: characterName, user: userName(settings.personaName) }
+/**
+ * Noms substitués : le personnage, et l'utilisateur tel que SA persona le nomme
+ * (résolue pour ce personnage — épinglée sur sa carte, sinon la défaut des
+ * Réglages : shared/personas.ts, le même repli partout).
+ */
+function macroNamesFor(character: Pick<CharacterMeta, 'name' | 'userPersona'>, settings: Settings): MacroNames {
+  return { char: character.name, user: userName(activePersona(settings, character)?.name) }
 }
 
 /**
- * Bloc persona : qui est l'utilisateur, tel qu'il s'est décrit dans les
- * réglages. Faits bruts (en anglais, langue de travail des prompts), AUCUNE
- * directive ajoutée — comme le bloc heure et les notes de scène. Les deux
- * champs sont indépendants : un nom seul, une description seule, ou les deux.
+ * Bloc persona : qui est l'utilisateur, tel que la persona active le décrit
+ * (Résultats → « Vous », ou épinglée sur la carte du personnage). Faits bruts
+ * (en anglais, langue de travail des prompts), AUCUNE directive ajoutée — comme
+ * le bloc heure et les notes de scène. Les deux champs sont indépendants : un
+ * nom seul, une description seule, ou les deux.
  */
 function personaBlock(name: string, description: string): string {
-  let block = '\n\n## The user (persona, set by the user in Hanami settings)\n'
+  let block = '\n\n## The user (persona, set by the user in Hanami)\n'
   if (name) block += `The user's name is ${name}.\n`
   if (description) block += `${description}\n`
   return block
@@ -161,17 +205,29 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 function timeBlock(lastMessageTs: string | null): string {
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
+  // Timezone NOMMÉE (et non « user's local time ») : un ancrage explicite que
+  // le modèle peut vérifier, au lieu d'une notion à deviner.
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'
   let block =
-    '\n\n## Current time (auto-injected by Hanami)\n' +
+    '\n\n## Current date and time (auto-injected by Hanami — the only authoritative source)\n' +
     `Now: ${WEEKDAYS[now.getDay()]} ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}, ` +
-    `${pad(now.getHours())}:${pad(now.getMinutes())} (user's local time).\n`
+    `${pad(now.getHours())}:${pad(now.getMinutes())} (${tz}, the user's local time).\n`
   if (lastMessageTs) {
     const gap = now.getTime() - new Date(lastMessageTs).getTime()
     if (Number.isFinite(gap) && gap >= 0) {
       block += `Time since the previous message in this conversation: ${humanizeGap(gap)}.\n`
     }
   }
-  block += 'Let this inform your replies naturally (greetings, time of day, absences) — never recite it.\n'
+  // L'ancienne consigne « never recite it » faisait échouer la question directe
+  // « quelle heure est-il ? » : le modèle généralisait « ne pas réciter » à
+  // « ne pas répondre ». D'où l'autorisation explicite ci-dessous, et la phrase
+  // d'autorité : les modèles locaux ont tendance à répondre une date de leur
+  // données d'entraînement si on ne leur impose pas celle d'ici.
+  block +=
+    'Your training data does not know the current date or time — trust ONLY the values above, never a date you may "remember".\n' +
+    'If the user asks what day, date or time it is, answer directly and exactly with those values, ' +
+    'in the language of the conversation. Otherwise let them shape your replies naturally ' +
+    '(greetings, time of day, absences) without reciting them.\n'
   return block
 }
 
@@ -202,15 +258,52 @@ export function buildPayload(
   omitLastMessage = false,
 ): { systemText: string; characterPrompt: string; injected: string; payload: BackendPayload } {
   const character = getCharacter(characterId)
-  if (!character) throw new Error(`Personnage introuvable : ${characterId}`)
+  if (!character) throw new CodedError(ErrorCodes.characterNotFound, { id: characterId })
+  // Chantier B — compression de contexte, opt-in par personnage (absent = éteint).
+  // STRATÉGIE PAR TYPE (mesurée, cas COMPLEXE inclus — voir test-complex.mjs) :
+  //   - sysprompt du perso + persona → JAMAIS compressés, ils partent VERBATIM.
+  //     denseEncode « densifie » mais CASSE la prose narrative du prompt : mesuré,
+  //     « un peu timide » → « peu timide » (inversion du trait), « C’est une » →
+  //     orphelin, « note-le » → « note- ». Sur un perso complexe, le prompt cassé
+  //     fait flotter la fidélité, allonger le thinking et perdre les émotags. Le
+  //     prompt est l'identité du personnage : il part tel quel, point.
+  //   - mémoire (faits) → version compressée en cache (agressif −41 %, vérifieur),
+  //     repli denseEncode si le cache est absent ou périmé.
+  // L'ORIGINAL n'est JAMAIS modifié sur disque : seule la forme ENVOYÉE change, et
+  // l'inspecteur la montre telle quelle (ce qui part = ce qui est affiché).
+  const compressionOn = character.llm?.compression === true
   const characterPrompt = character.systemPrompt
+  // Mémoire : le cache agressif (sourceHash du contenu des faits) est lu UNE fois ;
+  // chaque fichier injecté repart compressé s'il est dans le cache, sinon repli
+  // denseEncode (repli honnête — jamais une perte silencieuse de fait).
+  let getCompressed: ((name: string, content: string) => string) | undefined
+  if (compressionOn) {
+    const cache = readCompressionCache(characterId)
+    // Entrée FRAÎCHE = le fichier n'a pas bougé depuis sa compression (sourceHash).
+    // Un fichier modifié (ou jamais compressé) retombe sur denseEncode — repli
+    // honnête, jamais une perte silencieuse de fait.
+    getCompressed = (name, content) => {
+      const entry = cache?.files[name]
+      return entry && entry.sourceHash === hashMemoryContent(content) ? entry.content : denseEncode(content)
+    }
+  }
   let injected = ''
   // La persona vient EN TÊTE des blocs ajoutés : savoir à qui l'on parle
-  // précède ce dont on se souvient de lui.
-  const personaName = settings.personaName.trim()
-  const personaDescription = settings.personaDescription.trim()
-  if (personaName || personaDescription) injected += personaBlock(personaName, personaDescription)
-  if (settings.memoryEnabled) injected += buildMemoryBlock(characterId, settings.modelMode === 'simple')
+  // précède ce dont on se souvient de lui. Résolue pour CE personnage :
+  // épinglée sur sa carte, sinon la défaut des Réglages (shared/personas.ts).
+  const persona = activePersona(settings, character)
+  if (persona && (persona.name.trim() || persona.description.trim())) {
+    injected += personaBlock(persona.name.trim(), persona.description.trim())
+  }
+  if (settings.memoryEnabled) {
+    // Mode sélectif : la requête courante sert à classer la mémoire (repli 'auto'
+    // si elle est vide — ex. salutation 'open', ou mode 'auto' de base).
+    injected += buildMemoryBlock(characterId, settings.modelMode === 'simple', {
+      mode: settings.memoryInjection,
+      query: textContent(pendingUserContent),
+      getCompressed,
+    })
+  }
 
   const { meta, messages: all } = readChat(characterId, chatId)
   const history = omitLastMessage ? all.slice(0, -1) : all
@@ -225,10 +318,10 @@ export function buildPayload(
   // personnage ET blocs ajoutés — une note de scène peut dire « {{char}} »),
   // l'historique et le message courant. `characterPrompt` reste brut plus bas :
   // c'est la source que l'inspecteur rend éditable.
-  const names = macroNamesFor(character.name, settings)
+  const names = macroNamesFor(character, settings)
   const systemText = substituteMacros(characterPrompt + injected, names)
   const live = history.slice(upto)
-  const recent = settings.maxHistoryMessages > 0 ? live.slice(-settings.maxHistoryMessages) : []
+  const recent = historyWindow(live, settings)
   const messages: unknown[] = [
     { role: 'system', content: systemText },
     // Un message d'historique porteur d'images repart en multimodal : le modèle
@@ -256,6 +349,11 @@ export function buildPayload(
     temperature: settings.temperature,
     max_tokens: settings.maxTokens,
   }
+  // MÊME règle que le client streaming (server/llm/openai.ts) : posé seulement
+  // quand réel — l'aperçu est le contrat, ce qu'il montre est ce qui part.
+  // 'auto' = AUCUNE clé (le modèle décide).
+  const effort = reasoningEffortParam(settings.thinkingLevel)
+  if (effort) payload.reasoning_effort = effort
   if (tools.length > 0) payload.tools = tools
   return { systemText, characterPrompt, injected, payload }
 }
@@ -316,26 +414,29 @@ function buildImpersonatePayload(
   settings: Settings,
 ): { payload: BackendPayload } {
   const character = getCharacter(characterId)
-  if (!character) throw new Error(`Personnage introuvable : ${characterId}`)
+  if (!character) throw new CodedError(ErrorCodes.characterNotFound, { id: characterId })
   const { meta, messages: all } = readChat(characterId, chatId)
-  const names = macroNamesFor(character.name, settings)
+  const names = macroNamesFor(character, settings)
 
   let injected = ''
   if (meta.summary) injected += summaryBlock(meta.summary)
   if (meta.sceneNotes) injected += sceneNotesBlock(meta.sceneNotes)
   if (settings.timeAwareness) injected += timeBlock(all.length > 0 ? all[all.length - 1].ts : null)
 
+  // MÊME persona que le chat de ce personnage (épinglée ou défaut) : l'écriteur
+  // impersonné EST le persona, pas une autre facette de l'utilisateur.
+  const persona = activePersona(settings, character)
   const base = impersonateSystemPrompt(
     character.name,
-    settings.personaName.trim(),
-    settings.personaDescription.trim(),
+    persona?.name.trim() ?? '',
+    persona?.description.trim() ?? '',
     typicalUserLength(all),
   )
   const systemText = substituteMacros(base + injected, names)
 
   const upto = meta.summary ? Math.min(meta.summaryUpto ?? 0, all.length) : 0
   const live = all.slice(upto)
-  const recent = settings.maxHistoryMessages > 0 ? live.slice(-settings.maxHistoryMessages) : []
+  const recent = historyWindow(live, settings)
   const messages: unknown[] = [
     { role: 'system', content: systemText },
     // Perspective inversée : le tour de {{char}} devient "user", celui de
@@ -356,6 +457,14 @@ function toAssistantMessage(text: string, thinking?: string): ChatMessage {
   if (emotion) msg.emotion = emotion
   if (thinking) msg.thinking = thinking
   return msg
+}
+
+// Résultat plafonné pour la PERSISTANCE : un read_file peut faire 256 Ko et le
+// .jsonl ne doit pas gonfler — la puce dépliée n'a besoin que du début du
+// résultat. En session (event SSE), le client garde le résultat intégral.
+const TRACE_RESULT_CAP = 2048
+function cappedTraceResult(result: string): string {
+  return result.length > TRACE_RESULT_CAP ? result.slice(0, TRACE_RESULT_CAP) + '…' : result
 }
 
 // ── Variantes de réponse ───────────────────────────────────────────────────
@@ -379,6 +488,7 @@ function bodyOf(m: ChatMessage): MessageVariant {
     ts: m.ts,
     ...(m.emotion ? { emotion: m.emotion } : {}),
     ...(m.thinking ? { thinking: m.thinking } : {}),
+    ...(m.tools && m.tools.length > 0 ? { tools: m.tools } : {}),
   }
 }
 
@@ -395,6 +505,8 @@ function withVariants(m: ChatMessage, variants: MessageVariant[], index: number)
   if (active.emotion) out.emotion = active.emotion
   delete out.thinking
   if (active.thinking) out.thinking = active.thinking
+  delete out.tools
+  if (active.tools) out.tools = active.tools
   if (variants.length >= 2) {
     out.variants = variants
     out.variant = index
@@ -427,7 +539,13 @@ function pruneVariants(m: ChatMessage): ChatMessage {
  * write_file s'exécutait même outils fichiers désactivés. Le throw est rendu au
  * modèle comme résultat d'outil (« Erreur : … ») — transparent, jamais fatal.
  */
-async function executeTool(characterId: string, settings: Settings, name: string, rawArgs: string): Promise<string> {
+async function executeTool(
+  characterId: string,
+  settings: Settings,
+  name: string,
+  rawArgs: string,
+  mem: MemorySession,
+): Promise<string> {
   let args: Record<string, unknown>
   try {
     args = rawArgs.trim() ? (JSON.parse(rawArgs) as Record<string, unknown>) : {}
@@ -436,7 +554,7 @@ async function executeTool(characterId: string, settings: Settings, name: string
   }
   if ((MEMORY_TOOL_NAMES as readonly string[]).includes(name)) {
     if (!settings.memoryEnabled) throw new Error('memory tools are disabled in settings')
-    return executeMemoryTool(characterId, name, args)
+    return executeMemoryTool(characterId, name, args, mem)
   }
   if ((CHAT_TOOL_NAMES as readonly string[]).includes(name)) {
     if (!settings.memoryEnabled) throw new Error('memory tools are disabled in settings')
@@ -457,6 +575,19 @@ function writeEvent(res: Response, ev: ChatEvent): void {
   res.write('data: ' + JSON.stringify(ev) + '\n\n')
 }
 
+/**
+ * Événement « error » SSE — contrat codes/phrases : CodedError → code (+
+ * params), la phrase est traduite côté client ; toute autre erreur → message
+ * brut (erreur interne imprévue, jamais une phrase française du serveur).
+ */
+function errorEvent(e: unknown, partial?: ChatMessage): ChatEvent {
+  if (e instanceof CodedError) {
+    return partial ? { type: 'error', code: e.code, params: e.params, partial } : { type: 'error', code: e.code, params: e.params }
+  }
+  const message = e instanceof Error ? e.message : String(e)
+  return partial ? { type: 'error', message, partial } : { type: 'error', message }
+}
+
 // Consigne de continuation — envoyée dans le payload, JAMAIS sauvegardée dans le chat.
 const CONTINUE_DIRECTIVE =
   '[Continue your previous message exactly where it left off. Do not repeat, do not summarize — carry on seamlessly.]'
@@ -474,19 +605,19 @@ const MAX_IMAGE_CHARS = 2 * 1024 * 1024 // ~2 Mo par data URL (donc après encod
 const DATA_IMAGE_RE = /^data:image\/(png|jpe?g|webp);base64,/
 
 /** Valide body.images : uniquement des data URLs d'image, plafonnées en nombre et en poids. */
-function parseImages(raw: unknown): { images: string[] } | { error: string; status: number } {
+function parseImages(raw: unknown): { images: string[] } | { code: ErrorCode; params?: ErrorParams; status: number } {
   if (raw === undefined || raw === null) return { images: [] }
-  if (!Array.isArray(raw)) return { error: 'images doit être un tableau de data URLs', status: 400 }
+  if (!Array.isArray(raw)) return { code: ErrorCodes.imagesNotArray, status: 400 }
   if (raw.length > MAX_IMAGES) {
-    return { error: `Trop d'images (maximum ${MAX_IMAGES})`, status: 413 }
+    return { code: ErrorCodes.tooManyImages, params: { max: MAX_IMAGES }, status: 413 }
   }
   const images: string[] = []
   for (const item of raw) {
     if (typeof item !== 'string' || !DATA_IMAGE_RE.test(item)) {
-      return { error: 'Chaque image doit être une data URL image/png, image/jpeg ou image/webp', status: 400 }
+      return { code: ErrorCodes.imageNotDataUrl, status: 400 }
     }
     if (item.length > MAX_IMAGE_CHARS) {
-      return { error: `Image trop lourde (maximum ~${Math.round(MAX_IMAGE_CHARS / 1024 / 1024)} Mo)`, status: 413 }
+      return { code: ErrorCodes.imageTooLarge, params: { maxMo: Math.round(MAX_IMAGE_CHARS / 1024 / 1024) }, status: 413 }
     }
     images.push(item)
   }
@@ -523,8 +654,12 @@ async function runToolLoop<R extends { content: string; toolCalls: StreamedToolC
   // halluciné (ou hors du périmètre de la compaction) devient une erreur
   // d'outil rendue au modèle, jamais une exécution.
   allowed: ReadonlySet<string>,
+  // Fichiers mémoire lus pendant CETTE requête — le garde-fou « lire avant
+  // d'écrire » de memoryTools s'appuie dessus.
+  mem: MemorySession,
   call: (withTools: boolean) => Promise<R>,
   onTool?: (name: string, args: string, result: string) => void,
+  onToolStart?: (name: string, args: string) => void,
 ): Promise<{ last: R; exhausted: boolean }> {
   let last = await call(true)
   for (let iteration = 1; ; iteration++) {
@@ -544,8 +679,12 @@ async function runToolLoop<R extends { content: string; toolCalls: StreamedToolC
       if (!allowed.has(tc.name)) {
         toolResult = `Error: tool not offered in this request: ${tc.name}`
       } else {
+        // Signalé AVANT l'exécution : l'interface anime la puce pendant
+        // l'action (sans elle, le fil semble figé tant que le modèle
+        // n'a pas « fini » de parler).
+        onToolStart?.(tc.name, tc.arguments)
         try {
-          toolResult = await executeTool(characterId, settings, tc.name, tc.arguments)
+          toolResult = await executeTool(characterId, settings, tc.name, tc.arguments, mem)
         } catch (e) {
           toolResult = `Error: ${e instanceof Error ? e.message : String(e)}`
         }
@@ -585,8 +724,8 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   // Validé avant toute autre chose : la réponse est encore du JSON à ce stade
   // (une fois le flux SSE ouvert, plus aucun code d'erreur HTTP n'est possible).
   const parsedImages = parseImages(body.images)
-  if ('error' in parsedImages) {
-    res.status(parsedImages.status).json({ error: parsedImages.error })
+  if ('code' in parsedImages) {
+    httpError(res, parsedImages.status, parsedImages.code, parsedImages.params)
     return
   }
   // Les images n'appartiennent qu'au message COURANT : régénérer/continuer/ouvrir
@@ -594,19 +733,30 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   const images = mode ? [] : parsedImages.images
   // Une image seule est un message légitime (le texte peut être vide).
   if (!characterId || !chatId || (!content && !mode && images.length === 0)) {
-    res.status(400).json({ error: 'characterId, chatId et content (ou images, ou mode) sont requis' })
+    httpError(res, 400, ErrorCodes.chatPayloadRequired)
     return
   }
-  const settings = loadSettings()
-  if (!getCharacter(characterId)) {
-    res.status(404).json({ error: `Personnage introuvable : ${characterId}` })
+  // id invalide (getCharacter lève) → introuvable, pas une erreur interne.
+  let character: CharacterFull | null
+  try {
+    character = getCharacter(characterId)
+  } catch {
+    character = null
+  }
+  if (!character) {
+    httpError(res, 404, ErrorCodes.characterNotFound, { id: characterId })
     return
   }
+  // Réglages EFFECTIFS du personnage : les overrides de sa carte posés par-dessus
+  // le réglage global. Toutes les étapes de ce handler (payload, outils,
+  // recherche forcée, jauge) voient le MÊME objet — sinon le modèle d'envoi et
+  // la fenêtre de la jauge divergeraient.
+  const settings = effectiveSettings(character)
   let existing: ChatMessage[]
   try {
     existing = readChat(characterId, chatId).messages
   } catch {
-    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: chatId })
     return
   }
 
@@ -620,7 +770,7 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   let regenOpens = false
   if (mode === 'regenerate') {
     if (existing.length === 0) {
-      res.status(400).json({ error: 'Rien à régénérer (conversation vide)' })
+      httpError(res, 400, ErrorCodes.nothingToRegenerate)
       return
     }
     // Dernier message = réponse de l'assistant → nouvelle VARIANTE de ce message.
@@ -635,17 +785,17 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   } else if (mode === 'continue') {
     const last = existing[existing.length - 1]
     if (!last || last.role !== 'assistant') {
-      res.status(400).json({ error: 'Rien à continuer (le dernier message n’est pas une réponse)' })
+      httpError(res, 400, ErrorCodes.nothingToContinue)
       return
     }
     continueBase = last
   } else if (mode === 'open' && existing.length > 0) {
     // Le premier message ne se génère que dans une conversation encore vierge.
-    res.status(400).json({ error: "La conversation n'est pas vide (rien à ouvrir)" })
+    httpError(res, 400, ErrorCodes.openNotEmpty)
     return
   } else if (mode === 'impersonate' && existing.length === 0) {
     // Impersonate a besoin d'au moins un tour à imiter (ton, longueur, sujet).
-    res.status(400).json({ error: 'Rien à impersonner (conversation vide)' })
+    httpError(res, 400, ErrorCodes.nothingToImpersonate)
     return
   }
 
@@ -705,6 +855,11 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   // détectée dans un message normal (« cherche sur le web… », « google it »…) :
   // certains modèles préfèrent « jouer » la recherche en roleplay plutôt que
   // d'appeler l'outil ; ce filet la garantit quand même.
+  // Journal d'activité de la génération : chaque action exécutée y est notée,
+  // puis rattachée au message persisté (l'affichage en fait les puces — jamais
+  // renvoyé au backend, cf. shared/types.ts).
+  const toolTraces: ToolTrace[] = []
+
   const trimmedContent = content.trim()
   const forcedQuery = forceSearch
     ? trimmedContent
@@ -714,6 +869,8 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   if (!mode && forcedQuery && settings.webSearchEnabled && settings.modelMode !== 'simple') {
     const query = forcedQuery
     const toolCallId = `search_${Date.now()}`
+    const searchArgs = JSON.stringify({ query })
+    writeEvent(res, { type: 'tool_start', name: 'web_search', args: searchArgs })
     let result: string
     try {
       result = await executeWebSearchTool(settings, { query })
@@ -723,12 +880,11 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     messages.push({
       role: 'assistant',
       content: null,
-      tool_calls: [
-        { id: toolCallId, type: 'function', function: { name: 'web_search', arguments: JSON.stringify({ query }) } },
-      ],
+      tool_calls: [{ id: toolCallId, type: 'function', function: { name: 'web_search', arguments: searchArgs } }],
     })
     messages.push({ role: 'tool', tool_call_id: toolCallId, content: result })
-    writeEvent(res, { type: 'tool', name: 'web_search', args: JSON.stringify({ query }), result })
+    toolTraces.push({ name: 'web_search', args: searchArgs, result: cappedTraceResult(result) })
+    writeEvent(res, { type: 'tool', name: 'web_search', args: searchArgs, result })
   }
 
   let assistantText = ''
@@ -791,6 +947,9 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       if (assistantThinking) {
         merged.thinking = base.thinking ? base.thinking + '\n\n' + assistantThinking : assistantThinking
       }
+      // Les actions de la passée de continuation s'ajoutent au journal de la
+      // variante affichée (le corps du message la recopie — cf. invariant).
+      if (toolTraces.length > 0) merged.tools = [...(base.tools ?? []), ...toolTraces]
       // Le message porte des variantes : c'est la variante AFFICHÉE qui s'allonge
       // (« Continuer » continue ce qu'on lit) — les autres restent feuilletables.
       const active = merged.variant
@@ -807,12 +966,14 @@ async function handleChat(req: Request, res: Response): Promise<void> {
           return msgs
         }
         saved = toAssistantMessage(assistantText, assistantThinking)
+        if (toolTraces.length > 0) saved.tools = [...toolTraces]
         msgs.push(saved)
         return msgs
       })
       return saved
     }
     const message = toAssistantMessage(assistantText, assistantThinking)
+    if (toolTraces.length > 0) message.tools = [...toolTraces]
     // Régénération : la nouvelle réponse rejoint les précédentes DANS le message,
     // et devient celle qui est affichée. Comme pour la continuation, l'IDENTITÉ
     // du message visé est vérifiée (ts + contenu) : un message spontané a pu
@@ -851,12 +1012,14 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     // Les agrégations (truncated, finishReason, promptTokens — le dernier usage
     // NON NUL fait foi) restent ici, par fermeture : la boucle partagée ne
     // s'occupe que de la mécanique d'outils.
+    const mem = createMemorySession() // lectures mémoire de CETTE requête (garde-fou)
     const { exhausted } = await runToolLoop(
       characterId,
       settings,
       messages,
       MAX_TOOL_ITERATIONS,
       toolNamesOf(payload.tools),
+      mem,
       async (withTools) => {
         const result = await streamOnce(withTools)
         truncated = result.truncated
@@ -866,12 +1029,24 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       },
       (name, args, toolResult) => {
         writeEvent(res, { type: 'tool', name, args, result: toolResult })
+        toolTraces.push({ name, args, result: cappedTraceResult(toolResult) })
+      },
+      (name, args) => {
+        writeEvent(res, { type: 'tool_start', name, args })
       },
     )
 
-    if (exhausted && assistantText.length === 0) {
-      // Rien à sauvegarder : pas de message vide, pas de done.
-      writeEvent(res, { type: 'error', message: "Budget d'outils épuisé sans réponse du modèle" })
+    if (assistantText.length === 0 && toolTraces.length === 0) {
+      // Le modèle n'a produit NI texte NI action : budget de sortie absorbé
+      // par le raisonnement, fin de génération avant le premier mot… Rien à
+      // sauvegarder — pas de message vide, pas de done. (Avant, seul le cas
+      // « outils épuisés » était gardé : une réponse vide sans ce flag était
+      // persistée telle quelle et s'affichait comme une bulle vide.) Le cas
+      // épuisement garde son code spécifique : plus précis côté client.
+      writeEvent(res, {
+        type: 'error',
+        code: exhausted ? ErrorCodes.toolBudgetExhausted : ErrorCodes.emptyResponse,
+      })
       res.end()
       return
     }
@@ -884,19 +1059,21 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     const tokens =
       (promptTokens > 0 ? promptTokens : estimateTokens(messages) + estimateTokens(payload.tools ?? [])) +
       estimateTokens(assistantText)
+    // Fenêtre de TRAVAIL (plafonnée) et non le contexte complet du modèle :
+    // avec une fenêtre de 262k, la jauge plafonnait à ~15 % et l'auto-compaction
+    // ne se déclenchait jamais (voir workingWindow dans config.ts).
+    const limit = workingWindow(settings)
     const context: ContextInfo = {
       tokens,
-      limit: settings.contextSize,
-      percent: settings.contextSize > 0 ? Math.min(100, Math.round((tokens / settings.contextSize) * 100)) : 0,
+      limit,
+      percent: limit > 0 ? Math.min(100, Math.round((tokens / limit) * 100)) : 0,
     }
     writeEvent(res, { type: 'done', message, context })
     // Signalé APRÈS la sauvegarde et le done : le client affiche la bulle d'erreur discrète.
     if (truncated || finishReason === 'length') {
       writeEvent(res, {
         type: 'error',
-        message: truncated
-          ? 'Réponse probablement tronquée (flux interrompu avant la fin)'
-          : 'Réponse coupée (max_tokens atteint)',
+        code: truncated ? ErrorCodes.responseTruncated : ErrorCodes.responseLengthLimit,
       })
     }
     res.end()
@@ -911,13 +1088,12 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       }
       return
     }
-    const message = e instanceof Error ? e.message : String(e)
     if (assistantText.length > 0) {
       // Erreur mi-flux : le partiel déjà affiché côté client est sauvegardé, et joint à l'événement.
       const partial = persistAssistant()
-      writeEvent(res, { type: 'error', message, partial })
+      writeEvent(res, errorEvent(e, partial))
     } else {
-      writeEvent(res, { type: 'error', message })
+      writeEvent(res, errorEvent(e))
     }
     res.end()
   }
@@ -938,7 +1114,7 @@ chatRouter.post('/api/chat', async (req, res) => {
       : null
   if (openKey !== null) {
     if (opensInFlight.has(openKey)) {
-      res.status(409).json({ error: 'Ouverture déjà en cours pour cette conversation' })
+      httpError(res, 409, ErrorCodes.openAlreadyRunning)
       return
     }
     opensInFlight.add(openKey)
@@ -947,12 +1123,11 @@ chatRouter.post('/api/chat', async (req, res) => {
     await handleChat(req, res)
   } catch (e) {
     // Dernier filet (ne devrait pas arriver : handleChat gère ses erreurs).
-    const message = e instanceof Error ? e.message : String(e)
     if (!res.headersSent) {
-      res.status(500).json({ error: message })
+      sendJsonError(res, 500, e)
     } else {
       try {
-        writeEvent(res, { type: 'error', message })
+        writeEvent(res, errorEvent(e))
         res.end()
       } catch {
         /* connexion fermée */
@@ -970,7 +1145,9 @@ chatRouter.post('/api/chat', async (req, res) => {
 // (le modèle se contente de lister des faits en texte).
 
 const COMPACT_MIN_MESSAGES = 6
-const COMPACT_MAX_ITERATIONS = 4
+// Six et non quatre : la passe mémoire sous garde-fou coûte un aller-retour de
+// lecture par fichier existant touché (memory_read puis memory_update/append).
+const COMPACT_MAX_ITERATIONS = 6
 // Garde-fou d'horloge d'une compaction : au-delà, l'appel backend est abandonné
 // et le verrou compactionsInFlight se libère (10 min — large, jamais infini).
 const COMPACT_TIMEOUT_MS = 10 * 60_000
@@ -1039,7 +1216,9 @@ function compactDirective(hasPrevSummary: boolean, memoryTools: boolean, instruc
   }
   if (memoryTools) {
     d +=
-      '- BEFORE writing the summary, use the memory tools (memory_save / memory_update) to persist any durable facts worth remembering beyond this conversation.\n'
+      '- BEFORE writing the summary, persist any durable facts worth remembering beyond this conversation: ' +
+      'memory_read an existing memory file before memory_update (complete merged content), ' +
+      'memory_append a fact to an existing file, memory_save only brand-new topics.\n'
   }
   if (instruction) d += `- User instruction for this compaction: ${instruction}\n`
   d += 'Reply with ONLY the summary text (no preamble, no emotion tag).'
@@ -1051,19 +1230,21 @@ async function runCompaction(
   chatId: string,
   instruction: string,
 ): Promise<{ summary: string; summaryUpto: number; compacted: number }> {
-  const settings = loadSettings()
   const character = getCharacter(characterId)
-  if (!character) throw new Error(`Personnage introuvable : ${characterId}`)
+  if (!character) throw new CodedError(ErrorCodes.characterNotFound, { id: characterId })
+  // La compaction compresse la conversation DE CE PERSONNAGE : elle doit tenir
+  // dans SA fenêtre et écrire avec SON modèle (réglages effectifs, pas globaux).
+  const settings = effectiveSettings(character)
   const { meta, messages: history } = readChat(characterId, chatId)
   const prevUpto = meta.summary ? Math.min(meta.summaryUpto ?? 0, history.length) : 0
   const candidates = history.slice(prevUpto)
   if (candidates.length < COMPACT_MIN_MESSAGES) {
-    throw new Error(`Rien à compacter (moins de ${COMPACT_MIN_MESSAGES} messages depuis le dernier résumé)`)
+    throw new CodedError(ErrorCodes.nothingToCompact, { min: COMPACT_MIN_MESSAGES })
   }
 
   // Mode simple : pas de passe agentique, donc rien à annoncer sur les outils mémoire.
   const simple = settings.modelMode === 'simple'
-  const names = macroNamesFor(character.name, settings)
+  const names = macroNamesFor(character, settings)
   let systemText = character.systemPrompt
   if (settings.memoryEnabled) systemText += buildMemoryBlock(characterId, simple)
   if (meta.summary) systemText += summaryBlock(meta.summary)
@@ -1091,7 +1272,7 @@ async function runCompaction(
     take++
   }
   if (take < 1) {
-    throw new Error('Fenêtre trop petite pour compacter — augmentez « Taille de contexte du modèle »')
+    throw new CodedError(ErrorCodes.windowTooSmallForCompact)
   }
   const slice = candidates.slice(0, take)
   const upto = prevUpto + take
@@ -1152,12 +1333,14 @@ async function runCompaction(
     // Boucle agentique silencieuse (partagée avec le chat, cf. runToolLoop) :
     // le résumé = le texte du DERNIER appel — celui sans appels d'outils, ou le
     // dernier forcé sans outils quand le budget est épuisé.
+    const mem = createMemorySession() // lectures mémoire de CETTE compaction (garde-fou)
     const { last } = await runToolLoop(
       characterId,
       settings,
       messages,
       COMPACT_MAX_ITERATIONS,
       toolNamesOf(tools),
+      mem,
       async (withTools) => {
         const result = await streamChatCompletion({
           settings: compactSettings,
@@ -1173,10 +1356,7 @@ async function runCompaction(
     summary = last.content.trim()
   }
   if (!summary) {
-    throw new Error(
-      `Le modèle n'a pas produit de résumé (fin de génération : ${lastFinish || 'inconnue'} — ` +
-        `pensez à augmenter « Tokens max » ou la fenêtre du backend)`,
-    )
+    throw new CodedError(ErrorCodes.compactNoSummary, { finish: lastFinish || 'unknown' })
   }
   summary = summary.slice(0, COMPACT_SUMMARY_MAX_CHARS)
 
@@ -1195,25 +1375,27 @@ chatRouter.post('/api/chat/compact', async (req, res) => {
   const chatId = typeof body.chatId === 'string' ? body.chatId : ''
   const instruction = typeof body.instruction === 'string' ? body.instruction.trim().slice(0, 2000) : ''
   if (!characterId || !chatId) {
-    res.status(400).json({ error: 'characterId et chatId sont requis' })
+    httpError(res, 400, ErrorCodes.charChatRequired)
     return
   }
   try {
     readChat(characterId, chatId)
   } catch {
-    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: chatId })
     return
   }
   const lockKey = `${characterId}/${chatId}`
   if (compactionsInFlight.has(lockKey)) {
-    res.status(409).json({ error: 'Compaction déjà en cours pour cette conversation' })
+    httpError(res, 409, ErrorCodes.compactionAlreadyRunning)
     return
   }
   compactionsInFlight.add(lockKey)
   try {
     res.json(await runCompaction(characterId, chatId, instruction))
   } catch (e) {
-    res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
+    // CodedError (fenêtre trop petite, rien à compacter, LLM…) → code + 400 (faute
+    // du client, comme les routes de restauration) ; sinon 500 brut.
+    sendJsonError(res, e instanceof CodedError ? 400 : 500, e)
   } finally {
     compactionsInFlight.delete(lockKey)
   }
@@ -1236,18 +1418,18 @@ chatRouter.put('/api/chat/message', (req, res) => {
   const index = typeof body.index === 'number' && Number.isInteger(body.index) ? body.index : -1
   const content = typeof body.content === 'string' ? body.content : ''
   if (!characterId || !chatId || index < 0 || !content.trim()) {
-    res.status(400).json({ error: 'characterId, chatId, index et content sont requis' })
+    httpError(res, 400, ErrorCodes.editMessageRequired)
     return
   }
   let count: number
   try {
     count = readChat(characterId, chatId).messages.length
   } catch {
-    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: chatId })
     return
   }
   if (index >= count) {
-    res.status(404).json({ error: `Message introuvable : ${index}` })
+    httpError(res, 404, ErrorCodes.messageNotFound, { index })
     return
   }
   let updated: ChatMessage | null = null
@@ -1284,27 +1466,27 @@ chatRouter.put('/api/chat/variant', (req, res) => {
   const index = typeof body.index === 'number' && Number.isInteger(body.index) ? body.index : -1
   const variant = typeof body.variant === 'number' && Number.isInteger(body.variant) ? body.variant : -1
   if (!characterId || !chatId || index < 0 || variant < 0) {
-    res.status(400).json({ error: 'characterId, chatId, index et variant (entiers ≥ 0) sont requis' })
+    httpError(res, 400, ErrorCodes.variantRequired)
     return
   }
   let messages: ChatMessage[]
   try {
     messages = readChat(characterId, chatId).messages
   } catch {
-    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: chatId })
     return
   }
   if (index >= messages.length) {
-    res.status(404).json({ error: `Message introuvable : ${index}` })
+    httpError(res, 404, ErrorCodes.messageNotFound, { index })
     return
   }
   const target = messages[index]
   if (!target.variants || target.variants.length < 2) {
-    res.status(400).json({ error: `Ce message n'a pas de variantes : ${index}` })
+    httpError(res, 400, ErrorCodes.messageNoVariants, { index })
     return
   }
   if (variant >= target.variants.length) {
-    res.status(404).json({ error: `Variante introuvable : ${variant}` })
+    httpError(res, 404, ErrorCodes.variantNotFound, { variant })
     return
   }
   let updated: ChatMessage | null = null
@@ -1318,7 +1500,7 @@ chatRouter.put('/api/chat/variant', (req, res) => {
     return msgs
   })
   if (updated === null) {
-    res.status(409).json({ error: 'La conversation a changé — variante introuvable' })
+    httpError(res, 409, ErrorCodes.variantStale)
     return
   }
   res.json({ index, message: updated })
@@ -1339,18 +1521,18 @@ chatRouter.delete('/api/chat/message', (req, res) => {
   const chatId = typeof body.chatId === 'string' ? body.chatId : ''
   const index = typeof body.index === 'number' && Number.isInteger(body.index) ? body.index : -1
   if (!characterId || !chatId || index < 0) {
-    res.status(400).json({ error: 'characterId, chatId et index sont requis' })
+    httpError(res, 400, ErrorCodes.deleteMessageRequired)
     return
   }
   let meta
   try {
     meta = readChat(characterId, chatId).meta
   } catch {
-    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: chatId })
     return
   }
   if (index >= meta.messageCount) {
-    res.status(404).json({ error: `Message introuvable : ${index}` })
+    httpError(res, 404, ErrorCodes.messageNotFound, { index })
     return
   }
   rewriteChatMessages(characterId, chatId, (msgs) => msgs.filter((_, i) => i !== index))
@@ -1377,18 +1559,18 @@ chatRouter.put('/api/chat/summary', (req, res) => {
   const chatId = typeof body.chatId === 'string' ? body.chatId : ''
   const summary = typeof body.summary === 'string' ? body.summary : null
   if (!characterId || !chatId || summary === null) {
-    res.status(400).json({ error: 'characterId, chatId et summary sont requis' })
+    httpError(res, 400, ErrorCodes.summaryRequired)
     return
   }
   let meta
   try {
     meta = readChat(characterId, chatId).meta
   } catch {
-    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: chatId })
     return
   }
   if (!meta.summary) {
-    res.status(400).json({ error: "Ce chat n'a pas encore de résumé de compaction" })
+    httpError(res, 400, ErrorCodes.noSummaryYet)
     return
   }
   // Résumé vidé = compaction annulée : l'historique complet repart dans le payload.
@@ -1411,13 +1593,13 @@ chatRouter.put('/api/chat/scene', (req, res) => {
   const chatId = typeof body.chatId === 'string' ? body.chatId : ''
   const sceneNotes = typeof body.sceneNotes === 'string' ? body.sceneNotes : null
   if (!characterId || !chatId || sceneNotes === null) {
-    res.status(400).json({ error: 'characterId, chatId et sceneNotes sont requis' })
+    httpError(res, 400, ErrorCodes.sceneNotesRequired)
     return
   }
   try {
     readChat(characterId, chatId)
   } catch {
-    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: chatId })
     return
   }
   // Notes vidées : la clé disparaît de l'en-tête, donc plus aucun bloc injecté.
@@ -1442,18 +1624,18 @@ chatRouter.put('/api/chat/pin', (req, res) => {
         ? body.pinned
         : undefined
   if (!characterId || !chatId || pinned === undefined) {
-    res.status(400).json({ error: 'characterId, chatId et pinned (entier ≥ 0 ou null) sont requis' })
+    httpError(res, 400, ErrorCodes.pinRequired)
     return
   }
   let count: number
   try {
     count = readChat(characterId, chatId).messages.length
   } catch {
-    res.status(404).json({ error: `Chat introuvable : ${chatId}` })
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: chatId })
     return
   }
   if (pinned !== null && pinned >= count) {
-    res.status(404).json({ error: `Message introuvable : ${pinned}` })
+    httpError(res, 404, ErrorCodes.messageNotFound, { index: pinned })
     return
   }
   updateChatHeader(characterId, chatId, { pinned: pinned ?? undefined })
@@ -1465,11 +1647,15 @@ chatRouter.get('/api/prompt-preview', (req, res) => {
   const characterId = typeof req.query.characterId === 'string' ? req.query.characterId : ''
   const chatId = typeof req.query.chatId === 'string' ? req.query.chatId : ''
   if (!characterId || !chatId) {
-    res.status(400).json({ error: 'characterId et chatId sont requis' })
+    httpError(res, 400, ErrorCodes.charChatRequired)
     return
   }
   try {
-    const settings = loadSettings()
+    const character = getCharacter(characterId)
+    if (!character) throw new CodedError(ErrorCodes.characterNotFound, { id: characterId })
+    // MÊME réglages effectifs que POST /api/chat : l'inspecteur affiche ce qui
+    // sera VRAIMENT envoyé, overrides de la carte du personnage compris.
+    const settings = effectiveSettings(character)
     const { systemText, characterPrompt, injected, payload } = buildPayload(characterId, chatId, settings)
     res.json({
       systemText,
@@ -1478,13 +1664,16 @@ chatRouter.get('/api/prompt-preview', (req, res) => {
       characterPrompt,
       injected,
       payload,
-      // Jauge de contexte : estimation du prochain envoi + limite configurée.
-      // Les définitions d'outils partent aussi dans le payload (et l'usage réel
-      // du backend les compte) : sans elles, la jauge sautait au premier message.
+      // Jauge de contexte : estimation du prochain envoi + fenêtre de travail
+      // (plafonnée, cf. workingWindow) — MÊME limite que l'événement « done » du
+      // chat, sinon la jauge sauterait à l'ouverture d'une conversation. Les
+      // définitions d'outils partent aussi dans le payload (et l'usage réel du
+      // backend les compte) : sans elles, elle sautait au premier message.
       tokens: estimateTokens(payload.messages) + estimateTokens(payload.tools ?? []),
-      contextSize: settings.contextSize,
+      contextSize: workingWindow(settings),
     })
   } catch (e) {
-    res.status(404).json({ error: e instanceof Error ? e.message : String(e) })
+    // CodedError (personnage, chat…) → code + 404 ; erreur interne → 500 brut.
+    sendJsonError(res, e instanceof CodedError ? 404 : 500, e)
   }
 })

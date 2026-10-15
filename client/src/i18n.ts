@@ -4,6 +4,7 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import type { ChatMeta } from '../../shared/types'
+import type { ErrorCode, ErrorParams } from '../../shared/errorCodes'
 import { getPref, setPref } from './prefs'
 
 export type Lang = 'fr' | 'en'
@@ -44,6 +45,9 @@ const FR = {
   customThemeAccent: 'Accent',
   themeCode: 'Code du thème (partageable — collez-en un ici)',
   sectionScene: 'Scène',
+  avatarVisible: 'Afficher l’avatar',
+  avatarVisibleSub:
+    'Masqué : toute la scène disparaît (avatar 3D, portrait 2D, fond, décor) et le chat prend toute la place — le moteur 3D est mis en pause, rien ne se rend à l’aveugle.',
   env3d: 'Décor 3D',
   env3dSub:
     'Affiche le décor du personnage autour de l’avatar. Éteint : fond 2D ou dégradé, comme avant.',
@@ -82,6 +86,10 @@ const FR = {
   characterVoicePlaceholder: 'identifiant exact (ex. clone:Sakurav1)',
   characterVoiceHint:
     'Laissez vide pour la voix par défaut des Réglages. « Tester » interroge le serveur de synthèse configuré et propose ses voix.',
+  characterTtsModel: 'Modèle de sa voix',
+  characterTtsModelPlaceholder: 'identifiant exact chez le serveur de synthèse',
+  characterTtsModelHint:
+    'Laissez vide pour le modèle par défaut des Réglages. C’est le modèle qui produit la voix, pas le serveur — celui-ci reste un réglage d’application.',
   // Famille d'animations propre au personnage (dialog Personnages). Deux
   // bibliothèques complètes et étanches — cf. vrma/README.md.
   characterAnimations: 'Gestuelle',
@@ -111,7 +119,7 @@ const FR = {
   vnHideBox: 'Masquer le dialogue (la scène seule)',
   vnShowBox: 'Réafficher le dialogue',
 
-  // ── Erreurs côté client (celles du serveur sont affichées telles quelles) ─
+  // ── Erreurs côté client (celles du serveur passent par SERVER_ERROR_I18N) ─
   authRequired: 'Authentification requise',
   serverError: 'Erreur serveur ({status})',
   serverUnreachable: 'Serveur Hanami injoignable',
@@ -153,6 +161,17 @@ const FR = {
   toolCall: '{name} : {args}',
   webSearchStatus: 'Recherche sur le Web : {query}',
   toolResultsHint: 'Cliquer pour voir les résultats',
+  toolRunningHint: 'Action en cours…',
+  toolTraceList: 'Liste les fichiers',
+  toolTraceRead: 'Lit {target}',
+  toolTraceWrite: 'Écrit {target}',
+  toolTraceEdit: 'Modifie {target}',
+  toolTraceDelete: 'Supprime {target}',
+  toolTraceMemSave: 'Mémoire : crée {target}',
+  toolTraceMemUpdate: 'Mémoire : modifie {target}',
+  toolTraceMemAppend: 'Mémoire : ajoute à {target}',
+  toolTraceMemRead: 'Mémoire : lit {target}',
+  toolTraceMemDelete: 'Mémoire : supprime {target}',
   regenerate: 'Régénérer',
   continueReply: 'Continuer',
   copyMessage: 'Copier le message',
@@ -232,7 +251,8 @@ const FR = {
   portrait: 'Portrait',
   portraitHint: 'Image de la carte importée — tient lieu d’avatar tant qu’aucun modèle 3D n’est choisi.',
   photo: 'Photo',
-  photoHint: 'Vignette du personnage dans la liste — à défaut, le portrait de sa carte, puis son initiale.',
+  photoHint:
+    'Vignette du personnage dans la liste — et son avatar en scène quand il n’a ni modèle 3D ni portrait de carte. À défaut : le portrait de sa carte, puis son initiale.',
   photoCapture: 'Capturer le modèle 3D',
   photoCaptureHint: 'Cadrez l’avatar à l’écran, puis capturez : la photo est ce que vous voyez.',
   photoUpload: 'Envoyer une image',
@@ -274,6 +294,27 @@ const FR = {
   deleteCharacterArmed:
     'Dernière chance : cette action supprime le personnage, ses chats et sa mémoire. Irréversible.',
   deleteCharacter: 'Supprimer le personnage',
+  // Overrides de génération par personnage : un champ vide retombe sur le
+  // réglage global de l'app (le placeholder le dit). Le backend et la clé API
+  // ne se surchargent PAS ici : c'est le moteur de la maison.
+  llmSection: 'Modèle (ce personnage)',
+  llmSectionHint:
+    'Overrides pour ce personnage uniquement — un champ vide retombe sur le réglage global de l’app (indiqué en filigrane). Backend et clé API restent globaux : c’est le moteur, pas la propriété du personnage.',
+  llmUseGlobal: 'Modèle global (réglages)',
+  llmModeGlobal: 'Global',
+  llmGlobal: 'Global : {value}',
+
+  // ── Compression de contexte (chantier B) ─────────────────────────────────
+  // Opt-in par personnage : le contexte part COMPRESSÉ au LLM (moins de
+  // tokens, rappel et fidélité intacts). L'original n'est JAMAIS modifié.
+  compressToggle: 'Compression de contexte',
+  compressToggleSub:
+    'Réduit les tokens envoyés au LLM pour ce personnage : prompt et persona densifiés, mémoire compressée (bouton ci-dessous). L’original n’est jamais modifié — désactiver reprend le contexte tel quel.',
+  compressBtn: 'Compresser la mémoire',
+  compressBtnHint:
+    'Un appel au modèle densifie chaque fichier de faits ; un vérifieur rejette toute perte de fait (repli sûr). Le résultat est mis en cache et exploité au prochain message.',
+  compressBusy: 'Compression en cours…',
+  compressResult: 'Mémoire : ≈ {before} → {after} tokens{gain} · {llm} par le LLM, {rejected} repli sûr',
 
   // ── Réglages ─────────────────────────────────────────────────────────────
   // Onglets du dialog : trois groupes, un seul formulaire.
@@ -282,14 +323,23 @@ const FR = {
   tabFeatures: 'Fonctions',
   tabCredits: 'Crédits',
   sectionConversation: 'Conversation',
-  // Persona de l'utilisateur : deux champs, valables pour tous les personnages.
+  // Personas de l'utilisateur : une collection de « moi ». Le persona par
+  // défaut s'applique à tous les personnages ; un personnage peut en épingler
+  // un autre sur sa carte (dialog Personnages).
   sectionPersona: 'Vous',
   personaName: 'Votre nom',
   personaNamePlaceholder: 'comment le personnage vous appelle',
   personaDescription: 'Qui vous êtes (en deux lignes)',
   personaDescriptionPlaceholder: 'Ce que le personnage sait de vous : métier, goûts, façon d’être…',
   personaHint:
-    'Optionnel, et injecté dans le prompt de tous vos personnages (visible dans l’Inspecteur). Le nom remplace aussi {{user}} dans les cartes importées.',
+    'Injecté dans le prompt (visible dans l’Inspecteur) : le persona par défaut s’applique à tous vos personnages, et un personnage peut en épingler un autre sur sa carte. Le nom du persona actif remplace aussi {{user}} dans les cartes importées.',
+  personasEmpty: 'Aucun persona : aucun bloc n’est injecté, et {{user}} reste « User ».',
+  personasAdd: 'Ajouter un persona',
+  personaDefault: 'Par défaut',
+  personaDelete: 'Supprimer ce persona',
+  charPersona: 'Persona (ce personnage)',
+  charPersonaDefault: 'Défaut des Réglages',
+  charPersonaHint: 'Qui vous êtes face à ce personnage. Vide = le persona par défaut des Réglages.',
   sectionBackend: 'Backend LLM',
   backendUrl: 'URL du backend (compatible OpenAI)',
   apiKey: 'Clé API',
@@ -315,19 +365,39 @@ const FR = {
     'Simple : aucun outil n’est exposé au modèle — Hanami gère la mémoire côté serveur (les faits sont extraits à la compaction) et devine l’émotion à partir du texte. À choisir pour les petits modèles, qui échouent souvent au tool-calling.',
   temperature: 'Température',
   maxTokens: 'Tokens max (réponse)',
+  thinkingLevel: 'Raisonnement (niveau)',
+  thinkingLevelSub:
+    'Plafonne le raisonnement (« thinking ») des modèles qui réfléchissent, comme Qwen3 (via Ollama). Envoyé en reasoning_effort. Auto : aucun paramètre n’est envoyé, le modèle décide — « Aucun » désactive le raisonnement. Un backend qui ne connaît pas ce paramètre l’ignore.',
+  thinkingLevelAuto: 'Auto',
+  thinkingLevelLow: 'Faible',
+  thinkingLevelMedium: 'Moyen',
+  thinkingLevelHigh: 'Élevé',
+  thinkingLevelMax: 'Maximal',
+  thinkingLevelNone: 'Aucun',
   maxHistory: 'Messages d’historique max envoyés',
+  historyLimit: 'Limite de messages',
+  historyLimitSub:
+    'Activée : l’historique envoyé est coupé à « Messages d’historique max envoyés » (0 = aucun historique). Désactivée : tout l’historique est envoyé, sans coupure.',
   showThoughts: 'Afficher les pensées du modèle',
   showThoughtsSub: 'Montre le raisonnement (« thinking ») dans un bloc repliable au-dessus de la réponse.',
   thoughts: 'Pensées',
   notifySound: 'Son de notification',
   notifySoundSub: 'Un petit son à la fin de chaque réponse.',
   contextSize: 'Taille de contexte du modèle (tokens)',
+  compactThreshold: 'Seuil de compaction (tokens)',
+  compactThresholdSub:
+    'Sert de limite d’auto-compaction quand la base est « Seuil de compaction ». 0 = pas de seuil : la limite devient la taille de contexte. Au-delà, un modèle local est plus lent, pas plus précis.',
+  compactBasis: 'Base de la limite d’auto-compaction',
+  compactBasisThreshold: 'Seuil de compaction',
+  compactBasisContext: 'Taille de contexte',
+  compactBasisSub:
+    'La jauge et l’auto-compaction suivent la valeur choisie, pas les deux à la fois. « Seuil de compaction » = le seuil ci-dessus (à garder ≤ la taille de contexte) ; « Taille de contexte » = la taille du modèle (la compaction arrive plus tard).',
   autoCompact: 'Compaction automatique',
   timeAwareness: 'Notion du temps',
   timeAwarenessSub:
     'Le personnage sait la date, l’heure et le temps écoulé depuis votre dernier message (visible dans l’Inspecteur).',
   autoCompactSub:
-    'Quand la jauge atteint 100 % : les faits importants sont sauvés en mémoire, puis la conversation est résumée. Le résumé reste visible et modifiable.',
+    'Elle se déclenche sur le nombre de TOKENS dans le contexte (la jauge), pas sur le nombre de messages : quand la jauge atteint 100 %, les faits importants sont sauvés en mémoire, puis la conversation est résumée. Le résumé reste visible et modifiable. Le niveau auquel la jauge se remplit se règle dans « Seuil de compaction » ; « Messages d’historique max envoyés » ne coupe que l’historique envoyé, sans rien déclencher.',
   contextBadge: '{percent} %',
   contextBadgeTitle: 'Contexte utilisé : ~{tokens} / {limit} tokens',
   contextUsage: 'Prochain envoi : ~{tokens} tokens / {limit} ({percent} %)',
@@ -344,6 +414,14 @@ const FR = {
   compactInstruction: 'Instruction optionnelle (ex. « garde tous les détails du voyage »)',
   compactInstructionPlaceholder: 'Instruction…',
   compactDone: 'Conversation compactée ({n} messages résumés).',
+  // Pastille persistante au point de coupure (dérivée de summaryUpto) — à ne
+  // pas confondre avec compactDone, la ligne éphémère « terminé » en bas du fil.
+  compactDivider: 'Conversation résumée · {n} messages antérieurs condensés',
+  // Échec de l'auto-compaction — plus jamais invisible : le 1ᵉʳ échec annonce
+  // la relance, l'arrêt (après MAX) pointe vers le bouton manuel.
+  autoCompactRetry: 'Auto-compaction : erreur — nouvel essai à la prochaine réponse.',
+  autoCompactStopped:
+    'Auto-compaction : {n} échecs d’affilée, plus tentée cette session (le bouton Compact de l’inspecteur reste là).',
   sectionTts: 'Synthèse vocale (TTS)',
   ttsEnabled: 'Lire les réponses à voix haute',
   ttsEnabledSub:
@@ -369,6 +447,11 @@ const FR = {
   sectionMemoryTools: 'Mémoire & outils',
   memoryToggle: 'Mémoire',
   memoryToggleSub: 'Injecte le bloc mémoire dans le contexte et expose les outils mémoire.',
+  memoryInjection: 'Injection mémoire',
+  memoryInjectionAuto: 'Auto',
+  memoryInjectionSelective: 'Pertinence',
+  memoryInjectionSub:
+    "Auto : tout ou rien (≤ 8000 caractères = tout, au-delà = index seul). Pertinence : classe les fichiers par rapport à la question courante et n'injecte que les plus utiles, le reste reste lisible à la demande.",
   fileTools: 'Outils fichiers',
   fileToolsSub: 'Le modèle peut lire/écrire dans le dossier sandbox.',
   allowDelete: 'Autoriser la suppression de fichiers',
@@ -513,7 +596,9 @@ const FR = {
   loginHint: 'Cette instance est protégée par un mot de passe.',
   password: 'Mot de passe',
   loggingIn: 'Connexion…',
-  login: 'Entrer',
+  // « Entrer » est le calque du bouton anglais « Enter » : en français, un bouton
+  // de connexion dit « Se connecter » (cohérent avec « Connexion… » ci-dessus).
+  login: 'Se connecter',
 
   // ── Mémoire ──────────────────────────────────────────────────────────────
   memoryHelp:
@@ -524,6 +609,26 @@ const FR = {
   memoryFileContent: 'Contenu de {name}',
   deleteFile: 'Supprimer',
   noMemoryFiles: 'Aucun fichier mémoire.',
+  memoryTidy: 'Ranger la mémoire',
+  memoryTidyArmed: 'Confirmer le rangement ?',
+  memoryTidyHint:
+    'Un seul appel au modèle fusionne et compresse les fichiers en gardant tous les faits. Une sauvegarde est prise avant, et restaurable ci-dessous.',
+  memoryTidyRunning: 'Rangement en cours…',
+  memoryTidyReport:
+    'Rangé : {bf} fichiers / {bc} car. → {af} fichiers / {ac} car. (sauvegarde automatique faite)',
+  memoryBackups: 'Sauvegardes mémoire',
+  memoryBackupMeta: '{files} fichiers · {chars} car.',
+  memoryBackupRestore: 'Restaurer',
+  memoryBackupRestoreArmed: 'Confirmer ?',
+  memoryBackupRestored: 'Sauvegarde {name} restaurée (l’état actuel a d’abord été sauvegardé).',
+  memoryInjectFull: 'Injecté dans le prompt : toute la mémoire ({chars} car.)',
+  memoryInjectSelective:
+    'Injecté dans le prompt : les fichiers les plus pertinents (classement par la requête, dans un budget) — le reste reste lisible via memory_read ({chars} car. au total)',
+  memoryInjectIndex:
+    'Injecté dans le prompt : seul l’index — le modèle lit les fichiers via l’outil memory_read ({chars} car. au total)',
+  memoryInjectCapped:
+    'Injecté dans le prompt : mémoire coupée au-delà de la limite du mode simple ({chars} car.)',
+  memoryInjectNone: 'Aucune mémoire injectée (mémoire désactivée ou vide)',
 
   // ── Inspecteur de prompt ─────────────────────────────────────────────────
   promptInspectorNote: 'Ceci est exactement ce que Hanami envoie au backend — rien d’autre.',
@@ -537,6 +642,132 @@ const FR = {
     'Le prompt du personnage — écrivez-le ici, le prochain message envoyé s’en sert déjà (c’est le même champ que « Prompt système » dans Personnages). Seules {{char}} et {{user}} sont remplacées à l’envoi : l’onglet « Payload complet » montre le texte réellement transmis.',
   injectedHint:
     'Ajouté par Hanami à la suite du prompt, à chaque envoi : vous (persona), mémoire, résumé de compaction, notes de scène, heure. Chaque bloc s’édite là où il vit (panneau Mémoire, onglets Résumé et Scène, réglages).',
+
+  // ── Erreurs serveur (contrat codes/phrases — shared/errorCodes.ts) ───────
+  // Une clé par code, même nom que le code : la table SERVER_ERROR_I18N (fin
+  // de fichier) est indexée sur les deux, tsc force la couverture complète.
+  // Deux codes réutilisent une clé existante : authRequired et badPassword
+  // (→ wrongPassword).
+  configUnreadable: 'Le fichier de configuration est illisible',
+  configUnreadableSave: 'Le fichier de configuration ne peut pas être sauvegardé',
+  corsBlocked: 'Origine refusée par le navigateur (CORS)',
+  badOrigin: 'Origine de la requête non autorisée',
+  accessDenied: 'Accès refusé',
+  characterNotFound: 'Personnage introuvable : {id}',
+  chatNotFound: 'Conversation introuvable : {id}',
+  bgNameExhausted: 'Trop de fonds portant ce nom — impossible de trouver un nom libre',
+  invalidId: 'Identifiant invalide : {id}',
+  chatCorrupt: 'Conversation corrompue : {id}',
+  invalidFileName: 'Nom de fichier invalide',
+  memoryIndexProtected: 'L’index de mémoire est protégé et ne peut pas être modifié à la main',
+  invalidBackupName: 'Nom de sauvegarde invalide',
+  backupNotFound: 'Sauvegarde introuvable : {name}',
+  fieldNameRequired: 'Champ requis : {field}',
+  charChatRequired: 'Un personnage et une conversation sont requis',
+  chatPayloadRequired: 'Corps de requête requis (conversation)',
+  editMessageRequired: 'Message à modifier requis',
+  variantRequired: 'Variante requise',
+  deleteMessageRequired: 'Message à supprimer requis',
+  summaryRequired: 'Résumé requis',
+  sceneNotesRequired: 'Notes de scène requises',
+  pinRequired: 'Épinglage requis',
+  characterIdRequired: 'Identifiant de personnage requis',
+  uiBodyExpected: 'Corps JSON attendu (réglages d’interface)',
+  uiTooLarge: 'Réglages trop volumineux ({maxKo} Ko maximum)',
+  cardBodyRequired: 'Corps de requête requis (PNG ou .json de card)',
+  noReadableCard:
+    'Aucune character card lisible (PNG sans chunk chara/ccv3, ou .json qui n’est pas une card)',
+  imageBodyRequired: 'Corps de requête image requis',
+  imageFormatUnsupported: 'Format non pris en charge (png, jpg, webp)',
+  notAnImage: 'Ce fichier n’est pas une image PNG, JPEG ou WebP',
+  backupPreviewToken: 'Jeton d’aperçu requis (stagedId)',
+  nothingToRegenerate: 'Rien à régénérer',
+  nothingToContinue: 'Rien à continuer',
+  nothingToImpersonate: 'Rien à imiter',
+  openAlreadyRunning: 'Une ouverture de conversation est déjà en cours',
+  openNotEmpty: 'La conversation n’est pas vide',
+  compactionAlreadyRunning: 'Une compaction est déjà en cours',
+  toolBudgetExhausted: 'Budget d’outils épuisé — la réponse se poursuit sans nouvel outil',
+  variantNotFound: 'Variante introuvable',
+  variantStale: 'Variante périmée — la conversation a changé',
+  messageNotFound: 'Message introuvable (index {index})',
+  messageNoVariants: 'Aucune variante pour ce message (index {index})',
+  noSummaryYet: 'Aucun résumé pour l’instant',
+  responseTruncated: 'Réponse tronquée (limite de longueur atteinte)',
+  responseLengthLimit: 'Limite de longueur de la réponse atteinte',
+  emptyResponse: 'Réponse vide — le modèle n’a produit ni texte ni action',
+  nothingToCompact: 'Pas assez de messages à compacter (minimum {min})',
+  windowTooSmallForCompact: 'Fenêtre de contexte trop petite pour la compaction',
+  compactNoSummary: 'La compaction n’a pas produit de résumé (fin : {finish})',
+  imagesNotArray: 'Les images doivent être envoyées en liste',
+  tooManyImages: 'Trop d’images (maximum {max})',
+  imageNotDataUrl: 'Image invalide (data URL attendue)',
+  imageTooLarge: 'Image trop volumineuse (maximum {maxMo} Mo)',
+  llmHttpError: 'Erreur du backend LLM (HTTP {status}) : {detail}',
+  llmNoBody: 'Le backend LLM n’a renvoyé aucun corps de réponse',
+  llmNoSseChunk: 'Réponse du backend LLM illisible (aucun chunk SSE exploitable)',
+  llmUnreachable: 'Backend LLM injoignable : {detail}',
+  backendProbeFailed: 'Sonde du backend échouée ({url}) : {detail}',
+  ttsDisabled: 'TTS désactivé (serveur TTS non configuré)',
+  ttsTextRequired: 'Texte à prononcer requis',
+  ttsNoUrl: 'Aucune URL de serveur TTS configurée',
+  ttsHttpError: 'Erreur du serveur TTS (HTTP {status}) : {detail}',
+  ttsUnreachable: 'Serveur TTS injoignable ({url}) : {detail}',
+  ttsProbeUrlInvalid: 'URL du serveur TTS invalide',
+  ttsProbeTimeout: 'Sonde du serveur TTS expirée',
+  tidyNeedsTwoFiles: 'Le rangement a besoin des deux fichiers (index et mémoire)',
+  tidyAlreadyRunning: 'Un rangement de mémoire est déjà en cours',
+  tidyNoJson: 'Index de mémoire introuvable',
+  tidyBadJson: 'Index de mémoire illisible',
+  tidyNoIndex: 'Aucun fichier mémoire à indexer',
+  tidyNoFiles: 'Aucun fichier mémoire trouvé',
+  tidyFileNoName: 'Fichier mémoire {n} sans nom dans l’index',
+  tidyIndexInFiles: 'L’index apparaît dans la liste des fichiers mémoire',
+  tidyDuplicateFile: 'Fichier mémoire en double : {name}',
+  tidyEmptyFile: 'Fichier mémoire vide : {name}',
+  tidyTooBig: 'Mémoire trop volumineuse pour la fenêtre de contexte ({k} k tokens, fenêtre {window} k)',
+  tidyNoAnswer: 'Le modèle n’a pas renvoyé de réponse exploitable',
+  compressAlreadyRunning: 'Une compression de mémoire est déjà en cours',
+  compressNoAnswer: 'Le modèle n’a pas renvoyé de réponse exploitable pour la compression',
+  restoreZipExpected: 'Archive .zip attendue dans le corps de la requête',
+  restoreEntryRefused: 'Nom d’entrée refusé : {name}',
+  restoreEntryControl: 'Nom d’entrée refusé (caractère de contrôle) : {name}',
+  restoreEntryBackslash: 'Nom d’entrée refusé (antislash) : {name}',
+  restoreEntryAbsolute: 'Nom d’entrée refusé (chemin absolu) : {name}',
+  restoreEntryTraversal: 'Nom d’entrée refusé (traversée de dossier) : {name}',
+  restoreEntryForbidden: 'Nom d’entrée refusé (caractère interdit) : {name}',
+  restoreEntryReserved: 'Nom d’entrée refusé (nom réservé) : {name}',
+  restoreEntryTrailing: 'Nom d’entrée refusé (point ou espace final) : {name}',
+  restoreEntryOutside: 'Entrée refusée (sortie du dossier cible) : {name}',
+  restoreManifestCorrupt: 'Manifeste illisible — archive Hanami abîmée',
+  restoreNotHanami: 'Ce zip n’est pas une sauvegarde Hanami',
+  restoreVersionUnreadable: 'Version de sauvegarde illisible',
+  restoreVersionTooNew:
+    'Sauvegarde en version {version} — cette installation d’Hanami ne lit que la version {max}. Mettez Hanami à jour.',
+  restoreUnrecognizable:
+    'Ce zip n’est pas une sauvegarde Hanami (ni manifeste, ni dossier data/ reconnaissable)',
+  restoreNoData: 'Archive sans données restaurables (ni data/, ni portraits/)',
+  restoreInterrupted: 'Restauration interrompue ({detail}). L’état d’avant est intact dans : {file}',
+  restoreStagedIdInvalid: 'Jeton d’archive invalide',
+  restorePreviewExpired: 'Aperçu expiré — redéposez l’archive et vérifiez-la à nouveau',
+  zipTooShort: 'Fichier trop court pour être un .zip',
+  zipNotZip: 'Ce fichier n’est pas un .zip (fin d’archive introuvable)',
+  zipZip64: 'Archive zip64 — non gérée par Hanami',
+  zipZip64Entry: 'Archive zip64 — non gérée par Hanami ({name})',
+  zipTruncatedIndex: 'Archive tronquée (index hors du fichier)',
+  zipTruncatedCd: 'Archive tronquée (index incomplet)',
+  zipTruncatedEntry: 'Archive tronquée ({name})',
+  zipTooManyEntries: 'Archive refusée : {count} entrées (maximum {max})',
+  zipCorruptIndex: 'Archive corrompue (entrée d’index invalide)',
+  zipCorruptHeader: 'Archive corrompue (en-tête de {name})',
+  zipCorruptSizes: 'Archive corrompue (tailles incohérentes : {name})',
+  zipCorruptSize: 'Archive corrompue (taille inattendue : {name})',
+  zipCorruptCrc: 'Archive corrompue (CRC invalide : {name})',
+  zipEncrypted: 'Entrée chiffrée — non gérée ({name})',
+  zipEntryTooLarge: 'Entrée trop volumineuse : {name} ({size} octets)',
+  zipContentTooLarge: 'Archive refusée : contenu décompressé trop volumineux',
+  zipEntryUnreadable: 'Entrée illisible : {name} ({detail})',
+  zipMethodUnsupported: 'Compression non gérée (méthode {method}) : {name}',
 }
 
 export type Key = keyof typeof FR
@@ -577,6 +808,9 @@ const EN: Record<Key, string> = {
   customThemeAccent: 'Accent',
   themeCode: 'Theme code (shareable — paste one here)',
   sectionScene: 'Scene',
+  avatarVisible: 'Show avatar',
+  avatarVisibleSub:
+    'Hidden: the whole scene disappears (3D avatar, 2D portrait, background, environment) and the chat takes the full space — the 3D engine is paused, nothing renders blind.',
   env3d: '3D environment',
   env3dSub:
     'Shows the character’s environment around the avatar. Off: 2D background or gradient, as before.',
@@ -588,7 +822,7 @@ const EN: Record<Key, string> = {
     'The character inhabits the room: turns to face you, walks around, sits on whatever it finds. Off: it stays put, as before.',
   sceneLiveNoMobile:
     'Large screens only: on a narrow screen the scene is just a strip, and the avatar stays in front of the environment.',
-  sceneLiveNoVrma: 'Needs gesture animations: without the .vrma files there is no step to play.',
+  sceneLiveNoVrma: 'Needs gesture animations: without the .vrma files it has no steps to play.',
   scene3dHint:
     'Click the floor to send it there, a seat to sit it down, the character to get its attention.',
 
@@ -610,6 +844,10 @@ const EN: Record<Key, string> = {
   characterVoicePlaceholder: 'exact id (e.g. clone:Sakurav1)',
   characterVoiceHint:
     'Leave empty for the default voice from Settings. “Test” asks the configured speech server for its voices.',
+  characterTtsModel: 'Their voice model',
+  characterTtsModelPlaceholder: 'exact id on the speech server',
+  characterTtsModelHint:
+    'Leave empty for the default model from Settings. This is the model that produces the voice, not the server — the server stays an app setting.',
   characterAnimations: 'Body language',
   animOverte: 'Overte',
   animRocketbox: 'Rocketbox',
@@ -661,11 +899,22 @@ const EN: Record<Key, string> = {
   stop: 'Stop generating',
   dictate: 'Dictate',
   dictateListening: 'Listening…',
-  impersonate: 'Impersonate me',
+  impersonate: 'Write for me',
   replyInProgress: 'Reply in progress',
   toolCall: '{name}: {args}',
   webSearchStatus: 'Searching the web: {query}',
   toolResultsHint: 'Click to see the results',
+  toolRunningHint: 'Action in progress…',
+  toolTraceList: 'Listing files',
+  toolTraceRead: 'Reading {target}',
+  toolTraceWrite: 'Writing {target}',
+  toolTraceEdit: 'Editing {target}',
+  toolTraceDelete: 'Deleting {target}',
+  toolTraceMemSave: 'Memory: creating {target}',
+  toolTraceMemUpdate: 'Memory: updating {target}',
+  toolTraceMemAppend: 'Memory: appending to {target}',
+  toolTraceMemRead: 'Memory: reading {target}',
+  toolTraceMemDelete: 'Memory: deleting {target}',
   regenerate: 'Regenerate',
   continueReply: 'Continue',
   copyMessage: 'Copy message',
@@ -688,11 +937,11 @@ const EN: Record<Key, string> = {
   attachImage: 'Attach an image',
   removeImage: 'Remove this image',
   imageAlt: 'Attached image',
-  viewImage: 'View the image larger',
+  viewImage: 'View the image full-size',
   closeImage: 'Close the image',
 
   // ── In-conversation search (Ctrl+F, or the magnifier in the bar) ─────────
-  searchInChat: 'Search in conversation',
+  searchInChat: 'Search the conversation',
   searchPlaceholder: 'Search…',
   searchCount: '{n}/{m}',
   searchPrev: 'Previous match',
@@ -735,7 +984,8 @@ const EN: Record<Key, string> = {
   portrait: 'Portrait',
   portraitHint: 'Image from the imported card — stands in as the avatar until a 3D model is chosen.',
   photo: 'Photo',
-  photoHint: 'The character’s thumbnail in the list — otherwise the portrait from its card, then its initial.',
+  photoHint:
+    'The character’s thumbnail in the list — and its avatar in the scene when it has no 3D model and no card portrait. Otherwise: the card portrait, then its initial.',
   photoCapture: 'Capture the 3D model',
   photoCaptureHint: 'Frame the avatar on screen, then capture: the photo is what you see.',
   photoUpload: 'Upload an image',
@@ -776,6 +1026,27 @@ const EN: Record<Key, string> = {
   deleteCharacterWarn: 'Deleting this character also deletes all of its chats and its memory.',
   deleteCharacterArmed: 'Last chance: this deletes the character, its chats and its memory. There is no undo.',
   deleteCharacter: 'Delete character',
+  // Per-character generation overrides: an empty field falls back to the app's
+  // global setting (the placeholder says which one). Backend and API key are
+  // NOT overridable here: that is the house engine, not a character property.
+  llmSection: 'Model (this character)',
+  llmSectionHint:
+    'Overrides for this character only — an empty field uses the app’s global setting (shown as a placeholder). Backend and API key stay global: that is the engine, not a property of the character.',
+  llmUseGlobal: 'Global model (settings)',
+  llmModeGlobal: 'Global',
+  llmGlobal: 'Global: {value}',
+
+  // ── Context compression (workstream B) ───────────────────────────────────
+  // Per-character opt-in: the context goes COMPRESSED to the LLM (fewer
+  // tokens, recall and fidelity intact). The original is NEVER modified.
+  compressToggle: 'Context compression',
+  compressToggleSub:
+    'Cuts the tokens sent to this character’s LLM: system prompt and persona are densified, memory is compressed (button below). The original is never modified — turning this off restores the context as-is.',
+  compressBtn: 'Compress memory',
+  compressBtnHint:
+    'One model call densifies each fact file; a verifier rejects any lost fact (safe fallback). The result is cached and used on the next message.',
+  compressBusy: 'Compressing…',
+  compressResult: 'Memory: ≈ {before} → {after} tokens{gain} · {llm} by LLM, {rejected} safe fallback',
 
   // ── Settings ─────────────────────────────────────────────────────────────
   tabAppearance: 'Appearance',
@@ -789,7 +1060,14 @@ const EN: Record<Key, string> = {
   personaDescription: 'Who you are (in two lines)',
   personaDescriptionPlaceholder: 'What the character knows about you: work, tastes, the way you are…',
   personaHint:
-    'Optional, and injected into every character’s prompt (visible in the Inspector). The name also replaces {{user}} in imported cards.',
+    'Injected into the prompt (visible in the Inspector): the default persona applies to every character, and a character can pin another one on its card. The active persona’s name also replaces {{user}} in imported cards.',
+  personasEmpty: 'No persona: no block is injected, and {{user}} stays “User”.',
+  personasAdd: 'Add a persona',
+  personaDefault: 'Default',
+  personaDelete: 'Delete this persona',
+  charPersona: 'Persona (this character)',
+  charPersonaDefault: 'Settings default',
+  charPersonaHint: 'Who you are in front of this character. Empty = the settings default persona.',
   sectionBackend: 'LLM backend',
   backendUrl: 'Backend URL (OpenAI-compatible)',
   apiKey: 'API key',
@@ -814,19 +1092,39 @@ const EN: Record<Key, string> = {
     'Simple: no tools are exposed to the model — Hanami handles memory server-side (facts are extracted during compaction) and guesses the emotion from the text. Pick this for small models, which often fail at tool calling.',
   temperature: 'Temperature',
   maxTokens: 'Max tokens (reply)',
+  thinkingLevel: 'Reasoning (level)',
+  thinkingLevelSub:
+    'Caps the reasoning (“thinking”) of models that think, like Qwen3 (via Ollama). Sent as reasoning_effort. Auto: no parameter is sent, the model decides — “None” turns reasoning off. A backend that does not know this parameter ignores it.',
+  thinkingLevelAuto: 'Auto',
+  thinkingLevelLow: 'Low',
+  thinkingLevelMedium: 'Medium',
+  thinkingLevelHigh: 'High',
+  thinkingLevelMax: 'Max',
+  thinkingLevelNone: 'None',
   maxHistory: 'Max history messages sent',
+  historyLimit: 'Message limit',
+  historyLimitSub:
+    'On: the sent history is cut at “Max history messages sent” (0 = no history at all). Off: the whole history is sent, uncapped.',
   showThoughts: 'Show the model’s thoughts',
   showThoughtsSub: 'Shows the reasoning (“thinking”) in a collapsible block above the reply.',
   thoughts: 'Thoughts',
   notifySound: 'Notification sound',
   notifySoundSub: 'A soft chime at the end of each reply.',
   contextSize: 'Model context size (tokens)',
+  compactThreshold: 'Compaction threshold (tokens)',
+  compactThresholdSub:
+    'Used as the auto-compaction limit when the basis is “Compaction threshold”. 0 = no threshold: the limit becomes the context size. Past it, a local model is just slower, not smarter.',
+  compactBasis: 'Auto-compaction limit basis',
+  compactBasisThreshold: 'Compaction threshold',
+  compactBasisContext: 'Context size',
+  compactBasisSub:
+    'The gauge and auto-compaction follow the chosen value, not both at once. “Compaction threshold” = the value above (keep it at or below the context size); “Context size” = the model’s context (compaction happens later).',
   autoCompact: 'Automatic compaction',
   timeAwareness: 'Sense of time',
   timeAwarenessSub:
     'The character knows the date, the time, and how long since your last message (visible in the Inspector).',
   autoCompactSub:
-    'When the gauge reaches 100%: important facts are saved to memory, then the conversation is summarized. The summary stays visible and editable.',
+    'Triggered by the TOKEN COUNT in the context (the gauge), not by the message count: when the gauge reaches 100%, important facts are saved to memory, then the conversation is summarized. The summary stays visible and editable. How fast the gauge fills is set in the compaction threshold; “Max history messages sent” only trims the sent history, it triggers nothing.',
   contextBadge: '{percent}%',
   contextBadgeTitle: 'Context used: ~{tokens} / {limit} tokens',
   contextUsage: 'Next request: ~{tokens} tokens / {limit} ({percent}%)',
@@ -838,6 +1136,14 @@ const EN: Record<Key, string> = {
   compactInstruction: 'Optional instruction (e.g. “keep every detail of the trip”)',
   compactInstructionPlaceholder: 'Instruction…',
   compactDone: 'Conversation compacted ({n} messages summarized).',
+  // Persistent marker at the cut point (derived from summaryUpto) — distinct
+  // from compactDone, the ephemeral "done" line at the bottom of the feed.
+  compactDivider: 'Conversation summarized · {n} earlier messages condensed',
+  // Auto-compaction failure — never silent again: the first failure announces
+  // the retry, the stop (after MAX) points to the manual button.
+  autoCompactRetry: 'Auto-compaction: error — will retry on the next reply.',
+  autoCompactStopped:
+    'Auto-compaction: {n} failures in a row, no more attempts this session (the Inspector’s Compact button still works).',
   sectionTts: 'Text-to-speech (TTS)',
   ttsEnabled: 'Read replies out loud',
   ttsEnabledSub:
@@ -857,12 +1163,17 @@ const EN: Record<Key, string> = {
   sectionSpontaneous: 'Spontaneous messages',
   spontaneousEnabled: 'The character can write on their own',
   spontaneousEnabledSub:
-    'While you are away: a little message after a few hours, then more and more spaced out, then one last understanding note — and silence until you return. Never outside the time window.',
+    'While you are away: a little message after a few hours, then more and more spaced out, then a final note of understanding — and silence until you return. Never outside the time window.',
   spontaneousStart: 'Not before (hour)',
   spontaneousEnd: 'Not after (hour)',
   sectionMemoryTools: 'Memory & tools',
   memoryToggle: 'Memory',
   memoryToggleSub: 'Injects the memory block into the context and exposes the memory tools.',
+  memoryInjection: 'Memory injection',
+  memoryInjectionAuto: 'Auto',
+  memoryInjectionSelective: 'Relevance',
+  memoryInjectionSub:
+    "Auto: all or nothing (≤ 8000 chars = all, beyond = index only). Relevance: ranks files against the current question and injects only the most useful ones, the rest staying readable on demand.",
   fileTools: 'File tools',
   fileToolsSub: 'The model can read and write inside the sandbox folder.',
   allowDelete: 'Allow file deletion',
@@ -963,13 +1274,13 @@ const EN: Record<Key, string> = {
     'data/config.json will be replaced: backend, API key and access password will be the ones from the backup.',
   restoreWarnPassword:
     'The backup carries a different access password: every session will drop, and you will have to sign in with THAT password.',
-  restoreWarnNoManifest: 'Archive made by a Hanami older than the manifest — recognised by its structure.',
+  restoreWarnNoManifest: 'Archive made by an older build of Hanami, before the manifest — recognised by its structure.',
   restoreWarnEmpty: 'This installation is empty: the restore will not replace anything.',
   restoreArm: 'Restore…',
   restoreConfirm: 'Confirm the restore',
   restoreWarn:
     'Restoring overwrites the files the archive carries. The current state is archived right before, into backups/.',
-  restoreArmed: 'Confirm: {added} and {replaced}. Click a second time to write.',
+  restoreArmed: 'Confirm: {added} and {replaced}. Click again to write.',
   restoreBusy: 'Restoring…',
   restoreDone: 'Restore done — {files}.',
   restoreNet: 'The previous state is archived here (never removed automatically):',
@@ -999,7 +1310,7 @@ const EN: Record<Key, string> = {
   loginHint: 'This instance is password-protected.',
   password: 'Password',
   loggingIn: 'Signing in…',
-  login: 'Enter',
+  login: 'Sign in',
 
   // ── Memory ───────────────────────────────────────────────────────────────
   memoryHelp:
@@ -1010,6 +1321,24 @@ const EN: Record<Key, string> = {
   memoryFileContent: 'Contents of {name}',
   deleteFile: 'Delete',
   noMemoryFiles: 'No memory files.',
+  memoryTidy: 'Tidy memory',
+  memoryTidyArmed: 'Confirm tidying?',
+  memoryTidyHint:
+    'One model call merges and compresses the files, keeping every fact. A backup is taken first and can be restored below.',
+  memoryTidyRunning: 'Tidying…',
+  memoryTidyReport: 'Tidied: {bf} files / {bc} chars → {af} files / {ac} chars (automatic backup taken)',
+  memoryBackups: 'Memory backups',
+  memoryBackupMeta: '{files} files · {chars} chars',
+  memoryBackupRestore: 'Restore',
+  memoryBackupRestoreArmed: 'Confirm?',
+  memoryBackupRestored: 'Backup {name} restored (the current state was backed up first).',
+  memoryInjectFull: 'Injected into the prompt: full memory ({chars} chars)',
+  memoryInjectSelective:
+    'Injected into the prompt: the most relevant files (ranked by the query, within a budget) — the rest stays readable via memory_read ({chars} chars total)',
+  memoryInjectIndex:
+    'Injected into the prompt: index only — the model reads files via the memory_read tool ({chars} chars total)',
+  memoryInjectCapped: 'Injected into the prompt: memory capped by the simple-mode limit ({chars} chars)',
+  memoryInjectNone: 'No memory injected (memory disabled or empty)',
 
   // ── Prompt inspector ─────────────────────────────────────────────────────
   promptInspectorNote: 'This is exactly what Hanami sends to the backend — nothing else.',
@@ -1023,6 +1352,126 @@ const EN: Record<Key, string> = {
     'The character’s prompt — write it here, the very next message already uses it (same field as “System prompt” in Characters). Only {{char}} and {{user}} are replaced on send: the “Full payload” tab shows the text actually transmitted.',
   injectedHint:
     'Appended by Hanami after the prompt on every request: you (persona), memory, compaction summary, scene notes, time. Each block is edited where it lives (Memory panel, Summary and Scene tabs, settings).',
+
+  // ── Server errors (codes/phrases contract — shared/errorCodes.ts) ────────
+  configUnreadable: 'The configuration file is unreadable',
+  configUnreadableSave: 'The configuration file cannot be saved',
+  corsBlocked: 'Origin refused by the browser (CORS)',
+  badOrigin: 'Request origin not allowed',
+  accessDenied: 'Access denied',
+  characterNotFound: 'Character not found: {id}',
+  chatNotFound: 'Conversation not found: {id}',
+  bgNameExhausted: 'Too many backgrounds with this name — no free name left',
+  invalidId: 'Invalid identifier: {id}',
+  chatCorrupt: 'Corrupt conversation: {id}',
+  invalidFileName: 'Invalid file name',
+  memoryIndexProtected: 'The memory index is protected and cannot be modified manually',
+  invalidBackupName: 'Invalid backup name',
+  backupNotFound: 'Backup not found: {name}',
+  fieldNameRequired: 'Required field: {field}',
+  charChatRequired: 'A character and a conversation are required',
+  chatPayloadRequired: 'Request body required (conversation)',
+  editMessageRequired: 'Message to edit required',
+  variantRequired: 'Variant required',
+  deleteMessageRequired: 'Message to delete required',
+  summaryRequired: 'Summary required',
+  sceneNotesRequired: 'Scene notes required',
+  pinRequired: 'Pinning required',
+  characterIdRequired: 'Character identifier required',
+  uiBodyExpected: 'JSON body expected (interface settings)',
+  uiTooLarge: 'Settings too large (max {maxKo} KB)',
+  cardBodyRequired: 'Request body required (card PNG or .json)',
+  noReadableCard: 'No readable character card (PNG without chara/ccv3 chunk, or .json that is not a card)',
+  imageBodyRequired: 'Image request body required',
+  imageFormatUnsupported: 'Unsupported format (png, jpg, webp)',
+  notAnImage: 'This file is not a PNG, JPEG or WebP image',
+  backupPreviewToken: 'Preview token required (stagedId)',
+  nothingToRegenerate: 'Nothing to regenerate',
+  nothingToContinue: 'Nothing to continue',
+  nothingToImpersonate: 'Nothing to impersonate',
+  openAlreadyRunning: 'An opening is already running',
+  openNotEmpty: 'The conversation is not empty',
+  compactionAlreadyRunning: 'A compaction is already running',
+  toolBudgetExhausted: 'Tool budget exhausted — the reply continues without new tools',
+  variantNotFound: 'Variant not found',
+  variantStale: 'Variant stale — the conversation has changed',
+  messageNotFound: 'Message not found (index {index})',
+  messageNoVariants: 'No variants for this message (index {index})',
+  noSummaryYet: 'No summary yet',
+  responseTruncated: 'Response truncated (length limit reached)',
+  responseLengthLimit: 'Response length limit reached',
+  emptyResponse: 'Empty response — the model produced neither text nor action',
+  nothingToCompact: 'Not enough messages to compact (minimum {min})',
+  windowTooSmallForCompact: 'Context window too small for compaction',
+  compactNoSummary: 'Compaction produced no summary (finish: {finish})',
+  imagesNotArray: 'Images must be sent as a list',
+  tooManyImages: 'Too many images (maximum {max})',
+  imageNotDataUrl: 'Invalid image (data URL expected)',
+  imageTooLarge: 'Image too large (maximum {maxMo} MB)',
+  llmHttpError: 'LLM backend error (HTTP {status}): {detail}',
+  llmNoBody: 'The LLM backend returned no response body',
+  llmNoSseChunk: 'Unreadable LLM backend response (no usable SSE chunk)',
+  llmUnreachable: 'LLM backend unreachable: {detail}',
+  backendProbeFailed: 'Backend probe failed ({url}): {detail}',
+  ttsDisabled: 'TTS disabled (no TTS server configured)',
+  ttsTextRequired: 'Text to speak required',
+  ttsNoUrl: 'No TTS server URL configured',
+  ttsHttpError: 'TTS server error (HTTP {status}): {detail}',
+  ttsUnreachable: 'TTS server unreachable ({url}): {detail}',
+  ttsProbeUrlInvalid: 'Invalid TTS server URL',
+  ttsProbeTimeout: 'TTS server probe timed out',
+  tidyNeedsTwoFiles: 'Tidying needs both files (index and memory)',
+  tidyAlreadyRunning: 'A memory tidy is already running',
+  tidyNoJson: 'Memory index not found',
+  tidyBadJson: 'Unreadable memory index',
+  tidyNoIndex: 'No memory files to index',
+  tidyNoFiles: 'No memory files found',
+  tidyFileNoName: 'Memory file {n} has no name in the index',
+  tidyIndexInFiles: 'The index appears in the memory file list',
+  tidyDuplicateFile: 'Duplicate memory file: {name}',
+  tidyEmptyFile: 'Empty memory file: {name}',
+  tidyTooBig: 'Memory too large for the context window ({k}k tokens, window {window}k)',
+  tidyNoAnswer: 'The model returned no usable answer',
+  compressAlreadyRunning: 'A memory compression is already running',
+  compressNoAnswer: 'The model returned no usable answer for compression',
+  restoreZipExpected: 'A .zip archive is expected in the request body',
+  restoreEntryRefused: 'Refused entry name: {name}',
+  restoreEntryControl: 'Refused entry name (control character): {name}',
+  restoreEntryBackslash: 'Refused entry name (backslash): {name}',
+  restoreEntryAbsolute: 'Refused entry name (absolute path): {name}',
+  restoreEntryTraversal: 'Refused entry name (directory traversal): {name}',
+  restoreEntryForbidden: 'Refused entry name (forbidden character): {name}',
+  restoreEntryReserved: 'Refused entry name (reserved name): {name}',
+  restoreEntryTrailing: 'Refused entry name (trailing dot or space): {name}',
+  restoreEntryOutside: 'Refused entry (outside the target folder): {name}',
+  restoreManifestCorrupt: 'Unreadable manifest — damaged Hanami archive',
+  restoreNotHanami: 'This zip is not a Hanami backup',
+  restoreVersionUnreadable: 'Unreadable backup version',
+  restoreVersionTooNew:
+    'Backup is version {version} — this Hanami installation reads version {max} only. Update Hanami.',
+  restoreUnrecognizable: 'This zip is not a Hanami backup (no manifest, no recognizable data/ folder)',
+  restoreNoData: 'Archive has no restorable data (no data/, no portraits/)',
+  restoreInterrupted: 'Restore interrupted ({detail}). The previous state is intact in: {file}',
+  restoreStagedIdInvalid: 'Invalid archive token',
+  restorePreviewExpired: 'Preview expired — re-upload the archive and check it again',
+  zipTooShort: 'File too short to be a .zip',
+  zipNotZip: 'This file is not a .zip (end of archive not found)',
+  zipZip64: 'zip64 archive — not supported by Hanami',
+  zipZip64Entry: 'zip64 archive — not supported by Hanami ({name})',
+  zipTruncatedIndex: 'Truncated archive (index outside the file)',
+  zipTruncatedCd: 'Truncated archive (incomplete index)',
+  zipTruncatedEntry: 'Truncated archive ({name})',
+  zipTooManyEntries: 'Archive refused: {count} entries (maximum {max})',
+  zipCorruptIndex: 'Corrupt archive (invalid index entry)',
+  zipCorruptHeader: 'Corrupt archive (header of {name})',
+  zipCorruptSizes: 'Corrupt archive (inconsistent sizes: {name})',
+  zipCorruptSize: 'Corrupt archive (unexpected size: {name})',
+  zipCorruptCrc: 'Corrupt archive (invalid CRC: {name})',
+  zipEncrypted: 'Encrypted entry — not supported ({name})',
+  zipEntryTooLarge: 'Entry too large: {name} ({size} bytes)',
+  zipContentTooLarge: 'Archive refused: decompressed content too large',
+  zipEntryUnreadable: 'Unreadable entry: {name} ({detail})',
+  zipMethodUnsupported: 'Unsupported compression (method {method}): {name}',
 }
 
 const DICT: Record<Lang, Record<Key, string>> = { fr: FR, en: EN }
@@ -1060,6 +1509,146 @@ export function getLang(): Lang {
 /** Traduction hors React (couche API). Dans un composant, préférer `useI18n().t`. */
 export function translate(key: Key, vars?: Vars): string {
   return interpolate(DICT[currentLang][key], vars)
+}
+
+/**
+ * Chaque code du contrat codes/phrases a SA phrase dans les deux langues.
+ * `Record<ErrorCode, Key>` : un code ajouté dans shared/errorCodes.ts sans
+ * entrée ici (et sans clé FR/EN) casse le typecheck — aucune phrase ne peut
+ * disparaître. Deux codes réutilisent des clés existantes.
+ */
+export const SERVER_ERROR_I18N: Record<ErrorCode, Key> = {
+  authRequired: 'authRequired',
+  badPassword: 'wrongPassword',
+  configUnreadable: 'configUnreadable',
+  configUnreadableSave: 'configUnreadableSave',
+  corsBlocked: 'corsBlocked',
+  badOrigin: 'badOrigin',
+  accessDenied: 'accessDenied',
+  characterNotFound: 'characterNotFound',
+  chatNotFound: 'chatNotFound',
+  bgNameExhausted: 'bgNameExhausted',
+  invalidId: 'invalidId',
+  chatCorrupt: 'chatCorrupt',
+  invalidFileName: 'invalidFileName',
+  memoryIndexProtected: 'memoryIndexProtected',
+  invalidBackupName: 'invalidBackupName',
+  backupNotFound: 'backupNotFound',
+  fieldNameRequired: 'fieldNameRequired',
+  charChatRequired: 'charChatRequired',
+  chatPayloadRequired: 'chatPayloadRequired',
+  editMessageRequired: 'editMessageRequired',
+  variantRequired: 'variantRequired',
+  deleteMessageRequired: 'deleteMessageRequired',
+  summaryRequired: 'summaryRequired',
+  sceneNotesRequired: 'sceneNotesRequired',
+  pinRequired: 'pinRequired',
+  characterIdRequired: 'characterIdRequired',
+  uiBodyExpected: 'uiBodyExpected',
+  uiTooLarge: 'uiTooLarge',
+  cardBodyRequired: 'cardBodyRequired',
+  noReadableCard: 'noReadableCard',
+  imageBodyRequired: 'imageBodyRequired',
+  imageFormatUnsupported: 'imageFormatUnsupported',
+  notAnImage: 'notAnImage',
+  backupPreviewToken: 'backupPreviewToken',
+  nothingToRegenerate: 'nothingToRegenerate',
+  nothingToContinue: 'nothingToContinue',
+  nothingToImpersonate: 'nothingToImpersonate',
+  openAlreadyRunning: 'openAlreadyRunning',
+  openNotEmpty: 'openNotEmpty',
+  compactionAlreadyRunning: 'compactionAlreadyRunning',
+  toolBudgetExhausted: 'toolBudgetExhausted',
+  variantNotFound: 'variantNotFound',
+  variantStale: 'variantStale',
+  messageNotFound: 'messageNotFound',
+  messageNoVariants: 'messageNoVariants',
+  noSummaryYet: 'noSummaryYet',
+  responseTruncated: 'responseTruncated',
+  responseLengthLimit: 'responseLengthLimit',
+  emptyResponse: 'emptyResponse',
+  nothingToCompact: 'nothingToCompact',
+  windowTooSmallForCompact: 'windowTooSmallForCompact',
+  compactNoSummary: 'compactNoSummary',
+  imagesNotArray: 'imagesNotArray',
+  tooManyImages: 'tooManyImages',
+  imageNotDataUrl: 'imageNotDataUrl',
+  imageTooLarge: 'imageTooLarge',
+  llmHttpError: 'llmHttpError',
+  llmNoBody: 'llmNoBody',
+  llmNoSseChunk: 'llmNoSseChunk',
+  llmUnreachable: 'llmUnreachable',
+  backendProbeFailed: 'backendProbeFailed',
+  ttsDisabled: 'ttsDisabled',
+  ttsTextRequired: 'ttsTextRequired',
+  ttsNoUrl: 'ttsNoUrl',
+  ttsHttpError: 'ttsHttpError',
+  ttsUnreachable: 'ttsUnreachable',
+  ttsProbeUrlInvalid: 'ttsProbeUrlInvalid',
+  ttsProbeTimeout: 'ttsProbeTimeout',
+  tidyNeedsTwoFiles: 'tidyNeedsTwoFiles',
+  tidyAlreadyRunning: 'tidyAlreadyRunning',
+  tidyNoJson: 'tidyNoJson',
+  tidyBadJson: 'tidyBadJson',
+  tidyNoIndex: 'tidyNoIndex',
+  tidyNoFiles: 'tidyNoFiles',
+  tidyFileNoName: 'tidyFileNoName',
+  tidyIndexInFiles: 'tidyIndexInFiles',
+  tidyDuplicateFile: 'tidyDuplicateFile',
+  tidyEmptyFile: 'tidyEmptyFile',
+  tidyTooBig: 'tidyTooBig',
+  tidyNoAnswer: 'tidyNoAnswer',
+  compressAlreadyRunning: 'compressAlreadyRunning',
+  compressNoAnswer: 'compressNoAnswer',
+  restoreZipExpected: 'restoreZipExpected',
+  restoreEntryRefused: 'restoreEntryRefused',
+  restoreEntryControl: 'restoreEntryControl',
+  restoreEntryBackslash: 'restoreEntryBackslash',
+  restoreEntryAbsolute: 'restoreEntryAbsolute',
+  restoreEntryTraversal: 'restoreEntryTraversal',
+  restoreEntryForbidden: 'restoreEntryForbidden',
+  restoreEntryReserved: 'restoreEntryReserved',
+  restoreEntryTrailing: 'restoreEntryTrailing',
+  restoreEntryOutside: 'restoreEntryOutside',
+  restoreManifestCorrupt: 'restoreManifestCorrupt',
+  restoreNotHanami: 'restoreNotHanami',
+  restoreVersionUnreadable: 'restoreVersionUnreadable',
+  restoreVersionTooNew: 'restoreVersionTooNew',
+  restoreUnrecognizable: 'restoreUnrecognizable',
+  restoreNoData: 'restoreNoData',
+  restoreInterrupted: 'restoreInterrupted',
+  restoreStagedIdInvalid: 'restoreStagedIdInvalid',
+  restorePreviewExpired: 'restorePreviewExpired',
+  zipTooShort: 'zipTooShort',
+  zipNotZip: 'zipNotZip',
+  zipZip64: 'zipZip64',
+  zipZip64Entry: 'zipZip64Entry',
+  zipTruncatedIndex: 'zipTruncatedIndex',
+  zipTruncatedCd: 'zipTruncatedCd',
+  zipTruncatedEntry: 'zipTruncatedEntry',
+  zipTooManyEntries: 'zipTooManyEntries',
+  zipCorruptIndex: 'zipCorruptIndex',
+  zipCorruptHeader: 'zipCorruptHeader',
+  zipCorruptSizes: 'zipCorruptSizes',
+  zipCorruptSize: 'zipCorruptSize',
+  zipCorruptCrc: 'zipCorruptCrc',
+  zipEncrypted: 'zipEncrypted',
+  zipEntryTooLarge: 'zipEntryTooLarge',
+  zipContentTooLarge: 'zipContentTooLarge',
+  zipEntryUnreadable: 'zipEntryUnreadable',
+  zipMethodUnsupported: 'zipMethodUnsupported',
+}
+
+/**
+ * Traduit un code d'erreur du serveur (corps REST ou événement SSE « error »)
+ * dans la langue courante. Code inconnu (client plus ancien que le serveur) :
+ * renvoyé tel quel — aucune erreur ne disparaît. Code vide : chaîne vide,
+ * l'appelant retombe alors sur son message brut (erreur non codée).
+ */
+export function serverErrorText(code: string | undefined, params?: ErrorParams): string {
+  if (!code) return ''
+  const key = SERVER_ERROR_I18N[code as ErrorCode]
+  return key ? translate(key, params) : code
 }
 
 /** Locale Intl associée à une langue (formats de date/heure). */

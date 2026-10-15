@@ -47,6 +47,41 @@ export const DT_SIM = 1 / 60 // pas de requestAnimationFrame simulé
 export const easeInOutQuad = (a) => (a < 0.5 ? 2 * a * a : -2 * a * a + 4 * a - 1)
 export const courbeFondu = (p, adouci = FONDUS_ADOUCIS) => (adouci ? easeInOutQuad(p) : p)
 
+// ── Le sens du repère des os normalisés ─────────────────────────────────────
+//
+// MIROIR de `normalizedFacesPlusZ` (client/src/scene/jointLimits.ts), qui ne
+// peut pas être importé ici : la page charge ce fichier sans transformation
+// TypeScript. Même témoin — l'avant géométrique est up × (épaule droite −
+// épaule gauche), confronté au +Z local des hanches — mais sans THREE
+// (doctrine du fichier) : tout se lit dans les matrices monde, et les
+// normalisations omises sont des facteurs positifs, le SIGNE du produit
+// scalaire est donc celui de l'original. Repli sur `metaVersion` quand les
+// épaules manquent.
+//
+// À quoi il sert ici : REST_POSE_Z (la pose de repos anti T-pose) est écrite
+// dans le repère qui regarde le −Z, celui des VRM 0.x. Dans l'autre repère —
+// tous les 1.x du dossier — appliquée telle quelle elle LÈVE les bras ; le
+// remède exact est le changement de signe (cf. applyRestPose, vrmStage.ts).
+export function normalizedFacesPlusZ(vrm) {
+  const left = vrm.humanoid.getNormalizedBoneNode('leftUpperArm')
+  const right = vrm.humanoid.getNormalizedBoneNode('rightUpperArm')
+  const ref = vrm.humanoid.getNormalizedBoneNode('hips') ?? left
+  if (left && right && ref) {
+    left.updateWorldMatrix(true, false)
+    right.updateWorldMatrix(true, false)
+    ref.updateWorldMatrix(true, false)
+    const a = left.matrixWorld.elements
+    const b = right.matrixWorld.elements
+    const cx = b[12] - a[12] // épaule droite − gauche, aplati au sol
+    const cz = b[14] - a[14]
+    if (cx * cx + cz * cz > 1e-8) {
+      const e = ref.matrixWorld.elements // 3ᵉ colonne = axe +Z local, en monde
+      return cz * e[8] - cx * e[10] >= 0 // (up × côté) · zLocal
+    }
+  }
+  return vrm.meta?.metaVersion !== '0'
+}
+
 // ── Groupes d'os ────────────────────────────────────────────────────────────
 export const OS_HAUT = [
   'spine', 'chest', 'upperChest', 'neck', 'head',

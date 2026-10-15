@@ -58,7 +58,7 @@ import { Bone, Group, Matrix4, PerspectiveCamera, Quaternion, Scene, Vector3 } f
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMHumanoid } from '@pixiv/three-vrm'
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation'
-import { createJointLimits } from '../client/src/scene/jointLimits'
+import { createJointLimits, normalizedFacesPlusZ } from '../client/src/scene/jointLimits'
 
 const ICI = path.dirname(fileURLToPath(import.meta.url))
 const PROJET = process.env.HANAMI_ROOT || path.resolve(ICI, '..')
@@ -87,6 +87,8 @@ function semer(graine) {
 // ── Montage d'un .vrm : le squelette humanoïde seul, aucun mesh, aucun DOM ───
 // Repris de devtools/diagnostic/juge/rig.mjs, réduit à ce que le regard touche.
 
+// Écrite dans le repère normalisé qui regarde le −Z (VRM 0.x) ; dans l'autre
+// repère le signe se renverse — mesuré par le témoin de l'app (jointLimits.ts).
 const REPOS_BRAS_Z = [
   ['leftUpperArm', 1.25],
   ['rightUpperArm', -1.25],
@@ -139,7 +141,10 @@ function chargerRig(fichier) {
 
   const nb = humanoid.normalizedHumanBones
   const osTous = Object.keys(nb)
-  for (const [os, z] of REPOS_BRAS_Z) if (nb[os]) nb[os].node.rotation.z = z
+  // Sans le miroir, un VRM 1.x posait les bras EN L'AIR — et reposQ, capturé
+  // juste dessous, mémorisait cette pose pour tout os que le clip n'anime pas.
+  const sens = normalizedFacesPlusZ({ humanoid, meta: { metaVersion } }) ? -1 : 1
+  for (const [os, z] of REPOS_BRAS_Z) if (nb[os]) nb[os].node.rotation.z = sens * z
   const reposQ = new Map(osTous.map((os) => [os, nb[os].node.quaternion.clone()]))
   const reposHips = nb.hips.node.position.clone()
   humanoid.update()

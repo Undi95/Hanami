@@ -14,6 +14,8 @@ import {
   ensureDataDirs,
 } from './lib/storage'
 import { authMiddleware, loginRouter } from './lib/auth'
+import { httpError } from './lib/errors'
+import { ErrorCodes } from '../shared/errorCodes'
 import { settingsRouter } from './api/settings'
 import { chatRouter } from './api/chat'
 import { charactersRouter } from './api/characters'
@@ -52,7 +54,7 @@ async function main(): Promise<void> {
   app.use((req, res, next) => {
     if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
       if (req.headers['sec-fetch-site'] === 'cross-site') {
-        res.status(403).json({ error: 'Requête cross-site refusée' })
+        httpError(res, 403, ErrorCodes.corsBlocked)
         return
       }
       const origin = req.headers.origin
@@ -64,7 +66,7 @@ async function main(): Promise<void> {
           /* Origin malformé (ex. "null") → refus */
         }
         if (!originHost || originHost !== req.headers.host) {
-          res.status(403).json({ error: 'Origin non autorisé' })
+          httpError(res, 403, ErrorCodes.badOrigin)
           return
         }
       }
@@ -141,7 +143,7 @@ async function main(): Promise<void> {
         const target = path.resolve(pathname.slice('/@fs/'.length))
         const rel = path.relative(DATA_DIR, target)
         if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
-          res.status(403).json({ error: 'Accès interdit' })
+          httpError(res, 403, ErrorCodes.accessDenied)
           return
         }
       }

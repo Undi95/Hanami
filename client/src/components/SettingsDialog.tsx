@@ -5,14 +5,20 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import type {
+  CompactBasis,
+  MemoryInjection,
   ModelMode,
   RestorePreview,
   RestoreResult,
   RestoreWarning,
   Settings,
+  ThinkingLevel,
+  UserPersona,
   VisionMode,
   WebSearchEngine,
 } from '../../../shared/types'
+import { PERSONA_MAX } from '../../../shared/personas'
+import { normalizeThinkingLevel } from '../../../shared/llm'
 import * as api from '../api'
 import { isPlural, localeOf, useI18n, type Key, type Lang } from '../i18n'
 import {
@@ -36,6 +42,11 @@ interface Props {
   settings: Settings
   theme: AppTheme
   onPickTheme: (theme: AppTheme) => void
+  // Avatar visible : préférence d'interface (data/ui.json), pas un réglage du
+  // backend — elle vit donc HORS du formulaire, comme le thème, et s'applique
+  // au clic.
+  avatarVisible: boolean
+  onToggleAvatar: (on: boolean) => void
   // Décor 3D : préférence d'interface (data/ui.json), pas un réglage du backend —
   // elle vit donc HORS du formulaire, comme le thème, et s'applique au clic.
   env3d: boolean
@@ -67,8 +78,12 @@ interface FormState {
   visionMode: VisionMode
   temperature: string
   maxTokens: string
+  // Budget de raisonnement : 0 = auto (aucun paramètre envoyé au backend).
+  thinkingLevel: string
   maxHistoryMessages: string
+  historyLimit: boolean
   memoryEnabled: boolean
+  memoryInjection: MemoryInjection
   fileToolsEnabled: boolean
   allowDelete: boolean
   toolsRoot: string
@@ -78,12 +93,18 @@ interface FormState {
   tavilyApiKey: string
   password: string
   contextSize: string
+  compactThreshold: string
+  compactBasis: CompactBasis
   autoCompact: boolean
   spontaneousEnabled: boolean
   spontaneousStartHour: string
   spontaneousEndHour: string
-  personaName: string
-  personaDescription: string
+  // Collection des personas « Vous » : copie LOCALE éditée ici, posée en bloc à
+  // l'enregistrement (le serveur reste la source de vérité, il normalise).
+  userPersonas: UserPersona[]
+  // Persona par défaut (id de la collection) : celle qui s'applique quand un
+  // personnage n'en a pas épinglé.
+  defaultPersona: string
   timeAwareness: boolean
   showThoughts: boolean
   notifySound: boolean
@@ -103,8 +124,13 @@ function toForm(s: Settings): FormState {
     visionMode: s.visionMode,
     temperature: String(s.temperature),
     maxTokens: String(s.maxTokens),
+    thinkingLevel: s.thinkingLevel,
     maxHistoryMessages: String(s.maxHistoryMessages),
+    // Réglage optionnel (config.json d'avant le toggle) : absent = on.
+    historyLimit: s.historyLimit !== false,
     memoryEnabled: s.memoryEnabled,
+    // Réglage optionnel (config.json d'avant la clé) : absent = 'auto'.
+    memoryInjection: s.memoryInjection ?? 'auto',
     fileToolsEnabled: s.fileToolsEnabled,
     allowDelete: s.allowDelete,
     toolsRoot: s.toolsRoot,
@@ -116,13 +142,17 @@ function toForm(s: Settings): FormState {
     tavilyApiKey: '',
     password: '',
     contextSize: String(s.contextSize),
+    compactThreshold: String(s.compactThreshold),
+    // Réglage optionnel (config.json d'avant la base) : absent = seuil.
+    compactBasis: s.compactBasis ?? 'threshold',
     autoCompact: s.autoCompact,
     spontaneousEnabled: s.spontaneousEnabled,
     spontaneousStartHour: String(s.spontaneousStartHour),
     spontaneousEndHour: String(s.spontaneousEndHour),
-    // Persona : champs optionnels, absents des config.json d'avant le réglage.
-    personaName: s.personaName ?? '',
-    personaDescription: s.personaDescription ?? '',
+    // Personas : copie locale (le formulaire réécrit des entrées, il ne doit
+    // pas muter l'objet des réglages en état).
+    userPersonas: (s.userPersonas ?? []).map((p) => ({ ...p })),
+    defaultPersona: s.defaultPersona ?? '',
     timeAwareness: s.timeAwareness,
     showThoughts: s.showThoughts,
     // Réglage optionnel (config.json d'avant le réglage) : absent = éteint.
@@ -153,8 +183,13 @@ function fromForm(
     visionMode: f.visionMode,
     temperature: num(f.temperature, base.temperature),
     maxTokens: Math.round(num(f.maxTokens, base.maxTokens)),
+    // 0 = auto ; la négative (champ mal saisi) retombe dessus — le serveur
+    // renormalise de toute façon (normalizeThinkingLevel : niveau connu ou auto).
+    thinkingLevel: normalizeThinkingLevel(f.thinkingLevel),
     maxHistoryMessages: Math.round(num(f.maxHistoryMessages, base.maxHistoryMessages)),
+    historyLimit: f.historyLimit,
     memoryEnabled: f.memoryEnabled,
+    memoryInjection: f.memoryInjection,
     fileToolsEnabled: f.fileToolsEnabled,
     allowDelete: f.allowDelete,
     toolsRoot: f.toolsRoot.trim(),
@@ -164,12 +199,16 @@ function fromForm(
     tavilyApiKey: clearTavilyKey ? api.CLEAR_SECRET : f.tavilyApiKey,
     password: clearPassword ? api.CLEAR_SECRET : f.password,
     contextSize: Math.round(num(f.contextSize, base.contextSize)),
+    compactThreshold: Math.round(num(f.compactThreshold, base.compactThreshold)),
+    compactBasis: f.compactBasis,
     autoCompact: f.autoCompact,
     spontaneousEnabled: f.spontaneousEnabled,
     spontaneousStartHour: Math.round(num(f.spontaneousStartHour, base.spontaneousStartHour)),
     spontaneousEndHour: Math.round(num(f.spontaneousEndHour, base.spontaneousEndHour)),
-    personaName: f.personaName.trim(),
-    personaDescription: f.personaDescription.trim(),
+    // Posées en bloc : le serveur normalise la paire (ids, bornes, max,
+    // cohérence du défaut) et ne fait rien d'autre que les conserver.
+    userPersonas: f.userPersonas,
+    defaultPersona: f.defaultPersona,
     timeAwareness: f.timeAwareness,
     showThoughts: f.showThoughts,
     notifySound: f.notifySound,
@@ -459,7 +498,10 @@ function SearxngGuide({ onClose }: { onClose: () => void }) {
 
 const LANG_OPTIONS: readonly Lang[] = ['fr', 'en']
 const MODEL_MODE_OPTIONS: readonly ModelMode[] = ['full', 'simple']
+const COMPACT_BASIS_OPTIONS: readonly CompactBasis[] = ['threshold', 'context']
+const MEMORY_INJECTION_OPTIONS: readonly MemoryInjection[] = ['auto', 'selective']
 const VISION_MODE_OPTIONS: readonly VisionMode[] = ['auto', 'on', 'off']
+const THINKING_LEVEL_OPTIONS: readonly ThinkingLevel[] = ['auto', 'low', 'medium', 'high', 'max', 'none']
 const WEB_SEARCH_ENGINE_OPTIONS: readonly WebSearchEngine[] = ['duckduckgo', 'searxng', 'tavily']
 // Un hint différent par moteur (compromis mis en avant) plutôt qu'un seul
 // sous-texte statique — les trois options n'ont pas le même arbitrage.
@@ -490,6 +532,8 @@ export default function SettingsDialog({
   settings,
   theme,
   onPickTheme,
+  avatarVisible,
+  onToggleAvatar,
   env3d,
   onToggleEnv3d,
   vrmaEnabled,
@@ -540,8 +584,14 @@ export default function SettingsDialog({
   // sur « Apparence » à l'ouverture. Le formulaire ci-dessous reste UNIQUE :
   // changer d'onglet ne perd rien et n'enregistre rien.
   const [tab, setTab] = useState<Tab>('appearance')
-  const [form, setForm] = useState<FormState>(() => toForm(settings))
+  // toForm() UNIQUE partagé par les deux états : le contrôle `dirty` compare
+  // les clés par RÉFÉRENCE, et `userPersonas` est un tableau — un second
+  // toForm() donnerait une référence neuve même sans changement, et le dialog
+  // serait « modifié » en permanence (la confirmation de fermeture à chaque fois).
+  // Aucune mutation in place en aval (setPersonaField/add/remove reconstruisent
+  // l'array), donc partager l'objet initial est sans risque.
   const [initialForm] = useState<FormState>(() => toForm(settings))
+  const [form, setForm] = useState<FormState>(initialForm)
   // Demandes d'effacement des secrets (envoient la sentinelle au PUT).
   const [clearApiKey, setClearApiKey] = useState(false)
   const [clearPassword, setClearPassword] = useState(false)
@@ -576,6 +626,36 @@ export default function SettingsDialog({
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  /** Édite un champ d'une persona de la collection (copie d'abord : les entrées sont immuables). */
+  function setPersonaField(i: number, field: 'name' | 'description', value: string) {
+    setForm((f) => ({
+      ...f,
+      userPersonas: f.userPersonas.map((p, j) => (j === i ? { ...p, [field]: value } : p)),
+    }))
+  }
+
+  /** Nouvelle persona vierge : id unique (positionnel + horodatage), vide à remplir. */
+  function addPersona() {
+    setForm((f) => {
+      if (f.userPersonas.length >= PERSONA_MAX) return f
+      let id = `persona-${Date.now().toString(36)}`
+      while (f.userPersonas.some((p) => p.id === id)) id += 'x'
+      return { ...f, userPersonas: [...f.userPersonas, { id, name: '', description: '' }] }
+    })
+  }
+
+  function removePersona(i: number) {
+    setForm((f) => {
+      const removed = f.userPersonas[i]
+      if (!removed) return f
+      const userPersonas = f.userPersonas.filter((_, j) => j !== i)
+      // Le défaut qui désignait la persona supprimée retombe sur la première
+      // restante (le serveur re-fait ce même travail à l'enregistrement).
+      const defaultPersona = f.defaultPersona === removed.id ? (userPersonas[0]?.id ?? '') : f.defaultPersona
+      return { ...f, userPersonas, defaultPersona }
+    })
   }
 
   const dirty =
@@ -812,6 +892,12 @@ export default function SettingsDialog({
           {/* Hors formulaire, appliqué au clic comme le thème et la langue : c'est
               une préférence d'interface, pas un réglage du modèle. */}
           <Toggle
+            label={t('avatarVisible')}
+            sub={t('avatarVisibleSub')}
+            checked={avatarVisible}
+            onChange={onToggleAvatar}
+          />
+          <Toggle
             label={t('env3d')}
             sub={t('env3dSub')}
             checked={env3d}
@@ -950,15 +1036,59 @@ export default function SettingsDialog({
               <input id="set-max" type="number" step="1" min="1" value={form.maxTokens} onChange={(e) => set('maxTokens', e.target.value)} />
             </div>
           </div>
+          <div className="field">
+            <label>{t('thinkingLevel')}</label>
+            {/* Six niveaux : le bloc enroule sur deux lignes (.seg flex-wrap),
+                comme le sélecteur du premier message. */}
+            <div>
+              <Seg
+                value={form.thinkingLevel}
+                options={THINKING_LEVEL_OPTIONS}
+                labels={{
+                  auto: t('thinkingLevelAuto'),
+                  low: t('thinkingLevelLow'),
+                  medium: t('thinkingLevelMedium'),
+                  high: t('thinkingLevelHigh'),
+                  max: t('thinkingLevelMax'),
+                  none: t('thinkingLevelNone'),
+                }}
+                onPick={(v) => set('thinkingLevel', v)}
+                ariaLabel={t('thinkingLevel')}
+              />
+            </div>
+            <span className="hint">{t('thinkingLevelSub')}</span>
+          </div>
           <div className="grid-2">
             <div className="field">
               <label htmlFor="set-hist">{t('maxHistory')}</label>
-              <input id="set-hist" type="number" step="1" min="0" value={form.maxHistoryMessages} onChange={(e) => set('maxHistoryMessages', e.target.value)} />
+              {/* Désactivé quand la limite est coupée : le nombre est ignoré,
+                  inutile de pouvoir l'éditer dans un état mort. */}
+              <input id="set-hist" type="number" step="1" min="0" value={form.maxHistoryMessages} disabled={!form.historyLimit} onChange={(e) => set('maxHistoryMessages', e.target.value)} />
             </div>
             <div className="field">
               <label htmlFor="set-ctx">{t('contextSize')}</label>
               <input id="set-ctx" type="number" step="1" min="0" value={form.contextSize} onChange={(e) => set('contextSize', e.target.value)} />
             </div>
+          </div>
+          <Toggle label={t('historyLimit')} sub={t('historyLimitSub')} checked={form.historyLimit} onChange={(v) => set('historyLimit', v)} />
+          <div className="field">
+            <label htmlFor="set-compact-th">{t('compactThreshold')}</label>
+            <input id="set-compact-th" type="number" step="1" min="0" value={form.compactThreshold} onChange={(e) => set('compactThreshold', e.target.value)} />
+            <span className="hint">{t('compactThresholdSub')}</span>
+          </div>
+          <div className="field">
+            <label>{t('compactBasis')}</label>
+            {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+            <div>
+              <Seg
+                value={form.compactBasis}
+                options={COMPACT_BASIS_OPTIONS}
+                labels={{ threshold: t('compactBasisThreshold'), context: t('compactBasisContext') }}
+                onPick={(v) => set('compactBasis', v)}
+                ariaLabel={t('compactBasis')}
+              />
+            </div>
+            <span className="hint">{t('compactBasisSub')}</span>
           </div>
           <div className="field">
             <label>{t('modelMode')}</label>
@@ -985,32 +1115,60 @@ export default function SettingsDialog({
 
       {tab === 'features' && (
         <>
-          {/* PERSONA — qui parle, de l'autre côté. Deux champs, pas un système
-              de personas multiples : c'est le même utilisateur qui écrit à tous
-              ses personnages. Le nom alimente aussi la macro {{user}} des cards. */}
+          {/* PERSONAS — qui parle, de l'autre côté : la COLLECTION des « moi »
+              de l'utilisateur (médecin, serviteur, moucheron…). La persona par
+              défaut s'applique à tous les personnages ; un personnage peut en
+              épingler une autre sur SA carte (dialog Personnages). Le nom de la
+              persona ACTIVE alimente aussi la macro {{user}} des cards. */}
           <h3 className="section-title">{t('sectionPersona')}</h3>
-          <div className="field">
-            <label htmlFor="set-persona-name">{t('personaName')}</label>
-            <input
-              id="set-persona-name"
-              type="text"
-              value={form.personaName}
-              maxLength={PERSONA_NAME_MAX}
-              placeholder={t('personaNamePlaceholder')}
-              onChange={(e) => set('personaName', e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="set-persona-desc">{t('personaDescription')}</label>
-            <textarea
-              id="set-persona-desc"
-              rows={3}
-              value={form.personaDescription}
-              maxLength={PERSONA_DESCRIPTION_MAX}
-              placeholder={t('personaDescriptionPlaceholder')}
-              onChange={(e) => set('personaDescription', e.target.value)}
-            />
-            <span className="hint">{t('personaHint')}</span>
+          <span className="hint">{t('personaHint')}</span>
+          {form.userPersonas.length === 0 && <span className="hint">{t('personasEmpty')}</span>}
+          {form.userPersonas.map((p, i) => (
+            <div className="persona-card" key={p.id}>
+              <div className="pick-row">
+                <label className="persona-default" title={t('personaDefault')}>
+                  <input
+                    type="radio"
+                    name="default-persona"
+                    aria-label={t('personaDefault')}
+                    checked={form.defaultPersona === p.id}
+                    onChange={() => set('defaultPersona', p.id)}
+                  />
+                  {t('personaDefault')}
+                </label>
+                <input
+                  type="text"
+                  value={p.name}
+                  maxLength={PERSONA_NAME_MAX}
+                  placeholder={t('personaNamePlaceholder')}
+                  aria-label={t('personaName')}
+                  style={{ flex: 1, minWidth: 0 }}
+                  onChange={(e) => setPersonaField(i, 'name', e.target.value)}
+                />
+                <button
+                  className="btn small"
+                  type="button"
+                  title={t('personaDelete')}
+                  aria-label={t('personaDelete')}
+                  onClick={() => removePersona(i)}
+                >
+                  ✕
+                </button>
+              </div>
+              <textarea
+                rows={2}
+                value={p.description}
+                maxLength={PERSONA_DESCRIPTION_MAX}
+                placeholder={t('personaDescriptionPlaceholder')}
+                aria-label={t('personaDescription')}
+                onChange={(e) => setPersonaField(i, 'description', e.target.value)}
+              />
+            </div>
+          ))}
+          <div>
+            <button className="btn" type="button" disabled={form.userPersonas.length >= PERSONA_MAX} onClick={addPersona}>
+              + {t('personasAdd')}
+            </button>
           </div>
 
           <h3 className="section-title">{t('sectionConversation')}</h3>
@@ -1119,6 +1277,22 @@ export default function SettingsDialog({
             checked={form.memoryEnabled}
             onChange={(v) => set('memoryEnabled', v)}
           />
+          {form.memoryEnabled && (
+            <div className="field">
+              <label>{t('memoryInjection')}</label>
+              {/* .field est une colonne flex : ce bloc empêche le sélecteur de s'étirer. */}
+              <div>
+                <Seg
+                  value={form.memoryInjection}
+                  options={MEMORY_INJECTION_OPTIONS}
+                  labels={{ auto: t('memoryInjectionAuto'), selective: t('memoryInjectionSelective') }}
+                  onPick={(v) => set('memoryInjection', v)}
+                  ariaLabel={t('memoryInjection')}
+                />
+              </div>
+              <span className="hint">{t('memoryInjectionSub')}</span>
+            </div>
+          )}
           <Toggle
             label={t('fileTools')}
             sub={t('fileToolsSub')}

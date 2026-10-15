@@ -89,6 +89,15 @@ export interface VrmStage {
    */
   setAnimationsEnabled(on: boolean): void
   /**
+   * Pause COMPLÈTE du rendu (réglage « Afficher l'avatar » masqué) : la boucle
+   * rAF s'arrête, plus aucune frame n'est rendue — ce n'est pas une animation
+   * éteinte (setAnimationsEnabled), c'est le moteur qui s'assoit. L'UI, elle,
+   * masque la div par CSS : la scène n'est jamais démontée (le stage y est
+   * attaché au boot, un unmount conditionnel le tuerait). Reprendre repart la
+   * boucle à l'image suivante — l'état (modèle, pose, décor) est intact.
+   */
+  setPaused(on: boolean): void
+  /**
    * Scène vivante : l'avatar occupe la pièce — il a une position et un cap, se
    * tourne vers vous, se déplace, s'assoit. Éteint (le défaut) = comportement
    * IDENTIQUE À L'OCTET PRÈS à celui d'avant : avatar à l'origine du monde, cap

@@ -4,6 +4,8 @@ import crypto from 'node:crypto'
 import { Router } from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import { configUnreadable, loadSettings } from '../config'
+import { httpError } from './errors'
+import { ErrorCodes } from '../../shared/errorCodes'
 
 /** Comparaison en temps constant : SHA-256 des deux côtés (tailles égales garanties). */
 function safeEqual(a: string, b: string): boolean {
@@ -36,7 +38,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   // défauts (vide) — ouvrir serait un fail-open. On FERME tant que le fichier
   // n'est pas réparé : perdre un fichier ne doit jamais désarmer la porte.
   if (configUnreadable()) {
-    res.status(503).json({ error: 'config.json illisible — accès suspendu (réparez le fichier)' })
+    httpError(res, 503, ErrorCodes.configUnreadable)
     return
   }
   if (!password) {
@@ -49,7 +51,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     next()
     return
   }
-  res.status(401).json({ error: 'Authentification requise' })
+  httpError(res, 401, ErrorCodes.authRequired)
 }
 
 export const loginRouter = Router()
@@ -59,7 +61,7 @@ loginRouter.post('/api/login', (req, res) => {
   // Même garde que l'authMiddleware : un config illisible rend le mot de passe
   // « vide » aux yeux du code — accorder un jeton là-dessus serait un fail-open.
   if (configUnreadable()) {
-    res.status(503).json({ error: 'config.json illisible — accès suspendu (réparez le fichier)' })
+    httpError(res, 503, ErrorCodes.configUnreadable)
     return
   }
   const { password } = loadSettings()
@@ -76,5 +78,5 @@ loginRouter.post('/api/login', (req, res) => {
     res.json({ token })
     return
   }
-  res.status(401).json({ error: 'Mot de passe incorrect' })
+  httpError(res, 401, ErrorCodes.badPassword)
 })

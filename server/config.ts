@@ -1,7 +1,10 @@
 // Réglages de l'app — data/config.json, mergé avec les défauts.
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Settings } from '../shared/types'
+import type { CharacterMeta, ChatMessage, Settings } from '../shared/types'
+import { normalizeLlm, normalizeThinkingLevel } from '../shared/llm'
+import { normalizePersonas } from '../shared/personas'
+import { CodedError, ErrorCodes } from '../shared/errorCodes'
 import { DATA_DIR } from './lib/storage'
 
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json')
@@ -13,18 +16,38 @@ export const DEFAULT_SETTINGS: Settings = {
   modelMode: 'full',
   temperature: 0.8,
   maxTokens: 1024,
+  // 'auto' : aucun paramètre de thinking envoyé, le modèle décide comme
+  // avant ce réglage (un config d'avant la clé reste inchangé).
+  thinkingLevel: 'auto',
   maxHistoryMessages: 40,
+  // ON (défaut) : l'historique envoyé est capé à maxHistoryMessages (0 = aucun).
+  // OFF : PAS de cap — tout l'historique part. C'est le « off » propre que le
+  // nombre seul ne pouvait pas exprimer (0 veut dire « zéro », pas « illimité »).
+  historyLimit: true,
   memoryEnabled: true,
+  // Opt-in : 'auto' = comportement actuel (tout-ou-rien), 'selective' =
+  // pertinence + budget. Défaut 'auto' = aucune régression pour qui n'y touche.
+  memoryInjection: 'auto',
   fileToolsEnabled: false,
   allowDelete: false,
   toolsRoot: path.join(DATA_DIR, 'workspace'),
   password: '',
   contextSize: 8192,
+  // Seuil par défaut de la jauge : avec un contexte géant (262k…), un seuil calé
+  // sur la fenêtre complète serait injoignable en pratique — et au-delà, un
+  // modèle local n'est que plus lent, pas plus attentif. Réglable dans l'UI.
+  compactThreshold: 65536,
+  // La jauge et l'auto-compaction suivent le SEUIL de compaction (défaut : le
+  // comportement d'origine — le seuil est presque toujours < la taille de
+  // contexte). L'utilisateur peut basculer sur la taille de contexte.
+  compactBasis: 'threshold',
   autoCompact: true,
   timeAwareness: true,
-  // Persona : vide = aucun bloc injecté, et {{user}} retombe sur « User ».
-  personaName: '',
-  personaDescription: '',
+  // Personas utilisateur : vide = aucun bloc injecté, et {{user}} retombe sur
+  // « User ». defaultPersona = la persona utilisée quand un personnage n'en a
+  // pas épinglé d'autre (shared/personas.ts décide, en 3 replis).
+  userPersonas: [],
+  defaultPersona: '',
   showThoughts: false,
   ttsEnabled: false,
   ttsUrl: '',
@@ -79,6 +102,11 @@ export function loadSettings(): Settings {
     if (merged.visionMode !== 'auto' && merged.visionMode !== 'on' && merged.visionMode !== 'off') {
       merged.visionMode = DEFAULT_SETTINGS.visionMode
     }
+    // Le PUT ne valide que le TYPE (string) : une base inconnue retombe sur le
+    // défaut plutôt que de casser workingWindow.
+    if (merged.compactBasis !== 'threshold' && merged.compactBasis !== 'context') {
+      merged.compactBasis = DEFAULT_SETTINGS.compactBasis
+    }
     // raw, pas merged : merged.webSearchEngine vaut déjà 'duckduckgo' par le
     // spread du défaut même quand le fichier ne porte pas la clé — c'est
     // justement CE cas (config d'avant le sélecteur) qu'il faut détecter.
@@ -92,6 +120,39 @@ export function loadSettings(): Settings {
     // rester un couple d'heures réelles (sinon le moteur spontané ne s'ouvrirait jamais).
     merged.spontaneousStartHour = normalizeHour(merged.spontaneousStartHour, DEFAULT_SETTINGS.spontaneousStartHour)
     merged.spontaneousEndHour = normalizeHour(merged.spontaneousEndHour, DEFAULT_SETTINGS.spontaneousEndHour)
+    // Même raison pour le niveau de raisonnement : une valeur inconnue (config
+    // édité à la main, PUT) retombe sur l'auto — on n'envoie au backend qu'un
+    // niveau documenté ou rien du tout.
+    merged.thinkingLevel = normalizeThinkingLevel(merged.thinkingLevel)
+    // Migration « collection de personas » : le config d'avant portait un seul
+    // couple personaName/personaDescription — il devient la persona {id:'default'}
+    // de la collection (l'utilisateur ne perd pas son « moi » au premier save).
+    // La liste, quand elle existe, passe par la même normalisation (le fichier
+    // est éditable à la main : bornes, dédoublonnage, max 20).
+    merged.userPersonas = normalizePersonas(raw.userPersonas ?? [])
+    const legacy = raw as Record<string, unknown>
+    if (!Array.isArray(raw.userPersonas)) {
+      const name = typeof legacy.personaName === 'string' ? legacy.personaName.trim().slice(0, 60) : ''
+      const description = typeof legacy.personaDescription === 'string' ? legacy.personaDescription.trim().slice(0, 1000) : ''
+      if (name || description) {
+        merged.userPersonas = [{ id: 'default', name, description }]
+        merged.defaultPersona = 'default'
+      }
+    }
+    // Les clés legacy, copiées dans merged par le spread, sont retirées : au
+    // prochain saveSettings, plus rien ne les recopierait dans le fichier.
+    delete legacy.personaName
+    delete legacy.personaDescription
+    delete (merged as Record<string, unknown>).personaName
+    delete (merged as Record<string, unknown>).personaDescription
+    // Le budget de tokens d'avant (thinkingBudget) n'existe plus — les niveaux
+    // l'ont remplacé : la clé morte du fichier ne doit pas survivre au save.
+    delete (merged as Record<string, unknown>).thinkingBudget
+    // Cohérence du défaut : id absent de la collection → la première persona,
+    // collection vide → '' (le même repli que shared/personas.ts côté lecture).
+    if (!merged.userPersonas.some((p) => p.id === merged.defaultPersona)) {
+      merged.defaultPersona = merged.userPersonas[0]?.id ?? ''
+    }
     return merged
   } catch (e) {
     // ABSENT (premier lancement) : les défauts sont légitimes. ILLISIBLE (JSON
@@ -115,7 +176,7 @@ export function saveSettings(patch: Partial<Settings>): Settings {
     // Écrire maintenant persisterait les DÉFAUTS par-dessus le fichier abîmé :
     // la perte deviendrait irréversible. L'utilisateur répare (ou supprime) le
     // fichier d'abord — le message remonte tel quel dans les Réglages.
-    throw new Error('config.json est illisible : réparez ou supprimez le fichier avant de modifier les réglages')
+    throw new CodedError(ErrorCodes.configUnreadableSave)
   }
   fs.mkdirSync(DATA_DIR, { recursive: true })
   // Écriture ATOMIQUE (tmp + fsync + rename), même protocole que data/ui.json et
@@ -132,6 +193,49 @@ export function saveSettings(patch: Partial<Settings>): Settings {
   }
   fs.renameSync(tmp, CONFIG_FILE)
   return next
+}
+
+// Fenêtre de travail de la jauge et de l'auto-compaction : UNE valeur, au choix
+// de l'utilisateur (compactBasis) — plus le plus petit des deux réglages.
+//   'context'   = la taille de contexte du modèle (la compaction arrive tard,
+//                 à 80 % d'elle — le choix le plus simple) ;
+//   'threshold' = le seuil de compaction (défaut — le plus lisible sur un
+//                 modèle local : on compacte avant la zone où le modèle
+//                 ralentit ; à garder ≤ la taille de contexte), avec repli sur
+//                 la taille de contexte quand le seuil vaut 0.
+// Taille de contexte à 0 (inconnue) = pas de fenêtre : la jauge est neutre.
+export function workingWindow(settings: Settings): number {
+  if (settings.contextSize <= 0) return 0
+  if (settings.compactBasis === 'context') return settings.contextSize
+  return settings.compactThreshold > 0 ? settings.compactThreshold : settings.contextSize
+}
+
+/**
+ * Les messages d'historique RÉELLEMENT envoyés au modèle — source unique des
+ * deux chemins de server/api/chat.ts (chat normal et impersonation).
+ * `historyLimit` coupée → PAS de cap, tout l'historique part. Limitée → les
+ * `maxHistoryMessages` derniers (0 = aucun, le comportement d'origine).
+ */
+export function historyWindow(messages: ChatMessage[], settings: Settings): ChatMessage[] {
+  if (!settings.historyLimit) return messages
+  return settings.maxHistoryMessages > 0 ? messages.slice(-settings.maxHistoryMessages) : []
+}
+
+/**
+ * Les réglages EFFECTIFS pour un personnage : les réglages globaux avec les
+ * overrides du personnage posés par-dessus (un champ absent retombe sur le
+ * réglage de l'app). C'est l'objet que DOIVENT utiliser tous les call-sites
+ * qui génèrent « pour » un personnage — chat, compaction, aperçu du prompt,
+ * messages spontanés, rangement de mémoire — : repasser `loadSettings()` brut
+ * là, c'est ignorer la carte du personnage. Sans `llm` (ou `llm` vide),
+ * retourne tel quel les réglages globaux : un personnage écrit avant ce
+ * réglage ne change d'aucune façon.
+ */
+export function effectiveSettings(character: Pick<CharacterMeta, 'llm'>): Settings {
+  const base = loadSettings()
+  const llm = normalizeLlm(character.llm)
+  if (!llm) return base
+  return { ...base, ...llm }
 }
 
 export const PORT = Number(process.env.PORT ?? 7788)

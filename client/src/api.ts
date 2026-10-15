@@ -4,6 +4,7 @@
 import type {
   AnimationFamily,
   CharacterFull,
+  CharacterLlm,
   CharacterMeta,
   ChatEvent,
   ChatMessage,
@@ -17,7 +18,8 @@ import type {
   UiPrefsPatch,
 } from '../../shared/types'
 import type { EnvironmentCredit } from '../../shared/credits'
-import { translate as t } from './i18n'
+import { serverErrorText, translate as t } from './i18n'
+import type { ErrorParams } from '../../shared/errorCodes'
 
 const TOKEN_KEY = 'hanami_token'
 
@@ -40,10 +42,13 @@ export class AuthRequiredError extends Error {
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  /** Code serveur (ErrorCodes) quand la réponse est codée — ex. `nothingToCompact`. */
+  code?: string
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -58,15 +63,23 @@ function authHeaders(): Record<string, string> {
 
 async function throwFromResponse(res: Response): Promise<never> {
   if (res.status === 401) throw new AuthRequiredError()
-  // Un message d'erreur renvoyé par le serveur est affiché tel quel (jamais traduit).
   let message = t('serverError', { status: res.status })
+  let code: string | undefined
   try {
-    const data = (await res.json()) as { error?: string }
-    if (data.error) message = data.error
+    const data = (await res.json()) as { error?: string; params?: ErrorParams }
+    if (data.error) {
+      // Contrat codes/phrases : data.error est un CODE — traduit ici, dans la
+      // langue de l'UI. Code inconnu (serveur plus récent) : affiché tel quel ;
+      // erreur non codée (message brut) : affichée telle quelle, comme avant.
+      // Le code est aussi porté par l'ApiError (code) pour les rares logiques
+      // qui doivent réagir à un cas précis — ex. « rien à compacter encore ».
+      code = data.error
+      message = serverErrorText(data.error, data.params) || message
+    }
   } catch {
     /* corps non JSON */
   }
-  throw new ApiError(message, res.status)
+  throw new ApiError(message, res.status, code)
 }
 
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -216,6 +229,12 @@ export function createCharacter(input: {
   /** Voix du personnage : absent = muet (opt-in strict), voix vide = celle des Réglages. */
   ttsEnabled?: boolean
   ttsVoice?: string
+  /** Modèle TTS du personnage : vide/absent = le modèle des Réglages (le serveur reste global). */
+  ttsModel?: string
+  /** Overrides de génération : absent = réglages globaux (un champ vide retombe dessus). */
+  llm?: CharacterLlm
+  /** Persona utilisateur épinglée (id de la collection des Réglages) : absent = la persona par défaut. */
+  userPersona?: string
   /** Absent = prompt par défaut écrit par le serveur (à partir du nom). */
   systemPrompt?: string
 }): Promise<CharacterFull> {
@@ -226,7 +245,17 @@ export function getCharacter(id: string): Promise<CharacterFull> {
   return req('GET', `/api/characters/${encodeURIComponent(id)}`)
 }
 
-export function updateCharacter(id: string, patch: Partial<CharacterFull>): Promise<CharacterFull> {
+/**
+ * `llm` tolère `null` : c'est le contrat d'effacement (le serveur retire la
+ * clé du character.json) — `undefined` signifierait « inchangé », l'inverse.
+ */
+export function updateCharacter(
+  id: string,
+  // Omit d'abord : une intersection `Partial<CharacterFull> & { llm?: … | null }`
+  // rétrécirait le type de `llm` à l'intersection des deux déclarations
+  // (et `null` en sortirait exclu).
+  patch: Partial<Omit<CharacterFull, 'llm'>> & { llm?: CharacterLlm | null },
+): Promise<CharacterFull> {
   return req('PUT', `/api/characters/${encodeURIComponent(id)}`, patch)
 }
 
@@ -367,8 +396,76 @@ export function getStats(charId: string): Promise<CharacterStats> {
 
 // ── Mémoire ────────────────────────────────────────────────────────────────
 
-export function listMemory(charId: string): Promise<MemoryFile[]> {
+/** Ce que le serveur injectera réellement dans le system prompt (buildMemoryBlock). */
+export type MemoryInjection = 'none' | 'full' | 'selective' | 'index-only' | 'capped'
+
+export interface MemoryListing {
+  files: MemoryFile[]
+  injection: MemoryInjection
+  totalChars: number
+}
+
+export function listMemory(charId: string): Promise<MemoryListing> {
   return req('GET', `/api/characters/${encodeURIComponent(charId)}/memory`)
+}
+
+/** Snapshots de la mémoire (feature « Ranger »), les plus récents d'abord. */
+export interface MemoryBackup {
+  name: string // horodatage YYYY-MM-DD_HHmmss
+  files: number
+  chars: number
+}
+
+export interface TidyReport {
+  ok: true
+  before: { files: number; chars: number }
+  after: { files: number; chars: number }
+  backup: string
+}
+
+/**
+ * Rangement mémoire : UN appel LLM fusionne/comprime les fichiers (tous les
+ * faits conservés), backup automatique d'avant, plan validé en dur côté serveur.
+ */
+export function tidyMemory(charId: string): Promise<TidyReport> {
+  return req('POST', `/api/characters/${encodeURIComponent(charId)}/memory/tidy`, {})
+}
+
+/** Rapport de la compression de mémoire (chantier B) : vue compressée, en cache. */
+export interface CompressReport {
+  ok: true
+  files: number
+  llmFiles: number // fichiers réellement compressés par le LLM (vérifiés)
+  rejected: number // tombés sur le repli sûr (denseEncode) — vérif ou sortie vide
+  beforeChars: number // caractères des fichiers de faits (originals)
+  afterChars: number // caractères de la vue compressée (cache)
+}
+
+/**
+ * Compression AGRESSIVE de la mémoire (un appel LLM par fichier de faits +
+ * vérifieur déterministe : toute perte de fait dur → repli denseEncode pour ce
+ * fichier). Le résultat part en cache : c'est le message SUIVANT qui l'exploite.
+ * Les fichiers .md restent INTACTS — la compression est une vue, jamais une
+ * écriture ; l'original reste éditable dans le panneau.
+ */
+export function compressMemory(charId: string): Promise<CompressReport> {
+  return req('POST', `/api/characters/${encodeURIComponent(charId)}/memory/compress`, {})
+}
+
+export function listMemoryBackups(charId: string): Promise<MemoryBackup[]> {
+  return req('GET', `/api/characters/${encodeURIComponent(charId)}/memory/backups`)
+}
+
+/** Restaure un snapshot (un snapshot de sécurité de l'état courant est pris d'abord). */
+export function restoreMemoryBackup(
+  charId: string,
+  name: string,
+): Promise<{ ok: true; restored: string; backup: string }> {
+  return req(
+    'POST',
+    `/api/characters/${encodeURIComponent(charId)}/memory/backups/${encodeURIComponent(name)}/restore`,
+    {},
+  )
 }
 
 export function createMemoryFile(charId: string, name: string, content: string): Promise<{ ok: true }> {
@@ -533,15 +630,19 @@ export async function uploadBackground(file: File): Promise<string> {
 /**
  * Renvoie l'audio de la réponse (le serveur proxifie le serveur TTS configuré).
  * `voice` = la voix du personnage qui parle ; vide/absente, le serveur prend
- * celle des Réglages.
+ * celle des Réglages. `model` = le modèle TTS du personnage (même logique :
+ * vide/absent = le modèle des Réglages). Le serveur, lui, est toujours celui
+ * de la configuration.
  */
-export async function tts(text: string, voice = ''): Promise<Blob> {
+export async function tts(text: string, voice = '', model = ''): Promise<Blob> {
   let res: Response
   try {
     res = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify(voice ? { text, voice } : { text }),
+      body: JSON.stringify(
+        { text, ...(voice ? { voice } : {}), ...(model ? { model } : {}) },
+      ),
     })
   } catch {
     throw new ApiError(t('serverUnreachable'), 0)

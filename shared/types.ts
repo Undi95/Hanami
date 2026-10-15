@@ -1,9 +1,23 @@
 // Types partagés client/serveur — LE contrat de l'app.
+import type { ErrorCode, ErrorParams } from './errorCodes'
 
 // Mode du modèle : 'full' = les outils sont exposés (tool-calling) ; 'simple' =
 // AUCUN outil, l'intelligence migre côté serveur — pensé pour les petits modèles,
 // dont le tool-calling est le talon d'Achille.
 export type ModelMode = 'full' | 'simple'
+
+// Base de la limite d'auto-compaction : quelle valeur pilote la jauge et
+// l'auto-compaction. 'threshold' = le seuil de compaction (compactThreshold),
+// 'context' = la taille de contexte du modèle (contextSize). L'utilisateur
+// choisit : la limite suit UNE des deux valeurs, plus le plus petit des deux.
+export type CompactBasis = 'threshold' | 'context'
+
+// Mode d'injection mémoire : 'auto' = comportement actuel (tout-ou-rien :
+// ≤ 8000 chars = tout, au-delà = index seul) ; 'selective' = classement des
+// fichiers par pertinence à la requête courante, injection du top dans un
+// budget, le reste restant lisible via memory_read (cf. server/lib/memoryRank).
+// Opt-in : le défaut est 'auto', le comportement existant est inchangé.
+export type MemoryInjection = 'auto' | 'selective'
 
 // Envoi d'images au modèle : 'auto' = détecté auprès du backend (Ollama expose
 // les capacités du modèle), 'on' = forcé, 'off' = jamais. En 'off' (ou détection
@@ -15,6 +29,11 @@ export type VisionMode = 'auto' | 'on' | 'off'
 // 'tavily' (via Settings.tavilyApiKey, une clé API gratuite).
 export type WebSearchEngine = 'duckduckgo' | 'searxng' | 'tavily'
 
+// Niveaux de raisonnement du réglage thinkingLevel. 'auto' = aucun paramètre
+// envoyé (le modèle décide). Les autres sont envoyés tels quels en
+// `reasoning_effort` — d'où le vocabulaire anglais : c'est le contrat backend.
+export type ThinkingLevel = 'auto' | 'low' | 'medium' | 'high' | 'max' | 'none'
+
 export interface Settings {
   backendUrl: string // base OpenAI-compat, ex: http://127.0.0.1:5001/v1
   apiKey: string // optionnel (backends locaux : souvent vide)
@@ -22,22 +41,34 @@ export interface Settings {
   modelMode: ModelMode // 'simple' : pas d'outils, mémoire et émotions gérées sans le modèle
   temperature: number
   maxTokens: number // max_tokens de la réponse
-  maxHistoryMessages: number // nb max de messages d'historique envoyés
+  // Niveau de raisonnement du modèle (Qwen3 et consorts via Ollama, envoyé en
+  // `reasoning_effort`). 'auto' = AUCUN paramètre n'est envoyé, le modèle
+  // décide comme avant ce réglage (un config d'avant la clé reste inchangé).
+  // Les niveaux plafonnent le raisonnement, 'none' le désactive.
+  thinkingLevel: ThinkingLevel
+  maxHistoryMessages: number // quand historyLimit est ON : nb max de messages d'historique envoyés (0 = aucun)
+  historyLimit: boolean // ON : l'historique envoyé est capé à maxHistoryMessages (0 = aucun) ; OFF : pas de cap, tout l'historique part
   memoryEnabled: boolean // injecte le bloc mémoire + expose les outils mémoire
+  memoryInjection: MemoryInjection // mode d'injection mémoire (cf. type ci-dessus)
   fileToolsEnabled: boolean // expose les outils fichiers au modèle
   allowDelete: boolean // autorise delete_file (toggle ON/OFF)
   toolsRoot: string // dossier sandbox des outils fichiers
   password: string // '' = pas d'authentification (usage local)
-  contextSize: number // taille de contexte du modèle (tokens) — sert à la jauge et à l'auto-compaction
-  autoCompact: boolean // compacte automatiquement la conversation à ~80 % du contexte
+  contextSize: number // taille de contexte du modèle (tokens) — la vraie limite du modèle
+  compactThreshold: number // seuil (tokens) de compaction ; limite quand compactBasis = 'threshold' ; 0 = repli sur contextSize
+  compactBasis: CompactBasis // quelle valeur pilote la jauge et l'auto-compaction : le seuil de compaction ou la taille de contexte
+  autoCompact: boolean // compacte automatiquement la conversation quand la jauge atteint 80 % de la fenêtre de travail
   timeAwareness: boolean // injecte date/heure + temps écoulé depuis le dernier message
-  // Persona de l'utilisateur : qui il est, pour TOUS ses personnages. Deux
-  // champs libres, tous deux optionnels ('' = rien d'injecté). Le nom alimente
-  // aussi la macro {{user}} des cards importées (shared/macros.ts).
-  // Volontairement UNE seule persona : pas de collection à gérer, pas de
-  // sélecteur de plus dans l'interface — c'est le même utilisateur qui parle.
-  personaName: string
-  personaDescription: string
+  // Personas de l'utilisateur : des « moi » nommés et décrits (médecin,
+  // serviteur, moucheron…), valables pour TOUS ses personnages — et dont un
+  // personnage peut épingler UN en particulier (CharacterMeta.userPersona),
+  // pour ne plus jamais ressaisir « qui je suis avec celui-là ». Le nom de la
+  // persona ACTIVE alimente aussi la macro {{user}} des cards importées
+  // (shared/macros.ts). `defaultPersona` désigne la persona active quand un
+  // personnage n'en a pas épinglé (id absent de la collection = la première,
+  // collection vide = aucune persona, comportement d'origine).
+  userPersonas: UserPersona[]
+  defaultPersona: string
   showThoughts: boolean // affiche le raisonnement du modèle dans le fil (bloc repliable)
   ttsEnabled: boolean // lit les réponses à voix haute via le serveur TTS
   ttsUrl: string // base OpenAI-compat du serveur TTS (POST {ttsUrl}/audio/speech)
@@ -73,6 +104,40 @@ export type GreetingMode = 'written' | 'generated' | 'ask'
  */
 export type AnimationFamily = 'overte' | 'rocketbox'
 
+/**
+ * Une persona utilisateur : un « moi » parmi d'autres. `name` est ce dont le
+ * personnage vous appelle (et ce que la macro {{user}} résout) ; `description`
+ * est ce qu'il sait de vous dans ce rôle. Les deux peuvent être vides — une
+ * persona sans nom ni description n'injecte rien, elle existe seulement pour
+ * être épinglée.
+ */
+export interface UserPersona {
+  id: string
+  name: string
+  description: string
+}
+
+/**
+ * Overrides de génération D'UN PERSONNAGE, posés par-dessus les réglages
+ * globaux : seul le champ présent est appliqué, l'absent retombe sur le
+ * réglage de l'app (un personnage sans cette clé se comporte exactement comme
+ * avant). Le backend (URL, clé API) ne se surcharge PAS ici : c'est le moteur
+ * de la maison, pas une propriété du personnage.
+ */
+export interface CharacterLlm {
+  model?: string
+  modelMode?: ModelMode
+  temperature?: number
+  maxTokens?: number
+  maxHistoryMessages?: number
+  contextSize?: number
+  compactThreshold?: number
+  // Opt-in (absent = éteint) : compresser le contexte envoyé au LLM pour ce
+  // personnage. sysprompt + persona → denseEncode (sûr) ; mémoire → codec
+  // agressif (repli denseEncode). L'original n'est JAMAIS modifié sur disque.
+  compression?: boolean
+}
+
 export interface CharacterMeta {
   id: string
   name: string
@@ -83,9 +148,11 @@ export interface CharacterMeta {
   // la card EST l'image). Champ absent = aucune représentation visuelle.
   portrait?: string // ex: /portraits/sakura.png
   // Photo du personnage servie par /portraits — VIGNETTE d'identité (liste des
-  // personnages), sans rôle dans la scène : capture du modèle 3D tel qu'il est
-  // cadré à l'écran, ou image envoyée par l'utilisateur. Toujours un carré.
-  // Champ absent = repli sur `portrait`, puis sur l'initiale teintée.
+  // personnages : repli sur `portrait`, puis sur l'initiale teintée) ET, dans
+  // la scène, DERNIER REPLI d'avatar : sans `vrm` ni `portrait`, c'est elle qui
+  // représente le personnage en conversation (sinon il serait invisible — issue
+  // #4b). Capture du modèle 3D tel qu'il est cadré à l'écran, ou image envoyée
+  // par l'utilisateur. Toujours un carré.
   photo?: string // ex: /portraits/sakura-photo.png?v=1753900000000
   background: string // ex: /backgrounds/room.png ('' = dégradé par défaut)
   // Famille d'animations de face à face (cf. AnimationFamily). Clé ABSENTE =
@@ -107,9 +174,23 @@ export interface CharacterMeta {
   // Identifiant EXACT de la voix chez le serveur TTS (ex. « clone:Sakurav1 »).
   // Absent/vide = la voix par défaut des Réglages.
   ttsVoice?: string
+  // MODÈLE TTS du personnage : le nom EXACT chez le serveur de synthèse. Même
+  // logique que ttsVoice — la voix et le modèle qui la produit appartiennent au
+  // personnage ; le serveur (URL) reste celui des Réglages, c'est le moteur.
+  // Absent/vide = le modèle par défaut des Réglages (ttsModel global).
+  ttsModel?: string
   greeting: string // premier message affiché dans un nouveau chat
   greetings?: string[] // variantes supplémentaires (tirage au hasard avec greeting)
   greetingMode?: GreetingMode // absent = 'written'
+  // Overrides de génération de ce personnage (cf. CharacterLlm). Clé absente ou
+  // vide = tout retombe sur les réglages globaux — un personnage écrit avant ce
+  // réglage se comporte exactement comme avant.
+  llm?: CharacterLlm
+  // Persona utilisateur ÉPINGLÉE pour ce personnage : l'IDENTIFIANT d'une des
+  // personas des Réglages (Settings.userPersonas) — « quel moi-je parle avec
+  // celui-là ». Absente/retirée = la persona par défaut des Réglages s'applique
+  // (shared/personas.ts décide de la résolution).
+  userPersona?: string
   createdAt: string
 }
 
@@ -118,17 +199,33 @@ export interface CharacterFull extends CharacterMeta {
 }
 
 /**
+ * Trace d'une action exécutée par le modèle pendant la génération d'une réponse
+ * (outil fichier du workspace, mémoire, recherche web…). C'est le journal
+ * d'activité du message — destiné à l'AFFICHAGE uniquement : le serveur n'envoie
+ * jamais `tools` au backend (le payload ne porte que rôle et texte, comme
+ * `thinking`). `result` est plafonné à la persistance (un read_file peut faire
+ * 256 Ko ; le .jsonl ne doit pas gonfler), `args` reste le JSON brut — l'affichage
+ * en extrait la cible (chemin, nom de mémoire…).
+ */
+export interface ToolTrace {
+  name: string // nom de l'outil (write_file, memory_save…)
+  args: string // arguments JSON bruts
+  result?: string // résultat ou erreur — plafonné à la persistance
+}
+
+/**
  * Une VARIANTE de réponse : le corps d'un message assistant, tel qu'il a été
  * généré. « Régénérer » en ajoute une au lieu d'écraser l'ancienne — on feuillette
  * ensuite. Une variante porte tout ce qui dépend du texte : l'heure de SA
- * génération, SON tag d'émotion (le visage suit la variante affichée) et SON
- * raisonnement.
+ * génération, SON tag d'émotion (le visage suit la variante affichée), SON
+ * raisonnement et les actions QUE SA génération a exécutées.
  */
 export interface MessageVariant {
   content: string
   ts: string
   emotion?: string
   thinking?: string
+  tools?: ToolTrace[] // actions exécutées pendant CETTE génération
 }
 
 export interface ChatMessage {
@@ -138,6 +235,7 @@ export interface ChatMessage {
   ts: string
   emotion?: string // tag d'émotion détecté en tête de message ([happy] etc.)
   thinking?: string // raisonnement du modèle (<think> ou champ reasoning) — jamais renvoyé au backend
+  tools?: ToolTrace[] // journal d'activité : actions exécutées pendant la génération — jamais renvoyé au backend
   spontaneous?: true // message écrit à l'initiative du personnage (moteur server/lib/spontaneous.ts)
   // ── Variantes de réponse ─────────────────────────────────────────────────
   // Clés ABSENTES = message ordinaire : tous les chats écrits avant les
@@ -145,7 +243,8 @@ export interface ChatMessage {
   // n'est inventé à la relecture, cf. normalizeMessage dans lib/storage.ts).
   //
   // INVARIANT DU FORMAT — quand `variants` est présent (toujours ≥ 2 entrées),
-  // `content`, `ts`, `emotion` et `thinking` RECOPIENT `variants[variant]`.
+  // `content`, `ts`, `emotion`, `thinking` (et `tools` quand la variante en
+  // porte) RECOPIENT `variants[variant]`.
   // Tout le reste de l'app lit `content` sans rien savoir des variantes :
   // payload du prochain envoi, export .md, voix, copie, recherche, émotion.
   // Changer la variante affichée, c'est donc changer ce que TOUT le monde voit.
@@ -178,7 +277,7 @@ export interface ChatMeta {
 // Jauge de contexte jointe à l'événement done (estimation, ou usage réel du backend).
 export interface ContextInfo {
   tokens: number // tokens du dernier payload envoyé (+ réponse)
-  limit: number // taille de contexte configurée (Settings.contextSize)
+  limit: number // fenêtre de travail (workingWindow : le seuil de compaction ou la taille de contexte) — 0 si inconnue
   percent: number // tokens / limit, arrondi (0 si limit inconnue)
 }
 
@@ -187,13 +286,24 @@ export interface MemoryFile {
   content: string
 }
 
-// Événements SSE émis par POST /api/chat
+// Événements SSE émis par POST /api/chat.
+// La variante error suit le contrat codes/phrases (shared/errorCodes.ts) :
+// `code` (+ `params`) quand l'erreur est codée — le client choisit la phrase
+// dans SA langue ; `message` (brut) seulement pour une erreur interne
+// imprévue, et `code` inconnu du client s'affiche tel quel (repli d'origine).
 export type ChatEvent =
   | { type: 'delta'; text: string }
   | { type: 'thinking'; text: string }
+  | { type: 'tool_start'; name: string; args: string } // l'action DÉMARRE (la puce s'anime) — `tool` apporte le résultat
   | { type: 'tool'; name: string; args: string; result: string }
   | { type: 'done'; message: ChatMessage; context?: ContextInfo }
-  | { type: 'error'; message: string; partial?: ChatMessage } // partial = message sauvegardé malgré l'erreur
+  | {
+      type: 'error'
+      code?: ErrorCode
+      params?: ErrorParams
+      message?: string // message brut d'une erreur non codée (interne)
+      partial?: ChatMessage // message sauvegardé malgré l'erreur
+    }
 
 export const EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'surprised', 'relaxed'] as const
 export type Emotion = (typeof EMOTIONS)[number]
@@ -283,6 +393,14 @@ export interface UiPrefs {
   theme?: string // identifiant de thème préfait, ou 'custom'
   customTheme?: UiCustomTheme
   vnMode?: boolean // mode visual novel
+  // L'avatar est-il visible dans la scène ? Clé ABSENTE = visible (le
+  // comportement d'origine) : un ui.json d'avant ce réglage ne change rien.
+  // Éteint, toute la scène (avatar 3D, portrait 2D, fond, décor) disparaît et
+  // le chat prend toute la largeur (desktop) — et le moteur 3D est mis en
+  // PAUSE, pas seulement masqué (pas de frame rendue à l'aveugle). Même famille
+  // qu'env3d et vrmaEnabled : un réglage de confort d'affichage, pas une
+  // propriété du personnage — il suit l'utilisateur d'un appareil à l'autre.
+  avatarVisible?: boolean
   // Décor 3D allumé/éteint (défaut : allumé). Éteint = fond 2D ou dégradé, comme
   // avant les décors. Vit ici et non dans le personnage : c'est un réglage
   // d'APPAREIL au sens du confort (une pièce en 3D coûte cher sur un téléphone),

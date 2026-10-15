@@ -5,10 +5,10 @@
 //
 // AUCUN état supplémentaire sur disque : tout se déduit du .jsonl de la
 // conversation active (les messages du moteur portent `spontaneous: true`).
-import { loadSettings } from '../config'
+import { effectiveSettings, loadSettings } from '../config'
 import { readUiPrefs } from '../api/ui'
 import { buildPayload } from '../api/chat'
-import { appendChatMessage, readChat } from './storage'
+import { appendChatMessage, getCharacter, readChat } from './storage'
 import { streamChatCompletion } from '../llm/openai'
 import { firstEmotionTag } from '../../shared/emotions'
 import type { ChatMessage, Settings } from '../../shared/types'
@@ -114,6 +114,13 @@ export async function runSpontaneousTick(): Promise<void> {
   const target = activeTarget()
   if (!target) return
   const { characterId, chatId } = target
+  // Réglages EFFECTIFS du personnage : un message spontané est aussi un message
+  // « de » lui — les overrides de sa carte (modèle, température…) s'appliquent.
+  // Les garde-fous ci-dessus (activé, plage horaire) restent globaux : ils ne
+  // sont pas surchargeables par un personnage.
+  const character = getCharacter(characterId)
+  if (!character) return
+  const effective = effectiveSettings(character)
 
   let messages: ChatMessage[]
   try {
@@ -139,7 +146,7 @@ export async function runSpontaneousTick(): Promise<void> {
   generating = true
   try {
     const directive = unanswered === MAX_UNANSWERED - 1 ? SOFT_END_DIRECTIVE : CHECK_IN_DIRECTIVE
-    const text = await generate(characterId, chatId, settings, directive)
+    const text = await generate(characterId, chatId, effective, directive)
     if (!text) {
       console.warn('[spontaneous] réponse vide du backend — nouvel essai au prochain tick')
       return

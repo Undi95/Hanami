@@ -38,14 +38,42 @@ const { VRMAnimationLoaderPlugin, createVRMAnimationClip } = await import(
 export const EPS = 1e-4 // dernière image : jamais t = durée (LoopRepeat reboucle)
 export const HANCHES_RIG_MESURE = 1.0167 // m — rig sur lequel world.json est mesuré
 
-// Pose de repos anti T-pose, reprise TELLE QUELLE de vrmStage.ts / index.html :
-// c'est elle que le lecteur restaure pour un os que le clip n'anime pas. Un
-// banc qui poserait la T-pose montrerait des bras en croix qu'on ne voit jamais
-// dans l'app.
+// Pose de repos anti T-pose, reprise de vrmStage.ts / index.html : c'est elle
+// que le lecteur restaure pour un os que le clip n'anime pas. Un banc qui
+// poserait la T-pose montrerait des bras en croix qu'on ne voit jamais dans
+// l'app. Écrite dans le repère normalisé qui regarde le −Z (VRM 0.x) ; dans
+// l'autre repère le signe se renverse — mesuré, cf. normalizedFacesPlusZ.
 const REPOS_Z = [
   ['leftUpperArm', 1.25], ['rightUpperArm', -1.25],
   ['leftLowerArm', 0.12], ['rightLowerArm', -0.12],
 ]
+
+// Le SENS du repère des os normalisés — MIROIR de `normalizedFacesPlusZ`
+// (client/src/scene/jointLimits.ts ; même copie que anim-lab/mesures.mjs et
+// ../juge/rig.mjs), que ce dossier n'importe pas : il ne dépend d'aucun code de
+// l'app. Même témoin — up × (épaule droite − épaule gauche) confronté au +Z
+// local des hanches, lu dans les matrices monde ; les normalisations omises
+// sont des facteurs positifs, le signe est donc celui de l'original. Repli sur
+// `metaVersion` quand les épaules manquent.
+function normalizedFacesPlusZ(vrm) {
+  const left = vrm.humanoid.getNormalizedBoneNode('leftUpperArm')
+  const right = vrm.humanoid.getNormalizedBoneNode('rightUpperArm')
+  const ref = vrm.humanoid.getNormalizedBoneNode('hips') ?? left
+  if (left && right && ref) {
+    left.updateWorldMatrix(true, false)
+    right.updateWorldMatrix(true, false)
+    ref.updateWorldMatrix(true, false)
+    const a = left.matrixWorld.elements
+    const b = right.matrixWorld.elements
+    const cx = b[12] - a[12] // épaule droite − gauche, aplati au sol
+    const cz = b[14] - a[14]
+    if (cx * cx + cz * cz > 1e-8) {
+      const e = ref.matrixWorld.elements // 3ᵉ colonne = axe +Z local, en monde
+      return cz * e[8] - cx * e[10] >= 0 // (up × côté) · zLocal
+    }
+  }
+  return vrm.meta?.metaVersion !== '0'
+}
 
 // ── glTF binaire ────────────────────────────────────────────────────────────
 
@@ -175,9 +203,10 @@ export function chargerModele(fichier, { maillage = true } = {}) {
     noeudBrut: (os) => osBruts.get(os) ?? null,
     majHumanoide: () => { humanoid.update(); scene.updateWorldMatrix(false, true) },
   }
+  const sens = normalizedFacesPlusZ(vrm) ? -1 : 1
   for (const [nom, z] of REPOS_Z) {
     const n = adapt.noeudNorm(nom)
-    if (n) { n.rotation.z = z; adapt.reposQ.set(nom, n.quaternion.clone()) }
+    if (n) { n.rotation.z = sens * z; adapt.reposQ.set(nom, n.quaternion.clone()) }
   }
   adapt.majHumanoide()
 

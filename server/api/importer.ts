@@ -1,14 +1,12 @@
 // Router import : character cards SillyTavern (PNG ou .json) + chats JSONL.
-import express, { Router, type Response } from 'express'
+import express, { Router } from 'express'
 import { parseCardJson, parseCharacterCard, type ParsedCard } from '../lib/pngCard'
 import { convertStChat } from '../lib/stChat'
 import { createCharacter, getCharacter, savePortrait, updateCharacter, writeImportedChat } from '../lib/storage'
+import { httpError, sendJsonError } from '../lib/errors'
+import { ErrorCodes } from '../../shared/errorCodes'
 
 export const importRouter = Router()
-
-function sendError(res: Response, status: number, e: unknown): void {
-  res.status(status).json({ error: e instanceof Error ? e.message : String(e) })
-}
 
 function queryString(v: unknown): string {
   return typeof v === 'string' ? v.trim() : ''
@@ -62,7 +60,7 @@ importRouter.post(
     try {
       const buf = req.body as unknown
       if (!Buffer.isBuffer(buf) || buf.length === 0) {
-        res.status(400).json({ error: 'Corps de requête requis (PNG ou .json de card)' })
+        httpError(res, 400, ErrorCodes.cardBodyRequired)
         return
       }
       // PNG d'abord (le cas courant), puis .json nu. Le PNG lu avec succès est
@@ -70,10 +68,7 @@ importRouter.post(
       const fromPng = parseCharacterCard(buf)
       const card = fromPng ?? parseCardJson(buf)
       if (!card) {
-        res.status(400).json({
-          error:
-            'Aucune character card lisible : PNG sans chunk tEXt chara/ccv3, ou .json qui n’est pas une card (V1/V2/V3)',
-        })
+        httpError(res, 400, ErrorCodes.noReadableCard)
         return
       }
       const name = queryString(req.query.name) || card.name || 'Importé'
@@ -100,7 +95,7 @@ importRouter.post(
       }
       res.json({ character: saved })
     } catch (e) {
-      sendError(res, 500, e)
+      sendJsonError(res, 500, e)
     }
   },
 )
@@ -113,7 +108,7 @@ importRouter.post(
     try {
       const characterId = queryString(req.query.characterId)
       if (!characterId) {
-        res.status(400).json({ error: 'Paramètre "characterId" requis' })
+        httpError(res, 400, ErrorCodes.characterIdRequired)
         return
       }
       let character = null
@@ -123,19 +118,20 @@ importRouter.post(
         /* id invalide → introuvable */
       }
       if (!character) {
-        res.status(404).json({ error: `Personnage introuvable : ${characterId}` })
+        httpError(res, 404, ErrorCodes.characterNotFound, { id: characterId })
         return
       }
       const body = req.body as unknown
       const jsonl = Buffer.isBuffer(body) ? body.toString('utf8') : typeof body === 'string' ? body : ''
       const messages = convertStChat(jsonl)
+      // Date ISO plutôt que toLocaleDateString('fr-FR') : le titre est DONNÉE
+      // (stocké, affiché tel quel) — un format neutre se lit dans les deux langues.
       const title =
-        queryString(req.query.title) ||
-        `Import SillyTavern ${new Date().toLocaleDateString('fr-FR')}`
+        queryString(req.query.title) || `Import SillyTavern ${new Date().toISOString().slice(0, 10)}`
       const chat = writeImportedChat(characterId, title, messages)
       res.json({ chat, imported: messages.length })
     } catch (e) {
-      sendError(res, 500, e)
+      sendJsonError(res, 500, e)
     }
   },
 )

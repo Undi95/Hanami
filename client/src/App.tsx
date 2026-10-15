@@ -10,10 +10,13 @@ import type {
 } from '../../shared/types'
 import type { EnvNotice, FrameMode, VrmStage } from './scene/types'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
+import { activePersona } from '../../shared/personas'
 import * as api from './api'
+import { MAX_AUTO_COMPACT_FAILS, type AutoCompactOutcome, autoCompactFailUpdate } from './autoCompact'
 import { useStableCallback } from './hooks'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
 import { disposeNotify, playNotify } from './sound'
+import { cleanForSpeech, splitIntoSpeechSegments } from './tts'
 import {
   applyTheme,
   normalizeTheme,
@@ -38,7 +41,7 @@ import {
   type ViewMode,
 } from './prefs'
 import { chatPanelWidth, healLayoutPrefs, saveChatPanelWidth, saveVnBoxWidth, saveVnTextHeight } from './layout'
-import { I18nProvider, chatDisplayTitle, getLang, localeOf, useI18n } from './i18n'
+import { I18nProvider, chatDisplayTitle, getLang, localeOf, serverErrorText, useI18n } from './i18n'
 import TopBar, { AUTO_COMPACT_AT, CtxBadge, type DialogKind } from './components/TopBar'
 import { ChatPanelGrip, SheetHandle } from './components/ResizeGrips'
 import MessageList, { VnBox, messageVariants, type FeedItem } from './components/MessageList'
@@ -59,6 +62,10 @@ import PromptInspector from './components/PromptInspector'
 // Citation d'un message : longueur de l'aperçu (bandeau) et de l'extrait envoyé.
 const QUOTE_PREVIEW_MAX = 80
 const QUOTE_MAX = 200
+// Auto-compaction : le nombre d'échecs tolérés (MAX_AUTO_COMPACT_FAILS) et la
+// transition du compteur vivent dans ./autoCompact (logique pure, testée par
+// scripts/test-auto-compact.ts). Un échec transitoire ne doit plus tuer
+// l'auto-compact pour la session ; 409 et `nothingToCompact` ne comptent pas.
 // Chargement du modèle VRM : délais avant nouvelle tentative. Un serveur qui
 // redémarre coupe la requête sans que rien ne soit cassé — inutile d'annoncer
 // une erreur au premier échec.
@@ -80,9 +87,13 @@ function excerpt(text: string, max: number): string {
   return flat.length > max ? flat.slice(0, max - 1).trimEnd() + '…' : flat
 }
 
-/** Noms des macros pour ce personnage — {{user}} suit la persona, sinon « User ». */
-function macroNamesOf(char: CharacterFull, personaName: string): MacroNames {
-  return { char: char.name, user: userName(personaName) }
+/**
+ * Noms des macros pour ce personnage — {{user}} suit la persona ACTIVE de ce
+ * personnage (épinglée sur sa carte, sinon la défaut des Réglages : le même
+ * shared/personas.ts que le serveur, les deux doivent s'accorder).
+ */
+function macroNamesOf(char: CharacterFull, settings: Settings | null): MacroNames {
+  return { char: char.name, user: userName(settings ? activePersona(settings, char)?.name : undefined) }
 }
 
 /**
@@ -91,9 +102,9 @@ function macroNamesOf(char: CharacterFull, personaName: string): MacroNames {
  * sur dix par « Hello {{user}}! ». La substitution est faite ICI, à l'affichage :
  * character.json garde ses macros (renommer le personnage suffit à les suivre).
  */
-function greetingPool(char: CharacterFull, personaName: string): string[] {
+function greetingPool(char: CharacterFull, settings: Settings | null): string[] {
   const variants = Array.isArray(char.greetings) ? char.greetings : []
-  const names = macroNamesOf(char, personaName)
+  const names = macroNamesOf(char, settings)
   return [char.greeting, ...variants]
     .filter((g) => typeof g === 'string' && g.trim().length > 0)
     .map((g) => substituteMacros(g, names))
@@ -102,6 +113,36 @@ function greetingPool(char: CharacterFull, personaName: string): string[] {
 /** Tirage d'un accueil : chaque nouvelle conversation peut s'ouvrir autrement. */
 function pickGreeting(pool: string[]): string {
   return pool[Math.floor(Math.random() * pool.length)]
+}
+
+/**
+ * Reconstruit le fil depuis les messages sauvegardés : les traces d'outils
+ * (m.tools) réapparaissent en puces, juste AVANT le message qui les a portées
+ * — la même place que pendant le stream. Champ optionnel : les vieux chats
+ * n'en ont pas, rien à réinsérer.
+ *
+ * `summaryUpto` (en-tête du .jsonl) : nombre de messages de tête remplacés par
+ * le résumé dans le contexte envoyé. On y plante la pastille persistante de
+ * compaction juste AVANT le premier message non résumé — un fait de fichier,
+ * pas d'état UI, donc elle survit au rechargement.
+ */
+function feedFromMessages(messages: ChatMessage[], summaryUpto = 0): FeedItem[] {
+  const items: FeedItem[] = []
+  const upto = Math.min(Math.max(0, summaryUpto | 0), messages.length)
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]
+    if (i === upto && upto > 0) items.push({ kind: 'compact', count: upto })
+    if (Array.isArray(m.tools)) {
+      for (const tr of m.tools) {
+        items.push({ kind: 'tool', name: tr.name, args: tr.args, result: tr.result })
+      }
+    }
+    items.push({ kind: 'msg', msg: m })
+  }
+  // Tout le fil résumé (messages supprimés après la compaction) : la pastille
+  // bascule en fin de fil plutôt que de disparaître.
+  if (upto > 0 && upto >= messages.length) items.push({ kind: 'compact', count: upto })
+  return items
 }
 
 /**
@@ -152,9 +193,10 @@ function AppInner() {
   const [feed, setFeed] = useState<FeedItem[]>([])
   // Message visé par le prochain envoi : sa citation sera écrite dans le message.
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
-  // Texte poussé par Impersonate dans le composer — `token` change à chaque
-  // delta reçu, y compris si le texte lui-même se répète (fin de flux).
-  const [impersonatePrefill, setImpersonatePrefill] = useState<{ text: string; token: number } | null>(null)
+  // Texte poussé dans le composer : par Impersonate (au fil de son flux) ou
+  // rendu par un envoi qui a échoué AVANT d'atteindre le disque (à réenvoyer).
+  // `token` change à chaque poussée, y compris si le texte se répète (fin de flux).
+  const [composerPrefill, setComposerPrefill] = useState<{ text: string; token: number } | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   // Onglet d'ouverture de l'Inspecteur : 'system' par la barre du haut, 'scene'
@@ -175,6 +217,9 @@ function AppInner() {
   const [compacting, setCompacting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [vnMode, setVnMode] = useState(() => getPref('vnMode') === true)
+  // Avatar visible : allumé par défaut (clé absente = visible, comportement
+  // d'origine) ; masqué, le chat prend toute la largeur et le moteur se pause.
+  const [avatarVisible, setAvatarVisible] = useState(() => getPref('avatarVisible') !== false)
   // Décor 3D : allumé par défaut (clé absente = allumé), éteint explicitement.
   const [env3d, setEnv3d] = useState(() => getPref('env3d') !== false)
   // Animations gestuelles (.vrma) : même grammaire que le décor.
@@ -225,6 +270,15 @@ function AppInner() {
   // outils ne font pas bouger les lèvres) + audio TTS en cours de lecture.
   const speakTimerRef = useRef<number | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  // Callback qui débloque le `await new Promise` en cours dans playTts quand on
+  // coupe la lecture de l'extérieur (bouton stop, nouvelle génération, rejeu
+  // d'une autre bulle) — sans lui, `audio.pause()` seul ne déclenche pas
+  // `onended` et la boucle de lecture des segments resterait suspendue.
+  const audioEndRef = useRef<(() => void) | null>(null)
+  // Identifiant de session TTS : incrémenté à chaque coupure. Un pipeline de
+  // segments en cours (lecture ou synthèse en attente) vérifie ce compteur
+  // avant d'agir — s'il a changé, la session est périmée et s'arrête net.
+  const ttsSeqRef = useRef(0)
   // Compteur de génération : invalide les chargements perso/chat dépassés par un
   // choix plus récent (évite qu'une réponse lente écrase la sélection courante).
   const loadGenRef = useRef(0)
@@ -239,16 +293,20 @@ function AppInner() {
   // appel par activation de chat (jamais de polling, même si l'app re-rend).
   // Remis à null par openChat, en même temps que la jauge.
   const ctxEstimatedRef = useRef<string | null>(null)
-  // Chats dont l'auto-compaction a échoué : pas de nouvel essai automatique
-  // (sinon un backend strict serait re-sollicité à chaque message).
-  const autoCompactFailedRef = useRef<Set<string>>(new Set())
+  // Échecs consécutifs de l'auto-compaction, par chat. Tant que le compteur
+  // reste sous MAX_AUTO_COMPACT_FAILS, la réponse suivante relance l'essai
+  // (échec transitoire ≠ mort de l'auto-compact pour la session). Au-delà, on
+  // arrête de re-solliciter le backend (l'intention d'origine) — mais l'arrêt
+  // est AFFICHÉ dans le fil, plus seulement en console.warn. 409 n'y figure pas.
+  const autoCompactFailCountRef = useRef<Map<string, number>>(new Map())
   // Personnage courant pour le callback de cadrage (posé une fois à la création
   // de la scène, qui vit plus longtemps que chaque personnage).
   const characterIdRef = useRef<string | null>(null)
-  // Nom de la persona, en REF : les salutations sont posées par openChat, qui
-  // est aussi appelé depuis le boot — une fermeture figée au premier rendu, où
-  // l'état `settings` est encore null. La ref, elle, dit la vérité du moment.
-  const personaNameRef = useRef('')
+  // Réglages, en REF : les salutations sont posées par openChat, qui est aussi
+  // appelé depuis le boot — une fermeture figée au premier rendu, où l'état
+  // `settings` est encore null. La ref, elle, dit la vérité du moment (et la
+  // persona se résout de là, via activePersona — épinglée ou défaut).
+  const settingsRef = useRef<Settings | null>(null)
   // Idem pour le mode d'affichage : le callback du stage ne doit jamais lire un
   // vnMode capturé au rendu qui l'a posé — il choisirait la mauvaise clé de vue.
   const viewModeRef = useRef<ViewMode>(getPref('vnMode') === true ? 'vn' : 'desktop')
@@ -349,13 +407,23 @@ function AppInner() {
     stageRef.current?.setSpeaking(false)
   }
 
+  /**
+   * Coupe net l'audio en cours ET débloque une éventuelle attente de synthèse
+   * (segment suivant en cours de préparation) — sans remettre `ttsPlaying` ni
+   * `speaking` à zéro : c'est à l'appelant de décider (stop réel → silence ;
+   * nouvelle session `playTts` → un autre segment va reprendre la main).
+   */
+  function cancelTtsPlayback() {
+    ttsSeqRef.current++
+    audioRef.current?.pause()
+    const end = audioEndRef.current
+    audioEndRef.current = null
+    end?.()
+  }
+
   function stopTts() {
+    cancelTtsPlayback()
     setTtsPlaying(null)
-    const audio = audioRef.current
-    if (!audio) return
-    audioRef.current = null
-    audio.pause()
-    if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src)
     stageRef.current?.setSpeaking(false)
   }
 
@@ -370,12 +438,20 @@ function AppInner() {
     setCompacting(true)
     try {
       const out = await api.compactChat(charId, chatId, instruction)
-      autoCompactFailedRef.current.delete(chatId)
+      autoCompactFailCountRef.current.delete(chatId)
       setChatMeta((m) =>
         m && m.id === chatId ? { ...m, summary: out.summary, summaryUpto: out.summaryUpto } : m,
       )
-      if (chatIdRef.current === chatId) {
-        setFeed((f) => [...f, { kind: 'info', text: t('compactDone', { n: out.compacted }) }])
+      // Pastille PERSISTANTE au point de coupure : reconstruite depuis le disque
+      // (une lecture, pas de LLM) pour qu'elle apparaisse ICI et maintenant — et
+      // survive au rechargement. La bulle assistant vient d'être persistée
+      // (persistAssistant précède l'événement `done`), elle est donc dans la
+      // relecture. Elle remplace l'ancienne ligne d'info éphémère en bas de fil.
+      if (chatIdRef.current === chatId && character && character.id === charId) {
+        const { messages } = await api.getChat(charId, chatId)
+        if (chatIdRef.current === chatId && character.id === charId) {
+          setFeed(feedFromDisk(character, messages, out.summaryUpto))
+        }
       }
       // Rafraîchit la jauge — sinon le badge resterait au rouge (≥ 80 %)
       // jusqu'au prochain message alors que le contexte vient d'être libéré.
@@ -387,11 +463,30 @@ function AppInner() {
         return
       }
       if (silent) {
-        // 409 = « déjà en cours » (autre appareil, double déclenchement) :
-        // occupé n'est pas cassé — marquer le chat couperait l'auto-compaction
-        // pour toute la session sur une simple collision.
-        if (!(e instanceof api.ApiError && e.status === 409)) {
-          autoCompactFailedRef.current.add(chatId)
+        // `noise` = cas qui ne sont PAS des échecs (logique dans ./autoCompact) :
+        // 409 « déjà en cours » (autre appareil, double déclenchement — occupé
+        // n'est pas cassé) et `nothingToCompact` (< 6 messages, « pas encore
+        // assez » — un état transitoire qui se résout tout seul, pas une panne).
+        const isApi = e instanceof api.ApiError
+        const outcome: AutoCompactOutcome =
+          isApi && (e.status === 409 || e.code === 'nothingToCompact')
+            ? 'noise'
+            : 'failure'
+        const { count, signal } = autoCompactFailUpdate(
+          autoCompactFailCountRef.current.get(chatId),
+          outcome,
+        )
+        if (count === undefined) autoCompactFailCountRef.current.delete(chatId)
+        else autoCompactFailCountRef.current.set(chatId, count)
+        // L'échec n'est plus invisible : on annonce le 1ᵉʳ (un essai restant) et
+        // l'arrêt définitif ; les essais intermédiaires sont silencieux (bornés).
+        // Pas de ligne si le chat n'est plus actif.
+        if (signal && chatIdRef.current === chatId) {
+          const msg =
+            signal === 'retry'
+              ? t('autoCompactRetry')
+              : t('autoCompactStopped', { n: MAX_AUTO_COMPACT_FAILS })
+          setFeed((f) => [...f, { kind: 'info', text: msg }])
         }
         console.warn('[compact]', e)
         return
@@ -404,18 +499,35 @@ function AppInner() {
   }
 
   /**
-   * Lit une réplique à voix haute. `key` = le `ts` du message lu : il désigne la
-   * bulle dont l'icône doit devenir un carré « stop », et il se nettoie tout
-   * seul quand la lecture s'achève (ou échoue). Sans clé, la voix parle mais
-   * aucune bulle ne s'annonce parlante.
+   * Lit une réplique à voix haute, phrase par phrase (voir `splitIntoSpeechSegments`) :
+   * chaque segment est synthétisé puis joué, le suivant se prépare pendant la
+   * lecture du précédent — le son démarre dès la première phrase prête au lieu
+   * d'attendre la synthèse de tout le message (qui peut dépasser la minute).
+   * `key` = le `ts` du message lu : il désigne la bulle dont l'icône doit
+   * devenir un carré « stop » (posé au premier son réellement audible, pas à
+   * la demande), et il se nettoie tout seul quand la lecture s'achève (ou
+   * échoue). Sans clé, la voix parle mais aucune bulle ne s'annonce parlante.
    * `voice` = la voix du personnage qui parle ; vide, le serveur prend celle
-   * des Réglages (le serveur de synthèse, lui, est toujours celui des Réglages).
+   * des Réglages. `model` = le modèle TTS du personnage (même logique :
+   * vide, le serveur prend celui des Réglages). Le serveur de synthèse, lui,
+   * est toujours celui des Réglages.
    */
-  async function playTts(text: string, key?: string, voice = '') {
-    const clean = stripEmotionTags(text).trim()
+  async function playTts(text: string, key?: string, voice = '', model = '') {
+    // Le texte AFFICHÉ (bulle, historique) ne passe jamais par `cleanForSpeech` —
+    // seule la copie envoyée au TTS perd ses tags d'émotion, ses didascalies
+    // entre astérisques et ses symboles markdown (~ _ ` * émojis…).
+    const clean = cleanForSpeech(stripEmotionTags(text)).trim()
     if (!clean) return
-    const blob = await api.tts(clean, voice)
-    stopTts()
+    const segments = splitIntoSpeechSegments(clean)
+    if (segments.length === 0) return
+
+    // Nouvelle session : coupe la précédente (audio + synthèse en attente) et
+    // se rend infalsifiable — tout pipeline plus ancien s'arrête au prochain
+    // point de contrôle (`isCurrent`) en voyant `ttsSeqRef` avoir changé.
+    cancelTtsPlayback()
+    const seq = ttsSeqRef.current
+    const isCurrent = () => ttsSeqRef.current === seq
+
     // Le timer des lèvres « texte » ne doit pas refermer la bouche en pleine
     // lecture audio : l'audio pilote seul à partir d'ici.
     speakUntilRef.current = 0
@@ -423,29 +535,76 @@ function AppInner() {
       window.clearTimeout(speakTimerRef.current)
       speakTimerRef.current = null
     }
-    const url = URL.createObjectURL(blob)
-    const audio = new Audio(url)
-    audioRef.current = audio
-    audio.onplay = () => stageRef.current?.setSpeaking(true)
-    const end = () => {
-      if (audioRef.current === audio) {
-        audioRef.current = null
-        setTtsPlaying(null)
-        stageRef.current?.setSpeaking(false)
+
+    let lastSynthError: unknown = null
+    const synth = async (segment: string): Promise<string | null> => {
+      try {
+        const blob = await api.tts(segment, voice, model)
+        return isCurrent() ? URL.createObjectURL(blob) : null
+      } catch (e) {
+        console.warn('[tts] segment échoué, on continue avec le suivant', e)
+        lastSynthError = e
+        return null
       }
-      URL.revokeObjectURL(url)
     }
-    audio.onended = end
-    audio.onerror = end
-    setTtsPlaying(key ?? null)
-    try {
-      await audio.play()
-    } catch (e) {
-      // Lecture refusée (autoplay bloqué, format illisible) : aucune bulle ne
-      // doit rester en « stop » — l'erreur, elle, remonte à l'appelant.
-      end()
-      throw e
+
+    let nextUrlPromise = synth(segments[0])
+    let played = false
+    let fatalError: unknown = null
+
+    for (let i = 0; i < segments.length; i++) {
+      if (!isCurrent()) break
+      const url = await nextUrlPromise
+      if (!isCurrent()) {
+        if (url) URL.revokeObjectURL(url)
+        break
+      }
+      // Préchauffe le segment suivant PENDANT la lecture de celui-ci — c'est
+      // ce qui permet un enchaînement sans blanc entre deux phrases.
+      if (i + 1 < segments.length) nextUrlPromise = synth(segments[i + 1])
+      if (!url) continue // segment perdu (déjà loggé) : on tente le suivant plutôt que d'abandonner toute la réplique
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const audio = new Audio(url)
+          audioRef.current = audio
+          const end = () => {
+            if (audioRef.current === audio) audioRef.current = null
+            if (audioEndRef.current === end) audioEndRef.current = null
+            URL.revokeObjectURL(url)
+            resolve()
+          }
+          audioEndRef.current = end
+          // `speaking` posé ici (pas entre les segments) : la bouche reste
+          // animée en continu d'une phrase à l'autre, elle ne se referme
+          // qu'à la toute fin de la réplique (ou sur coupure/erreur).
+          audio.onplay = () => {
+            played = true
+            setTtsPlaying(key ?? null)
+            stageRef.current?.setSpeaking(true)
+          }
+          audio.onended = end
+          audio.onerror = end
+          audio.play().catch((e) => {
+            end()
+            reject(e)
+          })
+        })
+      } catch (e) {
+        // Lecture refusée (autoplay bloqué, format illisible) : inutile de
+        // retenter sur les segments suivants, l'erreur remonte à l'appelant.
+        fatalError = e
+        break
+      }
     }
+
+    // Session supplantée (nouveau playTts, rejeu, stop) : on ne jette PAS — sinon
+    // une session coupée avant le premier son ferait une chip d'erreur fausse.
+    if (!isCurrent()) return
+    setTtsPlaying(null)
+    stageRef.current?.setSpeaking(false)
+    if (fatalError) throw fatalError
+    if (!played) throw lastSynthError ?? new Error('Synthèse vocale : tous les segments ont échoué')
   }
 
   // ── Scène 3D (import lazy, contrat scene/types.ts) ───────────────────────
@@ -510,6 +669,14 @@ function AppInner() {
   useEffect(() => {
     stageRef.current?.setAnimationsEnabled(vrmaEnabled)
   }, [vrmaEnabled, stageReady])
+
+  // Avatar masqué : la scène disparaît par CSS (la div reste montée — le stage
+  // y est attaché, un unmount conditionnel le tuerait) et le moteur est mis en
+  // pause VRAIE : plus aucune frame rendue à l'aveugle. Reprendre relance la
+  // boucle ; tout l'état (modèle, pose, décor) est intact.
+  useEffect(() => {
+    if (stageReady) stageRef.current?.setPaused(!avatarVisible)
+  }, [stageReady, avatarVisible])
 
   // Taille d'écran : la scène vivante s'éteint et se rallume au redimensionnement
   // DANS LES DEUX SENS, sans jamais toucher à la préférence — brancher un
@@ -689,7 +856,7 @@ function AppInner() {
   function chooseWrittenGreeting(ask: { char: CharacterFull; chat: ChatMeta }) {
     setGreetingAsk(null)
     if (chatIdRef.current !== ask.chat.id || feed.length > 0) return
-    const pool = greetingPool(ask.char, personaNameRef.current)
+    const pool = greetingPool(ask.char, settingsRef.current)
     if (pool.length === 0) return
     const text = pickGreeting(pool)
     setFeed([{ kind: 'greeting', text }])
@@ -717,14 +884,14 @@ function AppInner() {
       setContext(null)
       ctxEstimatedRef.current = null
       setActiveChat(char.id, meta.id)
-      const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
+      const items = feedFromMessages(messages, meta.summaryUpto ?? 0)
       // Premier message d'un chat VIDE (jamais sur un chat importé — il n'est pas
       // vide), selon le mode du personnage : 'written' (défaut) affiche une
       // salutation écrite tirée au hasard, 'generated' laisse le modèle ouvrir,
       // 'ask' pose la question. Sans aucun texte écrit, on génère dans tous les cas.
       const empty = messages.length === 0
       const mode = char.greetingMode ?? 'written'
-      const pool = empty ? greetingPool(char, personaNameRef.current) : []
+      const pool = empty ? greetingPool(char, settingsRef.current) : []
       const ask = empty && mode === 'ask' && pool.length > 0
       const opening = empty && !ask && mode !== 'generated' && pool.length > 0 ? pickGreeting(pool) : null
       if (opening) items.push({ kind: 'greeting', text: opening })
@@ -777,7 +944,7 @@ function AppInner() {
     try {
       const loaded = await api.getSettings()
       setSettings(loaded)
-      personaNameRef.current = loaded.personaName ?? ''
+      settingsRef.current = loaded
       // Auth acquise (getSettings est passé) : les préférences du serveur font
       // foi et remplacent le cache — l'abonnement ci-dessous applique langue,
       // thème et mode VN si elles diffèrent, la sélection est lue juste après.
@@ -841,6 +1008,7 @@ function AppInner() {
         // Sans ces deux lignes, un navigateur dont le cache localStorage ne connaît
         // pas encore la clé téléchargeait la pièce et affichait l'interrupteur coché
         // en contradiction avec data/ui.json, pendant toute la première ouverture.
+        if (typeof prefs.avatarVisible === 'boolean') setAvatarVisible(prefs.avatarVisible)
         if (typeof prefs.env3d === 'boolean') setEnv3d(prefs.env3d)
         if (typeof prefs.vrmaEnabled === 'boolean') setVrmaEnabled(prefs.vrmaEnabled)
         if (typeof prefs.interactive === 'boolean') setInteractive(prefs.interactive)
@@ -875,13 +1043,7 @@ function AppInner() {
         .then(({ meta, messages }) => {
           if (chatIdRef.current !== chat.id || meta.messageCount === chat.messageCount) return
           setChatMeta(meta)
-          const items: FeedItem[] = messages.map((m) => ({ kind: 'msg', msg: m }))
-          // Même accueil que partout ailleurs : macros résolues (cf. greetingPool).
-          if (items.length === 0 && char.greeting) {
-            const names = macroNamesOf(char, personaNameRef.current)
-            items.push({ kind: 'greeting', text: substituteMacros(char.greeting, names) })
-          }
-          setFeed(items)
+          setFeed(feedFromDisk(char, messages, meta.summaryUpto ?? 0))
           const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
           if (lastAssistant) {
             applyEmotion(lastAssistant.emotion ?? extractEmotion(lastAssistant.content) ?? 'neutral')
@@ -921,17 +1083,107 @@ function AppInner() {
 
   // ── Envoi + streaming ────────────────────────────────────────────────────
 
-  function keepPartialDraft(extra?: FeedItem) {
-    setFeed((f) => {
-      const out: FeedItem[] = []
-      for (const it of f) {
-        if (it.kind === 'msg' && it.pending) {
-          if (it.msg.content) out.push({ kind: 'msg', msg: it.msg })
-        } else out.push(it)
-      }
-      if (extra) out.push(extra)
-      return out
-    })
+  // Le fil reconstruit à partir du DISQUE : mêmes messages, mêmes puces
+  // d'outils, même accueil que l'ouverture d'un chat. Une seule grammaire,
+  // partagée entre le rafraîchissement doux et la re-synchronisation.
+  function feedFromDisk(
+    char: CharacterFull,
+    messages: ChatMessage[],
+    summaryUpto = 0,
+  ): FeedItem[] {
+    const items = feedFromMessages(messages, summaryUpto)
+    if (items.length === 0 && char.greeting) {
+      // Même accueil que partout ailleurs : macros résolues (cf. greetingPool).
+      const names = macroNamesOf(char, settingsRef.current)
+      items.push({ kind: 'greeting', text: substituteMacros(char.greeting, names) })
+    }
+    return items
+  }
+
+  // Une génération qui ne s'est PAS terminée par un `done` laisse le fil local
+  // incertain : le message optimiste de l'envoi peut être un ORPHELIN (POST
+  // rejeté avant enregistrement — il ne disparaît jamais du fil, et il décale
+  // TOUS les ordinaux de suppression/édition qui suivent), ou le partiel que
+  // le serveur a sauvegardé diffère de ce que le fil affiche. Le disque est la
+  // source de vérité : on relit le chat et on reconstruit.
+  // `ac` = le contrôleur de CETTE génération (null = appel hors flux, p. ex. le
+  // backstop d'un 404 de suppression) : un résultat qui arrive alors qu'UN
+  // AUTRE flux écrit le fil est jeté, comme dans les autres relectures.
+  // Renvoie true si `sent` (le message optimiste de l'envoi) a été retrouvée
+  // sur le disque ; false sinon — y compris si le serveur est injoignable,
+  // auquel cas les items optimistes/en attente sont retirés du fil.
+  async function resyncFeed(
+    char: CharacterFull,
+    chat: ChatMeta,
+    ac: AbortController | null,
+    chip?: FeedItem,
+    sent?: ChatMessage,
+  ): Promise<boolean> {
+    const stale = () =>
+      chatIdRef.current !== chat.id || (abortRef.current !== null && (ac === null || abortRef.current !== ac))
+    try {
+      const { meta, messages } = await api.getChat(char.id, chat.id)
+      if (stale()) return true
+      setChatMeta(meta)
+      const feed = feedFromDisk(char, messages, meta.summaryUpto ?? 0)
+      setFeed(chip ? [...feed, chip] : feed)
+      const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+      if (lastAssistant) applyEmotion(lastAssistant.emotion ?? extractEmotion(lastAssistant.content) ?? 'neutral')
+      if (!sent) return true
+      // Retrouvée ? Même contenu, rôle user, horodatée au plus tard une minute
+      // après notre envoi (le serveur date l'enregistrement lui-même).
+      const t0 = Date.parse(sent.ts)
+      return messages.some(
+        (m) => m.role === 'user' && m.content === sent.content && Math.abs(Date.parse(m.ts) - t0) < 60_000,
+      )
+    } catch {
+      if (stale()) return true
+      // Serveur injoignable : impossible de vérifier le disque. On ne garde
+      // que ce qui était sur le fil AVANT l'envoi — tout le reste (optimiste,
+      // partiel, puces en attente) n'est pas vérifiable et resterait un
+      // orphelin indéletable s'il restait affiché.
+      setFeed((f) => {
+        const out: FeedItem[] = []
+        for (const it of f) {
+          if (it.kind === 'msg' && (it.pending || it.optimistic)) continue
+          if (it.kind === 'tool' && it.pending) continue
+          out.push(it)
+        }
+        if (chip) out.push(chip)
+        return out
+      })
+      return false
+    }
+  }
+
+  // Fin de génération SANS `done` : re-synchronisation + restitution. Si le
+  // message que l'envoi devait persister n'est PAS sur le disque, son texte
+  // retourne dans le composer (vidé dès l'envoi) — rien n'est perdu, et plus
+  // d'orphelin dans le fil.
+  async function restoreIfLost(
+    char: CharacterFull,
+    chat: ChatMeta,
+    ac: AbortController | null,
+    chip?: FeedItem,
+    sent?: ChatMessage,
+  ) {
+    const found = await resyncFeed(char, chat, ac, chip, sent)
+    if (!found && sent && sent.content) {
+      setComposerPrefill((p) => ({ text: sent.content, token: (p?.token ?? 0) + 1 }))
+    }
+  }
+
+  // 404 sur une suppression/édition/variante : l'ordinal ne correspond plus au
+  // disque — le fil local est périmé (un orphelin plus haut le décale, un
+  // message ajouté ailleurs…). Le disque fait foi : on resynchronise au lieu
+  // d'aboyer en silence (avant : un 404 dans la console, et un message qui « ne
+  // disparaissait pas »). Renvoie true si l'écart a été réparé.
+  async function backstop404(e: unknown, char: CharacterFull, chat: ChatMeta): Promise<boolean> {
+    if (e instanceof api.ApiError && e.status === 404) {
+      await resyncFeed(char, chat, null)
+      return true
+    }
+    return false
   }
 
   // Réponse à un message précis : la citation est écrite EN TÊTE du message
@@ -981,13 +1233,18 @@ function AppInner() {
 
     // TTS d'une continuation : ne lire QUE la suite, pas tout le message fusionné.
     let ttsFromIndex = 0
+    // Message optimiste de l'envoi (envoi normal seulement) : porté par
+    // `optimistic` tant que le `done` ne l'a pas confirmé sur le disque —
+    // c'est lui que resyncFeed vérifie si la génération avorte.
+    let sentMsg: ChatMessage | undefined
 
     if (!mode) {
       const userMsg: ChatMessage = { role: 'user', content: opts.content ?? '', ts: new Date().toISOString() }
       // Vignettes visibles dans la bulle dès l'envoi (le serveur sauvegarde les mêmes).
       if (opts.images && opts.images.length > 0) userMsg.images = opts.images
       const draft: ChatMessage = { role: 'assistant', content: '', ts: new Date().toISOString() }
-      setFeed((f) => [...f, { kind: 'msg', msg: userMsg }, { kind: 'msg', msg: draft, pending: true }])
+      sentMsg = userMsg
+      setFeed((f) => [...f, { kind: 'msg', msg: userMsg, optimistic: true }, { kind: 'msg', msg: draft, pending: true }])
     } else {
       // Les chips d'erreur/info de fin de fil n'ont plus de sens : on rejoue.
       setFeed((f) => {
@@ -998,8 +1255,13 @@ function AppInner() {
         const last = out[out.length - 1]
         if (mode === 'regenerate' || mode === 'open') {
           // regenerate : la dernière bulle assistant disparaît (le serveur retire
-          // la sienne). open : le fil est vide, il n'y a rien à retirer.
-          if (mode === 'regenerate' && last && last.kind === 'msg' && last.msg.role === 'assistant') out.pop()
+          // la sienne) — et les puces d'outils qui la précèdent juste avant avec
+          // elle (les nouvelles viendront avec cette génération). open : le fil
+          // est vide, il n'y a rien à retirer.
+          if (mode === 'regenerate' && last && last.kind === 'msg' && last.msg.role === 'assistant') {
+            out.pop()
+            while (out.length > 0 && out[out.length - 1].kind === 'tool') out.pop()
+          }
           out.push({
             kind: 'msg',
             msg: { role: 'assistant', content: '', ts: new Date().toISOString() },
@@ -1081,9 +1343,30 @@ function AppInner() {
           } else if (ev.type === 'thinking') {
             thinkingAcc += ev.text
             flushThinking()
-          } else if (ev.type === 'tool') {
-            const chip: FeedItem = { kind: 'tool', name: ev.name, args: ev.args, result: ev.result }
+          } else if (ev.type === 'tool_start') {
+            // L'action DÉMARRE : une puce « en cours » pulse devant le message
+            // en cours de génération ; l'événement `tool` la figera avec son
+            // résultat (même place).
+            const chip: FeedItem = { kind: 'tool', name: ev.name, args: ev.args, pending: true }
             setFeed((f) => {
+              const i = f.findIndex((it) => it.kind === 'msg' && it.pending)
+              return i === -1 ? [...f, chip] : [...f.slice(0, i), chip, ...f.slice(i)]
+            })
+          } else if (ev.type === 'tool') {
+            // L'action est FINIE : on fige sa puce « en cours » (la DERNIÈRE —
+            // le même outil peut courir deux fois de suite) avec son résultat.
+            // À défaut de puce en attente (tool_start manqué, cas défensif),
+            // on insère la trace complète comme avant.
+            setFeed((f) => {
+              for (let i = f.length - 1; i >= 0; i--) {
+                const it = f[i]
+                if (it.kind === 'tool' && it.pending && it.name === ev.name && it.args === ev.args) {
+                  const out = [...f]
+                  out[i] = { kind: 'tool', name: ev.name, args: ev.args, result: ev.result }
+                  return out
+                }
+              }
+              const chip: FeedItem = { kind: 'tool', name: ev.name, args: ev.args, result: ev.result }
               const i = f.findIndex((it) => it.kind === 'msg' && it.pending)
               return i === -1 ? [...f, chip] : [...f.slice(0, i), chip, ...f.slice(i)]
             })
@@ -1108,7 +1391,16 @@ function AppInner() {
                 applyEmotion(detectEmotionFallback(ev.message.content), true)
               }
             }
-            setFeed((f) => f.map((it) => (it.kind === 'msg' && it.pending ? { kind: 'msg', msg: ev.message } : it)))
+            setFeed((f) =>
+              f.map((it) => {
+                if (it.kind === 'msg' && it.pending) return { kind: 'msg', msg: ev.message }
+                // Le `done` prouve que le serveur a ouvert le flux : le message
+                // optimiste est sur le disque (écrit AVANT l'ouverture du flux)
+                // — le drapeau n'a plus de raison d'être.
+                if (it.kind === 'msg' && it.optimistic) return { kind: 'msg', msg: it.msg }
+                return it
+              }),
+            )
             // Messages ajoutés au fichier : envoi normal = question + réponse,
             // open = la seule réponse, continue = fusion en place, regenerate =
             // remplacement (0) SAUF si rien n'avait été retiré (dernière bulle
@@ -1128,22 +1420,30 @@ function AppInner() {
             )
             if (ev.context) {
               setContext(ev.context)
-              // Auto-compaction au seuil — silencieuse (le serveur refuse s'il
-              // n'y a pas assez de nouveaux messages, on l'ignore sans bruit).
-              // Un chat dont l'auto-compaction a échoué n'est plus retenté
-              // automatiquement (le bouton manuel de l'inspecteur reste là).
+              // Auto-compaction au seuil. Le serveur refuse (silencieusement)
+              // s'il n'y a pas assez de nouveaux messages — on ignore sans bruit.
+              // Après un échec réel, on retente tant que le compteur reste sous
+              // MAX_AUTO_COMPACT_FAILS (l'échec est affiché dans le fil) ; au-
+              // delà, on n'en redemande plus ce chat pour la session (le bouton
+              // manuel de l'inspecteur reste là).
+              const fails = autoCompactFailCountRef.current.get(chat.id) ?? 0
               if (
                 settings?.autoCompact &&
                 ev.context.limit > 0 &&
                 ev.context.percent >= AUTO_COMPACT_AT &&
-                !autoCompactFailedRef.current.has(chat.id)
+                fails < MAX_AUTO_COMPACT_FAILS
               ) {
                 compact(char.id, chat.id, '', true).catch((err) => console.warn('[compact]', err))
               }
             }
             // Voix ou ding, jamais les deux : quand le TTS lit la réponse, la
             // voix EST la notification. Le TTS se tait sur un texte sans mot
-            // (tags d'émotion seuls) — dans ce cas le ding reprend son rôle.
+            // (tags d'émotion seuls, ou qui ne contenait que de l'action/des
+            // symboles une fois nettoyé pour la voix) — dans ce cas le ding
+            // reprend son rôle. Même nettoyage qu'à l'intérieur de `playTts` :
+            // sinon un « *sourit* 😊 » sans texte prononçable déclencherait un
+            // `playTts` qui se tait silencieusement, sans jamais laisser sa
+            // place au ding.
             const toSpeak = ev.message.content.slice(ttsFromIndex)
             // La voix appartient au PERSONNAGE : l'interrupteur des Réglages
             // ouvre le service, le sien décide s'il parle. `char` et non l'état
@@ -1152,9 +1452,9 @@ function AppInner() {
             const ttsWillSpeak =
               settings?.ttsEnabled === true &&
               char.ttsEnabled === true &&
-              stripEmotionTags(toSpeak).trim().length > 0
+              cleanForSpeech(stripEmotionTags(toSpeak)).trim().length > 0
             if (ttsWillSpeak) {
-              playTts(toSpeak, ev.message.ts, char.ttsVoice ?? '').catch((e) => {
+              playTts(toSpeak, ev.message.ts, char.ttsVoice ?? '', char.ttsModel ?? '').catch((e) => {
                 setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }])
               })
             } else if (settings?.notifySound) {
@@ -1162,21 +1462,30 @@ function AppInner() {
             }
           } else if (ev.type === 'error') {
             finished = true
-            keepPartialDraft({ kind: 'error', text: ev.message })
+            // Contrat codes/phrases : le CODE est traduit ici ; sinon le
+            // message brut (erreur non codée, serveur plus ancien).
+            const text = serverErrorText(ev.code, ev.params) || ev.message || ''
+            // Le flux s'arrête SANS `done` : le disque fait foi (le partiel
+            // éventuel a été sauvegardé par le serveur avant l'événement).
+            void restoreIfLost(char, chat, ac, { kind: 'error', text }, sentMsg)
           }
         },
       })
-      if (!finished) keepPartialDraft({ kind: 'error', text: t('responseInterrupted') })
+      if (!finished) void restoreIfLost(char, chat, ac, { kind: 'error', text: t('responseInterrupted') }, sentMsg)
     } catch (e) {
+      let chip: FeedItem | undefined
       if (e instanceof api.AuthRequiredError) {
-        keepPartialDraft()
+        // L'écran de login va couvrir le fil : pas de chip — mais la
+        // re-synchronisation nettoie l'orphelin éventuel pour le retour.
         setNeedLogin(true)
       } else if ((e as Error).name === 'AbortError') {
-        keepPartialDraft()
+        // Stop volontaire : pas de chip. Le partiel (ou son absence) est
+        // tranché par le disque, comme pour tout le reste.
       } else {
-        keepPartialDraft({ kind: 'error', text: api.errorMessage(e) })
+        chip = { kind: 'error', text: api.errorMessage(e) }
         if (e instanceof api.ApiError && (e.status === 502 || e.status === 0)) setBackendDown(true)
       }
+      void restoreIfLost(char, chat, ac, chip, sentMsg)
     } finally {
       setStreaming(false)
       // Fin NORMALE : la bouche finit de « prononcer » la dernière rafale (le
@@ -1219,11 +1528,13 @@ function AppInner() {
             // modèle peut les écrire quand même (cf. le fix sur les réponses du
             // personnage) — un tag qui fuirait ici finirait dans un message UTILISATEUR,
             // jamais passé par stripEmotionTags à l'affichage. Filet identique ici.
-            setImpersonatePrefill({ text: stripEmotionTags(acc, true), token: ++token })
+            setComposerPrefill({ text: stripEmotionTags(acc, true), token: ++token })
           } else if (ev.type === 'done') {
-            setImpersonatePrefill({ text: stripEmotionTags(ev.message.content), token: ++token })
+            setComposerPrefill({ text: stripEmotionTags(ev.message.content), token: ++token })
           } else if (ev.type === 'error') {
-            setFeed((f) => [...f, { kind: 'error', text: ev.message }])
+            // Même contrat que le flux principal : code traduit, sinon brut.
+            const text = serverErrorText(ev.code, ev.params) || ev.message || ''
+            setFeed((f) => [...f, { kind: 'error', text }])
           }
         },
       })
@@ -1245,7 +1556,13 @@ function AppInner() {
     const char = character
     const chat = chatMeta
     if (!char || !chat) return
-    const out = await api.editChatMessage(char.id, chat.id, ordinal, content)
+    const out = await api
+      .editChatMessage(char.id, chat.id, ordinal, content)
+      .catch(async (e: unknown) => {
+        if (await backstop404(e, char, chat)) return null
+        throw e
+      })
+    if (!out) return
     setFeed((f) => {
       let n = -1
       return f.map((it) => {
@@ -1264,14 +1581,30 @@ function AppInner() {
     const char = character
     const chat = chatMeta
     if (!char || !chat) return
-    const out = await api.deleteChatMessage(char.id, chat.id, ordinal)
+    const out = await api
+      .deleteChatMessage(char.id, chat.id, ordinal)
+      .catch(async (e: unknown) => {
+        if (await backstop404(e, char, chat)) return null
+        throw e
+      })
+    if (!out) return
     setFeed((f) => {
       let n = -1
-      return f.filter((it) => {
-        if (it.kind !== 'msg') return true
+      const next: FeedItem[] = []
+      for (const it of f) {
+        if (it.kind !== 'msg') {
+          next.push(it)
+          continue
+        }
         n++
-        return n !== ordinal
-      })
+        if (n === ordinal) {
+          // Le message part, ses puces d'outils avec lui (elles sont juste devant).
+          while (next.length > 0 && next[next.length - 1].kind === 'tool') next.pop()
+          continue
+        }
+        next.push(it)
+      }
+      return next
     })
     setChatMeta((m) =>
       m && m.id === chat.id
@@ -1288,14 +1621,36 @@ function AppInner() {
     const char = character
     const chat = chatMeta
     if (!char || !chat) return
-    const out = await api.setChatMessageVariant(char.id, chat.id, ordinal, variant)
+    const out = await api
+      .setChatMessageVariant(char.id, chat.id, ordinal, variant)
+      .catch(async (e: unknown) => {
+        if (await backstop404(e, char, chat)) return null
+        throw e
+      })
+    if (!out) return
     setFeed((f) => {
       let n = -1
-      return f.map((it) => {
-        if (it.kind !== 'msg') return it
+      const next: FeedItem[] = []
+      for (const it of f) {
+        if (it.kind !== 'msg') {
+          next.push(it)
+          continue
+        }
         n++
-        return n === ordinal ? { kind: 'msg' as const, msg: out.message } : it
-      })
+        if (n === ordinal) {
+          // La variante affichée change : les puces qui précédaient le message
+          // appartenaient à l'ancienne — on les remplace par le journal de la
+          // nouvelle (le serveur vient de le copier dans le corps du message).
+          while (next.length > 0 && next[next.length - 1].kind === 'tool') next.pop()
+          for (const tr of out.message.tools ?? []) {
+            next.push({ kind: 'tool', name: tr.name, args: tr.args, result: tr.result })
+          }
+          next.push({ kind: 'msg', msg: out.message })
+        } else {
+          next.push(it)
+        }
+      }
+      return next
     })
     // Le visage suit la variante affichée : chacune porte SON tag. `live` —
     // cette réplique-là s'affiche maintenant, exactement comme une réponse qui
@@ -1348,7 +1703,7 @@ function AppInner() {
   })
   const stableReplay = useStableCallback((msg: ChatMessage) => {
     if (!character) return
-    playTts(msg.content, msg.ts, character.ttsVoice ?? '').catch((e) =>
+    playTts(msg.content, msg.ts, character.ttsVoice ?? '', character.ttsModel ?? '').catch((e) =>
       setFeed((f) => [...f, { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) }]),
     )
   })
@@ -1368,9 +1723,9 @@ function AppInner() {
 
   function handleSettingsSaved(next: Settings) {
     setSettings(next)
-    // La persona vient peut-être de changer de nom : les prochaines salutations
-    // doivent l'appeler ainsi (cf. personaNameRef).
-    personaNameRef.current = next.personaName ?? ''
+    // Les personas viennent peut-être de changer : les prochaines salutations
+    // doivent les résoudre ainsi (cf. settingsRef).
+    settingsRef.current = next
     // Contrat : le token EST le mot de passe. On le synchronise pour rester connecté.
     api.setToken(next.password || null)
     probeBackend()
@@ -1448,9 +1803,12 @@ function AppInner() {
       ? { title: chatTitle, percent: ctxPercent, tooltip: ctxTooltip }
       : null
 
-  // Portrait 2D : un personnage SANS modèle 3D montre l'image de sa card (posée à
-  // l'import). Avec un VRM, l'avatar 3D reprend toute la place. '' = rien à montrer.
-  const portrait = character && !character.vrm ? (character.portrait ?? '') : ''
+  // Avatar 2D : un personnage SANS modèle 3D montre une image — d'abord le
+  // portrait de sa card (posé à l'import), et à défaut sa PHOTO (capture ou
+  // image envoyée) : un personnage créé de zéro avec une photo n'est plus
+  // invisible dans la conversation. Avec un VRM, l'avatar 3D reprend toute la
+  // place. '' = rien à montrer (le fond du décor reste seul à l'écran).
+  const portrait = character && !character.vrm ? (character.portrait || character.photo || '') : ''
 
   // ── Rendu ────────────────────────────────────────────────────────────────
   // NB : la div .scene reste montée en permanence (le stage 3D y est attaché via
@@ -1458,7 +1816,10 @@ function AppInner() {
   // place de l'arbre principal.
 
   return (
-    <div className="app">
+    // L'avatar masqué se joue par CLASSE sur la racine (jamais d'unmount de
+    // .scene : le stage 3D y est attaché) — le CSS masque la scène et le
+    // moteur est mis en pause par l'effet setPaused.
+    <div className={avatarVisible ? 'app' : 'app no-avatar'}>
       <div
         ref={sceneRef}
         className="scene"
@@ -1466,8 +1827,8 @@ function AppInner() {
         style={character?.background ? { backgroundImage: `url("${character.background}")` } : undefined}
       />
 
-      {/* Avatar 2D : l'image de la card tient lieu d'avatar quand le personnage
-          n'a pas de modèle 3D. Rendu FRÈRE de .scene et non dedans — le canvas du
+      {/* Avatar 2D : le portrait de la card — à défaut, la photo du personnage —
+          tient lieu d'avatar quand le personnage n'a pas de modèle 3D. Rendu FRÈRE de .scene et non dedans — le canvas du
           stage y est ajouté impérativement, React ne doit pas partager cet enfant.
           Placement en CSS pur (classe `vn`), et rien à brancher : une image ne
           bouge ni les lèvres ni les émotions. */}
@@ -1498,7 +1859,7 @@ function AppInner() {
           aux panneaux (chat desktop, boîte VN — les double-clics des poignées
           restent en raccourcis). Il vit HORS du chat-panel (le mode VN y coupe
           les pointer-events). */}
-      {stageReady && !vrmError && !!character && (
+      {stageReady && !vrmError && !!character && avatarVisible && (
         <button
           className={`scene-reset${vnMode ? ' vn' : ''}`}
           onClick={() => {
@@ -1709,8 +2070,11 @@ function AppInner() {
             pinned={chatMeta?.pinned ?? null}
             onSaveEdit={stableSaveEdit}
             onDeleteMessage={stableDeleteMessage}
-            // Une puce d'outil n'est jamais sauvegardée (cf. server/api/chat.ts) :
-            // la retirer du fil est un pur geste d'affichage, sans aller-retour serveur.
+            // Retrait local, sans aller-retour serveur. Nuance : la trace peut
+            // être persistée dans m.tools (cf. server/api/chat.ts) — une puce
+            // supprimée réapparaît alors à la prochaine resynchronisation
+            // disque. Dans le cas orphelin (régénérer + outil + zéro texte, où
+            // la puce n'existe que dans le fil), la suppression est définitive.
             onDeleteTool={stableDeleteTool}
             onSwitchVariant={stableSwitchVariant}
             onReply={setReplyTo}
@@ -1797,7 +2161,7 @@ function AppInner() {
                         stopTts()
                         return
                       }
-                      playTts(lastFeedMsg.msg.content, lastFeedMsg.msg.ts, character?.ttsVoice ?? '').catch((e) =>
+                      playTts(lastFeedMsg.msg.content, lastFeedMsg.msg.ts, character?.ttsVoice ?? '', character?.ttsModel ?? '').catch((e) =>
                         setFeed((f) => [
                           ...f,
                           { kind: 'error', text: t('ttsError', { message: api.errorMessage(e) }) },
@@ -1875,7 +2239,7 @@ function AppInner() {
           onStop={stopStreaming}
           canImpersonate={canImpersonate}
           onImpersonate={runImpersonate}
-          prefill={impersonatePrefill}
+          prefill={composerPrefill}
         />
       </div>
 
@@ -1886,6 +2250,11 @@ function AppInner() {
           onPickTheme={(t) => {
             setAppTheme(t)
             saveTheme(t)
+          }}
+          avatarVisible={avatarVisible}
+          onToggleAvatar={(on) => {
+            setAvatarVisible(on)
+            setPref({ avatarVisible: on })
           }}
           env3d={env3d}
           onToggleEnv3d={(on) => {
@@ -1967,16 +2336,21 @@ function AppInner() {
             handleCharacterDeleted(id).catch((e) => console.error('[characters]', e))
           }}
           // Photo par capture : proposée seulement quand un avatar 3D est bien à
-          // l'écran (scène prête, sans erreur, personnage doté d'un VRM). Le
-          // dialog restreint en plus au personnage actif — le seul qui soit affiché.
-          // La voix du personnage se règle dans son formulaire ; le service, lui,
-          // s'allume dans les Réglages — le dialog le dit quand il est éteint.
+          // l'écran (scène prête, sans erreur, personnage doté d'un VRM, avatar
+          // VISIBLE — masqué, le moteur est en pause, le canvas n'est plus qu'une
+          // image figée : aucune photo digne de ce nom). Le dialog restreint en
+          // plus au personnage actif — le seul qui soit affiché. La voix du
+          // personnage se règle dans son formulaire ; le service, lui, s'allume
+          // dans les Réglages — le dialog le dit quand il est éteint.
           ttsAvailable={settings?.ttsEnabled === true && (settings?.ttsUrl ?? '').trim() !== ''}
           snapshotAvatar={
-            stageReady && !vrmError && !!character?.vrm
+            stageReady && !vrmError && !!character?.vrm && avatarVisible
               ? () => stageRef.current?.snapshot() ?? null
               : null
           }
+          // Réglages globaux en filigrane des overrides (« Global : 0.8 ») —
+          // null tant que le chargement du boot n'est pas revenu.
+          settings={settings}
           onClose={() => setDialog(null)}
         />
       )}

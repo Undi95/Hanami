@@ -5,20 +5,27 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { emotionTagList } from '../../shared/emotions'
+import { normalizeLlm } from '../../shared/llm'
+import { CodedError, ErrorCodes } from '../../shared/errorCodes'
+import { rankMemoryForInjection, selectWithinBudget } from './memoryRank'
 import type {
   AnimationFamily,
   CharacterFull,
+  CharacterLlm,
   CharacterMeta,
   ChatMessage,
   ChatMeta,
   GreetingMode,
   MemoryFile,
   MessageVariant,
+  ToolTrace,
 } from '../../shared/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ROOT = path.resolve(__dirname, '..', '..')
-export const DATA_DIR = path.join(ROOT, 'data')
+// `HANAMI_DATA` déplace l'ENTIER de l'état (config, personnages, chats) :
+// instance de test isolée sur un autre port, sans jamais toucher data/ réel.
+export const DATA_DIR = process.env.HANAMI_DATA ? path.resolve(process.env.HANAMI_DATA) : path.join(ROOT, 'data')
 export const PRESETS_DIR = path.join(ROOT, 'presets')
 export const VRM_DIR = path.join(ROOT, 'vrm')
 export const BACKGROUNDS_DIR = path.join(ROOT, 'backgrounds')
@@ -54,7 +61,7 @@ export function ensureDataDirs(): void {
 export function sanitizeFileName(name: string): string {
   const clean = name.replace(/[\\/:*?"<>|]/g, '').replace(/\.\./g, '').trim()
   // Vide ou composé uniquement de points ("...", ".") → résoudrait vers le dossier parent.
-  if (!clean || /^\.+$/.test(clean)) throw new Error('Nom de fichier invalide')
+  if (!clean || /^\.+$/.test(clean)) throw new CodedError(ErrorCodes.invalidFileName)
   return clean
 }
 
@@ -113,6 +120,27 @@ function normalizeMeta(raw: CharacterMeta, id: string): CharacterMeta {
   // "mixamo"`) doit rendre le défaut, pas voyager jusqu'au client — la scène en
   // ferait un catalogue vide, donc un avatar en pose de repos, sans un message.
   if (raw.animations !== 'rocketbox') delete meta.animations
+  // Overrides de génération : un `llm` malformé écrit à la main ne doit pas
+  // voyager jusqu'au client — normalisé, ou la clé disparaît (tout devient
+  // global, comportement d'origine).
+  if (raw.llm !== undefined) {
+    const llm = normalizeLlm(raw.llm)
+    if (llm) meta.llm = llm
+    else delete meta.llm
+  }
+  // Persona épinglée : seule une chaîne non vide survit (trimmée, bornée) ;
+  // sinon la clé disparaît (la persona par défaut des Réglages s'applique).
+  // Pas de vérification d'existence ici : la collection vit dans config.json,
+  // et c'est shared/personas.ts qui traite l'id orphelin, à la résolution.
+  if (typeof raw.userPersona === 'string' && raw.userPersona.trim()) {
+    meta.userPersona = raw.userPersona.trim().slice(0, 60)
+  } else {
+    delete meta.userPersona
+  }
+  // Modèle TTS du personnage : même règle — seule une chaîne non vide survit ;
+  // la clé vide ou mal typée disparaît (le modèle global des Réglages s'applique).
+  if (typeof raw.ttsModel === 'string' && raw.ttsModel.trim()) meta.ttsModel = raw.ttsModel.trim()
+  else delete meta.ttsModel
   return meta
 }
 
@@ -153,6 +181,9 @@ export interface CreateCharacterInput {
   systemPrompt?: string
   ttsEnabled?: boolean
   ttsVoice?: string
+  ttsModel?: string
+  llm?: CharacterLlm
+  userPersona?: string
 }
 
 /** Thème par personnage : clé écrite seulement quand elle porte une valeur. */
@@ -185,18 +216,41 @@ function portraitField(portrait: unknown): Partial<CharacterMeta> {
  * Voix du personnage : mêmes règles d'écriture que le thème — la clé n'existe
  * que si elle porte une valeur. `ttsEnabled` n'est écrit que VRAI : un
  * personnage muet n'a rien à dire dans son fichier, et tous ceux d'avant ce
- * réglage restent muets sans être touchés.
+ * réglage restent muets sans être touchés. Le modèle suit la voix : un ''
+ * explicite le retire (retour au modèle global des Réglages).
  */
-function ttsFields(ttsEnabled: unknown, ttsVoice: unknown): Partial<CharacterMeta> {
+function ttsFields(ttsEnabled: unknown, ttsVoice: unknown, ttsModel: unknown): Partial<CharacterMeta> {
   return {
     ...(ttsEnabled === true ? { ttsEnabled: true } : {}),
     ...(typeof ttsVoice === 'string' && ttsVoice.trim() ? { ttsVoice: ttsVoice.trim() } : {}),
+    ...(typeof ttsModel === 'string' && ttsModel.trim() ? { ttsModel: ttsModel.trim() } : {}),
   }
 }
 
 /** Photo (vignette) : même règle — et c'est ainsi qu'un '' explicite la RETIRE. */
 function photoField(photo: unknown): Partial<CharacterMeta> {
   return typeof photo === 'string' && photo.trim() ? { photo: photo.trim() } : {}
+}
+
+/**
+ * Overrides de génération : normalisés avant écriture (un objet sans champ
+ * valide ne produit pas de clé vide), et c'est ainsi qu'un `null` explicite
+ * retire TOUT — retour aux réglages globaux.
+ */
+function llmField(llm: unknown): Partial<CharacterMeta> {
+  const clean = normalizeLlm(llm)
+  return clean ? { llm: clean } : {}
+}
+
+/**
+ * Persona épinglée : seule une chaîne non vide s'écrit (clé absente de
+ * character.json = la persona par défaut des Réglages s'applique) ; un ''
+ * explicite la retire.
+ */
+function userPersonaField(userPersona: unknown): Partial<CharacterMeta> {
+  return typeof userPersona === 'string' && userPersona.trim()
+    ? { userPersona: userPersona.trim().slice(0, 60) }
+    : {}
 }
 
 /**
@@ -229,7 +283,9 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
     ...themeField(input.theme),
     ...animationsField(input.animations),
     ...environmentField(input.environment),
-    ...ttsFields(input.ttsEnabled, input.ttsVoice),
+    ...ttsFields(input.ttsEnabled, input.ttsVoice, input.ttsModel),
+    ...llmField(input.llm),
+    ...userPersonaField(input.userPersona),
     createdAt: new Date().toISOString(),
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
@@ -240,7 +296,7 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
 
 export function updateCharacter(id: string, patch: Partial<CharacterFull>): CharacterFull {
   const current = getCharacter(id)
-  if (!current) throw new Error(`Personnage introuvable : ${id}`)
+  if (!current) throw new CodedError(ErrorCodes.characterNotFound, { id })
   const dir = charDir(id)
   const meta: CharacterMeta = {
     id,
@@ -270,7 +326,22 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     // Voix : à reconduire comme le reste — meta est reconstruit clé par clé, un
     // oubli rendrait le personnage muet à la première édition. `false` explicite
     // l'éteint (false ?? current vaut false), `undefined` conserve.
-    ...ttsFields(patch.ttsEnabled ?? current.ttsEnabled, patch.ttsVoice ?? current.ttsVoice),
+    ...ttsFields(
+      patch.ttsEnabled ?? current.ttsEnabled,
+      patch.ttsVoice ?? current.ttsVoice,
+      patch.ttsModel ?? current.ttsModel,
+    ),
+    // Overrides de génération : piège de la `??` — un `null` explicite (le
+    // formulaire a tout vidé = retour au global) passerait `??` et CONSERVERAIT
+    // l'ancien objet. Vérification d'`undefined` explicite : null = retirer la
+    // clé, undefined = reconduire celle du disque, objet = normaliser.
+    ...(patch.llm !== undefined ? llmField(patch.llm) : llmField(current.llm)),
+    // Persona épinglée : le MÊME piège de la `??` que llm — undefined =
+    // reconduire celle du disque, '' (ou null) = retirer la clé (la persona
+    // par défaut des Réglages s'applique à nouveau), chaîne = épingler.
+    ...(patch.userPersona !== undefined
+      ? userPersonaField(patch.userPersona)
+      : userPersonaField(current.userPersona)),
     createdAt: current.createdAt,
   }
   fs.writeFileSync(path.join(dir, 'character.json'), JSON.stringify(meta, null, 2))
@@ -283,7 +354,7 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
 export function deleteCharacter(id: string): void {
   const dir = charDir(id)
   // Ceinture : ne jamais supprimer le dossier characters/ lui-même.
-  if (path.resolve(dir) === path.resolve(CHARACTERS_DIR)) throw new Error(`Identifiant invalide : ${id}`)
+  if (path.resolve(dir) === path.resolve(CHARACTERS_DIR)) throw new CodedError(ErrorCodes.invalidId, { id })
   fs.rmSync(dir, { recursive: true, force: true })
   // Le portrait vit hors du dossier du personnage : il part avec lui, sinon un
   // homonyme créé plus tard hériterait de l'image de son prédécesseur.
@@ -404,6 +475,26 @@ function normalizeHeader(raw: ChatHeader): ChatHeader {
 }
 
 /**
+ * Journal d'activité lu sur le disque : data/ s'édite à la main, seules les
+ * entrées strictement typées sont conservées — une ligne mal formée est écartée
+ * (l'affichage ne peut pas se casser sur un .jsonl retouché).
+ */
+function normalizeTools(raw: unknown): ToolTrace[] | null {
+  if (!Array.isArray(raw)) return null
+  const out: ToolTrace[] = []
+  for (const t of raw) {
+    if (t === null || typeof t !== 'object') continue
+    const tr = t as Partial<ToolTrace>
+    if (typeof tr.name !== 'string' || !tr.name) continue
+    if (typeof tr.args !== 'string') continue
+    const entry: ToolTrace = { name: tr.name, args: tr.args }
+    if (typeof tr.result === 'string') entry.result = tr.result
+    out.push(entry)
+  }
+  return out.length > 0 ? out : null
+}
+
+/**
  * Une variante lue sur le disque : texte obligatoire, heure de repli sur celle
  * du message (data/ s'édite à la main). null = entrée inexploitable, écartée.
  */
@@ -414,6 +505,8 @@ function normalizeVariant(raw: unknown, fallbackTs: string): MessageVariant | nu
   const out: MessageVariant = { content: v.content, ts: typeof v.ts === 'string' ? v.ts : fallbackTs }
   if (typeof v.emotion === 'string' && v.emotion) out.emotion = v.emotion
   if (typeof v.thinking === 'string' && v.thinking) out.thinking = v.thinking
+  const tools = normalizeTools(v.tools)
+  if (tools) out.tools = tools
   return out
 }
 
@@ -451,6 +544,8 @@ function normalizeMessage(raw: ChatMessage): ChatMessage {
   if (active.emotion) msg.emotion = active.emotion
   delete msg.thinking
   if (active.thinking) msg.thinking = active.thinking
+  delete msg.tools
+  if (active.tools) msg.tools = active.tools
   return msg
 }
 
@@ -546,7 +641,10 @@ export function createChat(charId: string, title?: string): ChatMeta {
   const id = newChatId(charId)
   const header: ChatHeader = {
     id,
-    title: title || `Chat du ${new Date().toLocaleDateString('fr-FR')}`,
+    // Fallback uniquement (le client envoie son titre localisé). Il suit le
+    // motif canonique « Conversation du <date> » que le client reconnaît pour
+    // le RE-rendre dans sa propre langue — date ISO, lisible dans les deux.
+    title: title || `Conversation du ${new Date().toISOString().slice(0, 10)}`,
     createdAt: new Date().toISOString(),
   }
   fs.mkdirSync(path.join(charDir(charId), 'chats'), { recursive: true })
@@ -591,7 +689,7 @@ export function deleteChat(charId: string, chatId: string): void {
  */
 export function forkChat(charId: string, chatId: string, title?: string): ChatMeta {
   const lines = fs.readFileSync(chatFile(charId, chatId), 'utf8').split('\n').filter(Boolean)
-  if (lines.length === 0) throw new Error(`Chat corrompu : ${chatId}`)
+  if (lines.length === 0) throw new CodedError(ErrorCodes.chatCorrupt, { id: chatId })
   const header = normalizeHeader(JSON.parse(lines[0]) as ChatHeader)
   const id = newChatId(charId)
   const clone: ChatHeader = {
@@ -643,7 +741,7 @@ export function updateChatHeader(
   const file = chatFile(charId, chatId)
   const lines = fs.readFileSync(file, 'utf8').split('\n')
   const firstIdx = lines.findIndex((l) => l.trim().length > 0)
-  if (firstIdx === -1) throw new Error(`Chat corrompu : ${chatId}`)
+  if (firstIdx === -1) throw new CodedError(ErrorCodes.chatCorrupt, { id: chatId })
   const header = JSON.parse(lines[firstIdx]) as ChatHeader
   lines[firstIdx] = JSON.stringify({ ...header, ...patch })
   const tmp = file + '.tmp'
@@ -704,9 +802,11 @@ function memoryDir(charId: string): string {
 export function listMemory(charId: string): MemoryFile[] {
   const dir = memoryDir(charId)
   if (!fs.existsSync(dir)) return []
+  // withFileTypes : ne descend JAMAIS dans les sous-dossiers (backups/ vit ici).
   return fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('.md'))
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith('.md'))
+    .map((e) => e.name)
     .sort((a, b) => (a === 'MEMORY.md' ? -1 : b === 'MEMORY.md' ? 1 : a.localeCompare(b)))
     .map((f) => ({ name: f, content: fs.readFileSync(path.join(dir, f), 'utf8') }))
 }
@@ -727,7 +827,7 @@ export function writeMemoryFile(charId: string, name: string, content: string): 
 
 export function deleteMemoryFile(charId: string, name: string): void {
   // Comparaison insensible à la casse : le FS Windows l'est aussi ("memory.MD" = même fichier).
-  if (sanitizeFileName(name).toLowerCase() === 'memory.md') throw new Error("MEMORY.md est l'index — non supprimable")
+  if (sanitizeFileName(name).toLowerCase() === 'memory.md') throw new CodedError(ErrorCodes.memoryIndexProtected)
   // unlinkSync et non rmSync : sous Node 25/Windows, rmSync ne supprime PAS un
   // chemin contenant un caractère non-ASCII (« passé.md ») et ne lève rien —
   // le fichier restait dans la liste après un « ok ». Le try avale ENOENT pour
@@ -739,23 +839,225 @@ export function deleteMemoryFile(charId: string, name: string): void {
   }
 }
 
+// ── Sauvegardes mémoire (feature « Ranger ») ──────────────────────────────
+// Un snapshot = une copie de TOUS les fichiers .md dans memory/backups/<ts>/.
+// Les snapshots s'empilent : le rangement ET chaque restauration en prennent
+// un d'abord — l'historique de la mémoire est réversible à l'infini.
+
+export interface MemoryBackupInfo {
+  name: string // nom du dossier = horodatage YYYY-MM-DD_HHmmss
+  files: number
+  chars: number
+}
+
+function backupsDir(charId: string): string {
+  return path.join(memoryDir(charId), 'backups')
+}
+
+/** Fichiers mémoire actuels (top-level .md uniquement, hors backups/). */
+function currentMemoryFiles(charId: string): string[] {
+  const dir = memoryDir(charId)
+  if (!fs.existsSync(dir)) return []
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith('.md'))
+    .map((e) => e.name)
+}
+
+function backupTimestamp(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+}
+
+/**
+ * Copie la mémoire courante dans memory/backups/<ts>/ — renvoie le nom du
+ * snapshot (ou '' si la mémoire est vide : un snapshot vide est inutile).
+ * Anti-collision : deux snapshots dans la même seconde se démarquent par -2, -3…
+ */
+export function snapshotMemory(charId: string): string {
+  const files = currentMemoryFiles(charId)
+  if (files.length === 0) return ''
+  const base = backupsDir(charId)
+  let name = backupTimestamp()
+  for (let i = 2; fs.existsSync(path.join(base, name)); i++) name = `${backupTimestamp()}-${i}`
+  const dest = path.join(base, name)
+  fs.mkdirSync(dest, { recursive: true })
+  for (const f of files) fs.copyFileSync(path.join(memoryDir(charId), f), path.join(dest, f))
+  return name
+}
+
+/** Snapshots existants, les plus récents d'abord (les noms se trient). */
+export function listMemoryBackups(charId: string): MemoryBackupInfo[] {
+  const dir = backupsDir(charId)
+  if (!fs.existsSync(dir)) return []
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => {
+      const sub = path.join(dir, e.name)
+      const entries = fs.readdirSync(sub, { withFileTypes: true }).filter((f) => f.isFile())
+      let chars = 0
+      for (const f of entries) chars += fs.statSync(path.join(sub, f.name)).size
+      return { name: e.name, files: entries.length, chars }
+    })
+    .sort((a, b) => b.name.localeCompare(a.name))
+}
+
+/**
+ * Restaure un snapshot : snapshot de sécurité de l'état courant D'ABORD (les
+ * sauvegardes s'empilent — on ne perd jamais l'état qu'on remplace), puis
+ * remplacement des fichiers par le contenu du snapshot.
+ * Renvoie le nom du snapshot de sécurité (ou '' si la mémoire était vide).
+ */
+export function restoreMemoryBackup(charId: string, name: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(name)) throw new CodedError(ErrorCodes.invalidBackupName)
+  const src = path.join(backupsDir(charId), name)
+  if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) {
+    throw new CodedError(ErrorCodes.backupNotFound, { name })
+  }
+  const safety = snapshotMemory(charId)
+  for (const f of currentMemoryFiles(charId)) {
+    // unlinkSync et non rmSync : piège Node 25/Windows sur les noms non-ASCII.
+    try {
+      fs.unlinkSync(path.join(memoryDir(charId), f))
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+    }
+  }
+  for (const f of fs.readdirSync(src, { withFileTypes: true }).filter((e) => e.isFile())) {
+    fs.copyFileSync(path.join(src, f.name), path.join(memoryDir(charId), f.name))
+  }
+  return safety
+}
+
+// Politique de gestion mémoire — le modèle ne la devinait pas : sans elle,
+// « enregistrer » voulait dire memory_save systématique (fichier neuf ou
+// écrasement), d'où les doublons et les « suppressions ». En anglais comme le
+// reste des prompts ; toolless (mode simple) : les outils n'existent pas, donc
+// aucune politique d'outils à donner.
+const MEMORY_POLICY =
+  'Memory policy — one topic per file; the index below lists what already exists. ' +
+  'Check it BEFORE saving: if a file already covers the topic, memory_read it, then memory_update it ' +
+  'with the COMPLETE merged content (keep every old fact, add the new ones) — never drop what is there. ' +
+  'memory_save is for brand-new topics only (on an existing name it replaces the whole file, and is refused ' +
+  'until you have read it). memory_append adds a fact to an existing file without rewriting it. ' +
+  'No near-duplicate files, no duplicate index lines. memory_delete only for facts that are wrong ' +
+  'or that the user asked to forget. Index lines stay one short line: - [Title](file.md) — a few words.\n'
+
+// Seuils d'injection mémoire — exportés pour que le panneau mémoire puisse
+// afficher CE QUI sera réellement injecté (même logique que le bloc ci-dessous).
+export const MEMORY_FULL_INJECT_LIMIT = 8000 // mode outils 'auto' : ≤ → tout, > → index seul
+export const MEMORY_TOOLLESS_CAP = 24000 // mode simple : plafond de l'injection intégrale
+// Budget d'injection du mode sélectif (chars) : combien de mémoire PERTINENTE
+// on injecte au modèle. Le reste (hors budget) reste lisible via memory_read —
+// d'où le fait que le sélectif n'existe qu'en mode Outils.
+export const MEMORY_SELECTIVE_BUDGET = 8000
+
+// ── Cache de compression de mémoire (chantier B) ─────────────────────────────
+// La compression AGRESSIVE (LLM) de la mémoire coûte un appel PAR FICHIER : le
+// résultat est mis en cache par personnage, une entrée par fichier. Chaque
+// entrée porte le hash de l'ORIGINAL au moment de la compression (sourceHash) :
+// l'entrée est FRAISE tant que ce fichier n'a pas bougé — un fichier modifié
+// retombe seul sur denseEncode (les autres gardent leur compression) jusqu'à la
+// prochaine compression. Les fichiers mémoire ne sont JAMAIS modifiés : le cache
+// est une VUE, l'original reste éditable dans le panneau.
+export interface CompressionCacheEntry {
+  content: string
+  sourceHash: string
+}
+export interface CompressionCache {
+  files: Record<string, CompressionCacheEntry>
+}
+
+const COMPRESSION_CACHE_FILE = 'compression-cache.json'
+
+/** Hash du contenu d'un fichier mémoire — marque la fraîcheur de son entrée de cache. */
+export function hashMemoryContent(content: string): string {
+  return crypto.createHash('sha256').update(content).digest('hex')
+}
+
+export function readCompressionCache(charId: string): CompressionCache | undefined {
+  const file = path.join(charDir(charId), COMPRESSION_CACHE_FILE)
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as CompressionCache
+    if (typeof raw?.files !== 'object' || raw.files === null) return undefined
+    return raw
+  } catch {
+    return undefined
+  }
+}
+
+/** Écriture ATOMIQUE (tmp + fsync + rename) — même protocole que config.json. */
+export function writeCompressionCache(charId: string, cache: CompressionCache): void {
+  const file = path.join(charDir(charId), COMPRESSION_CACHE_FILE)
+  const tmp = file + '.tmp'
+  const fd = fs.openSync(tmp, 'w')
+  try {
+    fs.writeSync(fd, JSON.stringify(cache, null, 2))
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  fs.renameSync(tmp, file)
+}
+
 /**
  * Bloc mémoire injecté dans le system prompt (transparent : visible dans l'inspecteur).
  * toolless (mode modèle « simple ») : AUCUN outil n'existe côté modèle — tout est
  * injecté, plafonné, et on ne mentionne jamais memory_read.
+ *
+ * opts.mode 'selective' (+ opts.query = la requête courante) : en mode Outils,
+ * on range les fichiers par pertinence à la requête et on injecte les plus
+ * pertinents dans MEMORY_SELECTIVE_BUDGET, le reste restant lisible via
+ * memory_read. C'est le correctif à la chute brutale du tout-ou-rien (≤ 8000 =
+ * tout, > = index seul) : la mémoire utile part toujours, quelle que soit la
+ * taille de la collection. Aucun signal de pertinence (requête vide, ou rien ne
+ * colle) → repli sur le comportement 'auto' (jamais d'injection arbitraire).
  */
-export function buildMemoryBlock(charId: string, toolless = false): string {
+export function buildMemoryBlock(
+  charId: string,
+  toolless = false,
+  opts: {
+    mode?: 'auto' | 'selective'
+    query?: string
+    // Chantier B : si fourni, remplace le CONTENU de chaque fichier injecté par
+    // getCompressed(name, content). Les décisions d'injection (full / index-seul /
+    // plafond / ranking) restent calculées sur l'ORIGINAL — la compression ne
+    // change QUE le texte envoyé, jamais ce qui est choisi.
+    getCompressed?: (name: string, content: string) => string
+  } = {},
+): string {
   const files = listMemory(charId)
   if (files.length === 0) return ''
   const index = files.find((f) => f.name === 'MEMORY.md')
   const others = files.filter((f) => f.name !== 'MEMORY.md')
   const totalLen = others.reduce((n, f) => n + f.content.length, 0)
+  const contentOf = (name: string, content: string) =>
+    opts.getCompressed ? opts.getCompressed(name, content) : content
   let block = `\n\n## Memory (auto-injected by Hanami — edit in the Memory panel)\n`
+  if (!toolless) block += MEMORY_POLICY
   if (index) block += index.content + '\n'
-  if (toolless) {
+
+  // Sélectif : mode Outils + mode demandé + une requête non vide + AU MOINS un
+  // fichier pertinent (score > 0) — sinon on retombe sur 'auto' (ci-dessous).
+  const query = (opts.query ?? '').trim()
+  const ranked =
+    !toolless && opts.mode === 'selective' && query !== '' && others.length > 0
+      ? rankMemoryForInjection(query, others, index?.content ?? '')
+      : []
+  const selective = ranked.length > 0 && ranked[0].score > 0
+
+  if (selective) {
+    const { selected, omitted } = selectWithinBudget(ranked, MEMORY_SELECTIVE_BUDGET)
+    for (const r of selected) block += `\n### ${r.file.name}\n${contentOf(r.file.name, r.file.content)}\n`
+    if (omitted.length > 0) {
+      block += `\n(${omitted.length} more memory file(s) — use the memory_read(name) tool to read one.)\n`
+    }
+  } else if (toolless) {
     // Injection intégrale plafonnée : au-delà, les fichiers suivants sont coupés
     // (les plus gros en dernier pour sacrifier le moins de fichiers possible).
-    const CAP = 24000
+    const CAP = MEMORY_TOOLLESS_CAP
     let used = 0
     for (const f of [...others].sort((a, b) => a.content.length - b.content.length)) {
       if (used + f.content.length > CAP) {
@@ -763,11 +1065,11 @@ export function buildMemoryBlock(charId: string, toolless = false): string {
         continue
       }
       used += f.content.length
-      block += `\n### ${f.name}\n${f.content}\n`
+      block += `\n### ${f.name}\n${contentOf(f.name, f.content)}\n`
     }
-  } else if (totalLen <= 8000) {
+  } else if (totalLen <= MEMORY_FULL_INJECT_LIMIT) {
     // Petits volumes : tout injecter.
-    for (const f of others) block += `\n### ${f.name}\n${f.content}\n`
+    for (const f of others) block += `\n### ${f.name}\n${contentOf(f.name, f.content)}\n`
   } else if (others.length > 0) {
     // Gros volumes : index seul, le modèle lira via l'outil memory_read.
     block += `\n(${others.length} memory files — use the memory_read(name) tool to read one.)\n`

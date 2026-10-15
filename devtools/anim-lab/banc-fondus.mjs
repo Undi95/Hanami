@@ -35,6 +35,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { normalizedFacesPlusZ } from './mesures.mjs'
 
 const LAB = path.resolve(path.dirname(decodeURIComponent(new URL(import.meta.url).pathname.slice(1))))
 const PROJET = process.env.HANAMI_ROOT || path.resolve(LAB, '..', '..')
@@ -63,6 +64,8 @@ const EASE = F.easeInOutQuad
 
 // ── Rig : le squelette humanoïde d'un vrai .vrm, monté à la main ────────────
 // Aucun mesh, aucune texture, donc aucun DOM. Même montage que sonde.mjs.
+// REST_POSE_Z est écrite dans le repère normalisé qui regarde le −Z (VRM 0.x) ;
+// dans l'autre repère le signe se renverse — mesuré, cf. normalizedFacesPlusZ.
 const REST_POSE_Z = [
   ['leftUpperArm', 1.25], ['rightUpperArm', -1.25],
   ['leftLowerArm', 0.12], ['rightLowerArm', -0.12],
@@ -111,13 +114,15 @@ function monterRig(fichier) {
   scene.add(humanoid.normalizedHumanBonesRoot)
   if (!ext1) scene.rotation.y = Math.PI
   scene.updateWorldMatrix(false, true)
+  const rig = { humanoid, scene, meta: { metaVersion: ext1 ? '1' : '0' }, expressionManager: null, lookAt: null }
+  const sens = normalizedFacesPlusZ(rig) ? -1 : 1
   for (const [nom, z] of REST_POSE_Z) {
     const n = humanoid.normalizedHumanBones[nom]?.node
-    if (n) n.rotation.z = z
+    if (n) n.rotation.z = sens * z
   }
   humanoid.update()
   scene.updateWorldMatrix(false, true)
-  return { humanoid, scene, meta: { metaVersion: ext1 ? '1' : '0' }, expressionManager: null, lookAt: null }
+  return rig
 }
 
 const nomVrm = args.get('vrm') || path.join(VRM_DIR, fs.readdirSync(VRM_DIR).filter((x) => x.toLowerCase().endsWith('.vrm')).sort()[0])

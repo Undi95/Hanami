@@ -60,6 +60,35 @@ const REPOS_BRAS_Z = [
   ['leftLowerArm', 0.12], ['rightLowerArm', -0.12],
 ]
 
+// Le SENS du repère des os normalisés — MIROIR de `normalizedFacesPlusZ`
+// (client/src/scene/jointLimits.ts ; même copie que anim-lab/mesures.mjs), que
+// ce dossier n'importe pas : il ne dépend d'aucun code de l'app. Même témoin —
+// up × (épaule droite − épaule gauche) confronté au +Z local des hanches, lu
+// dans les matrices monde ; les normalisations omises sont des facteurs
+// positifs, le signe est donc celui de l'original. Repli sur `metaVersion`.
+// REPOS_BRAS_Z est écrite pour le repère qui regarde le −Z (VRM 0.x) : dans
+// l'autre, appliquée telle quelle, elle LÈVE les bras — le remède est le
+// changement de signe (cf. applyRestPose, vrmStage.ts).
+function normalizedFacesPlusZ(vrm) {
+  const left = vrm.humanoid.getNormalizedBoneNode('leftUpperArm')
+  const right = vrm.humanoid.getNormalizedBoneNode('rightUpperArm')
+  const ref = vrm.humanoid.getNormalizedBoneNode('hips') ?? left
+  if (left && right && ref) {
+    left.updateWorldMatrix(true, false)
+    right.updateWorldMatrix(true, false)
+    ref.updateWorldMatrix(true, false)
+    const a = left.matrixWorld.elements
+    const b = right.matrixWorld.elements
+    const cx = b[12] - a[12] // épaule droite − gauche, aplati au sol
+    const cz = b[14] - a[14]
+    if (cx * cx + cz * cz > 1e-8) {
+      const e = ref.matrixWorld.elements // 3ᵉ colonne = axe +Z local, en monde
+      return cz * e[8] - cx * e[10] >= 0 // (up × côté) · zLocal
+    }
+  }
+  return vrm.meta?.metaVersion !== '0'
+}
+
 function lireGLB(buf) {
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
   if (dv.getUint32(0, true) !== 0x46546c67) throw new Error('pas un GLB')
@@ -125,9 +154,11 @@ export function chargerRig(fichier) {
     noeudBrut: (os) => brut.get(os) ?? null,
     majHumanoide: () => { humanoid.update(); scene.updateWorldMatrix(false, true) },
   }
+  const enPlusZ = normalizedFacesPlusZ({ humanoid, meta: { metaVersion } })
+  const sens = enPlusZ ? -1 : 1
   for (const [os, z] of REPOS_BRAS_Z) {
     const n = rig.noeudNorm(os)
-    if (n) { n.rotation.z = z; rig.reposQ.set(os, n.quaternion.clone()) }
+    if (n) { n.rotation.z = sens * z; rig.reposQ.set(os, n.quaternion.clone()) }
   }
   rig.majHumanoide()
 
@@ -205,19 +236,10 @@ export function chargerRig(fichier) {
   // si bien que leur +Z pointe vers l'ARRIÈRE du personnage dans le monde. Croire
   // la convention faisait dire au juge que chaque coude était en hyperextension
   // de très exactement sa flexion — le signe était simplement retourné.
-  // On mesure donc le sens une fois, au repos, en le confrontant à l'avant
-  // géométrique (qui, lui, ne dépend d'aucune convention). Vrai pour 0.x comme 1.0.
-  {
-    const g = P('leftUpperArm'), d = P('rightUpperArm')
-    let avant = new THREE.Vector3(0, 0, 1)
-    if (g && d) {
-      const c = d.clone().sub(g); c.y = 0
-      if (c.lengthSq() > 1e-10) avant = new THREE.Vector3(0, 1, 0).cross(c.normalize()).normalize()
-    }
-    const n = rig.noeudNorm('leftUpperArm') ?? rig.noeudNorm('hips')
-    const z = n ? new THREE.Vector3(0, 0, 1).applyQuaternion(n.getWorldQuaternion(new THREE.Quaternion())) : avant
-    rig.signeAvantNormalise = avant.dot(z) < 0 ? -1 : 1
-  }
+  // La mesure vit dans normalizedFacesPlusZ, faite UNE fois au montage : la pose
+  // de repos et ce signe sont deux consommateurs du même fait, et deux témoins
+  // du même fait finiraient par diverger. Vrai pour 0.x comme 1.0.
+  rig.signeAvantNormalise = enPlusZ ? 1 : -1
 
   rig.osPresents = new Set(osTous)
   return rig

@@ -422,6 +422,41 @@ select {
   }
 }
 
+/* Avatar masqué par l'utilisateur (« Afficher l'avatar » désactivé) : la classe
+   vit sur .app, JAMAIS un unmount de .scene (le stage 3D y est attaché, cf.
+   App.tsx) — et le moteur est en pause VRAIE (VrmStage.setPaused), pas une
+   frame rendue à l'aveugle. Le chat récupère toute la place laissée par la
+   scène. L'astuce 3D est liée à la scène : elle disparaît avec. */
+.no-avatar .scene,
+.no-avatar .scene-portrait,
+.no-avatar .scene-hint {
+  display: none;
+}
+
+/* Mobile (<900 px) : la feuille basse devient une page entière — la scène
+   n'occupe plus le tiers du haut, la poignée verticale a plus d'objet à régler. */
+.no-avatar .chat-panel:not(.vn) {
+  height: 100dvh;
+  border-radius: 0;
+  border-top: none;
+}
+.no-avatar .sheet-handle {
+  display: none;
+}
+
+/* Desktop (≥900 px) : la colonne de chat prend toute la largeur, sa poignée
+   de redimensionnement n'a plus de scène à délimiter. */
+@media (min-width: 900px) {
+  .no-avatar .chat-panel:not(.vn) {
+    left: 0;
+    width: 100%;
+    border-left: none;
+  }
+  .no-avatar .panel-grip {
+    display: none;
+  }
+}
+
 /* ── Panneau de chat en verre ─────────────────────────────────────────── */
 
 .chat-panel {
@@ -1023,6 +1058,23 @@ select {
   white-space: nowrap;
 }
 
+/* Trace EN COURS : pillule simple et non interactive qui pulse doucement —
+   l'événement `tool` la fige en puce ordinaire (même place, avec le résultat). */
+.tool-chip-pending {
+  cursor: default;
+  animation: tool-chip-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tool-chip-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 /* Résultats complets, dépliés sous la puce — un résultat par bloc, avec son
    lien cliquable et son extrait. Même esprit sobre que .thoughts-body. */
 .tool-chip-body {
@@ -1294,6 +1346,24 @@ select {
   50% {
     opacity: 1;
   }
+}
+
+/* Pastille PERSISTANTE du point de compaction — même famille visuelle que
+    .compact-pill mais sans pulsation : elle marque un fait accompli, pas une
+    action en cours. Elle survit au rechargement (dérivée de summaryUpto). */
+.compact-divider {
+  align-self: center;
+  margin: 12px auto;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-style: italic;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 14px;
+  width: fit-content;
+  max-width: 92%;
+  text-align: center;
 }
 
 /* Badge de jauge de contexte (accolé au titre du chat, jamais tronqué) */
@@ -2359,6 +2429,34 @@ select {
   .grid-2 {
     grid-template-columns: 1fr;
   }
+}
+
+/* Carte persona, section « Vous » (Réglages) : sur une ligne le choix du
+   défaut (pastille + libellé), le nom et le bouton de suppression — le
+   texte de description s'étend dessous. */
+.persona-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.persona-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.persona-default input {
+  margin: 0;
 }
 
 .row {
