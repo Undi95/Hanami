@@ -20,5 +20,23 @@ export function sendJsonError(res: Response, status: number, e: unknown): void {
     httpError(res, status, e.code, e.params)
     return
   }
-  res.status(status).json({ error: e instanceof Error ? e.message : String(e) })
+  res.status(status).json({ error: scrubPaths(e instanceof Error ? e.message : String(e)) })
+}
+
+/**
+ * Retire les chemins ABSOLUS d'un message d'erreur brut. Une erreur système
+ * (« ENOENT … mkdir 'C:\Users\…' ») part telle quelle au client — et le
+ * serveur peut être joignable depuis Internet (tunnel) : le chemin du dossier
+ * de données, nom d'utilisateur Windows compris, n'a rien à y faire. Le nom du
+ * fichier final reste, c'est lui qui aide à comprendre ; la console du serveur,
+ * elle, garde le message complet.
+ */
+export function scrubPaths(message: string): string {
+  // Le début du chemin ne doit pas coller à une lettre, un « : » ni un « / » :
+  // « http://… » (le « p: » d'un schéma) et le milieu d'une URL sont épargnés —
+  // une URL de backend dans un message aide l'utilisateur, elle ne trahit rien.
+  return message.replace(/(?<![\w:/.])(?:[A-Za-z]:[\\/]|\\\\|\/(?=[^\s'"]*\/))[^\s'"]*/g, (p) => {
+    const tail = p.split(/[\\/]/).filter(Boolean).pop() ?? ''
+    return `…${tail ? '/' + tail : ''}`
+  })
 }
