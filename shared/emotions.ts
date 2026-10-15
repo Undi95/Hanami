@@ -16,13 +16,33 @@ import { EMOTIONS, type Emotion } from './types'
  * sauter des occurrences selon l'ordre des appels.
  */
 export function emotionTagRe(flags = 'i'): RegExp {
-  return new RegExp(`\\[\\s*(${EMOTIONS.join('|')})\\s*\\]`, flags)
+  // Jamais un lien Markdown : « [content](url) » garde son libellé.
+  return new RegExp(`\\[\\s*(${[...EMOTIONS, ...Object.keys(EMOTION_ALIASES)].join('|')})\\s*\\](?![(\\[])`, flags)
 }
 
-/** Première émotion taguée dans le texte, en minuscules — null si aucune. */
+/**
+ * Les tags que les modèles INVENTENT, ramenés aux six du contrat. Trouvé au
+ * test complet : « [smile] » en tête de réponse — reconnu par aucun motif, le
+ * visage restait neutre. Seuls des synonymes francs : un tag ambigu reste
+ * inconnu (retiré de l'affichage, visage inchangé) plutôt que mal lu.
+ * JAMAIS « laugh » ni « think » : ce sont des balises de GESTE (shared/gestures.ts).
+ */
+export const EMOTION_ALIASES: Record<string, Emotion> = {
+  smile: 'happy', smiling: 'happy', grin: 'happy', joy: 'happy', joyful: 'happy',
+  cheerful: 'happy', excited: 'happy', glad: 'happy', delighted: 'happy',
+  sadness: 'sad', unhappy: 'sad', crying: 'sad', upset: 'sad', sorrow: 'sad', hurt: 'sad',
+  mad: 'angry', annoyed: 'angry', furious: 'angry', irritated: 'angry', frustrated: 'angry',
+  surprise: 'surprised', shocked: 'surprised', astonished: 'surprised', amazed: 'surprised',
+  calm: 'relaxed', peaceful: 'relaxed', serene: 'relaxed', content: 'relaxed', relieved: 'relaxed',
+  normal: 'neutral',
+}
+
+/** Première émotion taguée dans le texte (alias ramenés aux six), en minuscules — null si aucune. */
 export function firstEmotionTag(text: string): Emotion | null {
   const m = emotionTagRe().exec(text)
-  return m ? (m[1].toLowerCase() as Emotion) : null
+  if (!m) return null
+  const tag = m[1].toLowerCase()
+  return EMOTION_ALIASES[tag] ?? (tag as Emotion)
 }
 
 /**
