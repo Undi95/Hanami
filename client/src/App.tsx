@@ -164,6 +164,40 @@ function frameModeOf(mode: ViewMode): FrameMode {
  * DONNÉES (accumulateur `acc`) restent à jour à chaque appel, seul le
  * `flush` (donc le `setFeed` déclenché) est cadencé.
  */
+/**
+ * Fil relu du disque → fil affiché, en GARDANT l'objet de chaque entrée qui n'a
+ * pas changé : MessageBubble est mémoïsé sur l'identité de son message, une
+ * entrée réutilisée ne se redessine donc pas (ni ne re-parse son Markdown).
+ * Comparaison par position et par contenu — un message édité, une variante
+ * changée ou un fil décalé se redessinent normalement.
+ */
+function reuseUnchanged(prev: FeedItem[], next: FeedItem[]): FeedItem[] {
+  const same = (a: FeedItem, b: FeedItem): boolean => {
+    if (a.kind !== 'msg' || b.kind !== 'msg' || a.pending || b.pending) return false
+    const x = a.msg
+    const y = b.msg
+    return (
+      x.ts === y.ts &&
+      x.role === y.role &&
+      x.content === y.content &&
+      x.variant === y.variant &&
+      (x.variants?.length ?? 0) === (y.variants?.length ?? 0) &&
+      x.emotion === y.emotion
+    )
+  }
+  let reused = 0
+  const out = next.map((item, i) => {
+    const old = prev[i]
+    if (old && same(old, item)) {
+      reused++
+      return old
+    }
+    return item
+  })
+  // Rien n'a changé du tout : on rend l'ANCIEN tableau, React n'a rien à faire.
+  return reused === prev.length && prev.length === next.length ? prev : out
+}
+
 function throttled(intervalMs: number, flush: () => void): () => void {
   let last = 0
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -1033,18 +1067,43 @@ function AppInner() {
   // ── Rafraîchissement doux ────────────────────────────────────────────────
   // Au retour sur l'onglet : les messages spontanés arrivés pendant l'absence
   // apparaissent sans recharger la page (comparaison du nombre de messages).
+  //
+  // LE GEL AU RETOUR, et sa cause : `focus` ET `visibilitychange` partent tous
+  // les deux au retour (deux fois le travail), chacun retéléchargeait la
+  // conversation ENTIÈRE (images comprises) — et si un message spontané était
+  // arrivé pendant l'absence, le fil était reconstruit avec des objets NEUFS :
+  // la mémoïsation de MessageBubble ne servait plus à rien, chaque bulle
+  // re-parsait son Markdown. Sur des semaines d'historique, la page gelait.
+  // Désormais : un seul rafraîchissement à la fois (et pas deux en 3 s), un
+  // contrôle LÉGER d'abord (la liste des conversations ne porte que le nombre
+  // de messages), le fil complet seulement s'il a changé, et les bulles
+  // inchangées gardent leur objet — seules les nouvelles se dessinent.
+  const refreshInFlightRef = useRef(false)
+  const lastRefreshRef = useRef(0)
   useEffect(() => {
     function onVisible() {
       if (document.hidden) return
       const char = character
       const chat = chatMeta
       if (!char || !chat || streaming || compacting) return
+      const now = Date.now()
+      if (refreshInFlightRef.current || now - lastRefreshRef.current < 3000) return
+      refreshInFlightRef.current = true
+      lastRefreshRef.current = now
       api
-        .getChat(char.id, chat.id)
-        .then(({ meta, messages }) => {
+        .listChats(char.id)
+        .then((metas) => {
+          const fresh = metas.find((m) => m.id === chat.id)
+          if (!fresh || fresh.messageCount === chat.messageCount) return null
+          return api.getChat(char.id, chat.id)
+        })
+        .then((full) => {
+          if (!full) return
+          const { meta, messages } = full
           if (chatIdRef.current !== chat.id || meta.messageCount === chat.messageCount) return
           setChatMeta(meta)
-          setFeed(feedFromDisk(char, messages, meta.summaryUpto ?? 0))
+          const next = feedFromDisk(char, messages, meta.summaryUpto ?? 0)
+          setFeed((prev) => reuseUnchanged(prev, next))
           const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
           if (lastAssistant) {
             applyEmotion(lastAssistant.emotion ?? extractEmotion(lastAssistant.content) ?? 'neutral')
@@ -1052,6 +1111,9 @@ function AppInner() {
         })
         .catch(() => {
           /* serveur injoignable : le fil actuel reste affiché */
+        })
+        .finally(() => {
+          refreshInFlightRef.current = false
         })
     }
     document.addEventListener('visibilitychange', onVisible)
