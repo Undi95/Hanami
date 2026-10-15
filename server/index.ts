@@ -93,6 +93,17 @@ async function main(): Promise<void> {
   app.use(uiRouter)
   app.use(backupRouter)
 
+  // Filet de l'API : TOUT ce qui reste sous /api répond en JSON codé, comme le
+  // reste du contrat — Express renvoyait sa page HTML par défaut (« Cannot GET »,
+  // « SyntaxError » de body-parser), que le client ne sait pas lire.
+  app.use('/api', (req, res) => httpError(res, 404, ErrorCodes.apiNotFound, { path: req.path }))
+  app.use('/api', (err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const type = (err as { type?: string } | null)?.type
+    if (type === 'entity.parse.failed') httpError(res, 400, ErrorCodes.badJson)
+    else if (type === 'entity.too.large') httpError(res, 413, ErrorCodes.bodyTooLarge)
+    else next(err)
+  })
+
   // Statiques (non gardés).
   app.use('/vrm', express.static(VRM_DIR))
   app.use('/backgrounds', express.static(BACKGROUNDS_DIR))

@@ -1700,6 +1700,12 @@ chatRouter.get('/api/prompt-preview', (req, res) => {
     })
   } catch (e) {
     // CodedError (personnage, chat…) → code + 404 ; erreur interne → 500 brut.
+    // Conversation absente du disque : readChat lève un ENOENT brut (pas une
+    // CodedError) — c'est un 404, pas une panne du serveur.
+    if ((e as NodeJS.ErrnoException | null)?.code === 'ENOENT') {
+      httpError(res, 404, ErrorCodes.chatNotFound, { id: chatId })
+      return
+    }
     sendJsonError(res, e instanceof CodedError ? 404 : 500, e)
   }
 })

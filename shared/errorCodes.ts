@@ -20,6 +20,9 @@ export const ErrorCodes = {
   corsBlocked: 'corsBlocked',
   badOrigin: 'badOrigin',
   accessDenied: 'accessDenied',
+  apiNotFound: 'apiNotFound', // { path }
+  badJson: 'badJson',
+  bodyTooLarge: 'bodyTooLarge',
 
   // ── Personnages, chats, fichiers ─────────────────────────────────────────
   characterNotFound: 'characterNotFound', // { id }
