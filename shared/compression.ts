@@ -4,9 +4,9 @@
 // Les deux sont DÉTERMINISTES, zéro LLM, zéro dépendance : importés par le
 // serveur (server/api/chat.ts, server/api/memory.ts) et réutilisés par la mesure.
 //
-// Stratégie par TYPE (le résultat de la recherche) :
-//   - sysprompt du perso + persona user → denseEncode SEUL (sûr, ne casse jamais —
-//     le codec agressif fait boucler VIDE les prompts complexes, HYP. 2).
+// Stratégie par TYPE (le résultat de la recherche, révisé par ba0154d) :
+//   - sysprompt du perso + persona user → VERBATIM, jamais compressés : denseEncode
+//     casse la prose narrative d'un prompt (cf. le commentaire de buildPayload).
 //   - mémoire (faits) → codec agressif (LLM) PUIS verifyFacts ici comme filet de
 //     sûreté : un fait dur manquant → rejet → repli denseEncode.
 //
@@ -29,10 +29,12 @@ export function denseEncode(text: string): string {
     octobre: '10', novembre: '11', 'décembre': '12', decembre: '12',
   }
   // Nombres en lettres → chiffres. « un » EXCLU : trop ambigu avec l'article.
+  // « neuf » EXCLU pour la même raison : c'est aussi l'adjectif (« un vélo neuf »
+  // devenait « vélo 9 ») — un nombre FABRIQUÉ, exactement ce que ce codec s'interdit.
   const COUNTS: Array<[RegExp, string]> = [
     [/\bdeux\b/gi, '2'], [/\btrois\b/gi, '3'], [/\bquatre\b/gi, '4'],
     [/\bcinq\b/gi, '5'], [/\bsix\b/gi, '6'], [/\bsept\b/gi, '7'],
-    [/\bhuit\b/gi, '8'], [/\bneuf\b/gi, '9'], [/\bdix\b/gi, '10'],
+    [/\bhuit\b/gi, '8'], [/\bdix\b/gi, '10'],
   ]
   // Majuscule (y compris accentuées) = probable nom propre.
   const isCap = (c: string) => /[A-ZÀ-ÖØ-Þ]/.test(c)
@@ -65,7 +67,10 @@ export function denseEncode(text: string): string {
       //    « une » AVANT « un » : sinon « C'est une » → « e » (l'alternance prend « un »).
       s = s.replace(/\bc[’']est (?:une|un|des)\s*/gi, ' ')
       s = s.replace(/(?<![\p{L}\p{N}])c[’']est(?![\p{L}\p{N}])/giu, ' ')
-      s = s.replace(/(?<![\p{L}\p{N}])(?:est|sont)(?![\p{L}\p{N}])/giu, ' ')
+      //    Jamais après une apostrophe : « l'est » est le POINT CARDINAL (« à l'est
+      //    de Lyon » perdait le fait), et « n'est »/« qu'est » laissaient un « n' »
+      //    orphelin. (« c'est » est traité juste au-dessus.)
+      s = s.replace(/(?<![\p{L}\p{N}’'])(?:est|sont)(?![\p{L}\p{N}])/giu, ' ')
       // 6) Articles : retirés SANS toucher à ceux qui précèdent un nom propre ou un
       //    chiffre (« Les 52 »), ni après un trait d'union (« enregistre-le »), ni devant
       //    un quantifiant (« un peu », « une fois » — retirer l'article retourne le sens).
@@ -111,6 +116,8 @@ export interface Verdict {
   ok: boolean
   missingNumbers: string[]
   missingEntities: string[]
+  /** Marqueurs de négation perdus (original − compressé, ≥ 0). */
+  lostNegations: number
 }
 
 // Accents normalisés (NFD) + diacritiques retirés — « â » ≈ « a ».
@@ -164,14 +171,30 @@ const numberPresent = (comp: string, d: string) =>
 const entityPresent = (comp: string, e: string) =>
   new RegExp(`(?<![\\p{L}])${escapeRe(e)}(?![\\p{L}])`, 'gu').test(comp)
 
+// La POLARITÉ est un fait dur que les nombres et les noms ne voient pas : « n'est
+// pas allergique aux arachides » → « allergique : arachides » gardait tous ses
+// faits durs et passait au vert — l'inversion la plus dangereuse qui soit. On
+// compte les marqueurs FORTS (FR + EN : la mémoire peut être écrite dans les
+// deux) ; « ne »/« n' » sont exclus, le style télégraphique les retire
+// légitimement (« pas de sucre »). Moins de marqueurs après qu'avant → rejet.
+// Faux-rouge possible (deux négations fusionnées en une ligne) : voulu.
+const NEGATION_RE =
+  /(?<![\p{L}])(?:pas|jamais|aucun|aucune|ni|sans|non|rien|not|never|no|none|nor|without)(?![\p{L}])|n['’]t(?![\p{L}])/giu
+
+export function countNegations(text: string): number {
+  return (stripAccents(text.toLowerCase()).match(NEGATION_RE) ?? []).length
+}
+
 export function verifyFacts(original: string, compressed: string): Verdict {
   const facts = extractFacts(original)
   const comp = stripAccents(compressed.toLowerCase())
   const missingNumbers = facts.numbers.filter((n) => !numberPresent(comp, n))
   const missingEntities = facts.entities.filter((e) => !entityPresent(comp, e))
+  const lostNegations = Math.max(0, countNegations(original) - countNegations(compressed))
   return {
-    ok: missingNumbers.length === 0 && missingEntities.length === 0,
+    ok: missingNumbers.length === 0 && missingEntities.length === 0 && lostNegations === 0,
     missingNumbers,
     missingEntities,
+    lostNegations,
   }
 }
