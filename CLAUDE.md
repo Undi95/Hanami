@@ -30,4 +30,5 @@
 ## Commits
 
 - Messages en français, un commit par étape.
-- Signature : `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`
+- Signature : le modèle RÉELLEMENT utilisé signe, vérifié avant chaque commit
+  (ex. `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`).
