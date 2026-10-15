@@ -18,6 +18,10 @@ export interface ParsedCard {
   // Consignes que SillyTavern place APRÈS l'historique (le « jailbreak » des
   // cards) : la règle qui doit peser le plus lourd au moment de répondre.
   postHistoryInstructions: string
+  // Champs PROPRES à Hanami (data.extensions.hanami, écrit par notre export) :
+  // ce qu'une card SillyTavern ne sait pas porter — le corps 3D et son décor.
+  // Des CHEMINS, pas des fichiers : l'import ne les garde que s'ils existent ici.
+  hanami?: { vrm?: string; environment?: string; background?: string; animations?: string; theme?: string }
 }
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -100,6 +104,15 @@ function normalizeCard(raw: unknown): ParsedCard | null {
     systemPrompt: str(src.system_prompt),
     mesExample: str(src.mes_example),
     postHistoryInstructions: str(src.post_history_instructions),
+  }
+  const ext = src.extensions && typeof src.extensions === 'object' ? (src.extensions as Record<string, unknown>).hanami : null
+  if (ext && typeof ext === 'object') {
+    const h = ext as Record<string, unknown>
+    const hanami: NonNullable<ParsedCard['hanami']> = {}
+    for (const k of ['vrm', 'environment', 'background', 'animations', 'theme'] as const) {
+      if (typeof h[k] === 'string' && (h[k] as string).trim()) hanami[k] = (h[k] as string).trim()
+    }
+    if (Object.keys(hanami).length > 0) card.hanami = hanami
   }
   if (!card.name && !card.description && !card.firstMes) return null
   return card

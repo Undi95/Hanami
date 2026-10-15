@@ -2,7 +2,18 @@
 import express, { Router } from 'express'
 import { parseCardJson, parseCharacterCard, type ParsedCard } from '../lib/pngCard'
 import { convertStChat } from '../lib/stChat'
-import { createCharacter, getCharacter, savePortrait, updateCharacter, writeImportedChat } from '../lib/storage'
+import fs from 'node:fs'
+import path from 'node:path'
+import {
+  BACKGROUNDS_DIR,
+  ENVIRONMENTS_DIR,
+  VRM_DIR,
+  createCharacter,
+  getCharacter,
+  savePortrait,
+  updateCharacter,
+  writeImportedChat,
+} from '../lib/storage'
 import { httpError, sendJsonError } from '../lib/errors'
 import { ErrorCodes } from '../../shared/errorCodes'
 
@@ -51,6 +62,19 @@ function composeSystemPrompt(card: ParsedCard): string {
   return parts.join('\n\n')
 }
 
+/** URL d'asset d'une card → la même URL si le fichier existe ici, sinon undefined. */
+function localAsset(url: string | undefined, prefix: string, dir: string): string | undefined {
+  if (!url || !url.startsWith(prefix)) return undefined
+  let name: string
+  try {
+    name = decodeURIComponent(url.slice(prefix.length).split(/[?#]/)[0])
+  } catch {
+    return undefined
+  }
+  if (!name || name.includes('..') || /[\/]/.test(name)) return undefined
+  return fs.existsSync(path.join(dir, name)) ? url : undefined
+}
+
 importRouter.post(
   '/api/import/card',
   // Types explicites (le client envoie application/octet-stream) : accepter
@@ -79,6 +103,14 @@ importRouter.post(
         greeting: card.firstMes,
         greetings: card.alternateGreetings,
         systemPrompt: composeSystemPrompt(card),
+        // Le corps 3D et son décor (card exportée par Hanami) : gardés SEULEMENT si
+        // le fichier existe sur CETTE machine — une card venue d'ailleurs ne doit
+        // pas pointer vers un avatar absent (écran vide au lieu du portrait).
+        vrm: localAsset(card.hanami?.vrm, '/vrm/', VRM_DIR),
+        environment: localAsset(card.hanami?.environment, '/environments/', ENVIRONMENTS_DIR),
+        background: localAsset(card.hanami?.background, '/backgrounds/', BACKGROUNDS_DIR),
+        animations: card.hanami?.animations === 'rocketbox' ? 'rocketbox' : undefined,
+        theme: card.hanami?.theme,
       })
       // La card PNG EST une image : on la garde comme portrait du personnage,
       // seule représentation visuelle possible tant qu'aucun VRM n'est choisi.

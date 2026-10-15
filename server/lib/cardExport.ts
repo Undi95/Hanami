@@ -41,9 +41,22 @@ export function buildCardV2(character: CharacterFull): unknown {
       tags: [],
       creator: '',
       character_version: '',
-      extensions: {},
+      // L'espace prévu par la spec V2 pour les données d'un outil : le corps 3D
+      // et son décor y voyagent, ignorés par SillyTavern, relus par Hanami.
+      extensions: { hanami: hanamiExtension(character) },
     },
   }
+}
+
+/** Champs Hanami d'une card : seulement ceux qui sont posés. */
+function hanamiExtension(character: CharacterFull): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (character.vrm) out.vrm = character.vrm
+  if (character.environment) out.environment = character.environment
+  if (character.background) out.background = character.background
+  if (character.animations) out.animations = character.animations
+  if (typeof character.theme === 'string' && character.theme) out.theme = character.theme
+  return out
 }
 
 // ── Écriture PNG ───────────────────────────────────────────────────────────
