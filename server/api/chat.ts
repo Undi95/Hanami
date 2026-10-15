@@ -40,6 +40,7 @@ import { reasoningEffortParam } from '../../shared/llm'
 import { substituteMacros, userName, type MacroNames } from '../../shared/macros'
 import { activePersona } from '../../shared/personas'
 import { denseEncode } from '../../shared/compression'
+import { gestureTagList } from '../../shared/gestures'
 import type {
   CharacterFull,
   CharacterMeta,
@@ -146,6 +147,25 @@ function summaryBlock(summary: string): string {
  */
 function sceneNotesBlock(notes: string): string {
   return `\n\n## Scene notes (set by the user for this conversation)\n\n${notes}`
+}
+
+/**
+ * Consigne des balises de geste (shared/gestures.ts). C'est le seul bloc ajouté
+ * qui soit une DIRECTIVE et non un fait — parce que c'est la seule façon de
+ * faire marcher les gestes dans TOUTES les langues : le modèle comprend sa
+ * propre réponse mieux qu'aucune liste de mots, et la balise est la même en
+ * français, en anglais ou en japonais. Elle est donc courte, OPTIONNELLE pour le
+ * modèle (« when it fits »), et visible dans l'inspecteur comme le reste.
+ * Posée seulement quand un corps 3D peut la jouer (cf. buildPayload).
+ */
+function gestureBlock(): string {
+  return (
+    '\n\n## Gestures (3D avatar, added by Hanami)\n' +
+    `Optionally, place a gesture tag right where the gesture happens in your reply: ${gestureTagList()}. ` +
+    'Use them sparingly (0-2 per reply), only when the gesture fits; they are never shown or spoken. ' +
+    'Keep the tags in English whatever language you reply in.\n' +
+    'Example: `[happy] Of course! [nod] Leave it to me.`\n'
+  )
 }
 
 /** Plafond des notes de scène — c'est une note d'ambiance, pas un second prompt. */
@@ -314,6 +334,10 @@ export function buildPayload(
   if (settings.timeAwareness) {
     injected += timeBlock(history.length > 0 ? history[history.length - 1].ts : null)
   }
+  // Gestes : seulement si un corps 3D existe pour les jouer, et pas en mode
+  // simple — les petits modèles oublient déjà le tag d'émotion, une seconde
+  // consigne de balisage leur coûterait plus qu'elle n'apporte.
+  if (character.vrm && settings.modelMode !== 'simple') injected += gestureBlock()
   // Macros résolues sur TOUT ce qui part : le texte système (prompt du
   // personnage ET blocs ajoutés — une note de scène peut dire « {{char}} »),
   // l'historique et le message courant. `characterPrompt` reste brut plus bas :
@@ -1221,7 +1245,7 @@ function compactDirective(hasPrevSummary: boolean, memoryTools: boolean, instruc
       'memory_append a fact to an existing file, memory_save only brand-new topics.\n'
   }
   if (instruction) d += `- User instruction for this compaction: ${instruction}\n`
-  d += 'Reply with ONLY the summary text (no preamble, no emotion tag).'
+  d += 'Reply with ONLY the summary text (no preamble, no emotion or gesture tag).'
   return d
 }
 

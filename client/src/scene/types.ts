@@ -57,6 +57,14 @@ export interface VrmStage {
    */
   setEmotion(emotion: string, live?: boolean): void
   /**
+   * Joue le geste d'une balise lue dans la réponse ([nod], [shrug]…, cf.
+   * shared/gestures.ts) — TOUJOURS « live » : on ne l'appelle que dans le flux.
+   * Un geste en cours n'est pas coupé : la balise attend son tour (une place,
+   * périmée au bout de quelques secondes). Balise sans clip dans la famille du
+   * personnage, ou corps occupé (marche, transition) : rien, le visage suffit.
+   */
+  gesture(tag: string): void
+  /**
    * true pendant le streaming d'une réponse → anime la bouche (lipsync simple),
    * et joue le socle « parle » s'il existe dans vrma/.
    */

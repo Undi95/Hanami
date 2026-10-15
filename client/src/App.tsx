@@ -15,6 +15,7 @@ import * as api from './api'
 import { MAX_AUTO_COMPACT_FAILS, type AutoCompactOutcome, autoCompactFailUpdate } from './autoCompact'
 import { useStableCallback } from './hooks'
 import { detectEmotionFallback, extractEmotion, stripEmotionTags } from './emotions'
+import { gestureTagsIn } from '../../shared/gestures'
 import { disposeNotify, playNotify } from './sound'
 import { cleanForSpeech, splitIntoSpeechSegments } from './tts'
 import {
@@ -1299,6 +1300,9 @@ function AppInner() {
     // Émotion posée EN COURS de flux (null tant qu'aucun tag n'est arrivé) —
     // gardée pour la re-poser à la fin, cf. l'événement `done`.
     let liveEmotion: string | null = null
+    // Balises de geste déjà jouées dans CETTE réponse : chacune ne part qu'une
+    // fois, au moment où elle s'achève dans le flux — le corps suit le texte.
+    let gesturesSeen = 0
     let finished = false
     // Le fil ne se re-render pas à CHAQUE token — ~30 fps suffit à l'œil et
     // évite de reconstruire tout l'historique plusieurs fois par frame sur un
@@ -1338,6 +1342,12 @@ function AppInner() {
                 liveEmotion = em
                 applyEmotion(em, true)
               }
+            }
+            // Une balise s'achève par « ] » : rien à chercher dans un delta sans.
+            if (ev.text.includes(']')) {
+              const tags = gestureTagsIn(acc)
+              for (let i = gesturesSeen; i < tags.length; i++) stageRef.current?.gesture(tags[i])
+              gesturesSeen = tags.length
             }
             flushContent()
           } else if (ev.type === 'thinking') {

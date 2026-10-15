@@ -38,6 +38,8 @@ import {
 import type { VRMAnimation } from '@pixiv/three-vrm-animation'
 import { EMOTIONS } from '../../../shared/types'
 import type { AnimationFamily, Emotion } from '../../../shared/types'
+import { GESTURE_CLIP_STEMS, GESTURE_STEMS, GESTURE_TAGS } from '../../../shared/gestures'
+import type { GestureTag } from '../../../shared/gestures'
 import { getVrmAnimations } from '../api'
 // Les erreurs de cette scène remontent TELLES QUELLES à l'écran (bandeaux de
 // App.tsx) : elles se traduisent, comme celles de la couche API.
@@ -622,6 +624,9 @@ interface VrmaCatalog {
   talking: string[] // socle en boucle pendant que le personnage parle
   listening: string[] // socle en boucle pendant que l'utilisateur tape (famille rb)
   gestures: Map<Emotion, string[]> // joué une fois, puis retour au socle
+  // Gestes des BALISES de la réponse ([nod]…), par radical de clip (nod, wave,
+  // raise-hand…) — la balise choisit ensuite son radical (GESTURE_CLIP_STEMS).
+  tagGestures: Map<string, string[]>
   postures: Map<string, string[]> // remplace le socle (setPosture)
   world: Map<string, string[]> // domaine `world-`, clé = radical SANS le préfixe
   reactions: string[] // acquiescement au clic (REACTION_STEM), scène vivante seule
@@ -660,6 +665,7 @@ function catalogFromUrls(urls: readonly string[], family: AnimationFamily): Vrma
     talking: [],
     listening: [],
     gestures: new Map(),
+    tagGestures: new Map(),
     postures: new Map(),
     world: new Map(),
     reactions: [],
@@ -690,6 +696,10 @@ function catalogFromUrls(urls: readonly string[], family: AnimationFamily): Vrma
         pushInto(cat.gestures, stem as Emotion, url)
         continue
       }
+      // Gestes de balise : rangés SANS `continue` — `nod` Overte est aussi
+      // l'acquiescement au clic de la scène vivante (REACTION_STEM, plus bas),
+      // et il doit le rester.
+      if (GESTURE_STEMS.includes(stem)) pushInto(cat.tagGestures, stem, url)
     }
     // ── Domaine de la SCÈNE VIVANTE : Overte, quelle que soit la famille ────
     // Un clip `rb-` qui arrive ici (rb-nod, rb-wave, rb-think…) n'a pas trouvé
@@ -1934,6 +1944,79 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     fadeTo(action, GESTURE_IN)
   }
 
+  // ── Gestes des BALISES de la réponse ([nod], [shrug]…) ────────────────────
+  // Anti-répétition par balise, comme lastGesture par émotion.
+  const lastTagGesture = new Map<GestureTag, AnimationAction>()
+  /**
+   * La balise qui attend son tour. UNE place, et la plus récente gagne : le
+   * texte avance plus vite que les corps (un geste dure 2 à 4 s, trois balises
+   * peuvent tomber dans la même phrase). Rejouer un arriéré de gestes après
+   * coup désynchroniserait le corps du texte — on garde le dernier, il est
+   * encore d'actualité, et il se périme s'il attend trop.
+   */
+  let pendingTag: { tag: GestureTag; at: number } | null = null
+  const TAG_QUEUE_TTL_MS = 4000
+
+  /** Un clip à cycle unique (geste, réaction) tient l'écran, et ce n'est pas une transition. */
+  function gestureBusy(): boolean {
+    return activeAction !== null && activeAction !== baseAction && onceThen === null
+  }
+
+  /**
+   * Lance le geste d'une balise s'il y a un clip prêt et un corps libre. Rend
+   * true si un geste est parti (ou a été confié au comportement assis).
+   */
+  function startTagGesture(tag: GestureTag): boolean {
+    // Assis, le hochement est celui de la chaise (sit-ack, sit-nod) : le
+    // comportement sait s'il est au repos. Les autres balises n'y ont pas de
+    // clip : le visage porte seul, comme pour un geste debout refusé.
+    if (tag === 'nod' && wander?.react()) return true
+    if (gaitAction || onceThen) return false
+    // Premier radical présent DANS LA FAMILLE du personnage — jamais l'autre.
+    let action: AnimationAction | null = null
+    for (const stem of GESTURE_CLIP_STEMS[tag]) {
+      action = pickAction(catalog?.tagGestures.get(stem), lastTagGesture.get(tag) ?? null)
+      if (action) break
+    }
+    if (!action) return false
+    lastTagGesture.set(tag, action)
+    action.reset()
+    action.setLoop(LoopOnce, 1)
+    action.clampWhenFinished = true // même raison que playGesture
+    fadeTo(action, GESTURE_IN)
+    return true
+  }
+
+  function playTagGesture(tag: GestureTag): void {
+    if (!mixer) return
+    // Un geste en cours n'est jamais coupé net : la balise attend qu'il rende
+    // l'écran (cf. le gestionnaire 'finished').
+    if (gestureBusy()) {
+      pendingTag = { tag, at: performance.now() }
+      return
+    }
+    startTagGesture(tag)
+  }
+
+  /**
+   * Gestes de balise chargés EN ARRIÈRE-PLAN, une fois le socle posé : 1,7 Mo
+   * (Overte) à 2,4 Mo (Rocketbox) qui ne doivent pas retarder l'avatar — en 4G,
+   * le personnage doit bouger avant que ses gestes de ponctuation soient là.
+   * Une balise lue avant leur arrivée ne joue rien, sans plus.
+   */
+  async function loadTagGestures(vrm: VRM, cat: VrmaCatalog): Promise<void> {
+    const forMixer = mixer
+    const urls = [...new Set([...cat.tagGestures.values()].flat())].filter((u) => !actions.has(u))
+    if (urls.length === 0) return
+    const loaded = await Promise.all(urls.map(async (url) => [url, await loadVrmAnimation(url)] as const))
+    // Le modèle, la famille ou les animations ont pu changer pendant le
+    // téléchargement : ces clips appartiennent à un mixer qui n'est plus.
+    if (!forMixer || mixer !== forMixer || currentVrm !== vrm || disposed) return
+    for (const [url, animation] of loaded) {
+      if (animation && !actions.has(url)) actions.set(url, forMixer.clipAction(createVRMAnimationClip(animation, vrm)))
+    }
+  }
+
   /** Jette mixer et actions : les clips sont liés à CETTE instance de VRM. */
   function disposeAnimations(): void {
     if (mixer) {
@@ -1946,6 +2029,8 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     actions.clear()
     // Les variantes mémorisées par l'anti-répétition appartenaient à CE mixer.
     lastGesture.clear()
+    lastTagGesture.clear()
+    pendingTag = null
     lastReaction = null
     lastListen = null
     lastWorld.clear()
@@ -2030,6 +2115,13 @@ export function createVrmStage(container: HTMLElement): VrmStage {
         if (baseAction) fadeTo(baseAction, step.fade)
         return
       }
+      // Une balise attendait la fin de ce geste : elle enchaîne depuis lui
+      // (pas de retour au socle entre deux), si elle est encore d'actualité.
+      if (pendingTag) {
+        const next = pendingTag
+        pendingTag = null
+        if (performance.now() - next.at < TAG_QUEUE_TTL_MS && startTagGesture(next.tag)) return
+      }
       // Un geste d'émotion rend l'écran au socle.
       if (baseAction) fadeTo(baseAction, GESTURE_OUT)
     })
@@ -2042,6 +2134,8 @@ export function createVrmStage(container: HTMLElement): VrmStage {
     lastListen = listenAction
     postureAction = asBase(postureName ? pickAction(cat.postures.get(postureName)) : null)
     syncBase(NO_FADE)
+    // Jamais attendu : le socle n'a pas à patienter derrière les gestes de balise.
+    void loadTagGestures(vrm, cat)
     // Le socle est posé mais PAS ENCORE ÉVALUÉ : le squelette est toujours dans la
     // pose de repos, recadrer maintenant ne gagnerait rien. C'est la boucle de
     // rendu qui s'en charge, une fois le mixer passé (cf. reframeAfterMixer).
@@ -2717,6 +2811,11 @@ export function createVrmStage(container: HTMLElement): VrmStage {
       // conversation, ou au rechargement du modèle, serait absurde.
       idle.setEmotion(value)
       if (live) playGesture(value)
+    },
+
+    gesture(tag: string): void {
+      const value = tag.toLowerCase()
+      if ((GESTURE_TAGS as readonly string[]).includes(value)) playTagGesture(value as GestureTag)
     },
 
     setSpeaking(speaking: boolean): void {

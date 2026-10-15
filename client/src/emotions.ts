@@ -2,8 +2,21 @@
 // Le MOTIF vient de shared/emotions.ts — la même règle que le serveur.
 import type { Emotion } from '../../shared/types'
 import { emotionTagRe } from '../../shared/emotions'
+import { GESTURE_TAGS, gestureTagRe } from '../../shared/gestures'
 
 const ALL_TAGS = emotionTagRe('gi')
+// Les balises de geste ([nod], [shrug]…) s'écrivent AU MILIEU du texte : elles
+// sont retirées comme les tags d'émotion — affichage ET voix passent par ici.
+// L'espace qui précède la balise part avec elle, pas celui qui la suit :
+// « Oui [nod] bien sûr » → « Oui bien sûr », jamais « Ouibien sûr ».
+const GESTURE_TAGS_RE = new RegExp(`[ \\t]*${gestureTagRe('').source}`, 'gi')
+/**
+ * Balise de geste INACHEVÉE en FIN de texte, pendant l'écriture : « … [no »,
+ * « … [shr ». Le flux la livre en morceaux ; sans ce masque, la bulle montrait
+ * le début de balise le temps d'une ou deux trames. Seulement un PRÉFIXE d'une
+ * balise connue — un crochet ordinaire en fin de texte reste affiché.
+ */
+const TRAILING_PARTIAL = /[ \t]*\[\s*([a-z]*)$/i
 
 /** Première occurrence d'un tag d'émotion dans le texte (null si aucun). */
 export { firstEmotionTag as extractEmotion } from '../../shared/emotions'
@@ -61,10 +74,15 @@ const NOT_EMOTIONS = new Set(['ooc'])
  * qu'il s'achève (la bulle garde ses points d'attente au lieu de clignoter).
  */
 export function stripEmotionTags(text: string, streaming = false): string {
-  let clean = text.replace(ALL_TAGS, '').replace(/^[ \t]+/, '')
+  let clean = text.replace(ALL_TAGS, '').replace(GESTURE_TAGS_RE, '').replace(/^[ \t]+/, '')
   const unknown = UNKNOWN_HEAD_TAG.exec(clean)
   if (unknown && !NOT_EMOTIONS.has(unknown[1].toLowerCase())) clean = clean.slice(unknown[0].length)
-  return streaming && PARTIAL_TAG.test(clean) ? '' : clean
+  if (streaming) {
+    if (PARTIAL_TAG.test(clean)) return ''
+    const tail = TRAILING_PARTIAL.exec(clean)
+    if (tail && GESTURE_TAGS.some((g) => g.startsWith(tail[1].toLowerCase()))) clean = clean.slice(0, tail.index)
+  }
+  return clean
 }
 
 // ── Repli du mode simple ───────────────────────────────────────────────────
