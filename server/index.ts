@@ -15,6 +15,7 @@ import {
 } from './lib/storage'
 import { authMiddleware, loginRouter } from './lib/auth'
 import { httpError } from './lib/errors'
+import { gzipStatic } from './lib/gzipStatic'
 import { ErrorCodes } from '../shared/errorCodes'
 import { settingsRouter } from './api/settings'
 import { chatRouter } from './api/chat'
@@ -105,13 +106,18 @@ async function main(): Promise<void> {
   })
 
   // Statiques (non gardés).
+  // Les gros binaires 3D passent d'abord par gzipStatic (compressés une fois,
+  // −26 à −58 %) ; Range, client sans gzip et le reste retombent sur le statique.
+  app.use('/vrm', gzipStatic(VRM_DIR))
   app.use('/vrm', express.static(VRM_DIR))
   app.use('/backgrounds', express.static(BACKGROUNDS_DIR))
   // Portraits 2D des personnages sans modèle VRM (images des cards importées).
   app.use('/portraits', express.static(PORTRAITS_DIR))
   // Décors 3D (.glb + sidecar .json de placement) et animations (.vrma) : gros
   // fichiers, servis par express.static pour bénéficier de l'ETag et du Range.
+  app.use('/environments', gzipStatic(ENVIRONMENTS_DIR))
   app.use('/environments', express.static(ENVIRONMENTS_DIR))
+  app.use('/vrma', gzipStatic(VRMA_DIR))
   app.use('/vrma', express.static(VRMA_DIR))
 
   if (IS_PROD) {
