@@ -385,6 +385,25 @@ function writeSynced(file: string, data: Buffer): void {
 }
 
 /**
+ * rename, et son repli quand source et cible sont sur deux VOLUMES différents
+ * (EXDEV) : le dossier de travail vit sous <projet>/backups, les données peuvent
+ * vivre ailleurs (HANAMI_DATA sur un autre disque) — trouvé au test complet, la
+ * restauration y échouait en entier. Le repli garde l'atomicité PAR FICHIER :
+ * copie dans un temporaire à CÔTÉ de la cible (même volume), puis rename.
+ */
+function moveAtomic(src: string, dst: string): void {
+  try {
+    fs.renameSync(src, dst)
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw e
+    const tmp = `${dst}.restore-${process.pid}.tmp`
+    fs.copyFileSync(src, tmp)
+    fs.renameSync(tmp, dst)
+    fs.unlinkSync(src)
+  }
+}
+
+/**
  * Applique la restauration. Le filet est posé D'ABORD, puis TOUT est extrait
  * dans un dossier de travail (même volume que la cible), et seulement ensuite
  * les fichiers basculent un par un par rename — l'opération atomique du système
@@ -412,7 +431,7 @@ export function applyRestore(zip: Buffer, roots: BackupRoots, now = new Date()):
     for (const entry of plan.entries) fs.mkdirSync(path.dirname(entry.target), { recursive: true })
     // 3. Bascule.
     for (const entry of plan.entries) {
-      fs.renameSync(path.join(work, entry.name), entry.target)
+      moveAtomic(path.join(work, entry.name), entry.target)
       try {
         // La date de modification d'origine survit : l'ordre des conversations
         // (trié sur le mtime) est celui de la sauvegarde, pas celui d'aujourd'hui.
