@@ -91,7 +91,17 @@ memoryRouter.post('/api/characters/:id/memory', (req, res) => {
       return
     }
     const content = typeof body.content === 'string' ? body.content : ''
-    writeMemoryFile(req.params.id, forceMdExtension(body.name.trim()), content)
+    // Nom NORMALISÉ comme à l'écriture (« sous/dossier.md » → « sousdossier.md ») :
+    // c'est lui qu'il faut comparer, sinon le test passe à côté du vrai fichier.
+    const name = sanitizeFileName(forceMdExtension(body.name.trim()))
+    // CRÉER n'écrase JAMAIS : sans ce test, « Créer » sur un nom déjà pris
+    // remplaçait le fichier existant (MEMORY.md compris) par un fichier vide,
+    // sans un mot. Comparaison insensible à la casse, comme le FS Windows.
+    if (listMemory(req.params.id).some((f) => f.name.toLowerCase() === name.toLowerCase())) {
+      httpError(res, 409, ErrorCodes.memoryFileExists, { name })
+      return
+    }
+    writeMemoryFile(req.params.id, name, content)
     res.json({ ok: true })
   } catch (e) {
     sendJsonError(res, 400, e) // nom invalide (sanitizeFileName) → 400

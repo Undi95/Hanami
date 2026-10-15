@@ -29,6 +29,7 @@ export const ErrorCodes = {
   chatCorrupt: 'chatCorrupt', // { id }
   invalidFileName: 'invalidFileName',
   memoryIndexProtected: 'memoryIndexProtected',
+  memoryFileExists: 'memoryFileExists', // { name }
   invalidBackupName: 'invalidBackupName',
   backupNotFound: 'backupNotFound', // { name }
   fieldNameRequired: 'fieldNameRequired', // { field }
