@@ -219,6 +219,33 @@ function animationsField(animations: unknown): Partial<CharacterMeta> {
 }
 
 /** Décor 3D : même règle que le thème — et c'est ainsi qu'un '' explicite le RETIRE. */
+/**
+ * Chemin d'asset d'un personnage, validé : '' (aucun), ou une URL du BON dossier
+ * statique avec la BONNE extension, sans « .. » ni antislash. Rend `undefined`
+ * pour une valeur absente OU refusée — l'appelant garde alors la valeur
+ * courante. Trouvé au test complet : « ../../data/config.json » comme modèle
+ * VRM, ou un décor .glb comme image de fond, étaient enregistrés tels quels
+ * (le statique bloquait la traversée, mais la valeur absurde restait).
+ * `remote` : une URL http(s) est aussi acceptée (image de fond hébergée ailleurs).
+ */
+function assetUrl(value: unknown, dir: string, ext: RegExp, remote = false): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const v = value.trim()
+  if (v === '') return ''
+  if (remote && /^https?:\/\//i.test(v)) return v
+  let decoded = v
+  try {
+    decoded = decodeURIComponent(v.split(/[?#]/)[0])
+  } catch {
+    return undefined
+  }
+  if (!v.startsWith(dir) || decoded.includes('..') || decoded.includes('\\') || !ext.test(decoded)) return undefined
+  return v
+}
+const VRM_EXT = /\.vrm$/i
+const IMAGE_EXT = /\.(png|jpe?g|webp|gif|avif|bmp)$/i
+const ENV_EXT = /\.(glb|gltf)$/i
+
 function environmentField(environment: unknown): Partial<CharacterMeta> {
   return typeof environment === 'string' && environment.trim() ? { environment: environment.trim() } : {}
 }
@@ -292,13 +319,13 @@ export function createCharacter(input: CreateCharacterInput): CharacterFull {
   const meta: CharacterMeta = {
     id,
     name: input.name,
-    vrm: input.vrm ?? '',
-    background: input.background ?? '',
+    vrm: assetUrl(input.vrm, '/vrm/', VRM_EXT) ?? '',
+    background: assetUrl(input.background, '/backgrounds/', IMAGE_EXT, true) ?? '',
     greeting: input.greeting ?? '',
     ...greetingFields(input.greetings, input.greetingMode),
     ...themeField(input.theme),
     ...animationsField(input.animations),
-    ...environmentField(input.environment),
+    ...environmentField(assetUrl(input.environment, '/environments/', ENV_EXT)),
     ...ttsFields(input.ttsEnabled, input.ttsVoice, input.ttsModel),
     ...llmField(input.llm),
     ...userPersonaField(input.userPersona),
@@ -317,8 +344,8 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
   const meta: CharacterMeta = {
     id,
     name: patch.name ?? current.name,
-    vrm: patch.vrm ?? current.vrm,
-    background: patch.background ?? current.background,
+    vrm: assetUrl(patch.vrm, '/vrm/', VRM_EXT) ?? current.vrm,
+    background: assetUrl(patch.background, '/backgrounds/', IMAGE_EXT, true) ?? current.background,
     greeting: patch.greeting ?? current.greeting,
     // Un tableau vide dans le patch EST une valeur : il efface les variantes.
     ...greetingFields(patch.greetings ?? current.greetings, patch.greetingMode ?? current.greetingMode),
@@ -332,7 +359,7 @@ export function updateCharacter(id: string, patch: Partial<CharacterFull>): Char
     // Décor 3D : '' explicite = retour au fond 2D. Comme pour le thème, ce champ
     // DOIT être reconduit ici — meta est reconstruit clé par clé, un oubli
     // effacerait le décor en silence à chaque édition du personnage.
-    ...environmentField(patch.environment ?? current.environment),
+    ...environmentField(assetUrl(patch.environment, '/environments/', ENV_EXT) ?? current.environment),
     // Portrait conservé d'office : le dialog Personnages ne l'envoie pas (il n'a
     // pas d'éditeur) et une édition ne doit jamais l'effacer en silence.
     ...portraitField(patch.portrait ?? current.portrait),
