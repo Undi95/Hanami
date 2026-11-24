@@ -81,6 +81,10 @@ const WIDE_SCREEN_QUERY = '(min-width: 900px)'
 // tour de roue près — c'est le CSS qui fait le fondu, ce délai ne fait que
 // retirer du DOM une ligne déjà transparente.
 const HINT_3D_MS = 8600
+// Tours autonomes allumés : cadence du pouls qui guette un message écrit par le
+// personnage pendant que la page est à l'écran (deux dates de fichier, cf.
+// GET …/pulse — assez léger pour cette cadence, assez vif pour sembler direct).
+const AUTONOMOUS_PULSE_MS = 4000
 
 /** Extrait d'un message à citer : une seule ligne, tags d'émotion retirés, tronquée. */
 function excerpt(text: string, max: number): string {
@@ -1087,16 +1091,29 @@ function AppInner() {
   // contrôle LÉGER d'abord (la liste des conversations ne porte que le nombre
   // de messages), le fil complet seulement s'il a changé, et les bulles
   // inchangées gardent leur objet — seules les nouvelles se dessinent.
+  //
+  // TOURS AUTONOMES allumés : le personnage peut écrire pendant que la page est
+  // À L'ÉCRAN — le retour sur l'onglet ne suffit plus, son message attendrait
+  // qu'on change de fenêtre. Un POULS léger (deux dates de fichier, cf.
+  // /pulse) toutes les quelques secondes, et le même rafraîchissement doux
+  // seulement quand la date du fil a bougé. Mode éteint : aucun pouls.
   const refreshInFlightRef = useRef(false)
   const lastRefreshRef = useRef(0)
+  const pulseRef = useRef<{ chatId: string; mtime: number } | null>(null)
+  const autonomousOn = settings?.autonomousEnabled === true
   useEffect(() => {
-    function onVisible() {
-      if (document.hidden) return
+    /**
+     * Relit le fil si son nombre de messages a changé. `fromPulse` saute le
+     * délai anti-doublon des 3 s (réservé au couple focus + visibilitychange).
+     * Rend false quand rien n'a pu partir — l'appelant réessaiera.
+     */
+    function softRefresh(fromPulse = false): boolean {
+      if (document.hidden) return false
       const char = character
       const chat = chatMeta
-      if (!char || !chat || streaming || compacting) return
+      if (!char || !chat || streaming || compacting) return false
       const now = Date.now()
-      if (refreshInFlightRef.current || now - lastRefreshRef.current < 3000) return
+      if (refreshInFlightRef.current || (!fromPulse && now - lastRefreshRef.current < 3000)) return false
       refreshInFlightRef.current = true
       lastRefreshRef.current = now
       api
@@ -1124,14 +1141,43 @@ function AppInner() {
         .finally(() => {
           refreshInFlightRef.current = false
         })
+      return true
+    }
+    const onVisible = (): void => {
+      softRefresh()
     }
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', onVisible)
+    let pulse: number | undefined
+    if (autonomousOn && character && chatMeta) {
+      const charId = character.id
+      const chatId = chatMeta.id
+      pulse = window.setInterval(() => {
+        if (document.hidden || streaming || compacting) return
+        api
+          .getChatPulse(charId, chatId)
+          .then((p) => {
+            if (chatIdRef.current !== chatId) return
+            const seen = pulseRef.current
+            if (seen && seen.chatId === chatId && p.chat === seen.mtime) return
+            // La date a bougé — ou c'est le premier battement pour cette
+            // conversation, et un message a pu s'écrire entre l'ouverture de la
+            // page et lui : dans les deux cas, le contrôle léger du fil. La date
+            // n'est retenue que si ce contrôle est PARTI : sinon le battement
+            // suivant réessaie, et le message ne se perd pas.
+            if (softRefresh(true)) pulseRef.current = { chatId, mtime: p.chat }
+          })
+          .catch(() => {
+            /* serveur injoignable : le battement suivant réessaiera */
+          })
+      }, AUTONOMOUS_PULSE_MS)
+    }
     return () => {
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onVisible)
+      if (pulse !== undefined) window.clearInterval(pulse)
     }
-  }, [character, chatMeta, streaming, compacting])
+  }, [character, chatMeta, streaming, compacting, autonomousOn])
 
   // ── Mode visual novel ────────────────────────────────────────────────────
 
@@ -2463,6 +2509,7 @@ function AppInner() {
         <PromptInspector
           characterId={character.id}
           chatId={chatMeta.id}
+          autonomousEnabled={autonomousOn}
           initialTab={inspectorTab}
           summary={chatMeta.summary ?? ''}
           sceneNotes={chatMeta.sceneNotes ?? ''}

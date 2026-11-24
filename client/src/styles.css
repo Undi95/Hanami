@@ -3442,6 +3442,93 @@ a.credit-link {
   margin: 0;
 }
 
+/* Journal des tours autonomes (onglet « Tours » de l'inspecteur) : une entrée
+   par tour, la plus récente en haut. Même sobriété que les pensées et les
+   résultats d'outils du fil, dont elle reprend les blocs repliables. */
+.turn-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.turn-entry {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.turn-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+
+.turn-head time {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.turn-outcome {
+  color: var(--text);
+}
+
+/* Seul le tour où il a écrit prend la couleur d'accent : c'est le seul qui a
+   laissé quelque chose dans le fil. */
+.turn-spoke .turn-outcome {
+  color: var(--accent);
+}
+
+.turn-count {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.turn-error {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.turn-tool {
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+
+.turn-tool summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.turn-tool summary::marker {
+  color: var(--accent);
+}
+
+.turn-tool-body {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.turn-entry .thoughts {
+  margin: 6px 0 0;
+}
+
 /* Prompt du personnage dans l'inspecteur : l'allure du bloc de code qu'il
    remplace — c'est le même texte, à la même place — mais c'est un CHAMP, et ça
    doit se voir : poignée de redimensionnement et bordure d'accent au focus. */

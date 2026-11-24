@@ -7,15 +7,49 @@
 // à s'y méprendre aux deux onglets voisins, eux éditables).
 import { useEffect, useState } from 'react'
 import * as api from '../api'
-import { useI18n } from '../i18n'
+import { localeOf, serverErrorText, useI18n, type Key, type Lang } from '../i18n'
+import type { TurnLogEntry } from '../../../shared/types'
 import Dialog from './Dialog'
+import { toolTraceLabel } from './MessageList'
 
-/** Onglets de l'inspecteur — 'summary' n'existe que si la conversation est compactée. */
-type InspectorTab = 'system' | 'payload' | 'summary' | 'scene'
+/**
+ * Onglets de l'inspecteur — 'summary' n'existe que si la conversation est
+ * compactée, 'turns' que si les tours autonomes sont allumés ou ont déjà laissé
+ * quelque chose au journal de cette conversation.
+ */
+type InspectorTab = 'system' | 'payload' | 'summary' | 'scene' | 'turns'
+
+/** Relecture du journal des tours tant que son onglet est à l'écran. */
+const TURNS_REFRESH_MS = 5000
+
+const TURN_OUTCOME_KEY: Record<TurnLogEntry['outcome'], Key> = {
+  silent: 'turnSilent',
+  spoke: 'turnSpoke',
+  moved: 'turnMoved',
+  error: 'turnError',
+}
+
+/**
+ * La phrase d'une erreur du journal, dans la langue de l'interface. Un paramètre
+ * manquant (journal retouché à la main) ne laisse pas son « {nom} » à l'écran.
+ */
+function turnErrorText(entry: TurnLogEntry): string {
+  const text = serverErrorText(entry.error, entry.errorParams) || entry.error || ''
+  return text.replace(/\s*:?\s*\{[a-zA-Z]+\}/g, '').trim()
+}
+
+/** « 31/01 09:05 » — le jour compte : un journal couvre des jours d'absence. */
+function fmtStamp(ts: string, lang: Lang): string {
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return ts
+  return d.toLocaleString(localeOf(lang), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
 
 interface Props {
   characterId: string
   chatId: string
+  /** Tours autonomes allumés (Réglages) : l'onglet du journal est alors toujours offert. */
+  autonomousEnabled: boolean
   /** Onglet ouvert d'emblée (la liste des conversations amène directement aux notes de scène). */
   initialTab?: InspectorTab
   summary: string // résumé de compaction courant ('' = pas encore compacté)
@@ -31,6 +65,7 @@ interface Props {
 export default function PromptInspector({
   characterId,
   chatId,
+  autonomousEnabled,
   initialTab,
   summary,
   sceneNotes,
@@ -41,7 +76,7 @@ export default function PromptInspector({
   onSaveSceneNotes,
   onClose,
 }: Props) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const [data, setData] = useState<{
     systemText: string
     characterPrompt: string
@@ -101,6 +136,40 @@ export default function PromptInspector({
   useEffect(() => {
     if (tab === 'summary' && !summary) setTab('system')
   }, [tab, summary])
+
+  // Journal des tours autonomes. Lu à l'ouverture (c'est lui qui dit si l'onglet
+  // a quelque chose à montrer quand le mode est éteint), puis relu toutes les
+  // quelques secondes tant que l'onglet est à l'écran : un tour peut se jouer
+  // pendant qu'on regarde.
+  const [turns, setTurns] = useState<TurnLogEntry[] | null>(null)
+  const [turnsError, setTurnsError] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    const load = () => {
+      api
+        .getTurnLog(characterId, chatId)
+        .then((out) => {
+          if (!alive) return
+          setTurns(out.entries)
+          setTurnsError(null)
+        })
+        .catch((e) => {
+          if (alive) setTurnsError(api.errorMessage(e))
+        })
+    }
+    load()
+    const timer = tab === 'turns' ? window.setInterval(load, TURNS_REFRESH_MS) : undefined
+    return () => {
+      alive = false
+      if (timer !== undefined) window.clearInterval(timer)
+    }
+  }, [characterId, chatId, tab])
+  const turnsTab = autonomousEnabled || (turns !== null && turns.length > 0)
+
+  // Mode éteint et journal vide : l'onglet n'existe pas — même règle que le résumé.
+  useEffect(() => {
+    if (tab === 'turns' && !turnsTab && turns !== null) setTab('system')
+  }, [tab, turnsTab, turns])
 
   // Copier rend ce qui est À L'ÉCRAN : dans l'onglet système, le brouillon en
   // cours suivi des blocs ajoutés — pas la version enregistrée d'il y a dix secondes.
@@ -236,9 +305,57 @@ export default function PromptInspector({
             <button className={`tab${tab === 'scene' ? ' active' : ''}`} role="tab" aria-selected={tab === 'scene'} onClick={() => setTab('scene')}>
               {t('sceneTab')}
             </button>
+            {turnsTab && (
+              <button className={`tab${tab === 'turns' ? ' active' : ''}`} role="tab" aria-selected={tab === 'turns'} onClick={() => setTab('turns')}>
+                {t('turnsTab')}
+              </button>
+            )}
           </div>
 
-          {tab === 'summary' && summary ? (
+          {tab === 'turns' ? (
+            <>
+              <p className="hint">{t(autonomousEnabled ? 'turnsHintOn' : 'turnsHintOff')}</p>
+              {turnsError && <p className="msg-err">{turnsError}</p>}
+              {turns === null && !turnsError && <p className="hint">{t('loading')}</p>}
+              {turns !== null && turns.length === 0 && <p className="hint">{t('turnsEmpty')}</p>}
+              {turns !== null && turns.length > 0 && (
+                <ol className="turn-log">
+                  {/* Le plus récent en haut : c'est lui qu'on vient voir. */}
+                  {[...turns].reverse().map((entry, i) => (
+                    <li key={`${entry.ts}-${turns.length - i}`} className={`turn-entry turn-${entry.outcome}`}>
+                      <div className="turn-head">
+                        <time dateTime={entry.ts}>{fmtStamp(entry.ts, lang)}</time>
+                        <span className="turn-outcome">{t(TURN_OUTCOME_KEY[entry.outcome])}</span>
+                        {entry.count !== undefined && entry.count > 1 && (
+                          <span className="turn-count">
+                            {entry.since
+                              ? t('turnCountSince', { count: entry.count, since: fmtStamp(entry.since, lang) })
+                              : t('turnCount', { count: entry.count })}
+                          </span>
+                        )}
+                      </div>
+                      {entry.error && <p className="turn-error">{turnErrorText(entry)}</p>}
+                      {entry.tools?.map((tr, j) => (
+                        <details key={j} className="turn-tool">
+                          <summary>{toolTraceLabel(tr.name, tr.args, t)}</summary>
+                          <pre className="turn-tool-body">
+                            {tr.args}
+                            {tr.result !== undefined ? `\n→ ${tr.result}` : ''}
+                          </pre>
+                        </details>
+                      ))}
+                      {entry.thinking && (
+                        <details className="thoughts">
+                          <summary>{t('thoughts')}</summary>
+                          <div className="thoughts-body">{entry.thinking}</div>
+                        </details>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </>
+          ) : tab === 'summary' && summary ? (
             <>
               <p className="hint">{t('summaryHint')}</p>
               <textarea

@@ -645,6 +645,18 @@ const FR = {
   sceneHint:
     'Notes propres à cette conversation, ajoutées telles quelles au prompt système. Vide = rien n’est envoyé.',
   scenePlaceholder: 'Lieu, ambiance, contexte de la scène…',
+  turnsTab: 'Tours',
+  turnsHintOn:
+    'Ce que le personnage a fait pendant ses tours à lui dans cette conversation, le plus récent en haut. Il relit lui-même les derniers à chaque message (bloc « Your own turns » du prompt système) — sans les résultats de ses outils : ce qu’il veut retrouver, il doit le déposer en mémoire.',
+  turnsHintOff:
+    'Ce que le personnage a fait pendant ses tours à lui dans cette conversation, le plus récent en haut. Les tours autonomes sont éteints : ce journal n’est plus ajouté au prompt.',
+  turnsEmpty: 'Aucun tour ne s’est encore joué dans cette conversation.',
+  turnSilent: 'a laissé passer',
+  turnSpoke: 'a écrit un message',
+  turnMoved: 'abandonné : vous avez écrit',
+  turnError: 'en erreur',
+  turnCount: '{count} tours de suite',
+  turnCountSince: '{count} tours de suite, depuis {since}',
   characterPromptHint:
     'Le prompt du personnage — écrivez-le ici, le prochain message envoyé s’en sert déjà (c’est le même champ que « Prompt système » dans Personnages). Seules {{char}} et {{user}} sont remplacées à l’envoi : l’onglet « Payload complet » montre le texte réellement transmis.',
   injectedHint:
@@ -1366,6 +1378,18 @@ const EN: Record<Key, string> = {
   sceneHint:
     'Notes for this conversation only, added as-is to the system prompt. Empty = nothing is sent.',
   scenePlaceholder: 'Place, mood, context of the scene…',
+  turnsTab: 'Turns',
+  turnsHintOn:
+    'What the character did during their own turns in this conversation, most recent first. They re-read the latest ones with every message (the “Your own turns” block of the system prompt) — without their tools’ results: what they want to find again must be saved to memory.',
+  turnsHintOff:
+    'What the character did during their own turns in this conversation, most recent first. Autonomous turns are off: this log is no longer added to the prompt.',
+  turnsEmpty: 'No turn has been played in this conversation yet.',
+  turnSilent: 'let the turn pass',
+  turnSpoke: 'wrote a message',
+  turnMoved: 'dropped: you wrote',
+  turnError: 'failed',
+  turnCount: '{count} turns in a row',
+  turnCountSince: '{count} turns in a row, since {since}',
   characterPromptHint:
     'The character’s prompt — write it here, the very next message already uses it (same field as “System prompt” in Characters). Only {{char}} and {{user}} are replaced on send: the “Full payload” tab shows the text actually transmitted.',
   injectedHint:

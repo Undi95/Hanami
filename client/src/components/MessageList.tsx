@@ -325,6 +325,15 @@ function toolLabel(name: string, args: string, pending: boolean, t: (key: Key, v
   return t('toolCall', { name, args: summarizeArgs(args) }) + suffix
 }
 
+/**
+ * Le libellé d'une action TERMINÉE, tel que sa puce l'affiche dans le fil —
+ * exporté pour que le journal des tours (inspecteur) nomme les actions avec
+ * les mêmes mots.
+ */
+export function toolTraceLabel(name: string, args: string, t: (key: Key, vars?: Vars) => string): string {
+  return name === 'web_search' ? t('webSearchStatus', { query: summarizeArgs(args) }) : toolLabel(name, args, false, t)
+}
+
 // ── Rendu mémoïsé (hors recherche/édition) ─────────────────────────────────
 // Pendant le streaming, App.tsx re-render à chaque delta de texte (setFeed) :
 // SANS mémoïsation, chaque token relance renderMarkdown + reconstruit tout le

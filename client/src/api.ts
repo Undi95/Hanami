@@ -14,6 +14,7 @@ import type {
   RestorePreview,
   RestoreResult,
   Settings,
+  TurnLogEntry,
   UiPrefs,
   UiPrefsPatch,
 } from '../../shared/types'
@@ -377,6 +378,25 @@ export function forkChat(charId: string, chatId: string, title?: string): Promis
 
 export function deleteChat(charId: string, chatId: string): Promise<{ ok: true }> {
   return req('DELETE', `/api/characters/${encodeURIComponent(charId)}/chats/${encodeURIComponent(chatId)}`)
+}
+
+// ── Tours autonomes ──────────────────────────────────────────────────────────
+
+/**
+ * Journal des tours autonomes d'une conversation : ses dernières entrées, de la
+ * plus ancienne à la plus récente (liste vide si aucun tour ne s'y est joué).
+ */
+export function getTurnLog(charId: string, chatId: string): Promise<{ entries: TurnLogEntry[] }> {
+  return req('GET', `/api/characters/${encodeURIComponent(charId)}/chats/${encodeURIComponent(chatId)}/turns`)
+}
+
+/**
+ * Pouls d'une conversation : la date de son fil et celle de son journal des
+ * tours (0 = pas de journal). Deux nombres — de quoi savoir si quelque chose a
+ * changé sans rien retélécharger.
+ */
+export function getChatPulse(charId: string, chatId: string): Promise<{ chat: number; turns: number }> {
+  return req('GET', `/api/characters/${encodeURIComponent(charId)}/chats/${encodeURIComponent(chatId)}/pulse`)
 }
 
 // ── Statistiques ───────────────────────────────────────────────────────────
