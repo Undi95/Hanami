@@ -99,6 +99,8 @@ interface FormState {
   spontaneousEnabled: boolean
   spontaneousStartHour: string
   spontaneousEndHour: string
+  autonomousEnabled: boolean
+  autonomousPaceSeconds: string
   // Collection des personas « Vous » : copie LOCALE éditée ici, posée en bloc à
   // l'enregistrement (le serveur reste la source de vérité, il normalise).
   userPersonas: UserPersona[]
@@ -149,6 +151,8 @@ function toForm(s: Settings): FormState {
     spontaneousEnabled: s.spontaneousEnabled,
     spontaneousStartHour: String(s.spontaneousStartHour),
     spontaneousEndHour: String(s.spontaneousEndHour),
+    autonomousEnabled: s.autonomousEnabled,
+    autonomousPaceSeconds: String(s.autonomousPaceSeconds),
     // Personas : copie locale (le formulaire réécrit des entrées, il ne doit
     // pas muter l'objet des réglages en état).
     userPersonas: (s.userPersonas ?? []).map((p) => ({ ...p })),
@@ -205,6 +209,8 @@ function fromForm(
     spontaneousEnabled: f.spontaneousEnabled,
     spontaneousStartHour: Math.round(num(f.spontaneousStartHour, base.spontaneousStartHour)),
     spontaneousEndHour: Math.round(num(f.spontaneousEndHour, base.spontaneousEndHour)),
+    autonomousEnabled: f.autonomousEnabled,
+    autonomousPaceSeconds: Math.round(num(f.autonomousPaceSeconds, base.autonomousPaceSeconds)),
     // Posées en bloc : le serveur normalise la paire (ids, bornes, max,
     // cohérence du défaut) et ne fait rien d'autre que les conserver.
     userPersonas: f.userPersonas,
@@ -1268,6 +1274,31 @@ export default function SettingsDialog({
                 />
               </div>
             </div>
+          )}
+
+          <h3 className="section-title">{t('sectionAutonomous')}</h3>
+          <Toggle
+            label={t('autonomousEnabled')}
+            sub={t('autonomousEnabledSub')}
+            checked={form.autonomousEnabled}
+            onChange={(v) => set('autonomousEnabled', v)}
+          />
+          {form.autonomousEnabled && (
+            <>
+              <div className="field">
+                <label htmlFor="set-auto-pace">{t('autonomousPace')}</label>
+                <input
+                  id="set-auto-pace"
+                  type="number"
+                  step="1"
+                  min="10"
+                  max="86400"
+                  value={form.autonomousPaceSeconds}
+                  onChange={(e) => set('autonomousPaceSeconds', e.target.value)}
+                />
+              </div>
+              <span className="hint">{t('autonomousPaceHint')}</span>
+            </>
           )}
 
           <h3 className="section-title">{t('sectionMemoryTools')}</h3>

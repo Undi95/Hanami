@@ -444,6 +444,13 @@ const FR = {
     'Pendant vos absences : un petit mot après quelques heures, puis de plus en plus espacé, puis un dernier message compréhensif — et le silence jusqu’à votre retour. Jamais en dehors de la plage horaire.',
   spontaneousStart: 'Pas avant (heure)',
   spontaneousEnd: 'Pas après (heure)',
+  sectionAutonomous: 'Tours autonomes',
+  autonomousEnabled: 'Le personnage a des tours à lui',
+  autonomousEnabledSub:
+    'Sur un minuteur, sans attendre un message : il peut agir avec ses outils, vous écrire, ou laisser passer son tour. Il s’arrête après trois messages restés sans réponse, et s’efface dès que vous écrivez. Remplace les messages spontanés tant qu’il est allumé.',
+  autonomousPace: 'Secondes entre deux tours',
+  autonomousPaceHint:
+    'De 10 à 86 400 (un jour). Compté de la fin d’un tour au début du suivant ; un changement prend effet en quelques secondes. Hors de ces bornes, la valeur revient à 300.',
   sectionMemoryTools: 'Mémoire & outils',
   memoryToggle: 'Mémoire',
   memoryToggleSub: 'Injecte le bloc mémoire dans le contexte et expose les outils mémoire.',
@@ -1170,6 +1177,13 @@ const EN: Record<Key, string> = {
     'While you are away: a little message after a few hours, then more and more spaced out, then a final note of understanding — and silence until you return. Never outside the time window.',
   spontaneousStart: 'Not before (hour)',
   spontaneousEnd: 'Not after (hour)',
+  sectionAutonomous: 'Autonomous turns',
+  autonomousEnabled: 'The character has turns of their own',
+  autonomousEnabledSub:
+    'On a timer, without waiting for a message: they can act with their tools, write to you, or let the turn pass. They stop after three messages left unanswered, and step aside as soon as you write. Replaces spontaneous messages while it is on.',
+  autonomousPace: 'Seconds between two turns',
+  autonomousPaceHint:
+    'From 10 to 86,400 (one day). Counted from the end of a turn to the start of the next; a change takes effect within a few seconds. Outside these bounds, the value goes back to 300.',
   sectionMemoryTools: 'Memory & tools',
   memoryToggle: 'Memory',
   memoryToggleSub: 'Injects the memory block into the context and exposes the memory tools.',
