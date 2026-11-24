@@ -14,7 +14,9 @@
 //  - un tour passé en silence ne laisse AUCUNE trace dans la conversation —
 //    seuls les effets de ses outils restent (mémoire, fichiers). Le personnage
 //    ne se souvient donc pas de ses tours silencieux : limite CONNUE de ce
-//    premier pas, à lever par un journal d'activité.
+//    premier pas, à lever par un journal d'activité ;
+//  - en attendant ce journal, chaque tour laisse UNE ligne dans la console du
+//    serveur : son issue et le nombre d'outils appelés, jamais de contenu.
 //
 // AUCUN état supplémentaire sur disque : comme pour les messages spontanés,
 // tout se déduit du .jsonl (les messages du moteur portent `autonomous: true`).
@@ -65,6 +67,8 @@ export type TurnOutcome =
 
 // Verrou : un seul tour à la fois (un tour peut durer plus longtemps que le minuteur).
 let running = false
+// Outils appelés par le dernier tour JOUÉ : pour sa ligne de console, rien d'autre.
+let lastToolCalls = 0
 
 /** Le minuteur est-il écoulé depuis la fin du tour précédent ? */
 export function isDue(nowMs: number, lastEndMs: number, paceSeconds: number): boolean {
@@ -94,6 +98,47 @@ export function unansweredCount(messages: ChatMessage[]): number {
     n++
   }
   return n
+}
+
+// Les issues où le modèle a réellement été appelé.
+const PLAYED: ReadonlySet<TurnOutcome> = new Set<TurnOutcome>(['silent', 'spoke', 'moved', 'error'])
+
+/**
+ * Faut-il noter cette issue en console ? Un tour JOUÉ, toujours. Un tour qui
+ * ne s'est pas joué (une réponse est due, garde atteinte…), seulement quand la
+ * raison CHANGE : un minuteur court ne doit pas répéter la même ligne sans fin.
+ */
+export function shouldLog(outcome: TurnOutcome, previous: TurnOutcome | null): boolean {
+  if (outcome === 'off' || outcome === 'busy') return false
+  return PLAYED.has(outcome) || outcome !== previous
+}
+
+/**
+ * La ligne de console d'un tour : son issue et le nombre d'outils appelés.
+ * JAMAIS de contenu — ni ce que le personnage a écrit, ni ce qu'il a cherché.
+ */
+export function turnLine(outcome: TurnOutcome, toolCalls: number): string {
+  const tools = toolCalls > 0 ? ` (${toolCalls} appel${toolCalls > 1 ? 's' : ''} d'outil)` : ''
+  switch (outcome) {
+    case 'silent':
+      return `tour passé en silence${tools}`
+    case 'spoke':
+      return `tour joué : un message écrit${tools}`
+    case 'moved':
+      return `tour abandonné : la conversation a bougé${tools}`
+    case 'error':
+      return `tour en erreur${tools}`
+    case 'waiting-user':
+      return "pas de tour : une réponse est due à l'utilisateur"
+    case 'capped':
+      return `pas de tour : ${MAX_UNANSWERED} messages restés sans réponse`
+    case 'empty':
+      return 'pas de tour : la conversation active est vide'
+    case 'no-target':
+      return 'pas de tour : aucune conversation active'
+    default:
+      return '' // 'off' et 'busy' ne se notent jamais
+  }
 }
 
 /**
@@ -136,6 +181,7 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
     }
   }, WATCH_MS)
   watch.unref()
+  const traces: ToolTrace[] = []
   try {
     // Réglages EFFECTIFS du personnage (modèle, température… de sa carte), et
     // bloc temporel FORCÉ : un tour à soi sans l'heure n'aurait pas de sens.
@@ -143,7 +189,6 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
     const { payload } = buildPayload(characterId, chatId, { ...effective, timeAwareness: true }, TURN_DIRECTIVE)
     const tools = payload.tools
     const messages = [...payload.messages]
-    const traces: ToolTrace[] = []
     const { last: result } = await runToolLoop(
       characterId,
       effective,
@@ -192,33 +237,66 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
   } finally {
     clearInterval(watch)
     clearTimeout(timer)
+    lastToolCalls = traces.length
     running = false
   }
 }
 
+/** Ce que le minuteur retient d'un battement à l'autre. */
+export interface PaceState {
+  /** Fin du tour précédent (ou moment où le réglage a été allumé), en ms. */
+  lastEnd: number
+  wasEnabled: boolean
+  /** Issue du tour précédent — pour ne pas répéter la même ligne de console. */
+  previous: TurnOutcome | null
+}
+
+export function newPaceState(nowMs: number): PaceState {
+  return { lastEnd: nowMs, wasEnabled: false, previous: null }
+}
+
+/**
+ * Un battement du minuteur : relit les réglages, et lance un tour si le
+ * minuteur est écoulé. Rend la promesse du tour lancé, ou null si aucun tour
+ * ne part. Séparé de setInterval, avec l'horloge en paramètre, pour être
+ * vérifiable sans attendre (tests).
+ */
+export function beat(state: PaceState, now: () => number = Date.now): Promise<TurnOutcome> | null {
+  const settings = loadSettings()
+  if (!settings.autonomousEnabled) {
+    if (state.wasEnabled) console.log('[autonomous] éteint')
+    state.wasEnabled = false
+    return null
+  }
+  if (!state.wasEnabled) {
+    // Tout juste allumé : le premier tour vient UN minuteur plus tard, pas tout de suite.
+    state.wasEnabled = true
+    state.lastEnd = now()
+    state.previous = null
+    console.log(`[autonomous] allumé : un tour toutes les ${settings.autonomousPaceSeconds} s`)
+    return null
+  }
+  // Le réglage est relu à chaque battement : changer le minuteur prend effet
+  // au battement suivant, sans rien relancer.
+  if (running || !isDue(now(), state.lastEnd, settings.autonomousPaceSeconds)) return null
+  return runAutonomousTurn()
+    .then((outcome) => {
+      if (shouldLog(outcome, state.previous)) console.log('[autonomous] ' + turnLine(outcome, lastToolCalls))
+      state.previous = outcome
+      return outcome
+    })
+    .finally(() => {
+      // Le minuteur court de la FIN d'un tour au début du suivant.
+      state.lastEnd = now()
+    })
+}
+
 /** Démarre le minuteur (appelé après app.listen). */
 export function startAutonomous(): void {
-  let lastEnd = Date.now()
-  let wasEnabled = false
+  const state = newPaceState(Date.now())
   const poll = setInterval(() => {
-    const settings = loadSettings()
-    if (!settings.autonomousEnabled) {
-      wasEnabled = false
-      return
-    }
-    if (!wasEnabled) {
-      // Tout juste allumé : le premier tour vient UN minuteur plus tard, pas tout de suite.
-      wasEnabled = true
-      lastEnd = Date.now()
-      return
-    }
-    if (running || !isDue(Date.now(), lastEnd, settings.autonomousPaceSeconds)) return
-    // Le minuteur court de la FIN d'un tour au début du suivant.
-    runAutonomousTurn()
-      .catch((e) => console.warn('[autonomous]', e))
-      .finally(() => {
-        lastEnd = Date.now()
-      })
+    // runAutonomousTurn ne lève jamais ; ce filet ne sert que si cela changeait.
+    beat(state)?.catch((e) => console.warn('[autonomous]', e))
   }, POLL_MS)
   // Le serveur reste vivant par son socket : ce minuteur ne doit pas, à lui
   // seul, retenir le processus à l'arrêt.

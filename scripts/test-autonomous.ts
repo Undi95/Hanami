@@ -8,8 +8,10 @@
 // Ce qui est prouvé ici : un tour ne se joue que quand rien n'attend ; ce qu'il
 // écrit devient un message marqué `autonomous` ; le silence ne laisse rien ; les
 // outils sont joués et tracés ; la garde anti-flot ; l'abandon quand
-// l'utilisateur écrit pendant le tour ; le minuteur et ses bornes ; et que les
-// messages spontanés se taisent quand les tours autonomes sont allumés.
+// l'utilisateur écrit pendant le tour ; le minuteur, ses bornes et sa boucle
+// (horloge injectée : rien n'attend pour de vrai) ; la ligne de console de
+// chaque tour, sans contenu ; et que les messages spontanés se taisent quand
+// les tours autonomes sont allumés.
 import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -273,6 +275,167 @@ async function main(): Promise<void> {
       saveSettings({ autonomousPaceSeconds: valeur })
       equal(loadSettings().autonomousPaceSeconds, attendu, `minuteur pour ${valeur}`)
     }
+  })
+
+  // La boucle elle-même : `beat` est ce que setInterval appelle toutes les cinq
+  // secondes. L'horloge est une variable d'ici : aucun essai n'attend un minuteur.
+
+  await check("la boucle : aucun tour à l'allumage, puis un tour à chaque minuteur écoulé, jamais avant", async () => {
+    saveSettings({ autonomousEnabled: true, autonomousPaceSeconds: 60 })
+    let t = 5_000_000
+    const state = auto.newPaceState(0)
+    const avant = requests.length
+    equal(auto.beat(state, () => t), null, "battement d'allumage")
+    equal(state.lastEnd, t, "le minuteur part de l'allumage")
+    t += 59_999
+    equal(auto.beat(state, () => t), null, 'minuteur pas encore écoulé')
+    equal(requests.length, avant, 'appels au modèle avant le minuteur')
+    t += 1
+    const tour = auto.beat(state, () => t)
+    assert(tour !== null, 'le minuteur écoulé doit lancer un tour')
+    equal(await tour, 'silent', 'issue du tour')
+    equal(requests.length, avant + 1, 'appels au modèle')
+    equal(auto.beat(state, () => t), null, 'pas de second tour sans un minuteur entier')
+    t += 60_000
+    equal(await auto.beat(state, () => t), 'silent', 'tour suivant')
+    equal(requests.length, avant + 2, 'appels au modèle')
+  })
+
+  await check('la boucle : changer le minuteur dans les réglages prend effet au battement suivant ; éteindre arrête, rallumer repart de zéro', async () => {
+    let t = 6_000_000
+    const state = auto.newPaceState(0)
+    saveSettings({ autonomousEnabled: true, autonomousPaceSeconds: 3600 })
+    equal(auto.beat(state, () => t), null, "battement d'allumage")
+    t += 10_000
+    equal(auto.beat(state, () => t), null, 'une heure demandée : dix secondes ne suffisent pas')
+    saveSettings({ autonomousPaceSeconds: 10 })
+    equal(await auto.beat(state, () => t), 'silent', 'dix secondes demandées : le tour part')
+    saveSettings({ autonomousEnabled: false })
+    t += 3_600_000
+    const avant = requests.length
+    equal(auto.beat(state, () => t), null, 'éteint : aucun tour')
+    saveSettings({ autonomousEnabled: true })
+    equal(auto.beat(state, () => t), null, 'rallumé : pas de tour tout de suite')
+    t += 9_999
+    equal(auto.beat(state, () => t), null, 'rallumé : pas avant un minuteur entier')
+    equal(requests.length, avant, 'appels au modèle')
+    t += 1
+    equal(await auto.beat(state, () => t), 'silent', 'rallumé : un tour après un minuteur entier')
+  })
+
+  await check("la boucle : pendant un tour long aucun autre ne part, et le minuteur repart de sa FIN", async () => {
+    saveSettings({ autonomousEnabled: true, autonomousPaceSeconds: 60 })
+    let t = 7_000_000
+    const state = auto.newPaceState(0)
+    equal(auto.beat(state, () => t), null, "battement d'allumage")
+    t += 60_000
+    script.push({ content: '(silence)', delayMs: 600 })
+    const avant = requests.length
+    const tour = auto.beat(state, () => t)
+    assert(tour !== null, 'le tour doit partir')
+    await sleep(200)
+    t += 500_000 // le tour dure : l'horloge dépasse largement un minuteur
+    equal(auto.beat(state, () => t), null, 'un tour est en cours : aucun autre ne part')
+    equal(await tour, 'silent', 'issue')
+    equal(requests.length, avant + 1, 'appels au modèle')
+    equal(state.lastEnd, t, 'le minuteur repart de la fin du tour')
+    t += 59_999
+    equal(auto.beat(state, () => t), null, 'pas avant un minuteur entier après la fin')
+    t += 1
+    equal(await auto.beat(state, () => t), 'silent', 'un minuteur entier après la fin')
+  })
+
+  console.log('\nConsole')
+
+  // Les lignes « [autonomous] … » écrites pendant fn, sans leur préfixe.
+  const captured = async (fn: () => Promise<void>): Promise<string[]> => {
+    const lines: string[] = []
+    const original = console.log
+    console.log = (...args: unknown[]): void => {
+      const line = args.map(String).join(' ')
+      if (line.startsWith('[autonomous] ')) lines.push(line.slice('[autonomous] '.length))
+      else original(...args)
+    }
+    try {
+      await fn()
+    } finally {
+      console.log = original
+    }
+    return lines
+  }
+
+  await check('console : chaque tour joué laisse sa ligne, une attente ne se répète pas, et jamais de contenu', async () => {
+    saveSettings({ autonomousEnabled: true, autonomousPaceSeconds: 10 })
+    let t = 8_000_000
+    const state = auto.newPaceState(0)
+    const lignes = await captured(async () => {
+      auto.beat(state, () => t) // allumage
+      script.push({ toolCalls: [{ name: 'memory_save', arguments: JSON.stringify({ name: 'secret.md', content: 'TEXTE-A-NE-PAS-MONTRER' }) }] })
+      script.push({ content: '(silence)' })
+      t += 10_000
+      await auto.beat(state, () => t) // silence, un outil
+      t += 10_000
+      await auto.beat(state, () => t) // silence, sans outil
+      say('user', 'Je reviens.')
+      for (let i = 0; i < 3; i++) {
+        t += 10_000
+        await auto.beat(state, () => t) // trois battements où une réponse est due
+      }
+      say('assistant', 'Me revoilà.')
+      script.push({ content: 'MESSAGE-A-NE-PAS-MONTRER' })
+      t += 10_000
+      await auto.beat(state, () => t) // il écrit
+      saveSettings({ autonomousEnabled: false })
+      auto.beat(state, () => t) // extinction
+      auto.beat(state, () => t) // toujours éteint : rien de plus
+    })
+    saveSettings({ autonomousEnabled: true })
+    equal(lignes.length, 6, 'lignes de console ' + JSON.stringify(lignes))
+    assert(lignes[0].startsWith('allumé') && lignes[0].includes('10 s'), "ligne d'allumage, avec le minuteur")
+    assert(lignes[1].includes('silence') && lignes[1].includes("1 appel d'outil"), 'tour silencieux, son outil compté')
+    assert(lignes[2].includes('silence') && !lignes[2].includes('outil'), 'tour silencieux sans outil')
+    assert(lignes[3].includes('réponse est due'), 'attente notée une seule fois')
+    assert(lignes[4].includes('message écrit'), 'message noté')
+    equal(lignes[5], 'éteint', "ligne d'extinction")
+    assert(!lignes.join('\n').includes('NE-PAS-MONTRER'), 'aucun contenu ne doit paraître en console')
+    equal(storage.readMemoryFile(character.id, 'secret.md')?.trim(), 'TEXTE-A-NE-PAS-MONTRER', "l'outil du tour silencieux a bien été joué")
+  })
+
+  await check("console : après un rallumage, la raison d'une attente est redite", async () => {
+    saveSettings({ autonomousEnabled: true, autonomousPaceSeconds: 10 })
+    let t = 9_000_000
+    const state = auto.newPaceState(0)
+    say('user', 'Encore moi.')
+    const lignes = await captured(async () => {
+      auto.beat(state, () => t) // allumage
+      t += 10_000
+      await auto.beat(state, () => t) // une réponse est due
+      saveSettings({ autonomousEnabled: false })
+      auto.beat(state, () => t) // extinction
+      saveSettings({ autonomousEnabled: true })
+      auto.beat(state, () => t) // rallumage
+      t += 10_000
+      await auto.beat(state, () => t) // une réponse est toujours due
+    })
+    say('assistant', 'Oui.')
+    equal(lignes.filter((l) => l.includes('réponse est due')).length, 2, 'attente redite après le rallumage ' + JSON.stringify(lignes))
+  })
+
+  await check('console : les règles de la ligne', () => {
+    for (const joue of ['silent', 'spoke', 'moved', 'error'] as const) {
+      assert(auto.shouldLog(joue, joue), `un tour joué se note même s'il se répète (${joue})`)
+      assert(auto.turnLine(joue, 0) !== '', `ligne pour ${joue}`)
+    }
+    for (const attente of ['waiting-user', 'capped', 'empty', 'no-target'] as const) {
+      assert(auto.shouldLog(attente, null) && auto.shouldLog(attente, 'silent'), `une attente se note quand elle commence (${attente})`)
+      assert(!auto.shouldLog(attente, attente), `une attente ne se répète pas (${attente})`)
+      assert(auto.turnLine(attente, 0).startsWith('pas de tour'), `ligne pour ${attente}`)
+    }
+    for (const jamais of ['off', 'busy'] as const) {
+      assert(!auto.shouldLog(jamais, null), `${jamais} ne se note jamais`)
+    }
+    assert(auto.turnLine('silent', 2).includes("2 appels d'outil"), 'pluriel')
+    assert(auto.turnLine('capped', 0).includes(String(auto.MAX_UNANSWERED)), 'la garde dit son nombre')
   })
 
   console.log('\nMessages spontanés')
