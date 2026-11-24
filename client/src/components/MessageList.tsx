@@ -293,11 +293,18 @@ function parseSearchResults(result: string): SearchResultEntry[] {
 function toolLabel(name: string, args: string, pending: boolean, t: (key: Key, vars?: Vars) => string): string {
   const suffix = pending ? '…' : ''
   let target = ''
+  let url = ''
   try {
     const a = JSON.parse(args) as Record<string, unknown>
     target = typeof a.path === 'string' ? a.path : typeof a.name === 'string' ? a.name : ''
+    url = typeof a.url === 'string' ? a.url : ''
   } catch {
     /* args non JSON : affichage technique */
+  }
+  if (name === 'web_open' && url) {
+    // L'adresse sans son schéma : c'est le site qu'on lit sur une puce, pas « https:// ».
+    const shown = url.replace(/^https?:\/\//i, '').replace(/\/$/, '')
+    return t('toolTraceWebOpen', { target: shown.length > 48 ? shown.slice(0, 45) + '…' : shown }) + suffix
   }
   if (target) {
     switch (name) {

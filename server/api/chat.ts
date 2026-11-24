@@ -34,6 +34,7 @@ import {
   executeWebSearchTool,
   webSearchToolDefs,
 } from '../tools/webSearchTools'
+import { WEB_OPEN_TOOL_NAMES, executeWebOpenTool, webOpenToolDefs } from '../tools/webPageTools'
 import { firstEmotionTag } from '../../shared/emotions'
 import { CodedError, ErrorCodes, type ErrorCode, type ErrorParams } from '../../shared/errorCodes'
 import { httpError, sendJsonError } from '../lib/errors'
@@ -424,6 +425,7 @@ export function buildPayload(
           ...(settings.memoryEnabled ? [...memoryToolDefs, ...chatToolDefs] : []),
           ...(settings.fileToolsEnabled ? fileToolDefs : []),
           ...(settings.webSearchEnabled ? webSearchToolDefs : []),
+          ...(settings.webOpenEnabled ? webOpenToolDefs : []),
         ]
   const payload: BackendPayload = {
     messages,
@@ -650,6 +652,10 @@ async function executeTool(
   if ((WEB_SEARCH_TOOL_NAMES as readonly string[]).includes(name)) {
     if (!settings.webSearchEnabled) throw new Error('web search is disabled in settings')
     return executeWebSearchTool(settings, args)
+  }
+  if ((WEB_OPEN_TOOL_NAMES as readonly string[]).includes(name)) {
+    if (!settings.webOpenEnabled) throw new Error('web page reading is disabled in settings')
+    return executeWebOpenTool(args)
   }
   throw new Error(`unknown tool: ${name}`)
 }

@@ -69,6 +69,8 @@ export const DEFAULT_SETTINGS: Settings = {
   webSearchEngine: 'duckduckgo',
   webSearchUrl: '',
   tavilyApiKey: '',
+  // Opt-in : par défaut le personnage n'ouvre aucune page Web.
+  webOpenEnabled: false,
 }
 
 // Bornes du minuteur des tours autonomes (secondes). Le plancher protège le

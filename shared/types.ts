@@ -89,6 +89,10 @@ export interface Settings {
   webSearchEngine: WebSearchEngine // moteur utilisé par web_search
   webSearchUrl: string // base d'une instance SearXNG (ex: http://localhost:8080) — utilisée si webSearchEngine === 'searxng'
   tavilyApiKey: string // clé API Tavily — utilisée si webSearchEngine === 'tavily' ; jamais renvoyée en clair (cf. api/settings.ts)
+  // Lecture de pages Web : expose l'outil web_open (server/tools/webPageTools.ts).
+  // Réglage À PART de la recherche — ouvrir une adresse choisie par le modèle est
+  // une permission plus large que lire des extraits de résultats.
+  webOpenEnabled: boolean
 }
 
 // Comment s'ouvre une conversation vide : 'written' = une des salutations écrites

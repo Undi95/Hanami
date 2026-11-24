@@ -90,6 +90,7 @@ interface FormState {
   webSearchEnabled: boolean
   webSearchEngine: WebSearchEngine
   webSearchUrl: string
+  webOpenEnabled: boolean
   tavilyApiKey: string
   password: string
   contextSize: string
@@ -140,6 +141,7 @@ function toForm(s: Settings): FormState {
     webSearchEnabled: s.webSearchEnabled === true,
     webSearchEngine: s.webSearchEngine ?? 'duckduckgo',
     webSearchUrl: s.webSearchUrl ?? '',
+    webOpenEnabled: s.webOpenEnabled === true,
     // Secret jamais pré-rempli (le serveur le renvoie vide) : '' = inchangé.
     tavilyApiKey: '',
     password: '',
@@ -200,6 +202,7 @@ function fromForm(
     webSearchEnabled: f.webSearchEnabled,
     webSearchEngine: f.webSearchEngine,
     webSearchUrl: f.webSearchUrl.trim(),
+    webOpenEnabled: f.webOpenEnabled,
     tavilyApiKey: clearTavilyKey ? api.CLEAR_SECRET : f.tavilyApiKey,
     password: clearPassword ? api.CLEAR_SECRET : f.password,
     contextSize: Math.round(num(f.contextSize, base.contextSize)),
@@ -1424,6 +1427,14 @@ export default function SettingsDialog({
               )}
             </>
           )}
+          {/* À part de la recherche : ouvrir une adresse choisie par le modèle est
+              une permission plus large que lire des extraits de résultats. */}
+          <Toggle
+            label={t('webOpenToggle')}
+            sub={t('webOpenToggleSub')}
+            checked={form.webOpenEnabled}
+            onChange={(v) => set('webOpenEnabled', v)}
+          />
 
           <h3 className="section-title">{t('sectionAccess')}</h3>
           <div className="field">
