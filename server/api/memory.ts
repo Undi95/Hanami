@@ -20,6 +20,7 @@ import {
   type CompressionCacheEntry,
 } from '../lib/storage'
 import { streamChatCompletion } from '../llm/openai'
+import { yieldToUser } from '../lib/turnGate'
 import { CodedError, ErrorCodes } from '../../shared/errorCodes'
 import { httpError, sendJsonError } from '../lib/errors'
 import { denseEncode, verifyFacts } from '../../shared/compression'
@@ -312,6 +313,8 @@ memoryRouter.post('/api/characters/:id/memory/tidy', async (req, res) => {
   }
   tidyingInFlight.add(charId)
   try {
+    // Demandé par l'utilisateur : passe avant un tour autonome en cours.
+    await yieldToUser()
     res.json(await tidyMemory(charId))
   } catch (e) {
     // Fenêtre trop petite / backend down / JSON invalide → 500, RIEN n'a été écrit.
@@ -442,6 +445,8 @@ memoryRouter.post('/api/characters/:id/memory/compress', async (req, res) => {
   }
   compressingInFlight.add(charId)
   try {
+    // Demandé par l'utilisateur : passe avant un tour autonome en cours.
+    await yieldToUser()
     res.json(await compressMemory(charId))
   } catch (e) {
     // LLM injoignable / timeout → 500, AUCUN cache écrit (buildPayload retombe sur

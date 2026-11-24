@@ -12,8 +12,9 @@
 // (horloge injectée : rien n'attend pour de vrai) ; la ligne de console de
 // chaque tour, sans contenu ; le journal des tours (ce qui s'y écrit, ce qui s'y
 // fond, ses plafonds, sa lecture par l'API) et le bloc qui le rend au
-// personnage ; et que les messages spontanés se taisent quand les tours
-// autonomes sont allumés.
+// personnage ; le passage de main à l'utilisateur (chat, compaction, mémoire) ;
+// et que les messages spontanés se taisent quand les tours autonomes sont
+// allumés.
 import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -75,6 +76,7 @@ const backend = http.createServer((req, res) => {
       if (res.destroyed) return
       res.writeHead(200, { 'Content-Type': 'text/event-stream' })
       if (step.toolCalls) {
+        if (step.thinking) res.write(sse({ reasoning_content: step.thinking }, null))
         res.write(
           sse(
             {
@@ -689,6 +691,135 @@ async function main(): Promise<void> {
     }
   })
 
+  await check('le raisonnement de TOUTES les étapes du tour est gardé, pas seulement celui de la dernière', async () => {
+    const c = storage.createChat(character.id, 'etapes')
+    setActive(c.id)
+    storage.appendChatMessage(character.id, c.id, { role: 'assistant', content: 'Début.', ts: new Date().toISOString() })
+    script.push({ thinking: 'Je vais noter.', toolCalls: [{ name: 'memory_save', arguments: JSON.stringify({ name: 'etapes.md', content: 'Un.' }) }] })
+    script.push({ thinking: 'Noté, je me tais.', content: '(silence)' })
+    equal(await auto.runAutonomousTurn(), 'silent', 'tour silencieux')
+    equal(storage.readTurnLog(character.id, c.id)[0].thinking, 'Je vais noter.\n\nNoté, je me tais.', 'raisonnement au journal')
+    script.push({ thinking: 'Je relis.', toolCalls: [{ name: 'memory_read', arguments: JSON.stringify({ name: 'etapes.md' }) }] })
+    script.push({ thinking: 'Je le lui dis.', content: 'Tout est noté.' })
+    equal(await auto.runAutonomousTurn(), 'spoke', 'tour avec message')
+    const m = storage.readChat(character.id, c.id).messages
+    equal(m[m.length - 1].thinking, 'Je relis.\n\nJe le lui dis.', 'raisonnement sur le message')
+  })
+
+  console.log("\nPassage de main à l'utilisateur")
+
+  const { chatRouter } = await import('../server/api/chat')
+  const { memoryRouter } = await import('../server/api/memory')
+  const gate = await import('../server/lib/turnGate')
+  const appli = express()
+  appli.use(express.json())
+  appli.use(chatRouter)
+  appli.use(memoryRouter)
+  const serveur = http.createServer(appli)
+  await new Promise<void>((r) => serveur.listen(0, '127.0.0.1', r))
+  const api = `http://127.0.0.1:${(serveur.address() as AddressInfo).port}`
+  const poster = async (url: string, body: unknown): Promise<number> => {
+    const res = await fetch(api + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    await res.text() // le flux (ou le JSON) est lu jusqu'au bout
+    return res.status
+  }
+  // Rien n'attend sans fin : une main jamais rendue doit faire échouer l'essai, pas le bloquer.
+  const avecDelai = <T>(p: Promise<T>, ms: number, quoi: string): Promise<T> =>
+    Promise.race([p, sleep(ms).then(() => Promise.reject(new Error(`${quoi} : rien après ${ms} ms`)))])
+  // Un tour autonome LENT (sa réponse finale met quatre secondes), déjà passé par un outil.
+  const tourLent = async (chatId: string): Promise<{ tour: Promise<string>; debut: number }> => {
+    setActive(chatId)
+    script.push({ thinking: 'Je prends une note.', toolCalls: [{ name: 'memory_save', arguments: JSON.stringify({ name: `main-${Date.now()}.md`, content: 'Note.' }) }] })
+    script.push({ content: 'Trop tard.', delayMs: 4000 })
+    const debut = Date.now()
+    const tour = auto.runAutonomousTurn()
+    await sleep(300) // l'outil est joué, la réponse finale est en cours
+    return { tour, debut }
+  }
+
+  await check("un message de l'utilisateur abandonne le tour TOUT DE SUITE, et sa réponse voit ce que le tour avait fait", async () => {
+    const c = storage.createChat(character.id, 'main')
+    storage.appendChatMessage(character.id, c.id, { role: 'assistant', content: 'Début.', ts: new Date().toISOString() })
+    const { tour, debut } = await tourLent(c.id)
+    script.push({ content: '[happy] Bien sûr.' })
+    const statut = await avecDelai(poster('/api/chat', { characterId: character.id, chatId: c.id, content: 'Je passe avant.' }), 6000, 'réponse du chat')
+    equal(statut, 200, 'statut du chat')
+    equal(await avecDelai(tour, 6000, 'fin du tour'), 'moved', 'issue du tour')
+    // La surveillance du fichier ne passe qu'à la seconde : avant cela, seul le passage de main a pu l'arrêter.
+    assert(Date.now() - debut < 2500, 'le tour ne doit pas aller au bout de sa réponse')
+    const t = storage.readTurnLog(character.id, c.id)
+    equal(t.length, 1, 'entrées au journal')
+    equal(t[0].outcome, 'moved', 'tour abandonné noté')
+    equal(t[0].tools?.length, 1, 'son outil est noté')
+    equal(t[0].thinking, 'Je prends une note.', 'ce qu\'il avait pensé est gardé')
+    const reponse = requests.find((r) => r.messages[r.messages.length - 1].content === 'Je passe avant.')
+    assert(reponse, 'la requête de la réponse doit être partie')
+    const systeme = String(reponse.messages[0].content)
+    assert(systeme.includes('the turn was dropped because the user wrote') && systeme.includes('memory_save'), 'la réponse doit voir au journal le tour abandonné')
+    const m = storage.readChat(character.id, c.id).messages
+    equal(m.map((x) => x.content).join(' | '), 'Début. | Je passe avant. | [happy] Bien sûr.', 'fil : aucun message du tour abandonné')
+  })
+
+  await check("mesuré : l'abandon vient du passage de main, pas de la surveillance à la seconde", async () => {
+    const c = storage.createChat(character.id, 'main-vite')
+    storage.appendChatMessage(character.id, c.id, { role: 'assistant', content: 'Début.', ts: new Date().toISOString() })
+    const { tour, debut } = await tourLent(c.id)
+    script.push({ content: 'Oui.' })
+    // La réponse du chat est demandée sans être attendue : seul compte l'instant où le tour lâche.
+    const envoi = poster('/api/chat', { characterId: character.id, chatId: c.id, content: 'Vite.' })
+    equal(await avecDelai(tour, 6000, 'fin du tour'), 'moved', 'issue du tour')
+    const duree = Date.now() - debut
+    assert(duree < 800, `tour abandonné en ${duree} ms : la surveillance du fichier, elle, n'aurait vu le message qu'après une seconde`)
+    await avecDelai(envoi, 6000, 'réponse du chat')
+  })
+
+  await check('compaction, rangement et compression de la mémoire demandent la main eux aussi', async () => {
+    const c = storage.createChat(character.id, 'main-autres')
+    storage.appendChatMessage(character.id, c.id, { role: 'assistant', content: 'Début.', ts: new Date().toISOString() })
+    for (const [quoi, url, body] of [
+      ['compaction', '/api/chat/compact', { characterId: character.id, chatId: c.id }],
+      ['rangement', `/api/characters/${character.id}/memory/tidy`, {}],
+      ['compression', `/api/characters/${character.id}/memory/compress`, {}],
+    ] as const) {
+      const { tour, debut } = await tourLent(c.id)
+      // Ce que la route répond importe peu ici (le faux modèle ne sait ni résumer ni ranger) : seul compte le tour.
+      const envoi = poster(url, body)
+      equal(await avecDelai(tour, 6000, `fin du tour (${quoi})`), 'moved', `issue du tour (${quoi})`)
+      const duree = Date.now() - debut
+      assert(duree < 800, `${quoi} : tour abandonné en ${duree} ms`)
+      await avecDelai(envoi, 8000, `réponse (${quoi})`)
+      script.length = 0 // ce que la route n'a pas consommé ne doit pas fuir dans l'essai suivant
+    }
+  })
+
+  await check("passage de main : sans tour en cours rien n'attend, et un tour ne retire que le sien", async () => {
+    await avecDelai(gate.yieldToUser(), 500, 'main sans tour')
+    let abandons = 0
+    let finA = (): void => {}
+    let finB = (): void => {}
+    const a = { abort: (): void => void abandons++, done: new Promise<void>((r) => (finA = r)) }
+    const b = { abort: (): void => void (abandons += 10), done: new Promise<void>((r) => (finB = r)) }
+    gate.declareRunningTurn(a)
+    gate.declareRunningTurn(b)
+    gate.clearRunningTurn(a) // a retire le sien : b reste déclaré
+    let rendue = false
+    const main = gate.yieldToUser().then(() => {
+      rendue = true
+    })
+    await sleep(50)
+    equal(abandons, 10, "c'est le tour déclaré en dernier qui est abandonné")
+    equal(rendue, false, "la main n'est pas rendue avant la fin du tour")
+    finB()
+    await avecDelai(main, 500, 'main après la fin du tour')
+    gate.clearRunningTurn(b)
+    finA()
+    await avecDelai(gate.yieldToUser(), 500, 'main une fois tout retiré')
+    equal(abandons, 10, 'plus aucun tour à abandonner')
+  })
+
+  serveur.closeAllConnections()
+  serveur.close()
+  script.length = 0
   setActive(chat.id)
 
   console.log('\nMessages spontanés')

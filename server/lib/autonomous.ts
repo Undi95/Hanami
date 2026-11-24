@@ -8,7 +8,10 @@
 //    n'est pas vide, et son dernier message n'est pas de l'utilisateur (une
 //    vraie réponse est due — c'est le flux normal qui s'en charge, jamais lui) ;
 //  - si l'utilisateur écrit pendant un tour, le tour est ABANDONNÉ : un backend
-//    local ne sert qu'une génération à la fois, et l'utilisateur passe avant ;
+//    local ne sert qu'une génération à la fois, et l'utilisateur passe avant.
+//    Les routes qui appellent le modèle pour lui demandent la main directement
+//    (lib/turnGate.ts) ; la surveillance du fichier de la conversation reste le
+//    filet pour tout le reste (édition, suppression, autre processus) ;
 //  - garde anti-flot : après MAX_UNANSWERED messages autonomes de suite restés
 //    sans réponse, plus aucun tour ne se joue jusqu'au retour de l'utilisateur ;
 //  - un tour passé en silence ne laisse rien DANS la conversation, mais chaque
@@ -28,6 +31,7 @@ import { effectiveSettings, loadSettings } from '../config'
 import { buildPayload, cappedTraceResult, runToolLoop, toolNamesOf } from '../api/chat'
 import { appendChatMessage, appendTurnLog, chatMtimeMs, getCharacter, readChat } from './storage'
 import { activeTarget } from './spontaneous'
+import { clearRunningTurn, declareRunningTurn } from './turnGate'
 import { streamChatCompletion } from '../llm/openai'
 import { createMemorySession } from '../tools/memoryTools'
 import { firstEmotionTag } from '../../shared/emotions'
@@ -195,6 +199,24 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
   }, WATCH_MS)
   watch.unref()
   const traces: ToolTrace[] = []
+  // Le raisonnement de CHAQUE étape du tour (avant chaque appel d'outil, puis
+  // avant la réponse), dans l'ordre — comme le chat le garde. Ne retenir que la
+  // dernière étape faisait perdre le « pourquoi » de tout ce que le tour a fait.
+  const thoughts: string[] = []
+  const thinkingSoFar = (): string | undefined => thoughts.join('\n\n') || undefined
+  // Le tour est déclaré au passage de main : une demande de l'utilisateur
+  // l'abandonne tout de suite, puis attend qu'il soit clos et noté au journal.
+  let finished = (): void => {}
+  const gate = {
+    abort: (): void => {
+      moved = true
+      abort.abort()
+    },
+    done: new Promise<void>((resolve) => {
+      finished = resolve
+    }),
+  }
+  declareRunningTurn(gate)
 
   const play = async (): Promise<Played> => {
     // Réglages EFFECTIFS du personnage (modèle, température… de sa carte), et
@@ -210,19 +232,22 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
       MAX_TOOL_ITERATIONS,
       toolNamesOf(tools),
       createMemorySession(),
-      (withTools) =>
-        streamChatCompletion({
+      async (withTools) => {
+        const step = await streamChatCompletion({
           settings: effective,
           messages,
           tools: withTools ? tools : undefined,
           signal: abort.signal,
           onDelta: () => {},
-        }),
+        })
+        if (step.thinking) thoughts.push(step.thinking)
+        return step
+      },
       (name, args, toolResult) => {
         traces.push({ name, args, result: cappedTraceResult(toolResult) })
       },
     )
-    const thinking = result.thinking || undefined
+    const thinking = thinkingSoFar()
     const text = result.content.trim()
     if (isSilence(text)) return { outcome: 'silent', thinking }
 
@@ -255,7 +280,8 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
     played = await play()
   } catch (e) {
     if (moved) {
-      played = { outcome: 'moved' } // l'abandon voulu n'est pas une erreur
+      // L'abandon voulu n'est pas une erreur. Ce que le tour avait déjà pensé reste au journal.
+      played = { outcome: 'moved', thinking: thinkingSoFar() }
     } else if (e instanceof CodedError) {
       // Erreur CODÉE (backend injoignable…) : le journal garde le code et ses
       // paramètres, l'inspecteur en fait la phrase dans la langue de l'interface.
@@ -284,6 +310,10 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
   } catch (e) {
     // Un journal qui ne s'écrit pas ne fait pas échouer le tour.
     console.warn('[autonomous] journal :', e instanceof Error ? e.message : String(e))
+  } finally {
+    // Clos ET noté : qui attendait la main peut la prendre.
+    clearRunningTurn(gate)
+    finished()
   }
   return played.outcome
 }

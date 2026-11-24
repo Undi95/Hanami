@@ -35,6 +35,7 @@ import {
   webSearchToolDefs,
 } from '../tools/webSearchTools'
 import { WEB_OPEN_TOOL_NAMES, executeWebOpenTool, webOpenToolDefs } from '../tools/webPageTools'
+import { yieldToUser } from '../lib/turnGate'
 import { firstEmotionTag } from '../../shared/emotions'
 import { CodedError, ErrorCodes, type ErrorCode, type ErrorParams } from '../../shared/errorCodes'
 import { httpError, sendJsonError } from '../lib/errors'
@@ -837,6 +838,10 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     httpError(res, 404, ErrorCodes.characterNotFound, { id: characterId })
     return
   }
+  // L'utilisateur passe avant un tour autonome en cours : il est abandonné ICI,
+  // avant toute lecture de la conversation — le payload construit plus bas voit
+  // alors au journal ce que ce tour avait déjà fait, et le backend est libre.
+  await yieldToUser()
   // Réglages EFFECTIFS du personnage : les overrides de sa carte posés par-dessus
   // le réglage global. Toutes les étapes de ce handler (payload, outils,
   // recherche forcée, jauge) voient le MÊME objet — sinon le modèle d'envoi et
@@ -1481,6 +1486,8 @@ chatRouter.post('/api/chat/compact', async (req, res) => {
   }
   compactionsInFlight.add(lockKey)
   try {
+    // Une compaction demandée par l'utilisateur passe, elle aussi, avant un tour autonome.
+    await yieldToUser()
     res.json(await runCompaction(characterId, chatId, instruction))
   } catch (e) {
     // CodedError (fenêtre trop petite, rien à compacter, LLM…) → code + 400 (faute
