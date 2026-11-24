@@ -11,23 +11,28 @@
 //    local ne sert qu'une génération à la fois, et l'utilisateur passe avant ;
 //  - garde anti-flot : après MAX_UNANSWERED messages autonomes de suite restés
 //    sans réponse, plus aucun tour ne se joue jusqu'au retour de l'utilisateur ;
-//  - un tour passé en silence ne laisse AUCUNE trace dans la conversation —
-//    seuls les effets de ses outils restent (mémoire, fichiers). Le personnage
-//    ne se souvient donc pas de ses tours silencieux : limite CONNUE de ce
-//    premier pas, à lever par un journal d'activité ;
-//  - en attendant ce journal, chaque tour laisse UNE ligne dans la console du
-//    serveur : son issue et le nombre d'outils appelés, jamais de contenu.
+//  - un tour passé en silence ne laisse rien DANS la conversation, mais chaque
+//    tour joué laisse une entrée au JOURNAL DES TOURS (lib/storage.ts,
+//    turns/<conversation>.jsonl) : ses outils, son raisonnement, son issue.
+//    L'inspecteur le montre, et buildPayload le rend au personnage tant que les
+//    tours autonomes sont allumés — c'est par là qu'il se souvient de ce qu'il a
+//    fait de lui-même. Les résultats d'outils, eux, ne reviennent pas d'un tour
+//    à l'autre : ce qu'il veut garder, il le dépose en mémoire ou en fichier ;
+//  - chaque tour laisse aussi UNE ligne dans la console du serveur : son issue
+//    et le nombre d'outils appelés, jamais de contenu.
 //
-// AUCUN état supplémentaire sur disque : comme pour les messages spontanés,
-// tout se déduit du .jsonl (les messages du moteur portent `autonomous: true`).
+// État sur disque : le journal des tours, et rien d'autre. La garde anti-flot
+// se déduit du .jsonl de la conversation (les messages du moteur portent
+// `autonomous: true`), comme pour les messages spontanés.
 import { effectiveSettings, loadSettings } from '../config'
 import { buildPayload, cappedTraceResult, runToolLoop, toolNamesOf } from '../api/chat'
-import { appendChatMessage, chatMtimeMs, getCharacter, readChat } from './storage'
+import { appendChatMessage, appendTurnLog, chatMtimeMs, getCharacter, readChat } from './storage'
 import { activeTarget } from './spontaneous'
 import { streamChatCompletion } from '../llm/openai'
 import { createMemorySession } from '../tools/memoryTools'
 import { firstEmotionTag } from '../../shared/emotions'
-import type { ChatMessage, ToolTrace } from '../../shared/types'
+import { CodedError } from '../../shared/errorCodes'
+import type { ChatMessage, ToolTrace, TurnLogEntry } from '../../shared/types'
 
 // Le minuteur est relu à chaque battement : un changement du réglage prend
 // effet en quelques secondes, sans rien relancer.
@@ -141,10 +146,18 @@ export function turnLine(outcome: TurnOutcome, toolCalls: number): string {
   }
 }
 
+/** Ce qu'un tour JOUÉ a donné, avec de quoi l'écrire au journal des tours. */
+interface Played {
+  outcome: TurnLogEntry['outcome']
+  thinking?: string
+  error?: string
+  errorParams?: TurnLogEntry['errorParams']
+}
+
 /**
  * Un tour autonome. Exporté séparément du minuteur pour être appelable
  * directement (tests). Ne lève jamais : une erreur se note dans la console et
- * le tour suivant retentera naturellement.
+ * au journal des tours, et le tour suivant retentera naturellement.
  */
 export async function runAutonomousTurn(): Promise<TurnOutcome> {
   if (!loadSettings().autonomousEnabled) return 'off'
@@ -182,7 +195,8 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
   }, WATCH_MS)
   watch.unref()
   const traces: ToolTrace[] = []
-  try {
+
+  const play = async (): Promise<Played> => {
     // Réglages EFFECTIFS du personnage (modèle, température… de sa carte), et
     // bloc temporel FORCÉ : un tour à soi sans l'heure n'aurait pas de sens.
     const effective = effectiveSettings(character)
@@ -208,8 +222,9 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
         traces.push({ name, args, result: cappedTraceResult(toolResult) })
       },
     )
+    const thinking = result.thinking || undefined
     const text = result.content.trim()
-    if (isSilence(text)) return 'silent'
+    if (isSilence(text)) return { outcome: 'silent', thinking }
 
     // Le tour a duré : on ne colle jamais un message autonome derrière un
     // message arrivé entre-temps.
@@ -217,29 +232,60 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
     try {
       current = readChat(characterId, chatId).messages
     } catch {
-      return 'moved'
+      return { outcome: 'moved', thinking }
     }
     const stillLast = current[current.length - 1]
-    if (moved || current.length !== before.length || !stillLast || stillLast.ts !== last.ts) return 'moved'
+    if (moved || current.length !== before.length || !stillLast || stillLast.ts !== last.ts) {
+      return { outcome: 'moved', thinking }
+    }
 
     const msg: ChatMessage = { role: 'assistant', content: text, ts: new Date().toISOString(), autonomous: true }
     // Même détection qu'à la fin d'une réponse normale (shared/emotions.ts).
     const emotion = firstEmotionTag(text)
     if (emotion) msg.emotion = emotion
-    if (result.thinking) msg.thinking = result.thinking
+    if (thinking) msg.thinking = thinking
     if (traces.length > 0) msg.tools = traces
     appendChatMessage(characterId, chatId, msg)
-    return 'spoke'
+    // Le raisonnement vit sur le message : le journal ne le garde pas en double.
+    return { outcome: 'spoke' }
+  }
+
+  let played: Played
+  try {
+    played = await play()
   } catch (e) {
-    if (moved) return 'moved' // l'abandon voulu n'est pas une erreur
-    console.warn('[autonomous]', e instanceof Error ? e.message : String(e))
-    return 'error'
+    if (moved) {
+      played = { outcome: 'moved' } // l'abandon voulu n'est pas une erreur
+    } else if (e instanceof CodedError) {
+      // Erreur CODÉE (backend injoignable…) : le journal garde le code et ses
+      // paramètres, l'inspecteur en fait la phrase dans la langue de l'interface.
+      console.warn('[autonomous]', e.code, e.params?.detail ?? '')
+      played = { outcome: 'error', error: e.code, errorParams: e.params }
+    } else {
+      const error = e instanceof Error ? e.message : String(e)
+      console.warn('[autonomous]', error)
+      played = { outcome: 'error', error }
+    }
   } finally {
     clearInterval(watch)
     clearTimeout(timer)
     lastToolCalls = traces.length
     running = false
   }
+
+  // Journal des tours : ce tour y laisse sa trace, qu'il ait écrit ou non.
+  try {
+    const entry: TurnLogEntry = { ts: new Date().toISOString(), outcome: played.outcome }
+    if (traces.length > 0) entry.tools = traces
+    if (played.thinking) entry.thinking = played.thinking
+    if (played.error) entry.error = played.error
+    if (played.errorParams) entry.errorParams = played.errorParams
+    appendTurnLog(characterId, chatId, entry)
+  } catch (e) {
+    // Un journal qui ne s'écrit pas ne fait pas échouer le tour.
+    console.warn('[autonomous] journal :', e instanceof Error ? e.message : String(e))
+  }
+  return played.outcome
 }
 
 /** Ce que le minuteur retient d'un battement à l'autre. */

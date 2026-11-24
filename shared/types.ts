@@ -261,6 +261,28 @@ export interface ChatMessage {
   variant?: number // indice de la variante affichée dans `variants`
 }
 
+/**
+ * Un tour autonome JOUÉ (moteur server/lib/autonomous.ts), tel que le journal des
+ * tours le garde : data/characters/<id>/turns/<chatId>.jsonl, une entrée par
+ * ligne. Un tour où le modèle n'a pas été appelé (une réponse est due, garde
+ * atteinte…) n'y figure pas.
+ *
+ * Des tours « calmes » identiques qui se suivent — rien fait et rien dit, ou la
+ * même panne — se FONDENT en une seule entrée : `count` les compte, `since`
+ * garde l'heure du premier, `ts` celle du dernier. Un minuteur court ne remplit
+ * donc pas le journal de la même ligne.
+ */
+export interface TurnLogEntry {
+  ts: string // fin du tour (ISO)
+  outcome: 'silent' | 'spoke' | 'moved' | 'error' // laissé passer, a écrit, abandonné, en erreur
+  tools?: ToolTrace[] // journal d'activité du tour — résultats plafonnés, comme sur un message
+  thinking?: string // raisonnement du tour, plafonné (absent quand il a écrit : le message le porte)
+  error?: string // code de l'erreur (shared/errorCodes.ts), ou son message brut si elle n'est pas codée
+  errorParams?: Record<string, string | number> // paramètres du code — le client en fait la phrase dans sa langue
+  count?: number // nombre de tours fondus dans cette entrée (absent = un seul)
+  since?: string // heure du premier tour fondu (ISO)
+}
+
 export interface ChatMeta {
   id: string
   title: string

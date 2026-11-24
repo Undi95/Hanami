@@ -2,6 +2,7 @@
 import express, { Router, type Response } from 'express'
 import type { CharacterFull, CharacterLlm, GreetingMode } from '../../shared/types'
 import {
+  chatMtimeMs,
   createCharacter,
   createChat,
   deleteCharacter,
@@ -13,7 +14,9 @@ import {
   listChats,
   readChat,
   readCharacterImage,
+  readTurnLog,
   savePhoto,
+  turnLogMtimeMs,
   updateChatHeader,
   updateCharacter,
 } from '../lib/storage'
@@ -320,5 +323,41 @@ charactersRouter.delete('/api/characters/:id/chats/:chatId', (req, res) => {
     res.json({ ok: true })
   } catch (e) {
     sendJsonError(res, 500, e)
+  }
+})
+
+// ── Tours autonomes ────────────────────────────────────────────────────────
+
+/** Entrées du journal des tours servies d'un coup — les plus récentes. */
+const TURN_LOG_PAGE = 200
+
+// Journal des tours d'une conversation (lecture seule), du plus ancien au plus
+// récent. Une conversation sans tour autonome répond une liste vide.
+charactersRouter.get('/api/characters/:id/chats/:chatId/turns', (req, res) => {
+  try {
+    if (chatMtimeMs(req.params.id, req.params.chatId) === 0) {
+      httpError(res, 404, ErrorCodes.chatNotFound, { id: req.params.chatId })
+      return
+    }
+    res.json({ entries: readTurnLog(req.params.id, req.params.chatId).slice(-TURN_LOG_PAGE) })
+  } catch {
+    // Id invalide → 404, comme la lecture de la conversation.
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: req.params.chatId })
+  }
+})
+
+// Pouls d'une conversation : deux dates de fichier, rien d'autre. Le client le
+// consulte pendant que les tours autonomes sont allumés, pour savoir à peu de
+// frais si le fil ou le journal a changé — sans retélécharger la conversation.
+charactersRouter.get('/api/characters/:id/chats/:chatId/pulse', (req, res) => {
+  try {
+    const chat = chatMtimeMs(req.params.id, req.params.chatId)
+    if (chat === 0) {
+      httpError(res, 404, ErrorCodes.chatNotFound, { id: req.params.chatId })
+      return
+    }
+    res.json({ chat, turns: turnLogMtimeMs(req.params.id, req.params.chatId) })
+  } catch {
+    httpError(res, 404, ErrorCodes.chatNotFound, { id: req.params.chatId })
   }
 })

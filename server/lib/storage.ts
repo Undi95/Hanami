@@ -1,5 +1,5 @@
 // Couche de stockage : tout l'état vit dans data/ sous forme de fichiers lisibles.
-// data/characters/<id>/{character.json, system-prompt.md, memory/*.md, chats/*.jsonl}
+// data/characters/<id>/{character.json, system-prompt.md, memory/*.md, chats/*.jsonl, turns/*.jsonl}
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -19,6 +19,7 @@ import type {
   MemoryFile,
   MessageVariant,
   ToolTrace,
+  TurnLogEntry,
 } from '../../shared/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -719,6 +720,8 @@ export function appendChatMessage(charId: string, chatId: string, msg: ChatMessa
 
 export function deleteChat(charId: string, chatId: string): void {
   fs.rmSync(chatFile(charId, chatId), { force: true })
+  // Le journal des tours part avec sa conversation : il ne décrit qu'elle.
+  fs.rmSync(turnLogFile(charId, chatId), { force: true })
 }
 
 /**
@@ -753,6 +756,10 @@ export function forkChat(charId: string, chatId: string, title?: string): ChatMe
     fs.closeSync(fd)
   }
   fs.renameSync(tmp, file)
+  // La branche hérite du même passé, tours autonomes compris : sans leur
+  // journal, le personnage y aurait oublié ce qu'il a fait de lui-même.
+  const turns = turnLogFile(charId, chatId)
+  if (fs.existsSync(turns)) fs.copyFileSync(turns, turnLogFile(charId, id))
   return {
     id,
     title: clone.title,
@@ -834,6 +841,133 @@ export function writeImportedChat(charId: string, title: string, messages: ChatM
   const body = messages.map((m) => JSON.stringify(m)).join('\n')
   if (body) fs.appendFileSync(file, body + '\n')
   return { ...meta, messageCount: messages.length }
+}
+
+// ── Journal des tours autonomes ────────────────────────────────────────────
+// Un fichier par conversation, dans turns/ — À CÔTÉ de chats/ et pas dedans :
+// listChats prend tout .jsonl de chats/ pour une conversation. Écrit par le
+// moteur des tours autonomes (lib/autonomous.ts), lu par l'inspecteur et par
+// buildPayload (le personnage se souvient de ce qu'il a fait de lui-même).
+
+/** Entrées gardées par conversation ; au-delà, les plus anciennes s'effacent. */
+export const TURN_LOG_MAX = 500
+// L'élagage réécrit le fichier : il attend ce débord plutôt que de le faire à chaque tour.
+const TURN_LOG_SLACK = 50
+/** Plafond du raisonnement gardé par tour — le journal est un journal, pas une archive. */
+export const TURN_THINKING_MAX = 4000
+
+function turnLogFile(charId: string, chatId: string): string {
+  return path.join(charDir(charId), 'turns', `${sanitizeFileName(chatId)}.jsonl`)
+}
+
+/** Mtime (ms) du journal des tours d'une conversation — 0 s'il n'existe pas. */
+export function turnLogMtimeMs(charId: string, chatId: string): number {
+  try {
+    return fs.statSync(turnLogFile(charId, chatId)).mtimeMs
+  } catch {
+    return 0
+  }
+}
+
+const TURN_OUTCOMES: readonly TurnLogEntry['outcome'][] = ['silent', 'spoke', 'moved', 'error']
+
+/**
+ * Entrée lue sur le disque : data/ s'édite à la main, seules les entrées
+ * strictement typées sont gardées (null = écartée), et rien de mal typé ne
+ * remonte jusqu'au client ni jusqu'au prompt.
+ */
+function normalizeTurn(raw: unknown): TurnLogEntry | null {
+  if (raw === null || typeof raw !== 'object') return null
+  const r = raw as Partial<TurnLogEntry>
+  if (typeof r.ts !== 'string' || !r.ts) return null
+  if (!TURN_OUTCOMES.includes(r.outcome as TurnLogEntry['outcome'])) return null
+  const entry: TurnLogEntry = { ts: r.ts, outcome: r.outcome as TurnLogEntry['outcome'] }
+  const tools = normalizeTools(r.tools)
+  if (tools) entry.tools = tools
+  if (typeof r.thinking === 'string' && r.thinking) entry.thinking = r.thinking
+  if (typeof r.error === 'string' && r.error) entry.error = r.error
+  if (entry.error && r.errorParams !== null && typeof r.errorParams === 'object' && !Array.isArray(r.errorParams)) {
+    const params: Record<string, string | number> = {}
+    for (const [k, v] of Object.entries(r.errorParams)) {
+      if (typeof v === 'string' || typeof v === 'number') params[k] = v
+    }
+    if (Object.keys(params).length > 0) entry.errorParams = params
+  }
+  if (typeof r.count === 'number' && Number.isInteger(r.count) && r.count > 1) {
+    entry.count = r.count
+    if (typeof r.since === 'string' && r.since) entry.since = r.since
+  }
+  return entry
+}
+
+/** Le journal des tours d'une conversation, du plus ancien au plus récent — vide s'il n'existe pas. */
+export function readTurnLog(charId: string, chatId: string): TurnLogEntry[] {
+  let text: string
+  try {
+    text = fs.readFileSync(turnLogFile(charId, chatId), 'utf8')
+  } catch {
+    return []
+  }
+  const out: TurnLogEntry[] = []
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue
+    try {
+      const entry = normalizeTurn(JSON.parse(line))
+      if (entry) out.push(entry)
+    } catch {
+      /* ligne abîmée (fichier retouché, coupure) : écartée, les autres restent */
+    }
+  }
+  return out
+}
+
+/** Deux tours « calmes » identiques : rien fait et rien dit, ou la même panne. */
+function sameQuietTurn(a: TurnLogEntry, b: TurnLogEntry): boolean {
+  if (a.tools || b.tools || a.outcome !== b.outcome) return false
+  if (a.outcome === 'silent') return true
+  return a.outcome === 'error' && (a.error ?? '') === (b.error ?? '')
+}
+
+function writeTurnLog(file: string, entries: TurnLogEntry[]): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  const tmp = file + '.tmp'
+  // Même protocole que les .jsonl des conversations : tmp + fsync + rename.
+  const fd = fs.openSync(tmp, 'w')
+  try {
+    fs.writeSync(fd, entries.map((e) => JSON.stringify(e)).join('\n') + '\n')
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  fs.renameSync(tmp, file)
+}
+
+/**
+ * Ajoute un tour au journal. Un tour calme identique au précédent s'y FOND
+ * (compteur, heure du dernier, raisonnement du dernier) au lieu d'ajouter une
+ * ligne ; le journal est tenu sous TURN_LOG_MAX entrées.
+ */
+export function appendTurnLog(charId: string, chatId: string, entry: TurnLogEntry): void {
+  // Conversation supprimée pendant le tour : ne pas lui laisser un journal orphelin.
+  if (!fs.existsSync(chatFile(charId, chatId))) return
+  const next: TurnLogEntry = { ...entry }
+  if (next.thinking && next.thinking.length > TURN_THINKING_MAX) {
+    next.thinking = next.thinking.slice(0, TURN_THINKING_MAX) + '…'
+  }
+  const file = turnLogFile(charId, chatId)
+  const entries = readTurnLog(charId, chatId)
+  const last = entries[entries.length - 1]
+  if (last && sameQuietTurn(last, next)) {
+    entries[entries.length - 1] = { ...next, count: (last.count ?? 1) + 1, since: last.since ?? last.ts }
+    writeTurnLog(file, entries)
+    return
+  }
+  if (entries.length >= TURN_LOG_MAX + TURN_LOG_SLACK) {
+    writeTurnLog(file, [...entries.slice(entries.length - (TURN_LOG_MAX - 1)), next])
+    return
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.appendFileSync(file, JSON.stringify(next) + '\n')
 }
 
 // ── Mémoire ────────────────────────────────────────────────────────────────

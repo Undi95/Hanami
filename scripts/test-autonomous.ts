@@ -10,14 +10,16 @@
 // outils sont joués et tracés ; la garde anti-flot ; l'abandon quand
 // l'utilisateur écrit pendant le tour ; le minuteur, ses bornes et sa boucle
 // (horloge injectée : rien n'attend pour de vrai) ; la ligne de console de
-// chaque tour, sans contenu ; et que les messages spontanés se taisent quand
-// les tours autonomes sont allumés.
+// chaque tour, sans contenu ; le journal des tours (ce qui s'y écrit, ce qui s'y
+// fond, ses plafonds, sa lecture par l'API) et le bloc qui le rend au
+// personnage ; et que les messages spontanés se taisent quand les tours
+// autonomes sont allumés.
 import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
-import type { ChatMessage } from '../shared/types'
+import type { ChatMessage, TurnLogEntry } from '../shared/types'
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'hanami-autonome-'))
 // AVANT tout import du serveur : DATA_DIR se fige au chargement de storage.ts.
@@ -51,6 +53,7 @@ function equal<T>(actual: T, expected: T, what: string): void {
 
 interface Step {
   content?: string
+  thinking?: string // raisonnement, émis en reasoning_content avant le texte
   toolCalls?: { name: string; arguments: string }[]
   delayMs?: number
 }
@@ -87,6 +90,7 @@ const backend = http.createServer((req, res) => {
         )
         res.write(sse({}, 'tool_calls'))
       } else {
+        if (step.thinking) res.write(sse({ reasoning_content: step.thinking }, null))
         res.write(sse({ content: step.content ?? '' }, null))
         res.write(sse({}, 'stop'))
       }
@@ -241,7 +245,8 @@ async function main(): Promise<void> {
     script.push({ content: '(silence)' })
     equal(await auto.runAutonomousTurn(), 'silent', 'issue')
     saveSettings({ timeAwareness: true })
-    assert(String(lastRequest().messages[0].content).includes(String(new Date().getFullYear())), 'le bloc de l\'heure doit être dans le texte système')
+    // Par son titre, pas par l'année : le bloc des tours porte des dates lui aussi.
+    assert(String(lastRequest().messages[0].content).includes('## Current date and time'), 'le bloc de l\'heure doit être dans le texte système')
   })
 
   await check('backend en panne : une erreur notée, rien d\'ajouté, pas de verrou resté posé', async () => {
@@ -437,6 +442,254 @@ async function main(): Promise<void> {
     assert(auto.turnLine('silent', 2).includes("2 appels d'outil"), 'pluriel')
     assert(auto.turnLine('capped', 0).includes(String(auto.MAX_UNANSWERED)), 'la garde dit son nombre')
   })
+
+  console.log('\nJournal des tours')
+
+  const { buildPayload, turnLogBlock } = await import('../server/api/chat')
+  const { charactersRouter } = await import('../server/api/characters')
+  const express = (await import('express')).default
+
+  // Une conversation neuve : le journal y part de zéro.
+  const journal = storage.createChat(character.id, 'journal')
+  const setActive = (chatId: string): void =>
+    fs.writeFileSync(path.join(TMP, 'ui.json'), JSON.stringify({ activeCharacter: character.id, activeChat: { [character.id]: chatId } }))
+  setActive(journal.id)
+  storage.appendChatMessage(character.id, journal.id, { role: 'assistant', content: 'Début.', ts: new Date().toISOString() })
+  const turns = () => storage.readTurnLog(character.id, journal.id)
+  const journalFile = path.join(TMP, 'characters', character.id, 'turns', `${journal.id}.jsonl`)
+  saveSettings({ autonomousEnabled: true })
+
+  await check('un tour silencieux laisse une entrée : son issue, ses outils (résultat compris), son raisonnement', async () => {
+    script.push({ toolCalls: [{ name: 'memory_save', arguments: JSON.stringify({ name: 'carnet.md', content: 'Une note.' }) }] })
+    script.push({ content: '(silence)', thinking: 'Je note, puis je me tais.' })
+    equal(await auto.runAutonomousTurn(), 'silent', 'issue')
+    const t = turns()
+    equal(t.length, 1, 'entrées au journal')
+    equal(t[0].outcome, 'silent', 'issue notée')
+    equal(t[0].tools?.length, 1, 'outils notés')
+    equal(t[0].tools?.[0].name, 'memory_save', 'outil')
+    assert(String(t[0].tools?.[0].result).length > 0, "le résultat de l'outil doit être gardé")
+    equal(t[0].thinking, 'Je note, puis je me tais.', 'raisonnement')
+    assert(!Number.isNaN(new Date(t[0].ts).getTime()), 'heure lisible')
+    equal(t[0].count, undefined, 'un seul tour : pas de compteur')
+  })
+
+  await check('des tours calmes qui se suivent se fondent en une entrée, sans avaler un tour qui a agi', async () => {
+    const avant = new Date().toISOString()
+    script.push({ content: '(silence)', thinking: 'Premier.' })
+    equal(await auto.runAutonomousTurn(), 'silent', 'premier tour calme')
+    equal(turns().length, 2, 'le tour calme ne se fond pas dans celui qui avait un outil')
+    await sleep(15)
+    script.push({ content: '(silence)', thinking: 'Deuxième.' })
+    script.push({ content: '(silence)', thinking: 'Troisième.' })
+    equal(await auto.runAutonomousTurn(), 'silent', 'deuxième')
+    equal(await auto.runAutonomousTurn(), 'silent', 'troisième')
+    const t = turns()
+    equal(t.length, 2, 'entrées au journal')
+    equal(t[1].count, 3, 'tours fondus')
+    equal(t[1].thinking, 'Troisième.', 'raisonnement du dernier')
+    assert(t[1].since !== undefined && t[1].since >= avant && t[1].since < t[1].ts, 'since = heure du premier, ts = heure du dernier')
+  })
+
+  await check('il écrit : entrée notée avec ses outils, le raisonnement reste sur le message', async () => {
+    script.push({ toolCalls: [{ name: 'memory_save', arguments: JSON.stringify({ name: 'carnet2.md', content: 'Autre note.' }) }] })
+    script.push({ content: 'J\'ai rangé mes notes.', thinking: 'Je le lui dis.' })
+    equal(await auto.runAutonomousTurn(), 'spoke', 'issue')
+    const t = turns()
+    equal(t.length, 3, 'entrées au journal')
+    equal(t[2].outcome, 'spoke', 'issue notée')
+    equal(t[2].tools?.length, 1, 'outils notés')
+    equal(t[2].thinking, undefined, 'pas de raisonnement en double')
+    const m = storage.readChat(character.id, journal.id).messages
+    equal(m[m.length - 1].thinking, 'Je le lui dis.', 'raisonnement sur le message')
+  })
+
+  await check('une panne laisse une entrée avec son message ; la même panne répétée se fond', async () => {
+    saveSettings({ backendUrl: 'http://127.0.0.1:9/v1' })
+    equal(await auto.runAutonomousTurn(), 'error', 'première panne')
+    equal(await auto.runAutonomousTurn(), 'error', 'seconde panne')
+    saveSettings({ backendUrl: `http://127.0.0.1:${port}/v1` })
+    const t = turns()
+    equal(t.length, 4, 'entrées au journal')
+    equal(t[3].outcome, 'error', 'issue notée')
+    equal(t[3].error, 'llmUnreachable', "le code de l'erreur doit être gardé")
+    assert(String(t[3].errorParams?.detail ?? '').length > 0, 'le détail de la panne doit être gardé avec le code')
+    equal(t[3].count, 2, 'pannes fondues')
+  })
+
+  await check("l'utilisateur écrit pendant un tour : le tour abandonné est noté ; un tour non joué ne laisse rien", async () => {
+    script.push({ content: 'Trop tard.', delayMs: 400 })
+    const tour = auto.runAutonomousTurn()
+    await sleep(100)
+    storage.appendChatMessage(character.id, journal.id, { role: 'user', content: 'Me voilà.', ts: new Date().toISOString() })
+    equal(await tour, 'moved', 'issue')
+    equal(turns().length, 5, 'entrées au journal')
+    equal(turns()[4].outcome, 'moved', 'issue notée')
+    equal(await auto.runAutonomousTurn(), 'waiting-user', 'une réponse est due')
+    saveSettings({ autonomousEnabled: false })
+    equal(await auto.runAutonomousTurn(), 'off', 'éteint')
+    saveSettings({ autonomousEnabled: true })
+    equal(turns().length, 5, 'un tour non joué ne laisse aucune entrée')
+    storage.appendChatMessage(character.id, journal.id, { role: 'assistant', content: 'Bonjour.', ts: new Date().toISOString() })
+  })
+
+  await check('bloc rendu au personnage : ses tours, leurs appels sans les résultats, seulement quand le mode est allumé', async () => {
+    const { injected } = buildPayload(character.id, journal.id, loadSettings())
+    assert(injected.includes('## Your own turns'), 'le bloc doit être dans le texte ajouté')
+    assert(injected.includes('memory_save') && injected.includes('carnet.md'), "les appels d'outils doivent y figurer")
+    const resultat = String(turns()[0].tools?.[0].result)
+    assert(!injected.includes(resultat), "les résultats d'outils ne doivent pas y figurer")
+    assert(injected.includes('3 turns in a row'), 'les tours fondus doivent être comptés')
+    assert(injected.includes('let the turn pass') && injected.includes('wrote a message') && injected.includes('the user wrote') && injected.includes('failed'), 'les quatre issues')
+    assert(!injected.includes('Je note, puis je me tais.'), "le raisonnement n'est pas réinjecté")
+    script.push({ content: '(silence)' })
+    equal(await auto.runAutonomousTurn(), 'silent', 'issue')
+    assert(String(lastRequest().messages[0].content).includes('## Your own turns'), 'le bloc doit partir au modèle pendant un tour')
+    saveSettings({ autonomousEnabled: false })
+    assert(!buildPayload(character.id, journal.id, loadSettings()).injected.includes('## Your own turns'), 'mode éteint : rien de ce mode dans le prompt')
+    saveSettings({ autonomousEnabled: true })
+    const autre = storage.createChat(character.id, 'sans journal')
+    storage.appendChatMessage(character.id, autre.id, { role: 'assistant', content: 'Rien ici.', ts: new Date().toISOString() })
+    assert(
+      !buildPayload(character.id, autre.id, loadSettings()).injected.includes('## Your own turns'),
+      "le journal d'une conversation ne passe pas dans une autre du même personnage",
+    )
+  })
+
+  await check('bloc : vide sans tour ; seuls les plus récents ; arguments et taille plafonnés', () => {
+    equal(turnLogBlock([]), '', 'aucun tour')
+    const many = Array.from({ length: 30 }, (_, i) => ({
+      ts: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(),
+      outcome: 'silent' as const,
+      tools: [{ name: 'memory_save', args: JSON.stringify({ name: `n${i}.md` }) }],
+    }))
+    const block = turnLogBlock(many)
+    equal(block.split('\n').filter((l) => l.startsWith('- ')).length, 12, 'tours rendus')
+    assert(block.includes('n29.md') && block.includes('n18.md') && !block.includes('n17.md'), 'ce sont les plus récents')
+    const long = turnLogBlock([{ ts: many[0].ts, outcome: 'silent', tools: [{ name: 'memory_save', args: 'x'.repeat(5000) }] }])
+    assert(!long.includes('x'.repeat(200)) && long.includes('…'), 'arguments tronqués')
+    const heavy = turnLogBlock(
+      many.map((e) => ({ ...e, tools: Array.from({ length: 6 }, () => ({ name: 'memory_save', args: 'y'.repeat(150) })) })),
+    )
+    assert(heavy.length < 3600, `taille plafonnée (${heavy.length})`)
+    assert(heavy.includes(turnLogBlock([many[29]]).split('\n').find((l) => l.startsWith('- '))!.slice(0, 18)), 'le tour le plus récent reste')
+  })
+
+  await check('fusion : seules des issues calmes identiques se fondent — ni deux pannes différentes, ni deux abandons, ni deux messages', () => {
+    const c = storage.createChat(character.id, 'fusion')
+    storage.appendChatMessage(character.id, c.id, { role: 'assistant', content: 'x', ts: new Date().toISOString() })
+    const add = (e: Omit<TurnLogEntry, 'ts'>): void => storage.appendTurnLog(character.id, c.id, { ts: new Date().toISOString(), ...e })
+    add({ outcome: 'error', error: 'a' })
+    add({ outcome: 'error', error: 'b' })
+    add({ outcome: 'error', error: 'b' })
+    add({ outcome: 'silent' })
+    add({ outcome: 'moved' })
+    add({ outcome: 'moved' })
+    add({ outcome: 'spoke' })
+    add({ outcome: 'spoke' })
+    const t = storage.readTurnLog(character.id, c.id)
+    equal(
+      t.map((e) => `${e.outcome}${e.error ?? ''}×${e.count ?? 1}`).join(' '),
+      'errora×1 errorb×2 silent×1 moved×1 moved×1 spoke×1 spoke×1',
+      'entrées',
+    )
+  })
+
+  let plafondsId = ''
+  await check('plafonds du journal : raisonnement tronqué, entrées les plus anciennes effacées', () => {
+    const c = storage.createChat(character.id, 'plafonds')
+    plafondsId = c.id
+    storage.appendChatMessage(character.id, c.id, { role: 'assistant', content: 'x', ts: new Date().toISOString() })
+    storage.appendTurnLog(character.id, c.id, { ts: new Date().toISOString(), outcome: 'silent', thinking: 'z'.repeat(storage.TURN_THINKING_MAX + 100) })
+    equal(storage.readTurnLog(character.id, c.id)[0].thinking?.length, storage.TURN_THINKING_MAX + 1, 'raisonnement tronqué')
+    let n = 1
+    let size = 1
+    // Des tours qui ont agi (jamais fondus) : le journal grossit jusqu'à l'élagage.
+    for (;;) {
+      storage.appendTurnLog(character.id, c.id, { ts: new Date().toISOString(), outcome: 'silent', tools: [{ name: 't', args: String(n) }] })
+      n++
+      const now = storage.readTurnLog(character.id, c.id).length
+      if (now <= size) break
+      size = now
+      assert(n < storage.TURN_LOG_MAX * 2, "l'élagage n'est jamais venu")
+    }
+    const t = storage.readTurnLog(character.id, c.id)
+    equal(t.length, storage.TURN_LOG_MAX, 'entrées après élagage')
+    equal(t[t.length - 1].tools?.[0].args, String(n - 1), 'le dernier tour est gardé')
+    equal(t[0].tools?.[0].args, String(n - storage.TURN_LOG_MAX), 'ce sont les plus anciens qui partent')
+    assert(size > storage.TURN_LOG_MAX, "l'élagage attend un débord, il ne réécrit pas à chaque tour")
+  })
+
+  await check('journal retouché à la main : les lignes abîmées sont écartées, les autres restent', () => {
+    const c = storage.createChat(character.id, 'retouche')
+    const file = path.join(TMP, 'characters', character.id, 'turns', `${c.id}.jsonl`)
+    fs.writeFileSync(
+      file,
+      [
+        'ceci n\'est pas du JSON',
+        JSON.stringify({ ts: '2026-01-01T00:00:00.000Z', outcome: 'silent', count: 'trois', tools: 'non', thinking: 12 }),
+        JSON.stringify({ ts: '2026-01-01T00:01:00.000Z', outcome: 'inconnue' }),
+        JSON.stringify({ outcome: 'silent' }),
+        JSON.stringify({ ts: '2026-01-01T00:02:00.000Z', outcome: 'spoke', tools: [{ name: 'a', args: '{}' }, { name: 3 }], errorParams: { detail: 'x' } }),
+        JSON.stringify({ ts: '2026-01-01T00:03:00.000Z', outcome: 'error', error: 'code', errorParams: { detail: 'réseau', n: 2, objet: { a: 1 }, liste: [1] } }),
+        JSON.stringify({ ts: '2026-01-01T00:04:00.000Z', outcome: 'error', error: 'code', errorParams: 'non' }),
+      ].join('\n') + '\n',
+    )
+    const t = storage.readTurnLog(character.id, c.id)
+    equal(t.length, 4, 'entrées gardées')
+    equal(JSON.stringify(t[0]), JSON.stringify({ ts: '2026-01-01T00:00:00.000Z', outcome: 'silent' }), 'champs mal typés retirés')
+    equal(t[1].tools?.length, 1, 'traces mal typées retirées')
+    equal(t[1].errorParams, undefined, "pas de paramètres d'erreur sans erreur")
+    equal(JSON.stringify(t[2].errorParams), JSON.stringify({ detail: 'réseau', n: 2 }), "paramètres d'erreur : seuls textes et nombres")
+    equal(t[3].errorParams, undefined, "paramètres d'erreur mal typés retirés")
+  })
+
+  await check('le journal suit sa conversation : copié avec une branche, effacé avec elle, jamais pris pour une conversation', () => {
+    const avant = storage.listChats(character.id).length
+    const branche = storage.forkChat(character.id, journal.id, 'branche')
+    equal(storage.listChats(character.id).length, avant + 1, 'la branche est la seule conversation de plus')
+    equal(storage.readTurnLog(character.id, branche.id).length, turns().length, 'journal de la branche')
+    storage.deleteChat(character.id, branche.id)
+    equal(storage.readTurnLog(character.id, branche.id).length, 0, 'journal effacé avec la conversation')
+    storage.appendTurnLog(character.id, branche.id, { ts: new Date().toISOString(), outcome: 'silent' })
+    equal(storage.readTurnLog(character.id, branche.id).length, 0, 'pas de journal pour une conversation supprimée')
+    assert(fs.existsSync(journalFile), "le journal de l'original n'est pas touché")
+  })
+
+  await check('API : le journal et le pouls d\'une conversation ; 404 pour une conversation inconnue', async () => {
+    const app = express()
+    app.use(charactersRouter)
+    const server = http.createServer(app)
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/characters/${character.id}/chats`
+    try {
+      const got = (await (await fetch(`${base}/${journal.id}/turns`)).json()) as { entries: { outcome: string }[] }
+      equal(got.entries.length, turns().length, 'entrées servies')
+      equal(got.entries[0].outcome, 'silent', 'du plus ancien au plus récent')
+      const pulse1 = (await (await fetch(`${base}/${journal.id}/pulse`)).json()) as { chat: number; turns: number }
+      assert(pulse1.chat > 0 && pulse1.turns > 0, 'deux dates de fichier')
+      await sleep(25)
+      script.push({ toolCalls: [{ name: 'memory_save', arguments: JSON.stringify({ name: 'carnet3.md', content: 'Encore.' }) }] })
+      script.push({ content: '(silence)' })
+      equal(await auto.runAutonomousTurn(), 'silent', 'un tour de plus')
+      const pulse2 = (await (await fetch(`${base}/${journal.id}/pulse`)).json()) as { chat: number; turns: number }
+      assert(pulse2.turns > pulse1.turns, 'le pouls du journal bouge quand un tour est joué')
+      equal(pulse2.chat, pulse1.chat, "le pouls du fil ne bouge pas pour un tour silencieux")
+      equal((await fetch(`${base}/2000-01-01-inconnue/turns`)).status, 404, 'journal d\'une conversation inconnue')
+      equal((await fetch(`${base}/2000-01-01-inconnue/pulse`)).status, 404, 'pouls d\'une conversation inconnue')
+      const vide = storage.createChat(character.id, 'sans tour')
+      const none = (await (await fetch(`${base}/${vide.id}/turns`)).json()) as { entries: unknown[] }
+      equal(none.entries.length, 0, 'conversation sans tour : liste vide')
+      const big = (await (await fetch(`${base}/${plafondsId}/turns`)).json()) as { entries: { tools?: { args: string }[] }[] }
+      const all = storage.readTurnLog(character.id, plafondsId)
+      equal(big.entries.length, 200, "un long journal n'est servi que par sa fin")
+      equal(big.entries[199].tools?.[0].args, all[all.length - 1].tools?.[0].args, 'ce sont les entrées les plus récentes')
+    } finally {
+      server.close()
+    }
+  })
+
+  setActive(chat.id)
 
   console.log('\nMessages spontanés')
 
