@@ -648,7 +648,8 @@ async function executeTool(
   }
   if ((FILE_TOOL_NAMES as readonly string[]).includes(name)) {
     if (!settings.fileToolsEnabled) throw new Error('file tools are disabled in settings')
-    return executeFileTool(settings, name, args)
+    // Dans le dossier de CE personnage : la sandbox est propre à chacun.
+    return executeFileTool(settings, characterId, name, args)
   }
   if ((WEB_SEARCH_TOOL_NAMES as readonly string[]).includes(name)) {
     if (!settings.webSearchEnabled) throw new Error('web search is disabled in settings')

@@ -461,9 +461,10 @@ const FR = {
   memoryInjectionSub:
     "Auto : tout ou rien (≤ 8000 caractères = tout, au-delà = index seul). Pertinence : classe les fichiers par rapport à la question courante et n'injecte que les plus utiles, le reste reste lisible à la demande.",
   fileTools: 'Outils fichiers',
-  fileToolsSub: 'Le modèle peut lire/écrire dans le dossier sandbox.',
+  fileToolsSub:
+    'Chaque personnage peut lire et écrire dans SON dossier : un sous-dossier à son nom, dans le dossier sandbox ci-dessous. Il ne voit ni ceux des autres personnages, ni ce qui est posé à la racine.',
   allowDelete: 'Autoriser la suppression de fichiers',
-  allowDeleteSub: 'Danger : le modèle pourra supprimer des fichiers dans le dossier sandbox.',
+  allowDeleteSub: 'Danger : le personnage pourra supprimer des fichiers dans son dossier.',
   sandboxDir: 'Dossier sandbox des outils',
   sectionWebSearch: 'Recherche web',
   webSearchHelp: 'Choisissez ci-dessous le moteur de recherche du personnage. DuckDuckGo ne demande aucune configuration ; SearXNG et Tavily sont plus fiables.',
@@ -1210,9 +1211,10 @@ const EN: Record<Key, string> = {
   memoryInjectionSub:
     "Auto: all or nothing (≤ 8000 chars = all, beyond = index only). Relevance: ranks files against the current question and injects only the most useful ones, the rest staying readable on demand.",
   fileTools: 'File tools',
-  fileToolsSub: 'The model can read and write inside the sandbox folder.',
+  fileToolsSub:
+    'Each character can read and write in THEIR OWN folder: a subfolder named after them, inside the sandbox folder below. They see neither the other characters’ folders nor what sits at its root.',
   allowDelete: 'Allow file deletion',
-  allowDeleteSub: 'Danger: the model will be able to delete files in the sandbox folder.',
+  allowDeleteSub: 'Danger: the character will be able to delete files in their folder.',
   sandboxDir: 'Tools sandbox folder',
   sectionWebSearch: 'Web search',
   webSearchHelp: 'Pick the character’s search engine below. DuckDuckGo needs no setup; SearXNG and Tavily are more reliable.',

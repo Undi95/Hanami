@@ -14,6 +14,7 @@
     "test:restore": "tsx scripts/test-restore.ts",
     "test:autonomous": "tsx scripts/test-autonomous.ts",
     "test:web-open": "tsx scripts/test-web-open.ts",
+    "test:file-tools": "tsx scripts/test-file-tools.ts",
     "env:scene": "tsx scripts/env-scene.ts"
   },
   "dependencies": {

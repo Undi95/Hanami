@@ -186,6 +186,9 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
   Web's are refused, redirects included.
 - 🛠️ Optional **file tools** for the model (`list_files`, `read_file`, `write_file`,
   `edit_file`, and `delete_file` behind its own dedicated toggle), sandboxed to a folder you pick.
+  Each character gets **their own subfolder** there and sees nothing else: that is where they keep
+  their notes and what they write, rather than holding everything in memory. The folder of a
+  deleted character is set aside, never erased.
 - 🐣 **Model mode**: *Full* exposes the tools; *Simple* exposes **none** — Hanami injects the
   memory itself, extracts the durable facts server-side during compaction, and guesses the emotion
   from the text. Made for small models, whose weak spot is tool calling.

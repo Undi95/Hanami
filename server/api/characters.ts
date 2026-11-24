@@ -25,6 +25,8 @@ import { buildCardV2, cardDisposition, embedCardInPng, safeCardFileName } from '
 import { sniffFamily } from './assets'
 import { httpError, sendJsonError } from '../lib/errors'
 import { ErrorCodes } from '../../shared/errorCodes'
+import { loadSettings } from '../config'
+import { retireWorkspace } from '../tools/fileTools'
 
 export const charactersRouter = Router()
 charactersRouter.use(express.json({ limit: '5mb' }))
@@ -151,6 +153,14 @@ charactersRouter.delete('/api/characters/:id', (req, res) => {
       return
     }
     deleteCharacter(req.params.id)
+    // Son dossier de travail est mis de côté (jamais effacé) : un personnage
+    // recréé sous le même nom ne doit pas hériter de ses notes. Un dossier qui
+    // ne se laisse pas déplacer n'empêche pas la suppression.
+    try {
+      retireWorkspace(loadSettings(), req.params.id)
+    } catch (e) {
+      console.warn('[characters] dossier de travail non mis de côté :', e instanceof Error ? e.message : String(e))
+    }
     res.json({ ok: true })
   } catch (e) {
     sendJsonError(res, 500, e)

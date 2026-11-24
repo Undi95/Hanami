@@ -197,6 +197,9 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
   comprises.
 - 🛠️ **Outils fichiers** optionnels pour le modèle (`list_files`, `read_file`, `write_file`,
   `edit_file`, et `delete_file` derrière un toggle dédié), sandboxés dans un dossier de ton choix.
+  Chaque personnage y a **son propre sous-dossier** et ne voit que lui : c'est là qu'il range ses
+  notes et ce qu'il écrit, plutôt que de tout garder en mémoire. Le dossier d'un personnage
+  supprimé est mis de côté, jamais effacé.
 - 🐣 **Mode du modèle** : *Complet* expose les outils ; *Simple* n'en expose **aucun** — Hanami
   injecte lui-même la mémoire, extrait les faits durables côté serveur lors des compactions, et
   devine l'émotion à partir du texte. Pensé pour les petits modèles, dont le tool-calling est le
