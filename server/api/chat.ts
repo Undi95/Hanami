@@ -488,6 +488,16 @@ function impersonateSystemPrompt(
 }
 
 /**
+ * Note qui tient la place du tour de {{char}} quand l'historique échangé n'en
+ * a pas à la fin. Un fait, entre crochets : ce n'est pas une réplique.
+ */
+function impersonateCue(characterName: string, ownMessageLast: boolean): string {
+  return ownMessageLast
+    ? `[${characterName} has not replied yet. Write the next message you would send.]`
+    : `[Write your next message to ${characterName}.]`
+}
+
+/**
  * Payload d'impersonation : réutilise les blocs neutres de buildPayload
  * (résumé, notes de scène, heure — de simples faits, jamais des instructions
  * de rôle) mais jamais characterPrompt, et échange les rôles de l'historique.
@@ -522,15 +532,22 @@ function buildImpersonatePayload(
   const upto = meta.summary ? Math.min(meta.summaryUpto ?? 0, all.length) : 0
   const live = all.slice(upto)
   const recent = historyWindow(live, settings)
-  const messages: unknown[] = [
-    { role: 'system', content: systemText },
-    // Perspective inversée : le tour de {{char}} devient "user", celui de
-    // l'utilisateur devient "assistant" — voir le commentaire de section plus haut.
-    ...recent.map((m) => ({
-      role: m.role === 'assistant' ? 'user' : 'assistant',
-      content: subContent(messageContent(m), names),
-    })),
-  ]
+  // Perspective inversée : le tour de {{char}} devient "user", celui de
+  // l'utilisateur devient "assistant" — voir le commentaire de section plus haut.
+  const swapped: { role: string; content: unknown }[] = recent.map((m) => ({
+    role: m.role === 'assistant' ? 'user' : 'assistant',
+    content: subContent(messageContent(m), names),
+  }))
+  // Le modèle complète un tour « assistant » : la demande doit donc FINIR sur un
+  // tour « user ». Quand le dernier message est celui de l'utilisateur (réponse
+  // supprimée, génération arrêtée…) ou que la fenêtre d'historique est vide,
+  // une note tient cette place — sans elle, certains backends prolongent le
+  // dernier tour « assistant » et ne rendent rien.
+  const last = swapped[swapped.length - 1]
+  if (!last || last.role === 'assistant') {
+    swapped.push({ role: 'user', content: impersonateCue(character.name, last !== undefined) })
+  }
+  const messages: unknown[] = [{ role: 'system', content: systemText }, ...swapped]
   return {
     payload: { messages, model: settings.model, temperature: settings.temperature, max_tokens: settings.maxTokens },
   }

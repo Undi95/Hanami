@@ -15,6 +15,7 @@
     "test:autonomous": "tsx scripts/test-autonomous.ts",
     "test:web-open": "tsx scripts/test-web-open.ts",
     "test:file-tools": "tsx scripts/test-file-tools.ts",
+    "test:impersonate": "tsx scripts/test-impersonate.ts",
     "env:scene": "tsx scripts/env-scene.ts"
   },
   "dependencies": {
