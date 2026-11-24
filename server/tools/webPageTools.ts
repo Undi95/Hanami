@@ -72,6 +72,14 @@ export const PART_CHARS = 6000
 const LINKS_MAX = 40
 const LINK_TEXT_MAX = 120
 const TITLE_MAX = 200
+/**
+ * Liste de liens REPLIÉE : au moins ce nombre de puces, dont le texte est fait
+ * de liens pour au moins cette part. C'est un choix de langues, un menu, un
+ * nuage d'étiquettes — pas du texte à lire. Elle devient une ligne qui dit
+ * combien de liens elle porte ; ils restent listés sur demande.
+ */
+const FOLD_MIN_ITEMS = 12
+const FOLD_LINK_SHARE = 0.8
 /** Longueur maximale d'une adresse : celle qu'on ouvre, celle d'une redirection, d'un <base>, d'un lien. */
 const URL_MAX = 2048
 /** Liens gardés par page. Avec URL_MAX, c'est ce qui borne la mémoire qu'une page peut faire prendre. */
@@ -511,6 +519,7 @@ export interface PageLink {
   text: string
   url: string
   at: number // position du lien dans le texte de la page
+  folded?: true // lien d'une longue liste de liens repliée : sa position est celle de la ligne qui la remplace
 }
 
 export interface PageText {
@@ -578,6 +587,9 @@ export function htmlToText(html: string, baseUrl: string, skipChrome = true): Pa
   let contentDepth = 0 // dans un <article> ou un <main>
   let cellsInRow = 0
   let link: { url: string; text: string; at: number } | null = null
+  // Listes ouvertes (de la plus extérieure à la plus intérieure) et listes refermées, avec de quoi juger si ce sont des listes de liens.
+  const openLists: { start: number; items: number; firstLink: number }[] = []
+  const lists: { start: number; end: number; items: number; firstLink: number; lastLink: number }[] = []
 
   const breakLine = (n: number): void => {
     pendingBreak = Math.max(pendingBreak, n)
@@ -756,6 +768,20 @@ export function htmlToText(html: string, baseUrl: string, skipChrome = true): Pa
     } else if (name === 'li') {
       breakLine(1)
       pendingPrefix = closing ? '' : '- '
+      if (!closing && openLists.length > 0) openLists[openLists.length - 1].items++
+    } else if (name === 'ul' || name === 'ol') {
+      breakLine(2)
+      if (!closing) {
+        openLists.push({ start: text.length, items: 0, firstLink: links.length })
+      } else {
+        const list = openLists.pop()
+        if (list) {
+          lists.push({ ...list, end: text.length, lastLink: links.length })
+          // Les puces d'une liste emboîtée comptent aussi pour celle qui la contient :
+          // un menu à sous-menus se juge, et se replie, d'un seul tenant.
+          if (openLists.length > 0) openLists[openLists.length - 1].items += list.items
+        }
+      }
     } else if (name === 'tr') {
       breakLine(1)
       cellsInRow = 0
@@ -768,6 +794,40 @@ export function htmlToText(html: string, baseUrl: string, skipChrome = true): Pa
       breakLine(2)
     } else if (LINE.has(name)) {
       breakLine(1)
+    }
+  }
+  // Les longues listes de liens sont repliées ICI, en une seule passe sur le
+  // texte fini (jamais pendant la lecture : recouper le texte à chaque liste le
+  // ferait recopier autant de fois). Une liste contenue dans une liste déjà
+  // repliée part avec elle.
+  if (skipChrome) {
+    let out = ''
+    let cursor = 0
+    let shift = 0 // ce que les positions qui suivent ont gagné ou perdu
+    let nextLink = 0
+    const moved: PageLink[] = []
+    for (const list of lists.sort((a, b) => a.start - b.start || b.end - a.end)) {
+      if (list.start < cursor) continue
+      const count = list.lastLink - list.firstLink
+      let linkChars = 0
+      for (let i = list.firstLink; i < list.lastLink; i++) linkChars += links[i].text.length
+      // Une puce coûte trois caractères qui ne sont pas du texte : sa marque et son saut de ligne.
+      const body = list.end - list.start - 3 * list.items
+      if (list.items < FOLD_MIN_ITEMS || count === 0 || linkChars < FOLD_LINK_SHARE * body) continue
+      for (; nextLink < list.firstLink; nextLink++) moved.push({ ...links[nextLink], at: links[nextLink].at + shift })
+      out += text.slice(cursor, list.start)
+      const marker = `(${count} links not shown — web_open with "links": true lists them)`
+      const at = out.length + (out.length > 0 ? 2 : 0)
+      out += (out.length > 0 ? '\n\n' : '') + marker
+      for (; nextLink < list.lastLink; nextLink++) moved.push({ ...links[nextLink], at, folded: true })
+      shift = out.length - list.end
+      cursor = list.end
+    }
+    if (cursor > 0) {
+      for (; nextLink < links.length; nextLink++) moved.push({ ...links[nextLink], at: links[nextLink].at + shift })
+      text = out + text.slice(cursor)
+      links.length = 0
+      links.push(...moved)
     }
   }
   // Les positions des liens suivent le texte rendu : un blanc de tête retiré les décale d'autant.
@@ -935,7 +995,9 @@ export async function executeWebOpenTool(args: Record<string, unknown>, deps: We
   if (cached.truncated && served === parts.length) lines.push('(the page is very large: it was cut, its end is missing)')
   if (withLinks) {
     const seen = new Set<string>()
-    const here = page.links.filter((l) => l.at >= start && l.at < end && !seen.has(l.url) && seen.add(l.url))
+    // Les liens du texte d'abord ; ceux des longues listes repliées ensuite, s'il reste de la place.
+    const inPart = page.links.filter((l) => l.at >= start && l.at < end)
+    const here = [...inPart.filter((l) => !l.folded), ...inPart.filter((l) => l.folded)].filter((l) => !seen.has(l.url) && seen.add(l.url))
     if (here.length === 0) lines.push('', 'No link in this part.')
     else {
       lines.push('', 'Links in this part:')

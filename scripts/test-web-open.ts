@@ -148,6 +148,15 @@ const server = http.createServer((req, res) => {
     /* ne répond jamais */
   } else if (url === '/longue') html(LONGUE)
   else if (url === '/liens') html(LIENS)
+  else if (url === '/langues') {
+    html(
+      '<html><body><ul>' +
+        Array.from({ length: 50 }, (_, i) => `<li><a href="/langue/${i + 1}">Langue ${i + 1}</a></li>`).join('') +
+        `</ul><p>Le texte, avec un <a href="/dans-le-texte">lien du texte</a>. ${'Un vrai article a du texte à lire. '.repeat(8)}</p></body></html>`,
+    )
+  } else if (url === '/annuaire') {
+    html('<html><body><ul>' + Array.from({ length: 50 }, (_, i) => `<li><a href="/fiche/${i + 1}">Fiche ${i + 1}</a></li>`).join('') + '</ul></body></html>')
+  }
   else if (url === '/vers-port') res.writeHead(302, { Location: `http://127.0.0.1:${PORT + 1}/page` }).end()
   else if (url === '/vers-long') res.writeHead(302, { Location: '/page?' + 'a'.repeat(3000) }).end()
   else if (url === '/langue') html(`<html><body><p>Langue demandée : ${req.headers['accept-language']}</p></body></html>`)
@@ -514,6 +523,7 @@ async function main(): Promise<void> {
       ['petites balises', '<b>x</b> '.repeat(200_000)],
       ['liens à la chaîne', '<a href="/x">y</a> '.repeat(80_000)],
       ['blancs', ' \n\t'.repeat(600_000) + '<p>fin</p>'],
+      ['listes de liens à replier', ('<ul>' + '<li><a href=/x>y</a></li>'.repeat(12) + '</ul>').repeat(5000)],
     ]
     for (const [quoi, html] of hostiles) {
       const debut = Date.now()
@@ -548,6 +558,48 @@ async function main(): Promise<void> {
     equal(resolu.links.length, 0, 'lien trop long une fois résolu')
     const bavard = web.htmlToText(`<a href="/x">${'mot '.repeat(1000)}</a>`, 'https://example.org/')
     assert(bavard.links[0].text.length <= 125, `texte du lien borné : ${bavard.links[0].text.length}`)
+  })
+
+  await check('une longue liste de liens est repliée en une ligne ; ses liens restent, après ceux du texte', async () => {
+    const liste = (n: number, item: (i: number) => string): string => '<ul>' + Array.from({ length: n }, (_, i) => `<li>${item(i + 1)}</li>`).join('') + '</ul>'
+    const html =
+      '<p>Avant, avec un <a href="/a">premier lien</a>.</p>' +
+      liste(15, (i) => `<a href="/langue/${i}">Langue ${i}</a>`) +
+      '<p>Milieu, avec un <a href="/b">second lien</a>.</p>' +
+      liste(3, (i) => `<a href="/voir/${i}">Voir ${i}</a>`) +
+      liste(15, (i) => `Un vrai élément de liste, le numéro ${i}, avec <a href="/ref/${i}">sa source</a> en passant.`) +
+      liste(15, (i) => `<a href="#section-${i}">Section ${i}</a>`) +
+      '<p>Après.</p>'
+    const page = web.htmlToText(html, 'https://example.org/')
+    const marque = '(15 links not shown — web_open with "links": true lists them)'
+    assert(page.text.startsWith(`Avant, avec un premier lien.\n\n${marque}\n\nMilieu, avec un second lien.\n\n- Voir 1\n- Voir 2\n- Voir 3`), `début : ${JSON.stringify(page.text.slice(0, 180))}`)
+    assert(!page.text.includes('Langue 7'), 'la liste de langues ne doit plus être dans le texte')
+    assert(page.text.includes('numéro 15, avec sa source en passant.'), 'une liste de vrai texte reste')
+    assert(page.text.includes('- Section 15') && page.text.endsWith('Après.'), 'un sommaire (ancres) reste, la fin aussi')
+    const replies = page.links.filter((l) => l.folded)
+    equal(replies.length, 15, 'liens repliés')
+    for (const l of replies) equal(l.at, page.text.indexOf(marque), 'un lien replié est à la place de la ligne qui remplace sa liste')
+    for (const l of page.links.filter((x) => !x.folded)) assert(page.text.slice(l.at).startsWith(l.text.split(' ')[0]), `position du lien « ${l.text} » après le repli`)
+    equal(page.links.filter((l) => !l.folded).length, 2 + 3 + 15, 'liens du texte')
+    // Repli éteint (relecture d'une page presque vide) : tout reste.
+    assert(web.htmlToText(html, 'https://example.org/', false).text.includes('Langue 7'), 'sans retrait, la liste reste')
+    // Onze puces : en dessous du seuil.
+    assert(web.htmlToText(liste(11, (i) => `<a href="/x/${i}">Mot ${i}</a>`) + '<p>fin</p>', 'https://example.org/').text.includes('Mot 11'), 'une liste courte reste')
+    // Une liste repliée dans une autre : une seule ligne, celle de la plus grande.
+    const emboitee = web.htmlToText(liste(14, (i) => `<a href="/p/${i}">Parent ${i}</a>` + liste(14, (j) => `<a href="/e/${i}-${j}">Enfant ${j}</a>`)), 'https://example.org/')
+    equal(emboitee.text, '(210 links not shown — web_open with "links": true lists them)', 'listes emboîtées')
+
+    web.clearWebOpenCache()
+    const lu = await open('/langues', { links: true })
+    assert(lu.includes('(50 links not shown') && !lu.includes('Langue 3\n'), 'la page servie porte la ligne, pas la liste')
+    const servis = lu.slice(lu.indexOf('Links in this part:')).split('\n')
+    equal(servis[1], `1. lien du texte — ${base}/dans-le-texte`, 'le lien du texte passe avant ceux de la liste repliée')
+    equal(servis[2], `2. Langue 1 — ${base}/langue/1`, 'puis ceux de la liste')
+    assert(lu.endsWith('(11 more links not listed)'), 'et le reste est compté')
+    // Une page qui n'est QUE des liens (annuaire, index) : la replier ne laisserait rien à lire ni à suivre. Elle reste entière.
+    const annuaire = await open('/annuaire', { links: true })
+    assert(annuaire.includes('- Fiche 1\n- Fiche 2') && annuaire.includes('- Fiche 50') && !annuaire.includes('links not shown'), "une page d'annuaire garde sa liste")
+    assert(annuaire.includes(`1. Fiche 1 — ${base}/fiche/1`), 'et ses liens se listent')
   })
 
   await check('liens : repérés à leur place dans le texte', () => {
