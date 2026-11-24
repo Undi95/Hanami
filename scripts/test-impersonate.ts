@@ -163,6 +163,8 @@ async function main(): Promise<void> {
     const note = String(sent()[3].content)
     assert(note.startsWith('[') && note.endsWith(']'), 'la note est entre crochets')
     assert(note.includes('Jetable') && note.includes('has not replied yet'), "la note dit que le personnage n'a pas répondu")
+    assert(note.includes('the message above is yours'), 'la note dit à qui est le dernier message')
+    assert(note.includes('follow-up') && note.includes('not an answer'), "la note demande une suite, pas une réponse")
     equal(fs.readFileSync(fileOf(id), 'utf8'), before, 'fil inchangé sur le disque')
   })
 

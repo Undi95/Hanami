@@ -490,10 +490,15 @@ function impersonateSystemPrompt(
 /**
  * Note qui tient la place du tour de {{char}} quand l'historique échangé n'en
  * a pas à la fin. Un fait, entre crochets : ce n'est pas une réplique.
+ *
+ * Quand le dernier message est celui de l'utilisateur, la note dit À QUI il est
+ * et qu'une SUITE est attendue, pas une réponse : sans ces deux précisions, un
+ * vrai modèle écrit une fois sur trois la réponse de {{char}} à ce message.
  */
 function impersonateCue(characterName: string, ownMessageLast: boolean): string {
   return ownMessageLast
-    ? `[${characterName} has not replied yet. Write the next message you would send.]`
+    ? `[${characterName} has not replied yet: the message above is yours and is still the last one. ` +
+        `Write the message you would send next, as a follow-up to your own — not an answer to it.]`
     : `[Write your next message to ${characterName}.]`
 }
 
