@@ -113,6 +113,13 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
   environ 4 h, puis 10 h, puis 24 h, et enfin, vers 48 h, un dernier mot compréhensif avant de se
   taire jusqu'à ton retour. Quatre messages en tout, jamais en dehors de la plage horaire que tu
   fixes.
+- ⏳ **Tours autonomes** (opt-in) : sur un minuteur que tu règles (de 10 secondes à un jour), le
+  personnage a des tours à lui, sans attendre un message — il peut se servir de ses outils,
+  t'écrire, ou laisser passer. Tu passes toujours avant lui : s'il joue un tour quand tu écris, le
+  tour est abandonné ; après trois messages restés sans réponse, il se tait jusqu'à ton retour.
+  Chaque tour laisse une entrée dans un journal propre à la conversation (onglet *Tours* de
+  l'Inspecteur : ses actions, son raisonnement, son issue), qu'il relit lui-même pour se souvenir
+  de ce qu'il a fait. Remplace les messages spontanés tant qu'il est allumé.
 
 ### L'avatar et l'écran
 
@@ -182,6 +189,12 @@ avec un personnage, bien. Pas de macros, pas de 40 menus, pas de magie cachée.
   pas à pas, explique l'installation Docker), ou **Tavily** (une clé API gratuite). Les résultats
   apparaissent en petite puce dans le fil : clique la loupe pour déplier titres, liens et extraits
   complets, ou supprime la puce comme un message.
+- 📖 **Lecture de pages web** (opt-in, un réglage à part de la recherche) : le modèle peut ouvrir
+  une page et en lire le texte (`web_open`) — pour suivre un résultat de recherche, ou une adresse
+  que tu lui donnes. Les longues pages viennent en parties, et il peut demander les liens d'une
+  partie pour aller plus loin. Seules les pages publiques s'ouvrent : les adresses de ton réseau
+  local, celles de ta machine et les ports autres que ceux du Web sont refusés, redirections
+  comprises.
 - 🛠️ **Outils fichiers** optionnels pour le modèle (`list_files`, `read_file`, `write_file`,
   `edit_file`, et `delete_file` derrière un toggle dédié), sandboxés dans un dossier de ton choix.
 - 🐣 **Mode du modèle** : *Complet* expose les outils ; *Simple* n'en expose **aucun** — Hanami
@@ -248,9 +261,9 @@ Trois onglets, un seul formulaire — changer d'onglet ne perd rien et n'enregis
   3D, animations gestuelles, scène vivante).
 - **Modèle** — URL du backend, clé API, modèle, images (vision), température, tokens max, longueur
   d'historique, taille de contexte du modèle, mode du modèle, compaction automatique.
-- **Fonctions** — notion du temps, pensées, synthèse vocale, messages spontanés, mémoire, outils
-  fichiers, dossier sandbox, recherche web, mot de passe d'accès, sauvegarde et restauration des
-  données.
+- **Fonctions** — notion du temps, pensées, synthèse vocale, messages spontanés, tours autonomes,
+  mémoire, outils fichiers, dossier sandbox, recherche web, lecture de pages web, mot de passe
+  d'accès, sauvegarde et restauration des données.
 
 La langue et le thème s'appliquent immédiatement ; tout le reste prend effet à l'enregistrement.
 

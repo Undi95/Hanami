@@ -107,6 +107,13 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
 - 💌 **Spontaneous messages** (opt-in): while you are away, the character writes on their own —
   after about 4 h, then 10 h, then 24 h, and finally, around 48 h, one understanding note before
   going quiet until you come back. Four messages in all, never outside the hour range you set.
+- ⏳ **Autonomous turns** (opt-in): on a timer you set (from 10 seconds to a day), the character
+  has turns of their own, without waiting for a message — they can use their tools, write to you,
+  or let the turn pass. You always come first: a turn in progress is dropped the moment you
+  write, and after three messages left unanswered they stay quiet until you come back. Every turn
+  leaves an entry in a log kept with the conversation (the *Turns* tab of the Inspector: what they
+  did, their reasoning, how the turn ended), which they re-read to remember what they did on
+  their own. Replaces spontaneous messages while it is on.
 
 ### The avatar and the screen
 
@@ -172,6 +179,11 @@ character, and doing it well. No macro language, no forty nested menus, no hidde
   the Docker install), or **Tavily** (a free API key). Results appear as a small chip in the
   thread: click the magnifying glass to unfold the full titles, links and snippets, or delete the
   chip like any message.
+- 📖 **Web page reading** (opt-in, a setting of its own, apart from search): the model can open a
+  page and read its text (`web_open`) — to follow a search result, or an address you give it.
+  Long pages come in parts, and it can ask for the links of a part to go further. Only public
+  pages open: addresses on your local network, those of your machine, and ports other than the
+  Web's are refused, redirects included.
 - 🛠️ Optional **file tools** for the model (`list_files`, `read_file`, `write_file`,
   `edit_file`, and `delete_file` behind its own dedicated toggle), sandboxed to a folder you pick.
 - 🐣 **Model mode**: *Full* exposes the tools; *Simple* exposes **none** — Hanami injects the
@@ -235,8 +247,9 @@ Three tabs, one single form — switching tabs neither loses nor saves anything:
   environment, gesture animations, living scene).
 - **Model** — backend URL, API key, model, images (vision), temperature, max tokens, history
   length, model context size, model mode, automatic compaction.
-- **Features** — sense of time, thoughts, text-to-speech, spontaneous messages, memory, file
-  tools, sandbox folder, web search, access password, data backup and restore.
+- **Features** — sense of time, thoughts, text-to-speech, spontaneous messages, autonomous turns,
+  memory, file tools, sandbox folder, web search, web page reading, access password, data backup
+  and restore.
 
 Language and theme apply immediately; everything else takes effect when you save.
 
