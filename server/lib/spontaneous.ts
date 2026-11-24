@@ -65,8 +65,8 @@ function unansweredCount(messages: ChatMessage[]): number {
   return n
 }
 
-/** Conversation active (personnage + chat) d'après data/ui.json. */
-function activeTarget(): { characterId: string; chatId: string } | null {
+/** Conversation active (personnage + chat) d'après data/ui.json. Exportée : le moteur des tours autonomes vise la même. */
+export function activeTarget(): { characterId: string; chatId: string } | null {
   const prefs = readUiPrefs()
   const characterId = prefs.activeCharacter
   if (!characterId) return null
@@ -109,6 +109,9 @@ export async function runSpontaneousTick(): Promise<void> {
   if (generating) return
   const settings = loadSettings()
   if (!settings.spontaneousEnabled) return
+  // Les tours autonomes (server/lib/autonomous.ts) remplacent les messages
+  // spontanés : deux moteurs n'écrivent pas d'eux-mêmes dans le même fil.
+  if (settings.autonomousEnabled) return
   if (!withinWindow(new Date(), settings.spontaneousStartHour, settings.spontaneousEndHour)) return
 
   const target = activeTarget()

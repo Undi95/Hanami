@@ -80,6 +80,10 @@ export interface Settings {
   spontaneousEnabled: boolean // le personnage écrit de lui-même pendant votre absence
   spontaneousStartHour: number // heure locale à partir de laquelle il peut écrire (0-23)
   spontaneousEndHour: number // heure locale après laquelle il n'écrit plus (0-23)
+  // Tours autonomes (moteur server/lib/autonomous.ts) : le personnage a des tours
+  // À LUI, sur un minuteur — il peut agir avec ses outils, écrire, ou laisser passer.
+  autonomousEnabled: boolean // opt-in : éteint, aucun tour ne se joue sans message de l'utilisateur
+  autonomousPaceSeconds: number // secondes entre la fin d'un tour autonome et le suivant (bornes : server/config.ts)
   visionMode: VisionMode // envoi d'images au modèle (détection auprès du backend par défaut)
   webSearchEnabled: boolean // expose l'outil web_search au modèle
   webSearchEngine: WebSearchEngine // moteur utilisé par web_search
@@ -237,6 +241,7 @@ export interface ChatMessage {
   thinking?: string // raisonnement du modèle (<think> ou champ reasoning) — jamais renvoyé au backend
   tools?: ToolTrace[] // journal d'activité : actions exécutées pendant la génération — jamais renvoyé au backend
   spontaneous?: true // message écrit à l'initiative du personnage (moteur server/lib/spontaneous.ts)
+  autonomous?: true // message écrit pendant un tour à lui (moteur server/lib/autonomous.ts)
   // ── Variantes de réponse ─────────────────────────────────────────────────
   // Clés ABSENTES = message ordinaire : tous les chats écrits avant les
   // variantes restent valides tels quels, en lecture comme en écriture (rien

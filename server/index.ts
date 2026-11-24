@@ -30,6 +30,7 @@ import { backupRouter } from './api/backup'
 import { defaultRoots } from './lib/backupArchive'
 import { purgeStaging } from './lib/backupRestore'
 import { startSpontaneous } from './lib/spontaneous'
+import { startAutonomous } from './lib/autonomous'
 import { startEnvironmentIndex } from './lib/envIndex'
 import { uiRouter } from './api/ui'
 
@@ -185,6 +186,8 @@ async function main(): Promise<void> {
 
   // Messages spontanés : le personnage peut écrire de lui-même (opt-in, Réglages).
   startSpontaneous()
+  // Tours autonomes : le personnage a des tours à lui, sur un minuteur (opt-in, Réglages).
+  startAutonomous()
 
   // Décors 3D : analyse des .glb qui n'en ont pas (ou plus) une à jour. En tâche
   // de fond, une pièce à la fois, en rendant la main à la boucle d'événements —

@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "mock-llm": "node scripts/mock-llm.cjs",
     "test:restore": "tsx scripts/test-restore.ts",
+    "test:autonomous": "tsx scripts/test-autonomous.ts",
     "env:scene": "tsx scripts/env-scene.ts"
   },
   "dependencies": {

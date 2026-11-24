@@ -489,7 +489,8 @@ function toAssistantMessage(text: string, thinking?: string): ChatMessage {
 // .jsonl ne doit pas gonfler — la puce dépliée n'a besoin que du début du
 // résultat. En session (event SSE), le client garde le résultat intégral.
 const TRACE_RESULT_CAP = 2048
-function cappedTraceResult(result: string): string {
+// Exporté : le moteur des tours autonomes persiste ses traces sous le même plafond.
+export function cappedTraceResult(result: string): string {
   return result.length > TRACE_RESULT_CAP ? result.slice(0, TRACE_RESULT_CAP) + '…' : result
 }
 
@@ -662,7 +663,7 @@ function parseImages(raw: unknown): { images: string[] } | { code: ErrorCode; pa
  * `call` et le crochet `onTool`.
  */
 /** Noms des outils réellement annoncés dans un tableau de définitions OpenAI. */
-function toolNamesOf(tools: unknown[] | undefined): ReadonlySet<string> {
+export function toolNamesOf(tools: unknown[] | undefined): ReadonlySet<string> {
   const names = new Set<string>()
   for (const t of tools ?? []) {
     const name = (t as { function?: { name?: unknown } }).function?.name
@@ -671,7 +672,8 @@ function toolNamesOf(tools: unknown[] | undefined): ReadonlySet<string> {
   return names
 }
 
-async function runToolLoop<R extends { content: string; toolCalls: StreamedToolCall[] }>(
+// Exportée : les tours autonomes (server/lib/autonomous.ts) jouent la même boucle.
+export async function runToolLoop<R extends { content: string; toolCalls: StreamedToolCall[] }>(
   characterId: string,
   settings: Settings,
   messages: unknown[],

@@ -59,6 +59,9 @@ export const DEFAULT_SETTINGS: Settings = {
   spontaneousEnabled: false,
   spontaneousStartHour: 9,
   spontaneousEndHour: 22,
+  // Opt-in : par défaut aucun tour ne se joue sans message de l'utilisateur.
+  autonomousEnabled: false,
+  autonomousPaceSeconds: 300,
   // 'auto' : Hanami demande au backend si le modèle voit les images (GET /api/vision).
   visionMode: 'auto',
   // Opt-in : DuckDuckGo (sans clé) par défaut — SearXNG ou Tavily au choix, via le sélecteur.
@@ -67,6 +70,11 @@ export const DEFAULT_SETTINGS: Settings = {
   webSearchUrl: '',
   tavilyApiKey: '',
 }
+
+// Bornes du minuteur des tours autonomes (secondes). Le plancher protège le
+// backend local d'un tour collé au précédent ; le plafond est un jour.
+export const AUTONOMOUS_PACE_MIN = 10
+export const AUTONOMOUS_PACE_MAX = 86400
 
 /** Heure locale valide (entier 0-23) — sinon la valeur par défaut. */
 function normalizeHour(value: unknown, fallback: number): number {
@@ -141,6 +149,14 @@ export function loadSettings(): Settings {
     // rester un couple d'heures réelles (sinon le moteur spontané ne s'ouvrirait jamais).
     merged.spontaneousStartHour = normalizeHour(merged.spontaneousStartHour, DEFAULT_SETTINGS.spontaneousStartHour)
     merged.spontaneousEndHour = normalizeHour(merged.spontaneousEndHour, DEFAULT_SETTINGS.spontaneousEndHour)
+    // Même règle pour le minuteur des tours autonomes : hors bornes (ou pas un
+    // entier) → le défaut, jamais un tour toutes les 0 secondes.
+    merged.autonomousPaceSeconds = intInRange(
+      merged.autonomousPaceSeconds,
+      AUTONOMOUS_PACE_MIN,
+      AUTONOMOUS_PACE_MAX,
+      DEFAULT_SETTINGS.autonomousPaceSeconds,
+    )
     // Les réglages du MODÈLE, même règle (trouvé au test complet : température
     // −5, maxTokens −1, contexte de 10¹² et backendUrl « javascript: » étaient
     // tous enregistrés tels quels). Hors bornes → la valeur par défaut : on
