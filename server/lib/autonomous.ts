@@ -203,7 +203,10 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
   // avant la réponse), dans l'ordre — comme le chat le garde. Ne retenir que la
   // dernière étape faisait perdre le « pourquoi » de tout ce que le tour a fait.
   const thoughts: string[] = []
-  const thinkingSoFar = (): string | undefined => thoughts.join('\n\n') || undefined
+  // Celui de l'étape EN COURS, à mesure qu'il arrive : un tour abandonné au
+  // milieu d'une étape garde ce qu'elle avait déjà pensé.
+  let live = ''
+  const thinkingSoFar = (): string | undefined => [...thoughts, live].filter((s) => s !== '').join('\n\n') || undefined
   // Le tour est déclaré au passage de main : une demande de l'utilisateur
   // l'abandonne tout de suite, puis attend qu'il soit clos et noté au journal.
   let finished = (): void => {}
@@ -239,7 +242,12 @@ export async function runAutonomousTurn(): Promise<TurnOutcome> {
           tools: withTools ? tools : undefined,
           signal: abort.signal,
           onDelta: () => {},
+          onThinking: (text) => {
+            live += text
+          },
         })
+        // Étape finie : son raisonnement complet prend la place de ce qui arrivait.
+        live = ''
         if (step.thinking) thoughts.push(step.thinking)
         return step
       },

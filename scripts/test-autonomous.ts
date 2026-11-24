@@ -72,11 +72,19 @@ const backend = http.createServer((req, res) => {
   req.on('end', () => {
     requests.push(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'))
     const step = script.shift() ?? { content: '(silence)' }
+    // Un vrai modèle pense d'abord, puis répond : le raisonnement part dès que
+    // la réponse commence, et c'est la suite qui attend le délai du scénario.
+    let started = false
+    const start = (): void => {
+      if (started || res.destroyed) return
+      started = true
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      if (step.thinking) res.write(sse({ reasoning_content: step.thinking }, null))
+    }
     const send = (): void => {
       if (res.destroyed) return
-      res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      start()
       if (step.toolCalls) {
-        if (step.thinking) res.write(sse({ reasoning_content: step.thinking }, null))
         res.write(
           sse(
             {
@@ -92,14 +100,15 @@ const backend = http.createServer((req, res) => {
         )
         res.write(sse({}, 'tool_calls'))
       } else {
-        if (step.thinking) res.write(sse({ reasoning_content: step.thinking }, null))
         res.write(sse({ content: step.content ?? '' }, null))
         res.write(sse({}, 'stop'))
       }
       res.end('data: [DONE]\n\n')
     }
-    if (step.delayMs) setTimeout(send, step.delayMs)
-    else send()
+    if (step.delayMs) {
+      start()
+      setTimeout(send, step.delayMs)
+    } else send()
   })
 })
 
@@ -730,7 +739,7 @@ async function main(): Promise<void> {
   const tourLent = async (chatId: string): Promise<{ tour: Promise<string>; debut: number }> => {
     setActive(chatId)
     script.push({ thinking: 'Je prends une note.', toolCalls: [{ name: 'memory_save', arguments: JSON.stringify({ name: `main-${Date.now()}.md`, content: 'Note.' }) }] })
-    script.push({ content: 'Trop tard.', delayMs: 4000 })
+    script.push({ thinking: 'Je réfléchis à ma réponse.', content: 'Trop tard.', delayMs: 4000 })
     const debut = Date.now()
     const tour = auto.runAutonomousTurn()
     await sleep(300) // l'outil est joué, la réponse finale est en cours
@@ -751,7 +760,7 @@ async function main(): Promise<void> {
     equal(t.length, 1, 'entrées au journal')
     equal(t[0].outcome, 'moved', 'tour abandonné noté')
     equal(t[0].tools?.length, 1, 'son outil est noté')
-    equal(t[0].thinking, 'Je prends une note.', 'ce qu\'il avait pensé est gardé')
+    equal(t[0].thinking, 'Je prends une note.\n\nJe réfléchis à ma réponse.', "ce qu'il avait pensé est gardé, étape en cours comprise")
     const reponse = requests.find((r) => r.messages[r.messages.length - 1].content === 'Je passe avant.')
     assert(reponse, 'la requête de la réponse doit être partie')
     const systeme = String(reponse.messages[0].content)
